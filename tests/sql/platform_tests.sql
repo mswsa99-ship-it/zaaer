@@ -1,5 +1,5 @@
 -- =====================================================================
--- Platform tests (PL01–PL08): properties a hosted Supabase project needs that a plain
+-- Platform tests (PL01–PL09): properties a hosted Supabase project needs that a plain
 -- local Postgres would not catch. Runs on the DB built by tests/sql/run.sh, which mirrors
 -- the hosted layout (pgcrypto / uuid-ossp in schema "extensions").
 -- =====================================================================
@@ -84,6 +84,16 @@ select 'PL08 ai_settings uses a current Gemini model (default and rows; 1.x/2.x 
                          where table_schema = 'public' and table_name = 'ai_settings' and column_name = 'model') !~ 'gemini-[12][.]',
        coalesce(string_agg(model, ', '), '')
 from ai_settings where model ~ '^gemini-[12][.]';
+
+-- PL09: business dates come from the branch (fn_branch_today / AT TIME ZONE), never from the session time zone, which
+-- is UTC on the hosted database: current_date, now()::date and <timestamp>_at::date are yesterday until 03:00 in Riyadh
+insert into test_results
+select 'PL09 no function in public takes a business date from the session time zone (0019)', count(*) = 0,
+       coalesce(string_agg(p.proname, ', '), '')
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace and p.proname !~ '^t_'
+  and p.prosrc ~* '(\mcurrent_date\M|\mlocaltimestamp\M|\m(now\(\)|current_timestamp)\s*::\s*date\M|\m[a-z_]+_at\s*::\s*date\M)'
+  and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e');
 
 -- PL06: no API role can run the bootstrap (it can create keys and rewrite encrypted columns)
 insert into test_results

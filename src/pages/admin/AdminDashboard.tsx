@@ -6,7 +6,7 @@ import { DoorClosed, BedDouble, TrendingUp, BookCheck, Users, Wallet, LifeBuoy, 
 import { useBranch } from "../../lib/branch";
 import { opsApi, type ReportsFinance } from "../../lib/api";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
-import { formatCurrency } from "../../lib/utils";
+import { addDaysISO, formatCurrency, todayISO } from "../../lib/utils";
 
 interface Stats {
   totalRooms: number;
@@ -34,8 +34,6 @@ interface Stats {
 // Operational columns only — money is never read from the reservations table (A05); it comes from the ledger RPC.
 type ResRow = { id: string; status: string; check_in: string; check_out: string; payment_status: string; access_status: string; identity_status: string; source?: { name: string } | { name: string }[] | null };
 
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
-
 export default function AdminDashboard() {
   const { branchId } = useBranch();
   const [stats, setStats] = useState<Stats | null>(null);
@@ -47,8 +45,8 @@ export default function AdminDashboard() {
     const token = ++reqRef.current;
     setLoading(true);
     (async () => {
-      const today = isoDay(new Date());
-      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 6);
+      const today = todayISO();
+      const usageDay = new Date().toISOString().slice(0, 10);   // AI usage is counted per UTC day (edge functions)
       const hourAgo = new Date(Date.now() - 3600_000).toISOString();
       const [rooms, reservations, handoffs, unmatched, failures, aiUsage, finance] = await Promise.all([
         supabase.from("rooms").select("status").eq("branch_id", branchId),
@@ -56,8 +54,8 @@ export default function AdminDashboard() {
         supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").or(`branch_id.eq.${branchId},branch_id.is.null`),
         supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").eq("kind", "unmatched_reservation"),
         supabase.from("access_delivery_events").select("id", { count: "exact", head: true }).eq("acknowledged", false).lt("created_at", hourAgo),
-        supabase.from("ai_usage_daily").select("requests, tokens_in, tokens_out, fallbacks, guardrail_blocks").eq("day", today).maybeSingle(),
-        opsApi.reportsFinance(branchId, isoDay(weekAgo), today).catch((): ReportsFinance | null => null),
+        supabase.from("ai_usage_daily").select("requests, tokens_in, tokens_out, fallbacks, guardrail_blocks").eq("day", usageDay).maybeSingle(),
+        opsApi.reportsFinance(branchId, addDaysISO(today, -6), today).catch((): ReportsFinance | null => null),
       ]);
       if (token !== reqRef.current) return; // branch changed while loading
       const ai = aiUsage.data as { requests: number; tokens_in: number; tokens_out: number; fallbacks: number; guardrail_blocks: number } | null;
@@ -71,10 +69,9 @@ export default function AdminDashboard() {
       const netByDay = new Map((finance?.by_day ?? []).map((d) => [d.day, d.receipts - d.refunds]));
       const weekly: { day: string; bookings: number; net: number }[] = [];
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const ds = isoDay(d);
+        const ds = addDaysISO(today, -i);
         weekly.push({
-          day: d.toLocaleDateString("ar-SA", { weekday: "short" }),
+          day: new Date(ds + "T12:00:00Z").toLocaleDateString("ar-SA", { weekday: "short", timeZone: "UTC" }),
           bookings: resFlat.filter((r) => r.check_in === ds).length,
           net: (netByDay.get(ds) ?? 0) / 100,
         });

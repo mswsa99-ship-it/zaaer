@@ -4,7 +4,7 @@ import { staffApi, toArabicError } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
 import { SectionTitle, LoadingScreen, Card, Spinner, Badge, ErrorBanner } from "../../components/ui";
 import { CalendarRange, Unlock } from "lucide-react";
-import { todayISO } from "../../lib/utils";
+import { addDaysISO, todayISO } from "../../lib/utils";
 
 interface RuleRow {
   id: string; category_id: string; enabled: boolean; initial_public_release: number; release_increment: number; release_trigger: string;
@@ -26,10 +26,9 @@ export default function AdminAvailabilityRules() {
   const load = useCallback(async () => {
     if (!branchId) return;
     setError(null);
-    const end = new Date(); end.setDate(end.getDate() + 14);
     const [r, s] = await Promise.all([
       supabase.from("release_rules").select("id, category_id, enabled, initial_public_release, release_increment, release_trigger, category:room_categories(name_ar)").eq("branch_id", branchId),
-      supabase.from("released_slots").select("date, released_count, category_id").eq("branch_id", branchId).gte("date", todayISO()).lte("date", end.toISOString().slice(0, 10)).order("date"),
+      supabase.from("released_slots").select("date, released_count, category_id").eq("branch_id", branchId).gte("date", todayISO()).lte("date", addDaysISO(todayISO(), 14)).order("date"),
     ]);
     if (r.error) setError(toArabicError(r.error));
     setRules((r.data as unknown as RuleRow[]) ?? []);

@@ -7,16 +7,16 @@ import { toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, type PaymentMethod, type VoucherKind } from "../../lib/types";
-import { formatCurrency, formatDateTime } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 
 interface V { id: string; number: string; kind: VoucherKind; amount_halalas: number; method: PaymentMethod; status: string; reference: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null; created_by: string | null; reservation?: { id: string; internal_ref: string } | null; creator?: { full_name: string } | null }
 const sar = (h: number) => formatCurrency(h / 100);
-const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
+const monthStart = () => todayISO().slice(0, 8) + "01";
 
 export default function AdminFinance() {
   const { branchId } = useBranch();
   const [rows, setRows] = useState<V[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
-  const [f, setF] = useState({ from: monthStart(), to: new Date().toISOString().slice(0, 10), kind: "all", method: "all", includeCancelled: false });
+  const [f, setF] = useState({ from: monthStart(), to: todayISO(), kind: "all", method: "all", includeCancelled: false });
 
   const load = useCallback(async () => {
     if (!branchId) return;

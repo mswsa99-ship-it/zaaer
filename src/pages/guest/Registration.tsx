@@ -4,7 +4,7 @@ import { ArrowLeft, UserPlus, CheckCircle2, AlertCircle, IdCard } from "lucide-r
 import { guestApi, toArabicError, type GuestSession } from "../../lib/api";
 import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { IDENTITY_TYPE_LABELS, GUEST_VERIFICATION_LABELS, type IdentityType, type GuestVerificationStatus } from "../../lib/types";
-import { gregorianToHijri, hijriToGregorian, maskId } from "../../lib/utils";
+import { gregorianToHijri, hijriToGregorian, maskId, todayISO } from "../../lib/utils";
 
 type GuestRow = GuestSession["guests"][number];
 
@@ -196,7 +196,7 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
               </div>
             </div>
             {birthCalendar === "gregorian" ? (
-              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" max={new Date().toISOString().slice(0, 10)} />
+              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" max={todayISO()} />
             ) : (
               <input value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" dir="ltr" placeholder="1410-05-15 (سنة-شهر-يوم هجري)" pattern="\d{4}-\d{2}-\d{2}" />
             )}

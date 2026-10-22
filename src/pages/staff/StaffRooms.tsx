@@ -7,7 +7,7 @@ import { opsApi, toArabicError, type UnitCard, type DailySummary } from "../../l
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, RESERVATION_STATUS_LABELS, type RoomStatus, type ReservationStatus } from "../../lib/types";
-import { formatCurrency, formatDateTime } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 
 /** Units board — one card per unit with the three independent dimensions: occupancy/ops status, cleanliness, entry readiness. */
 export default function StaffRooms() {
@@ -27,7 +27,7 @@ export default function StaffRooms() {
     return () => { supabase.removeChannel(ch); };
   }, [load]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const visible = useMemo(() => units.filter((u) => {
     if (q && !u.room_number.includes(q)) return false;
     switch (filter) {

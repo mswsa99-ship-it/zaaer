@@ -6,7 +6,7 @@ import { opsApi, toArabicError, type ReservationRow } from "../../lib/api";
 import { SectionTitle, EmptyState, LoadingScreen, ErrorBanner, Badge } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { RESERVATION_STATUS_LABELS, RESERVATION_STATUS_COLORS, PAYMENT_STATUS_LABELS, type ReservationStatus } from "../../lib/types";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, todayISO } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 
 const PAGE = 25;
@@ -41,7 +41,7 @@ export default function StaffReservations() {
       const head = ["المرجع", "المرجع الخارجي", "الضيف", "الوحدة", "الحالة", "الوصول", "المغادرة", "الليالي", "المصدر", "الإجمالي", "المحصل", "المتبقي", "رصيد التأمين", "حالة الدفع"];
       const rows = all.rows.map((r) => [r.internal_ref, r.external_ref ?? "", r.guest_name ?? "", r.room_number ?? "", RESERVATION_STATUS_LABELS[r.status as ReservationStatus] ?? r.status, r.check_in, r.check_out, r.nights, r.source_name ?? "", (r.total_halalas / 100).toFixed(2), (r.paid_halalas / 100).toFixed(2), (r.balance_due_halalas / 100).toFixed(2), (r.deposit_balance_halalas / 100).toFixed(2), PAYMENT_STATUS_LABELS[r.payment_status as keyof typeof PAYMENT_STATUS_LABELS] ?? r.payment_status]);
       const csv = "﻿" + [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `reservations-${new Date().toISOString().slice(0, 10)}-${all.total}rows.csv`; a.click();
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `reservations-${todayISO()}-${all.total}rows.csv`; a.click();
     } catch (e) { setError(toArabicError(e)); } finally { setExporting(false); }
   }
 

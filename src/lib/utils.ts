@@ -82,8 +82,28 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+/**
+ * Business dates ("today", arrivals, report days) are the PROPERTY's dates, not UTC's and not the browser's:
+ * between 00:00 and 03:00 in Riyadh the UTC date is still yesterday. Same rule as fn_branch_today() in SQL
+ * (branches.timezone, default Asia/Riyadh).
+ */
+export const PROPERTY_TIME_ZONE = "Asia/Riyadh";
+
+/** YYYY-MM-DD of an instant in the property's time zone (en-CA formats dates as ISO). */
+export function isoDateIn(d: Date, timeZone: string = PROPERTY_TIME_ZONE): string {
+  try { return d.toLocaleDateString("en-CA", { timeZone }); } catch { return d.toLocaleDateString("en-CA", { timeZone: PROPERTY_TIME_ZONE }); }
+}
+
+/** Today in the property's time zone (pass a branch's own zone when it is known). */
+export function todayISO(timeZone?: string): string {
+  return isoDateIn(new Date(), timeZone);
+}
+
+/** Calendar arithmetic on YYYY-MM-DD strings (no time zone involved). */
+export function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 export function nightsBetween(checkIn: string, checkOut: string): number {

@@ -29,7 +29,10 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 EOF
-psql -d "$DB" -v ON_ERROR_STOP=1 -q -c "alter database $DB set app.keybox_key = 'test-keybox-key'; alter database $DB set app.identity_key = 'test-identity-key';" -c "alter database $DB set search_path = \"\$user\", public, extensions;"
+# Fixtures write "today" as current_date and mean the property's day, so suite sessions run in the property's zone
+# (set here, not taken from the machine: CI runners are UTC). The product itself must not depend on the session zone
+# (UTC on a hosted project): PL09 keeps session-zone dates out of every function, and local_date_tests.sql runs in UTC.
+psql -d "$DB" -v ON_ERROR_STOP=1 -q -c "alter database $DB set app.keybox_key = 'test-keybox-key'; alter database $DB set app.identity_key = 'test-identity-key';" -c "alter database $DB set search_path = \"\$user\", public, extensions;" -c "alter database $DB set timezone = 'Asia/Riyadh';"
 for f in supabase/migrations/*.sql; do
   echo "== applying $f"
   psql -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | grep -v NOTICE || true
@@ -48,3 +51,5 @@ echo "== running external-review fix tests"
 psql -d "$DB" -f tests/sql/review_tests.sql
 echo "== running AI settings tests"
 psql -d "$DB" -f tests/sql/ai_settings_tests.sql
+echo "== running branch-local date tests"
+psql -d "$DB" -f tests/sql/local_date_tests.sql

@@ -11,7 +11,7 @@ import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
-import { formatCurrency, formatDateTime } from "../lib/utils";
+import { formatCurrency, formatDateTime, todayISO } from "../lib/utils";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
 type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice";
@@ -68,7 +68,7 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
             {["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("extend")} className="btn-outline text-xs"><CalendarRange className="h-3.5 w-3.5" /> تغيير المغادرة / تمديد</button>}
             {["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("switch")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تبديل الوحدة</button>}
             {["confirmed", "pending_verification", "draft"].includes(r.status) && <button onClick={() => setDialog("cancel")} className="btn-ghost text-xs text-danger-600"><Ban className="h-3.5 w-3.5" /> إلغاء الحجز</button>}
-            {["confirmed", "pending_verification"].includes(r.status) && r.check_in <= new Date().toISOString().slice(0, 10) && <button onClick={() => setDialog("no_show")} className="btn-ghost text-xs text-danger-600"><UserX className="h-3.5 w-3.5" /> عدم حضور</button>}
+            {["confirmed", "pending_verification"].includes(r.status) && r.check_in <= todayISO() && <button onClick={() => setDialog("no_show")} className="btn-ghost text-xs text-danger-600"><UserX className="h-3.5 w-3.5" /> عدم حضور</button>}
           </div>
         )}
       </Card>
@@ -287,7 +287,7 @@ function ExtendDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
 
 function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: ReservationDetail; onClose: () => void; onDone: () => Promise<void> }) {
   const r = d.reservation;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [effective, setEffective] = useState(today > r.check_in ? today : r.check_in); const [room, setRoom] = useState(""); const [reason, setReason] = useState("");
   const [rooms, setRooms] = useState<Array<{ room_id: string; room_number: string; category_name: string; cleanliness: string; status: string }>>([]);
   useEffect(() => { if (!open) return; opsApi.availableRooms(r.branch_id, effective, r.check_out, null, r.id).then((x) => setRooms(x.filter((y) => y.room_id !== r.room_id))).catch(() => setRooms([])); }, [open, effective, r.branch_id, r.check_out, r.id, r.room_id]);

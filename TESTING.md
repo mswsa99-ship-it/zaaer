@@ -38,7 +38,8 @@ tests/sql/ai_settings_tests.sql ← إعدادات الذكاء الاصطناع
 tests/sql/concurrency.sh       ← سباقات بجلستين (X*)
 tests/unit/*.test.ts           ← منطق خالص بلا قاعدة: guardrails, ops, knowledge, contract, demo-invariants، ومحوّل Gemini (llm: شكل الطلب لكل جيل، توقيعات التفكير، النماذج الاحتياطية)
 tests/e2e/*.spec.ts            ← Playwright على نسخة العرض (A/R/F/H/D/U/S/K)
-tests/sql/platform_tests.sql   ← خصائص المنصة المستضافة: search_path، امتدادات في schema extensions، مفاتيح Vault (PL*)
+tests/sql/platform_tests.sql   ← خصائص المنصة المستضافة: search_path، امتدادات في schema extensions، مفاتيح Vault، لا تاريخ من منطقة الجلسة (PL*)
+tests/sql/local_date_tests.sql ← التواريخ التشغيلية بتوقيت الفرع والجلسة بتوقيت UTC كما في Supabase: سندات قبل منتصف الليل وبعده، وإقامة تبدأ «اليوم» بتوقيت الفرع (LD*)
 tests/staging/*.spec.ts        ← فحص حي بعد كل نشر للـstaging: الويب المنشور + Supabase + Edge Functions الحقيقية (L*)
 ```
 
@@ -48,6 +49,7 @@ tests/staging/*.spec.ts        ← فحص حي بعد كل نشر للـstaging:
 - **دالة RPC جديدة** → يجب أن تظهر في SQL وفي `src/demo/client.ts` معًا، وإلا فشل `contract.test.ts`.
 - **شاشة أو تدفق جديد** → spec في `tests/e2e` مع معرّف قبول في اسم الاختبار.
 - **سباق محتمل** (قفل، تكرار، رصيد) → حالة في `concurrency.sh` بجلستين حقيقيتين، لا استدعاءين متتاليين.
+- **تاريخ تشغيلي** («اليوم»، يوم التقرير، بداية الإقامة) → بتوقيت الفرع دائمًا: `fn_branch_today(branch)` في SQL (و`(يوم)::timestamp at time zone tz` لحدود اليوم)، و`todayISO()`/`addDaysISO()` في الواجهة، و`localDay(tz)` في Edge. لا `current_date` ولا `now()::date` في أي دالة (يرفضها PL09): جلسات Supabase بتوقيت UTC، فبين 00:00 و03:00 بتوقيت الرياض يكون تاريخ UTC هو الأمس. عدّادات استهلاك الذكاء الاصطناعي اليومية وحدها بيوم UTC، عمدًا.
 
 ## 4. قائمة التغيير (تُلزم كل PR — انظر `.github/pull_request_template.md`)
 

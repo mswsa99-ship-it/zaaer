@@ -9,7 +9,7 @@ import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, Spin
 import { BranchPicker } from "../../components/BranchPicker";
 import { BarChart3, Download, Info } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from "recharts";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, todayISO } from "../../lib/utils";
 import { useBranch } from "../../lib/branch";
 import { opsApi, toArabicError, type ReportsFinance } from "../../lib/api";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/types";
@@ -21,8 +21,8 @@ interface OpsStats { handoffs: number; unmatched: number; aiRequests14: number; 
 const sar = (h: number) => formatCurrency(h / 100);
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return isoDay(d); };
-const last30 = () => { const to = isoDay(new Date()); return { from: addDays(to, -29), to }; };
-const thisMonth = () => { const now = new Date(); return { from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`, to: isoDay(now) }; };
+const last30 = () => { const to = todayISO(); return { from: addDays(to, -29), to }; };
+const thisMonth = () => { const to = todayISO(); return { from: to.slice(0, 8) + "01", to }; };
 const shortDay = (iso: string) => iso.slice(5); // MM-DD on the axis
 
 // Categorical order shared with the other admin charts (brand, accent, …).

@@ -97,13 +97,8 @@ export async function executeOpsTool(name: string, args: Record<string, unknown>
   }
 }
 
-/** Branch-local calendar day; an invalid IANA name in branches.timezone must not take the function down. */
-export function localDay(tz: string | null | undefined): string {
-  for (const z of [tz, "Asia/Riyadh"]) {
-    try { if (z) return new Date().toLocaleDateString("en-CA", { timeZone: z }); } catch { /* invalid zone → next */ }
-  }
-  return new Date().toISOString().slice(0, 10);
-}
+/** Branch-local calendar day (moved to dates.ts, shared with ai-reception). */
+export { localDay } from "./dates.ts";
 
 /** Model-supplied arguments are logged for audit, but never with guest names / references in clear text. */
 const SAFE_ARG_KEYS = new Set(["action", "state", "priority", "pricing_mode", "method", "kind", "date", "from", "to", "effective", "new_check_out", "quantity", "amount_halalas"]);

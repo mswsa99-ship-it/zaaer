@@ -15,6 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { gateInput, gateOutput, scriptedReply, buildSystemPrompt, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
+import { localDay } from "../_shared/dates.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
     const { data: b } = await db.from("branches").select("id").eq("organization_id", org.id).eq("is_active", true).order("created_at").limit(1).maybeSingle();
     branchId = b?.id ?? null;
   }
-  const { data: branch } = await db.from("branches").select("id, name_ar").eq("id", branchId).eq("organization_id", org.id).maybeSingle();
+  const { data: branch } = await db.from("branches").select("id, name_ar, timezone").eq("id", branchId).eq("organization_id", org.id).maybeSingle();
   if (!branch) return json({ error: "branch_not_found" }, 400);
 
   const { data: settings } = await db.from("ai_settings").select("*").eq("organization_id", org.id).maybeSingle();
@@ -181,7 +182,8 @@ Deno.serve(async (req) => {
     .map((m) => ({ role: m.sender === "guest" ? "user" : "model", text: m.content }));
   // the current (redacted) message is already the last element
 
-  const system = buildSystemPrompt({ propertyName: org.name_ar, branchName: branch.name_ar, verified: !!guestToken, extra: s.strict_scope ? s.extra_instructions : s.extra_instructions, today: dayKey });
+  // the prompt states the branch's own date (dayKey is the UTC day the usage counters use)
+  const system = buildSystemPrompt({ propertyName: org.name_ar, branchName: branch.name_ar, verified: !!guestToken, extra: s.strict_scope ? s.extra_instructions : s.extra_instructions, today: localDay(branch.timezone) });
   const userWroteEnglish = /[A-Za-z]{3,}/.test(message) && !/[؀-ۿ]/.test(message);
 
   let tokensIn = 0, tokensOut = 0;

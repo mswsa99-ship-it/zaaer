@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "./supabase";
 import { useBranch } from "./branch";
+import { todayISO } from "./utils";
 
 export interface ReservationCard {
   id: string;
@@ -56,7 +57,7 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
     setLoading(true);
     let q = supabase.from("reservations").select(SELECT).eq("branch_id", branchId);
     if (statusKey) q = q.in("status", statusKey.split(","));
-    if (todayOnly) q = q.eq("check_in", new Date().toISOString().slice(0, 10));
+    if (todayOnly) q = q.eq("check_in", todayISO());
     q = q.order("created_at", { ascending: false });
     const { data: rows, error: e } = await q;
     if (token !== reqRef.current) return; // branch changed or a newer load started meanwhile
