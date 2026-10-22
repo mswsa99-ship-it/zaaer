@@ -230,7 +230,7 @@ export function seed(): Store {
   put("guest_lookup_attempts", []);
 
   // AI settings & usage
-  put("ai_settings", [{ organization_id: ORG, enabled: false, provider: "gemini", model: "gemini-2.5-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: "", ops_enabled: true, ops_daily_request_limit: 500, briefing_with_insights: true, updated_by: null, updated_at: ts(-10) }]);
+  put("ai_settings", [{ organization_id: ORG, enabled: false, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: "", ops_enabled: true, ops_daily_request_limit: 500, briefing_with_insights: true, updated_by: null, updated_at: ts(-10) }]);
   put("ai_usage_daily", Array.from({ length: 14 }, (_, i) => ({ organization_id: ORG, day: addDays(T, -13 + i), requests: 20 + Math.round(Math.sin(i) * 8 + 10), tokens_in: 42000 + i * 900, tokens_out: 9000 + i * 300, fallbacks: i % 4 === 0 ? 2 : 0, guardrail_blocks: i % 5 === 0 ? 1 : 0 })));
   put("ai_tool_executions", [{ id: uid(), conversation_id: conv2, tool_name: "get_public_property_policies", args_redacted: {}, result_status: "ok", latency_ms: 120, created_at: ts(-1, 20) }]);
   put("ai_guardrail_events", [{ id: uid(), conversation_id: conv2, stage: "input", rule: "off_scope:general", detail: "…", created_at: ts(-1, 20) }]);

@@ -13,7 +13,7 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { gateInput, gateOutput, scriptedReply, buildSystemPrompt, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
-import { createProvider, ProviderError, type ChatTurn } from "../_shared/llm.ts";
+import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
 
 const CORS = {
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
   if (!branch) return json({ error: "branch_not_found" }, 400);
 
   const { data: settings } = await db.from("ai_settings").select("*").eq("organization_id", org.id).maybeSingle();
-  const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-2.5-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
+  const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
 
   // ---- conversation -------------------------------------------------------
   if (conversationId) {
@@ -197,6 +197,7 @@ Deno.serve(async (req) => {
       if (res.toolCalls.length === 0) { finalText = res.text; break; }
       if (round === MAX_TOOL_ROUNDS) { await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "tool", rule: "max_tool_rounds" }); break; }
 
+      const results: ToolResult[] = [];
       for (const call of res.toolCalls) {
         const started = Date.now();
         let result: unknown; let status = "ok";
@@ -216,13 +217,15 @@ Deno.serve(async (req) => {
           }
         }
         await db.from("ai_tool_executions").insert({ conversation_id: conversationId, tool_name: call.name, args_redacted: call.args, result_status: status, latency_ms: Date.now() - started });
-        history.push({ role: "model", toolCall: { name: call.name, args: call.args } });
-        history.push({ role: "user", toolResult: { name: call.name, result } });
+        results.push({ name: call.name, id: call.id, result });
       }
+      // the model's step goes back exactly as it came (thought signatures), then all its results in one turn
+      history.push({ role: "model", toolStep: { calls: res.toolCalls, raw: res.raw } });
+      history.push({ role: "user", toolResults: results });
     }
   } catch (e) {
     const kind = e instanceof ProviderError ? e.kind : "http";
-    await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "output", rule: "provider_error:" + kind });
+    await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "output", rule: "provider_error:" + kind, detail: String((e as Error).message ?? "").slice(0, 300) });
     await bump({ tokens_in: tokensIn, tokens_out: tokensOut });
     return respondScripted("fallback", { ai_status: "provider_error:" + kind });
   }

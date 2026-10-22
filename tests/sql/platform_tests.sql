@@ -1,5 +1,5 @@
 -- =====================================================================
--- Platform tests (PL01–PL07): properties a hosted Supabase project needs that a plain
+-- Platform tests (PL01–PL08): properties a hosted Supabase project needs that a plain
 -- local Postgres would not catch. Runs on the DB built by tests/sql/run.sh, which mirrors
 -- the hosted layout (pgcrypto / uuid-ossp in schema "extensions").
 -- =====================================================================
@@ -76,6 +76,14 @@ from pg_proc p
 where p.pronamespace = 'public'::regnamespace and p.proname !~ '^t_'
   and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')
   and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e');
+
+-- PL08: the AI settings point at a model a new API key can call (0017): no Gemini 1.x/2.x, as default or as value
+insert into test_results
+select 'PL08 ai_settings uses a current Gemini model (default and rows; 1.x/2.x are unavailable to new keys)',
+       count(*) = 0 and (select column_default from information_schema.columns
+                         where table_schema = 'public' and table_name = 'ai_settings' and column_name = 'model') !~ 'gemini-[12][.]',
+       coalesce(string_agg(model, ', '), '')
+from ai_settings where model ~ '^gemini-[12][.]';
 
 -- PL06: no API role can run the bootstrap (it can create keys and rewrite encrypted columns)
 insert into test_results

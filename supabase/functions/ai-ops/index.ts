@@ -14,7 +14,7 @@
  *   - Secrets: GEMINI_API_KEY (Edge secret). Never returned.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { createProvider, ProviderError, type ChatTurn } from "../_shared/llm.ts";
+import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs } from "../_shared/ops.ts";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   const today = localDay(branch.timezone);
 
   const { data: settings } = await admin.from("ai_settings").select("*").eq("organization_id", staff.organization_id).maybeSingle();
-  const s = settings ?? { enabled: false, ops_enabled: true, provider: "gemini", model: "gemini-2.5-flash", temperature: 0.2, max_output_tokens: 700, timeout_ms: 15000, ops_daily_request_limit: 500, daily_token_budget: 500000, briefing_with_insights: true, extra_instructions: null };
+  const s = settings ?? { enabled: false, ops_enabled: true, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 700, timeout_ms: 15000, ops_daily_request_limit: 500, daily_token_budget: 500000, briefing_with_insights: true, extra_instructions: null };
   const dayKey = new Date().toISOString().slice(0, 10);
   // atomic server-side increment (concurrent requests must not overwrite each other's counters)
   const bump = async (patch: Record<string, number>) => {
@@ -87,7 +87,10 @@ Deno.serve(async (req) => {
         const g = gateOpsOutput(res.text ?? "", 900);
         insights = g.ok ? g.text : null;
         await bump({ requests: 1, tokens_in: res.usage.input, tokens_out: res.usage.output, guardrail_blocks: g.ok ? 0 : 1 });
-      } catch (e) { aiStatus = "provider_error:" + (e instanceof ProviderError ? e.kind : "http"); await bump({ fallbacks: 1 }); }
+      } catch (e) {
+        aiStatus = "provider_error:" + (e instanceof ProviderError ? e.kind : "http"); await bump({ fallbacks: 1 });
+        await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_" + aiStatus, detail: String((e as Error).message ?? "").slice(0, 300) });
+      }
     }
     return json({ ...b, insights, mode: insights ? "ai" : "deterministic", ai_status: aiStatus, generated_at: ctxData.generated_at, date: ctxData.summary?.date });
   }
@@ -136,6 +139,7 @@ Deno.serve(async (req) => {
       if (res.blockedBySafety) break;
       if (res.toolCalls.length === 0) { finalText = res.text; break; }
       if (round === MAX_TOOL_ROUNDS) break;
+      const results: ToolResult[] = [];
       for (const call of res.toolCalls) {
         const started = Date.now(); let result: unknown; let status = "ok";
         if (!isOpsTool(call.name)) { status = "denied"; result = { denied: true }; }
@@ -149,13 +153,16 @@ Deno.serve(async (req) => {
           } catch (e) { status = "error"; result = { error: String((e as Error).message).slice(0, 160) }; }
         }
         await admin.from("ai_tool_executions").insert({ conversation_id: null, tool_name: "ops:" + call.name, args_redacted: redactArgs(call.args), result_status: status, latency_ms: Date.now() - started });
-        history.push({ role: "model", toolCall: { name: call.name, args: call.args } });
-        history.push({ role: "user", toolResult: { name: call.name, result: shrink(result) } });
+        results.push({ name: call.name, id: call.id, result: shrink(result) });
       }
+      // the model's step goes back exactly as it came (thought signatures), then all its results in one turn
+      history.push({ role: "model", toolStep: { calls: res.toolCalls, raw: res.raw } });
+      history.push({ role: "user", toolResults: results });
     }
   } catch (e) {
     const kind = e instanceof ProviderError ? e.kind : "http";
     await bump({ requests: 1, fallbacks: 1, tokens_in: tokensIn, tokens_out: tokensOut });
+    await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_provider_error:" + kind, detail: String((e as Error).message ?? "").slice(0, 300) });
     return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: "provider_error:" + kind });
   }
 

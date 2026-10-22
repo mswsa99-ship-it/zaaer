@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   if (!role || !["owner", "manager"].includes(role)) return json({ error: "forbidden" }, 403);
 
   const { data: settings } = await userClient.from("ai_settings").select("provider, model, timeout_ms").limit(1).maybeSingle();
-  const provider = createProvider(settings?.provider ?? "gemini", settings?.model ?? "gemini-2.5-flash", Deno.env);
+  const provider = createProvider(settings?.provider ?? "gemini", settings?.model ?? "gemini-3.8-flash", Deno.env);
   if (!provider) return json({ configured: false, ok: false, model: settings?.model ?? null, error: "GEMINI_API_KEY غير مضبوط في أسرار Edge Functions" });
 
   const started = Date.now();
@@ -25,7 +25,8 @@ Deno.serve(async (req) => {
     const r = await provider.generate({ system: "أجب بكلمة واحدة: جاهز", history: [{ role: "user", text: "اختبار" }], tools: [], temperature: 0, maxOutputTokens: 5, timeoutMs: settings?.timeout_ms ?? 10000 });
     return json({ configured: true, ok: true, model: settings?.model, latency_ms: Date.now() - started, finish: r.finishReason });
   } catch (e) {
-    const kind = e instanceof ProviderError ? e.kind : "unknown";
-    return json({ configured: true, ok: false, model: settings?.model, latency_ms: Date.now() - started, error: kind });
+    // the provider's own reason (key-shaped text masked by the adapter) tells the owner what to fix
+    const error = e instanceof ProviderError ? (e.message && e.message !== e.kind ? `${e.kind}: ${e.message}` : e.kind) : "unknown";
+    return json({ configured: true, ok: false, model: settings?.model, latency_ms: Date.now() - started, error });
   }
 });

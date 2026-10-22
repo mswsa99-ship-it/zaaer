@@ -26,7 +26,7 @@ interface AiSettings {
 }
 
 const DEFAULTS: AiSettings = {
-  enabled: false, provider: "gemini", model: "gemini-2.5-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000,
+  enabled: false, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000,
   daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: "", ops_enabled: true, ops_daily_request_limit: 500, briefing_with_insights: true,
 };
 
@@ -44,7 +44,8 @@ const TOOLS = [
   "open_supervisor_ticket", "request_human_assistance",
 ];
 
-const MODEL_HINTS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+// current GA models (Gemini 2.x is not available to new API keys); any other model id can still be typed
+const MODEL_HINTS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 
 export default function AdminAiSettings() {
   const { profile } = useAuth();
