@@ -46,3 +46,5 @@ echo "== running reservation-parity tests"
 psql -d "$DB" -f tests/sql/parity_tests.sql
 echo "== running external-review fix tests"
 psql -d "$DB" -f tests/sql/review_tests.sql
+echo "== running AI settings tests"
+psql -d "$DB" -f tests/sql/ai_settings_tests.sql

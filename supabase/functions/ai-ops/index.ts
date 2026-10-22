@@ -61,13 +61,17 @@ Deno.serve(async (req) => {
   const today = localDay(branch.timezone);
 
   const { data: settings } = await admin.from("ai_settings").select("*").eq("organization_id", staff.organization_id).maybeSingle();
-  const s = settings ?? { enabled: false, ops_enabled: true, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 700, timeout_ms: 15000, ops_daily_request_limit: 500, daily_token_budget: 500000, briefing_with_insights: true, extra_instructions: null };
+  const s = settings ?? { enabled: false, ops_enabled: true, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 700, timeout_ms: 15000, ops_daily_request_limit: 500, daily_token_budget: 500000, briefing_with_insights: true, extra_instructions: null };
   const dayKey = new Date().toISOString().slice(0, 10);
   // atomic server-side increment (concurrent requests must not overwrite each other's counters)
   const bump = async (patch: Record<string, number>) => {
     await admin.rpc("fn_ai_usage_bump", { p_org: staff.organization_id, p_day: dayKey, p_requests: patch.requests ?? 0, p_tokens_in: patch.tokens_in ?? 0, p_tokens_out: patch.tokens_out ?? 0, p_fallbacks: patch.fallbacks ?? 0, p_blocks: patch.guardrail_blocks ?? 0 });
   };
-  const provider = s.enabled && s.ops_enabled ? createProvider(s.provider, s.model, Deno.env) : null;
+  const provider = s.enabled && s.ops_enabled ? createProvider(s.provider, s.model, Deno.env, s.fallback_models ?? []) : null;
+  // a fallback model answered: logged once per request next to the provider errors
+  const noteFallback = async (answeredBy: string | undefined, fellBack: string[]) => {
+    if (fellBack.length) await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_provider_fallback:" + (answeredBy ?? "?"), detail: fellBack.join(" | ").slice(0, 300) });
+  };
 
   // ---- context (always deterministic, always as the user) ----
   const { data: ctxData, error: ctxErr } = await user.rpc("fn_ai_ops_context", { p_branch: branchId, p_date: typeof body.date === "string" ? body.date : today });
@@ -84,6 +88,7 @@ Deno.serve(async (req) => {
           history: [{ role: "user", text: "السياق التشغيلي (JSON):\n" + JSON.stringify(ctxData).slice(0, 12000) }],
           tools: [], temperature: 0.3, maxOutputTokens: 350, timeoutMs: Number(s.timeout_ms ?? 15000),
         });
+        await noteFallback(res.model, res.fallbackFrom ?? []);
         const g = gateOpsOutput(res.text ?? "", 900);
         insights = g.ok ? g.text : null;
         await bump({ requests: 1, tokens_in: res.usage.input, tokens_out: res.usage.output, guardrail_blocks: g.ok ? 0 : 1 });
@@ -113,8 +118,8 @@ Deno.serve(async (req) => {
   await user.from("ai_ops_messages").insert({ conversation_id: conversationId, sender: "staff", content: message });
 
   const proposals: Array<Record<string, unknown>> = [];
-  const finish = async (reply: string, modeOut: "ai" | "deterministic", extra: Record<string, unknown> = {}) => {
-    await user.from("ai_ops_messages").insert({ conversation_id: conversationId, sender: "assistant", content: reply, meta: { mode: modeOut, proposals: proposals.map((p) => p.id), ...extra } });
+  const finish = async (reply: string, modeOut: "ai" | "deterministic", extra: Record<string, unknown> = {}, metaOnly: Record<string, unknown> = {}) => {
+    await user.from("ai_ops_messages").insert({ conversation_id: conversationId, sender: "assistant", content: reply, meta: { mode: modeOut, proposals: proposals.map((p) => p.id), ...extra, ...metaOnly } });
     await user.from("ai_ops_conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversationId);
     return json({ conversation_id: conversationId, reply, proposals, mode: modeOut, ...extra });
   };
@@ -132,10 +137,14 @@ Deno.serve(async (req) => {
   const toolCtx = { db: user, branchId, conversationId: conversationId!, today };
 
   let tokensIn = 0, tokensOut = 0, finalText: string | null = null;
+  let answeredBy: string = s.model;
+  const fellBack: string[] = [];
   try {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const res = await provider.generate({ system, history, tools: OPS_TOOL_DECLARATIONS, temperature: Number(s.temperature ?? 0.2), maxOutputTokens: Math.max(Number(s.max_output_tokens ?? 400), 600), timeoutMs: Number(s.timeout_ms ?? 15000) });
       tokensIn += res.usage.input; tokensOut += res.usage.output;
+      if (res.model) answeredBy = res.model;
+      if (res.fallbackFrom?.length) fellBack.push(...res.fallbackFrom);
       if (res.blockedBySafety) break;
       if (res.toolCalls.length === 0) { finalText = res.text; break; }
       if (round === MAX_TOOL_ROUNDS) break;
@@ -165,9 +174,10 @@ Deno.serve(async (req) => {
     await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_provider_error:" + kind, detail: String((e as Error).message ?? "").slice(0, 300) });
     return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: "provider_error:" + kind });
   }
+  await noteFallback(answeredBy, fellBack);
 
   const out = finalText ? gateOpsOutput(finalText) : { ok: false, text: "", violations: ["no_text"] };
   await bump({ requests: 1, tokens_in: tokensIn, tokens_out: tokensOut, guardrail_blocks: out.ok ? 0 : 1 });
   if (!out.ok) return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: "output_blocked:" + out.violations.join(",") });
-  return finish(out.text, "ai");
+  return finish(out.text, "ai", {}, { model: answeredBy });
 });

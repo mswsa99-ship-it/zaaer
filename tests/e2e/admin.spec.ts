@@ -63,6 +63,15 @@ test.describe("admin definitions", () => {
     await loginAs("owner");
     await page.goto("/#/admin/ai-settings", { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { name: "إعدادات الذكاء الاصطناعي" })).toBeVisible();
+    // fallback models are a setting too: validated in the form, saved in order, Arabic comma accepted
+    const fallbacks = page.getByLabel("النماذج الاحتياطية (حتى 3، بالترتيب)");
+    await expect(fallbacks).toHaveValue("gemini-3.6-flash, gemini-3.5-flash-lite");
+    await fallbacks.fill("Gemini 3!");
+    await expect(page.getByText(/اكتب معرّفات نماذج فقط/)).toBeVisible();
+    await fallbacks.fill("gemini-3.5-flash-lite، gemini-3.6-flash");
+    await page.getByRole("button", { name: "حفظ الإعدادات" }).click();
+    await expect(page.getByText("تم الحفظ")).toBeVisible();
+    await expect(fallbacks).toHaveValue("gemini-3.5-flash-lite, gemini-3.6-flash");
     await page.goto("/#/admin/branches", { waitUntil: "networkidle" });
     await expect(page.getByText(/الضريبة|ضريبة/).first()).toBeVisible();
   });

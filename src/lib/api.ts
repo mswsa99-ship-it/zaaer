@@ -179,10 +179,24 @@ export async function aiChat(message: string, opts: { conversationId?: string | 
   return data;
 }
 
-export async function aiHealth(): Promise<{ configured: boolean; ok: boolean; model?: string | null; latency_ms?: number; error?: string }> {
+/**
+ * ok: some model answered (the assistants use the first that does); model: the one they would use now — differs
+ * from `primary` while the configured model is down; error: the configured model's failure; checked: every model probed.
+ */
+export interface AiHealth {
+  configured: boolean;
+  ok: boolean;
+  primary?: string | null;
+  model?: string | null;
+  latency_ms?: number;
+  error?: string;
+  checked?: Array<{ model: string; ok: boolean; latency_ms?: number; error?: string }>;
+}
+
+export async function aiHealth(): Promise<AiHealth> {
   const { data, error } = await supabase.functions.invoke("ai-health", { body: {} });
   if (error) return { configured: false, ok: false, error: error.message };
-  return data as { configured: boolean; ok: boolean; model?: string | null; latency_ms?: number; error?: string };
+  return data as AiHealth;
 }
 
 function fingerprint(): string {

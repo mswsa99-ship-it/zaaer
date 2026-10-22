@@ -34,8 +34,9 @@ P0 = يمنع الدمج. P1 = يجب أن ينجح قبل الإصدار، وي
 tests/sql/security_tests.sql   ← RLS، الأدوار، عزل المؤسسات والفروع، كشف البيانات (T*)
 tests/sql/core_tests.sql       ← قواعد العمل: التخصيص، المال، التأمين، الأرشفة، المهام، النسخ (R/F/H/U/RV*)
 tests/sql/knowledge_tests.sql  ← قاعدة المعرفة والأسئلة بلا إجابة (K*)
+tests/sql/ai_settings_tests.sql ← إعدادات الذكاء الاصطناعي: النماذج الاحتياطية، التحقق، التدقيق، صلاحية المالك (AS*)
 tests/sql/concurrency.sh       ← سباقات بجلستين (X*)
-tests/unit/*.test.ts           ← منطق خالص بلا قاعدة: guardrails, ops, knowledge, contract, demo-invariants
+tests/unit/*.test.ts           ← منطق خالص بلا قاعدة: guardrails, ops, knowledge, contract, demo-invariants، ومحوّل Gemini (llm: شكل الطلب لكل جيل، توقيعات التفكير، النماذج الاحتياطية)
 tests/e2e/*.spec.ts            ← Playwright على نسخة العرض (A/R/F/H/D/U/S/K)
 tests/sql/platform_tests.sql   ← خصائص المنصة المستضافة: search_path، امتدادات في schema extensions، مفاتيح Vault (PL*)
 tests/staging/*.spec.ts        ← فحص حي بعد كل نشر للـstaging: الويب المنشور + Supabase + Edge Functions الحقيقية (L*)

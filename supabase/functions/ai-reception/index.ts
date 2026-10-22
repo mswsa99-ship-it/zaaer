@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
   if (!branch) return json({ error: "branch_not_found" }, 400);
 
   const { data: settings } = await db.from("ai_settings").select("*").eq("organization_id", org.id).maybeSingle();
-  const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
+  const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
 
   // ---- conversation -------------------------------------------------------
   if (conversationId) {
@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
   }
 
   // ---- AI disabled / provider missing → scripted ----------------------------
-  const provider = s.enabled ? createProvider(s.provider, s.model, Deno.env) : null;
+  const provider = s.enabled ? createProvider(s.provider, s.model, Deno.env, s.fallback_models ?? []) : null;
   if (!provider) return respondScripted("fallback", { ai_status: s.enabled ? "awaiting_credentials" : "disabled" });
 
   // ---- daily budgets ---------------------------------------------------------
@@ -187,11 +187,15 @@ Deno.serve(async (req) => {
   let tokensIn = 0, tokensOut = 0;
   let finalText: string | null = null;
   const actions: { label: string; route?: string }[] = [];
+  let answeredBy: string = s.model;          // the model that actually answered (a fallback when the configured one was down)
+  const fellBack: string[] = [];             // models that failed before it, with Google's reason
 
   try {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const res = await provider.generate({ system, history, tools: TOOL_DECLARATIONS, temperature: Number(s.temperature), maxOutputTokens: s.max_output_tokens, timeoutMs: s.timeout_ms });
       tokensIn += res.usage.input; tokensOut += res.usage.output;
+      if (res.model) answeredBy = res.model;
+      if (res.fallbackFrom?.length) fellBack.push(...res.fallbackFrom);
       if (res.blockedBySafety) { await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "output", rule: "provider_safety_block" }); break; }
 
       if (res.toolCalls.length === 0) { finalText = res.text; break; }
@@ -229,6 +233,8 @@ Deno.serve(async (req) => {
     await bump({ tokens_in: tokensIn, tokens_out: tokensOut });
     return respondScripted("fallback", { ai_status: "provider_error:" + kind });
   }
+  // a fallback model answered: the owner sees it next to the provider errors (ai-settings → events)
+  if (fellBack.length) await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "output", rule: "provider_fallback:" + answeredBy, detail: fellBack.join(" | ").slice(0, 300) });
 
   // ---- OUTPUT GATE -----------------------------------------------------------
   const allowedUrls = [appBaseUrl, "/booking/", "/checkin/", "/kiosk", "/privacy", "/terms"];
@@ -243,7 +249,7 @@ Deno.serve(async (req) => {
   }
 
   const uniqActions = actions.filter((a, i) => actions.findIndex((b) => b.route === a.route) === i).slice(0, 3);
-  await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "assistant", content: out.text, meta: { mode: "ai", model: s.model, violations: out.violations, tokens: { in: tokensIn, out: tokensOut } } });
+  await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "assistant", content: out.text, meta: { mode: "ai", model: answeredBy, violations: out.violations, tokens: { in: tokensIn, out: tokensOut } } });
   await db.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversationId);
   await bump({ requests: 1, tokens_in: tokensIn, tokens_out: tokensOut });
 

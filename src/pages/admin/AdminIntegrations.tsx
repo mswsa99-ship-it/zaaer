@@ -33,7 +33,10 @@ export default function AdminIntegrations() {
       if (!s || !s.enabled || s.provider === "none") setAi({ ...base, status: "disabled", description: "معطّل من الإعدادات — يعمل المسار الحواري التقليدي" });
       else if (!health.configured) setAi({ ...base, status: "awaiting", description: "مفعّل لكن مفتاح GEMINI_API_KEY غير مضبوط على الخادم" });
       else if (!health.ok) setAi({ ...base, status: "error", description: `فشل الاتصال: ${health.error ?? "غير معروف"}` });
-      else setAi({ ...base, status: "connected", description: `متصل — ${health.model ?? s.model}${typeof health.latency_ms === "number" ? ` · ${health.latency_ms} ms` : ""}` });
+      else {
+        const viaFallback = health.primary && health.model && health.model !== health.primary;
+        setAi({ ...base, status: "connected", description: `متصل — ${health.model ?? s.model}${typeof health.latency_ms === "number" ? ` · ${health.latency_ms} ms` : ""}${viaFallback ? ` (احتياطي؛ ${health.primary} لا يجيب حاليًا)` : ""}` });
+      }
     })();
   }, []);
 

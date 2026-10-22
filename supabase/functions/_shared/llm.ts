@@ -55,6 +55,10 @@ export interface GenerateResponse {
   usage: { input: number; output: number };
   finishReason: string;
   blockedBySafety: boolean;
+  /** the model that answered — one of the fallbacks when the configured model was unavailable */
+  model?: string;
+  /** the models tried before `model`, each with why it failed ("gemini-x: http 503: …"); empty when the first choice answered */
+  fallbackFrom?: string[];
 }
 
 export interface LLMProvider {
@@ -63,7 +67,7 @@ export interface LLMProvider {
 }
 
 export class ProviderError extends Error {
-  constructor(message: string, public readonly kind: "timeout" | "auth" | "quota" | "http" | "parse") {
+  constructor(message: string, public readonly kind: "timeout" | "auth" | "quota" | "http" | "parse", public readonly status?: number) {
     super(message);
   }
 }
@@ -100,17 +104,75 @@ export function providerErrorText(status: number, body: string): string {
   return `http ${status}: ${msg.replace(KEY_LIKE, "[key]").replace(/\s+/g, " ").trim().slice(0, 240)}`;
 }
 
+// ---------------------------------------------------------------------------
+// Model fallback. Google answers "503 high demand" for a model for hours at a time, per model and
+// sometimes per key; another current model usually still answers. So the configured model comes first,
+// then the owner's fallback list (ai_settings.fallback_models), within the same time budget.
+// ---------------------------------------------------------------------------
+
+/**
+ * Statuses that describe the MODEL right now, not the request, so another model may well answer:
+ * 404 retired/unknown model id, 408/504 deadline, 429 that model's quota, 500/502/503 capacity.
+ * 400 (the request), 401/403 (the key) and network failures are the same for every model: the chain stops.
+ */
+const MODEL_UNAVAILABLE = new Set([404, 408, 429, 500, 502, 503, 504]);
+/** How long later requests on this instance try a model that just failed that way last (ms). */
+const cooldownMs = (status?: number): number => (status === 404 ? 600_000 : status === 429 ? 60_000 : 120_000);
+const cooldowns = new Map<string, number>();   // model id → deprioritised until (epoch ms); shared by all requests of this isolate
+/** Test hook: forget which models were cooling down. */
+export function resetModelCooldowns(): void { cooldowns.clear(); }
+/** Another model is tried only while at least this much of the request's time budget is left. */
+export const MIN_ATTEMPT_MS = 1500;
+/**
+ * Google's documented placeholder for a function call the receiving model did not produce itself (thought-signature
+ * docs: traces moved between models, injected calls). Used when a tool loop continues on another model: that model
+ * cannot validate the first one's signatures. A step always goes back to its own model verbatim.
+ */
+export const FOREIGN_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
+
+/** A tool step as another model may receive it: its own signatures removed, the placeholder on the first call. */
+function foreignStep(parts: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  let first = true;
+  return parts.map((p) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(p)) if (k !== "thoughtSignature") out[k] = v;
+    if (p.functionCall && first) { first = false; out.thoughtSignature = FOREIGN_THOUGHT_SIGNATURE; }
+    return out;
+  });
+}
+
 export class GeminiProvider implements LLMProvider {
   readonly name = "gemini";
-  constructor(private readonly apiKey: string, private readonly model: string) {}
+  /** configured model first, then the fallbacks; blanks and repeats removed */
+  readonly models: string[];
+  constructor(private readonly apiKey: string, private readonly model: string, fallbacks: string[] = []) {
+    this.models = [...new Set([model, ...fallbacks].map((m) => String(m ?? "").trim()).filter(Boolean))];
+  }
 
-  toContents(history: ChatTurn[]) {
+  /**
+   * The order to try models in for this step: the model that produced the latest tool step first (a tool loop
+   * stays on its model — the signatures are its own), then the configured order; models that failed in the last
+   * minutes on this instance go last, as a final resort.
+   */
+  candidates(history: ChatTurn[]): string[] {
+    const started = ([...history].reverse().find((t) => t.toolStep)?.toolStep?.raw as { model?: string } | undefined)?.model;
+    const order = started && this.models.includes(started) ? [started, ...this.models.filter((m) => m !== started)] : this.models;
+    const now = Date.now();
+    const cooling = (m: string) => (cooldowns.get(m) ?? 0) > now;
+    return [...order.filter((m) => !cooling(m)), ...order.filter(cooling)];
+  }
+
+  toContents(history: ChatTurn[], model: string = this.model) {
     const contents: Array<{ role: string; parts: unknown[] }> = [];
     for (const t of history) {
       if (t.toolStep) {
-        const raw = t.toolStep.raw as { parts?: unknown[] } | undefined;
-        if (raw && Array.isArray(raw.parts) && raw.parts.length) contents.push({ role: "model", parts: raw.parts });
-        else contents.push({ role: "model", parts: t.toolStep.calls.map((c) => ({ functionCall: { name: c.name, args: c.args, ...(c.id ? { id: c.id } : {}) } })) });
+        const raw = t.toolStep.raw as { parts?: Array<Record<string, unknown>>; model?: string } | undefined;
+        if (raw && Array.isArray(raw.parts) && raw.parts.length) {
+          contents.push({ role: "model", parts: raw.model && raw.model !== model ? foreignStep(raw.parts) : raw.parts });
+        } else {
+          const parts = t.toolStep.calls.map((c) => ({ functionCall: { name: c.name, args: c.args, ...(c.id ? { id: c.id } : {}) } }));
+          contents.push({ role: "model", parts: isThinkingGemini(model) ? foreignStep(parts) : parts });
+        }
       } else if (t.toolResults) {
         contents.push({ role: "user", parts: t.toolResults.map((r) => ({ functionResponse: { name: r.name, ...(r.id ? { id: r.id } : {}), response: { result: r.result } } })) });
       } else {
@@ -120,11 +182,11 @@ export class GeminiProvider implements LLMProvider {
     return contents;
   }
 
-  buildBody(req: GenerateRequest): Record<string, unknown> {
-    const thinking = isThinkingGemini(this.model);
+  buildBody(req: GenerateRequest, model: string = this.model): Record<string, unknown> {
+    const thinking = isThinkingGemini(model);
     return {
       systemInstruction: { parts: [{ text: req.system }] },
-      contents: this.toContents(req.history),
+      contents: this.toContents(req.history, model),
       tools: req.tools.length ? [{ functionDeclarations: req.tools.map(toGeminiDeclaration) }] : undefined,
       toolConfig: req.tools.length ? { functionCallingConfig: { mode: "AUTO" } } : undefined,
       generationConfig: thinking
@@ -139,12 +201,39 @@ export class GeminiProvider implements LLMProvider {
     };
   }
 
+  /**
+   * One step. `req.timeoutMs` is the budget for the whole step, fallbacks included, so a guest never waits longer
+   * because a model was down. Throws the provider's error when nothing answered (several attempts → all of them).
+   */
   async generate(req: GenerateRequest): Promise<GenerateResponse> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
-    const body = this.buildBody(req);
+    const deadline = Date.now() + req.timeoutMs;
+    const failed: string[] = [];
+    let last: ProviderError | null = null;
+    for (const model of this.candidates(req.history)) {
+      const left = deadline - Date.now();
+      if (last && left < MIN_ATTEMPT_MS) break;
+      try {
+        const res = await this.call(model, req, Math.max(left, 1));
+        return { ...res, model, raw: res.raw ? { ...(res.raw as Record<string, unknown>), model } : undefined, fallbackFrom: failed };
+      } catch (e) {
+        if (!(e instanceof ProviderError)) throw e;
+        last = e;
+        failed.push(`${model}: ${e.message}`.slice(0, 160));
+        if (e.kind === "timeout") { cooldowns.set(model, Date.now() + 60_000); break; }   // the step's budget is spent
+        if (e.status === undefined || !MODEL_UNAVAILABLE.has(e.status)) break;          // would fail the same on any model
+        cooldowns.set(model, Date.now() + cooldownMs(e.status));
+      }
+    }
+    if (!last) throw new ProviderError("no model configured", "http");
+    throw failed.length > 1 ? new ProviderError(failed.join(" | "), last.kind, last.status) : last;
+  }
+
+  private async call(model: string, req: GenerateRequest, timeoutMs: number): Promise<GenerateResponse> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    const body = this.buildBody(req, model);
 
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), req.timeoutMs);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let res: Response;
     try {
       res = await fetch(url, {
@@ -162,9 +251,9 @@ export class GeminiProvider implements LLMProvider {
 
     if (!res.ok) {
       const detail = providerErrorText(res.status, await res.text().catch(() => ""));
-      if (res.status === 401 || res.status === 403) throw new ProviderError(detail, "auth");
-      if (res.status === 429) throw new ProviderError(detail, "quota");
-      throw new ProviderError(detail, "http");
+      if (res.status === 401 || res.status === 403) throw new ProviderError(detail, "auth", res.status);
+      if (res.status === 429) throw new ProviderError(detail, "quota", res.status);
+      throw new ProviderError(detail, "http", res.status);
     }
 
     let json: Record<string, unknown>;
@@ -199,11 +288,12 @@ export function parseGeminiResponse(json: Record<string, unknown>): GenerateResp
   };
 }
 
-export function createProvider(provider: string, model: string, env: { get(k: string): string | undefined }): LLMProvider | null {
+/** `fallbacks`: models to try, in order, when `model` is unavailable (ai_settings.fallback_models). */
+export function createProvider(provider: string, model: string, env: { get(k: string): string | undefined }, fallbacks: string[] = []): LLMProvider | null {
   if (provider === "gemini") {
     const key = env.get("GEMINI_API_KEY");
     if (!key) return null;
-    return new GeminiProvider(key, model);
+    return new GeminiProvider(key, model, Array.isArray(fallbacks) ? fallbacks : []);
   }
   return null;
 }

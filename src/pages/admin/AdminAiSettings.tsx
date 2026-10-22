@@ -11,6 +11,7 @@ interface AiSettings {
   enabled: boolean;
   provider: "gemini" | "none";
   model: string;
+  fallback_models: string[];
   temperature: number;
   max_output_tokens: number;
   timeout_ms: number;
@@ -26,7 +27,7 @@ interface AiSettings {
 }
 
 const DEFAULTS: AiSettings = {
-  enabled: false, provider: "gemini", model: "gemini-3.8-flash", temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000,
+  enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000,
   daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: "", ops_enabled: true, ops_daily_request_limit: 500, briefing_with_insights: true,
 };
 
@@ -40,12 +41,18 @@ const TOOLS = [
   "request_booking_verification", "get_verified_booking_summary",
   "create_registration_session", "get_registration_progress",
   "create_payment_request", "get_payment_status",
-  "submit_checkin_request", "get_public_property_policies",
+  "submit_checkin_request", "get_public_property_policies", "search_knowledge_base",
   "open_supervisor_ticket", "request_human_assistance",
 ];
 
 // current GA models (Gemini 2.x is not available to new API keys); any other model id can still be typed
 const MODEL_HINTS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+const MODEL_ID = /^[a-z0-9][a-z0-9.-]{0,62}$/;
+
+/** "gemini-3.6-flash، gemini-3.5-flash-lite" → ids in order, lower-case, without blanks or repeats (same rules as the server) */
+function parseModelList(text: string): string[] {
+  return [...new Set(text.split(/[\s,،]+/).map((m) => m.trim().toLowerCase()).filter(Boolean))];
+}
 
 export default function AdminAiSettings() {
   const { profile } = useAuth();
@@ -60,6 +67,7 @@ export default function AdminAiSettings() {
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [testing, setTesting] = useState(false);
+  const [fallbackText, setFallbackText] = useState(DEFAULTS.fallback_models.join(", "));
 
   const load = useCallback(async () => {
     setError(null);
@@ -75,7 +83,9 @@ export default function AdminAiSettings() {
       if (s.error) throw s.error;
       if (s.data) {
         const d = s.data as Partial<AiSettings>;
-        setForm({ ...DEFAULTS, ...d, temperature: Number(d.temperature ?? DEFAULTS.temperature), extra_instructions: d.extra_instructions ?? "" });
+        const fallbacks = Array.isArray(d.fallback_models) ? d.fallback_models : DEFAULTS.fallback_models;
+        setForm({ ...DEFAULTS, ...d, fallback_models: fallbacks, temperature: Number(d.temperature ?? DEFAULTS.temperature), extra_instructions: d.extra_instructions ?? "" });
+        setFallbackText(fallbacks.join(", "));
       }
       setUsage((u.data as UsageRow[]) ?? []);
       setGuards((g.data as GuardEvent[]) ?? []);
@@ -90,12 +100,16 @@ export default function AdminAiSettings() {
 
   function set<K extends keyof AiSettings>(k: K, v: AiSettings[K]) { setForm((f) => ({ ...f, [k]: v })); setSaved(false); }
 
+  const fallbackList = parseModelList(fallbackText);
+  const fallbackError = fallbackList.length > 3 ? "ثلاثة نماذج احتياطية كحد أقصى." : fallbackList.some((m) => !MODEL_ID.test(m)) ? "اكتب معرّفات نماذج فقط (حروف لاتينية صغيرة وأرقام و . -) مفصولة بفواصل." : null;
+
   async function save() {
     if (!isOwner) return;
+    if (fallbackError) { setError(fallbackError); return; }
     setSaving(true); setError(null); setSaved(false);
     try {
       const patch: Record<string, unknown> = {
-        enabled: form.enabled, provider: form.provider, model: form.model.trim(), temperature: form.temperature,
+        enabled: form.enabled, provider: form.provider, model: form.model.trim(), fallback_models: fallbackList, temperature: form.temperature,
         max_output_tokens: form.max_output_tokens, timeout_ms: form.timeout_ms, daily_request_limit: form.daily_request_limit,
         daily_token_budget: form.daily_token_budget, per_session_message_limit: form.per_session_message_limit,
         strict_scope: form.strict_scope, extra_instructions: (form.extra_instructions ?? "").slice(0, 1500),
@@ -147,6 +161,13 @@ export default function AdminAiSettings() {
               <datalist id="ai-models">{MODEL_HINTS.map((m) => <option key={m} value={m} />)}</datalist>
               <p className="mt-1 text-xs text-ink-300" dir="ltr">{MODEL_HINTS.join(" · ")}</p>
             </div>
+            <div className="sm:col-span-2">
+              <label className="label" htmlFor="ai-fallbacks">النماذج الاحتياطية (حتى 3، بالترتيب)</label>
+              <input id="ai-fallbacks" className="input" dir="ltr" value={fallbackText} onChange={(e) => { setFallbackText(e.target.value); setSaved(false); }} disabled={!isOwner} placeholder="gemini-3.6-flash, gemini-3.5-flash-lite" />
+              {fallbackError
+                ? <p className="mt-1 text-xs text-danger-600">{fallbackError}</p>
+                : <p className="mt-1 text-xs text-ink-300">إن تعذّر النموذج الأساسي (ضغط على المزود، تجاوز حصته، أو إيقافه) يُجرَّب التالي ضمن نفس المهلة، ويُسجَّل حدث provider_fallback. اتركه فارغًا لإيقاف ذلك.</p>}
+            </div>
             <NumberField label={`درجة الحرارة (${form.temperature.toFixed(2)})`} value={form.temperature} min={0} max={1} step={0.05} onChange={(v) => set("temperature", v)} disabled={!isOwner} range />
             <NumberField label="الحد الأقصى لتوكنز الرد (50–2000)" value={form.max_output_tokens} min={50} max={2000} step={10} onChange={(v) => set("max_output_tokens", v)} disabled={!isOwner} />
             <NumberField label="المهلة (ms) 2000–60000" value={form.timeout_ms} min={2000} max={60000} step={500} onChange={(v) => set("timeout_ms", v)} disabled={!isOwner} />
@@ -178,8 +199,14 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
             <div className="mt-3 space-y-1 text-xs">
               <Row k="المفتاح مضبوط" v={health.configured ? "نعم" : "لا"} ok={health.configured} />
               <Row k="الاتصال" v={health.ok ? "ناجح" : "فشل"} ok={health.ok} />
-              {health.model && <Row k="النموذج" v={health.model} />}
+              {health.model && <Row k="النموذج المستخدم الآن" v={health.model} />}
+              {health.ok && health.primary && health.model !== health.primary && (
+                <p className="text-warning-600">النموذج الأساسي {health.primary} لا يجيب حاليًا؛ المساعد يعمل عبر النموذج الاحتياطي.</p>
+              )}
               {typeof health.latency_ms === "number" && <Row k="زمن الاستجابة" v={`${health.latency_ms} ms`} />}
+              {health.checked && health.checked.length > 1 && health.checked.map((c) => (
+                <Row key={c.model} k={c.model} v={c.ok ? `يعمل · ${c.latency_ms ?? "—"} ms` : "لا يجيب"} ok={c.ok} />
+              ))}
               {health.error && <p className="text-danger-600" dir="ltr">{health.error}</p>}
             </div>
           )}
@@ -219,10 +246,11 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-700"><ShieldCheck className="h-4 w-4 text-brand-600" /> طبقات الحماية المفروضة على الخادم</h3>
         <ul className="grid gap-2 text-sm text-ink-600 sm:grid-cols-2">
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>بوابة الإدخال:</strong> كشف محاولات الحقن (prompt injection)، رفض المواضيع خارج النطاق، وحجب/إخفاء البيانات الشخصية (PII) قبل وصولها للنموذج.</li>
-          <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>قائمة الأدوات المسموحة:</strong> 13 أداة فقط، لا وصول مباشر لقاعدة البيانات ولا تعديل للهوية أو الدفع أو رموز الصناديق.</li>
+          <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>قائمة الأدوات المسموحة:</strong> {TOOLS.length} أداة فقط، لا وصول مباشر لقاعدة البيانات ولا تعديل للهوية أو الدفع أو رموز الصناديق.</li>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>بوابة الإخراج:</strong> منع تسريب الرموز، أرقام الوثائق، أرقام الجوال، الروابط غير المصرح بها، إعادة طباعة التعليمات (prompt echo)، وفرض اللغة.</li>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>الميزانيات:</strong> حد الطلبات اليومي، ميزانية التوكنز، وحد الرسائل لكل جلسة.</li>
-          <li className="rounded-lg bg-ink-50 px-3 py-2 sm:col-span-2"><strong>المسار الاحتياطي:</strong> عند أي فشل أو تجاوز للحدود يرد النظام بمسار حواري مكتوب مسبقًا (scripted fallback) ويُسجَّل الحدث.</li>
+          <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>النماذج الاحتياطية:</strong> إن تعذّر النموذج الأساسي يُجرَّب التالي في القائمة ضمن نفس المهلة، ويُؤجَّل النموذج المتعثر لدقائق حتى لا ينتظره كل نزيل.</li>
+          <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>المسار الاحتياطي:</strong> عند أي فشل أو تجاوز للحدود يرد النظام بمسار حواري مكتوب مسبقًا (scripted fallback) ويُسجَّل الحدث.</li>
         </ul>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {TOOLS.map((t) => (
