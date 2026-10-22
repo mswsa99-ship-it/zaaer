@@ -16,11 +16,14 @@ const queryClient = new QueryClient({
 
 // The hosted demo is served from a static path, so it uses hash routing; production keeps clean URLs.
 const Router = isDemo ? HashRouter : BrowserRouter;
+// A build served below a sub-path (vite build --base /zaaer/, e.g. the GitHub Pages staging site) routes under
+// that path; a root build ("/") needs no basename.
+const basename = isDemo ? undefined : import.meta.env.BASE_URL.replace(/\/+$/, "") || undefined;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <Router>
+      <Router basename={basename}>
         <AuthProvider>
           {/* One branch scope for the whole app: BranchPicker, data hooks and the route guard share it (A01/A02). */}
           <BranchProvider>

@@ -1,0 +1,86 @@
+name: Supabase backend
+description: >-
+  Brings ONE Supabase project up to the code in this commit: applies the pending database migrations (in order,
+  each exactly once — including an older one that was skipped), deploys every edge function with the settings in
+  supabase/config.toml, and sets the function secrets. Used by staging.yml (develop → staging) and
+  production.yml (main → production). Encryption keys are created inside the database by migration 0014;
+  nothing secret is passed on a command line or printed.
+
+inputs:
+  project-ref:
+    description: Supabase project ref (the id in the dashboard URL)
+    required: true
+  access-token:
+    description: Supabase personal access token (secret)
+    required: true
+  db-password:
+    description: Database password of that project (secret)
+    required: true
+  app-base-url:
+    description: Public URL of the web app in this environment — the only links the assistants may send
+    required: false
+    default: ""
+  gemini-api-key:
+    description: Optional model key. Without it the assistants answer from the knowledge base and the scripted paths
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Check credentials
+      shell: bash
+      env:
+        PROJECT_REF: ${{ inputs.project-ref }}
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.access-token }}
+        SUPABASE_DB_PASSWORD: ${{ inputs.db-password }}
+      run: |
+        missing=0
+        for v in PROJECT_REF SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD; do
+          if [ -z "${!v}" ]; then echo "::error::$v is empty (STAGING.md §3 for staging, §6 for production)"; missing=1; fi
+        done
+        exit $missing
+
+    - uses: supabase/setup-cli@v1
+      with:
+        version: 2.120.0
+
+    - name: Database — apply pending migrations
+      shell: bash
+      env:
+        PROJECT_REF: ${{ inputs.project-ref }}
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.access-token }}
+        SUPABASE_DB_PASSWORD: ${{ inputs.db-password }}
+      run: |
+        set -euo pipefail
+        supabase link --project-ref "$PROJECT_REF"
+        supabase migration list
+        # --include-all: a migration older than the newest applied one (e.g. 0015 after 0016) is applied too, once
+        supabase db push --include-all
+
+    - name: Edge functions — deploy
+      shell: bash
+      env:
+        PROJECT_REF: ${{ inputs.project-ref }}
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.access-token }}
+      run: supabase functions deploy --project-ref "$PROJECT_REF"
+
+    - name: Edge functions — secrets
+      shell: bash
+      env:
+        PROJECT_REF: ${{ inputs.project-ref }}
+        SUPABASE_ACCESS_TOKEN: ${{ inputs.access-token }}
+        APP_BASE_URL: ${{ inputs.app-base-url }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+      run: |
+        set -euo pipefail
+        # values go through a private temp file, not the command line
+        f=$(mktemp); chmod 600 "$f"; trap 'rm -f "$f"' EXIT
+        if [ -n "$APP_BASE_URL" ]; then echo "APP_BASE_URL=${APP_BASE_URL%/}" >> "$f"; fi
+        # without GEMINI_API_KEY the assistants run their deterministic path (knowledge base + scripted answers)
+        if [ -n "$GEMINI_API_KEY" ]; then echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> "$f"; fi
+        if [ -s "$f" ]; then
+          supabase secrets set --project-ref "$PROJECT_REF" --env-file "$f"
+        else
+          echo "no function secrets configured for this environment"
+        fi

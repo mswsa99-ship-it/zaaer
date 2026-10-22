@@ -2,22 +2,34 @@
 # Post-deploy smoke for a hosted environment (staging / production). Read-only: it creates at most one
 # guest conversation ("مرحبا") and never touches reservations, money or staff data.
 # Needs: APP_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+# STATIC_HOST=github-pages: the host has no rewrites and no custom headers (the staging site). Deep links are then
+# answered by 404.html — which is the app itself — so status 404 with the app shell counts as served, and the
+# security-header check is reported as skipped instead of failed. Production (Netlify) keeps both checks strict.
 set -uo pipefail
 fail=0
 ok()   { echo "PASS $1"; }
 bad()  { echo "FAIL $1"; fail=1; }
 base="${APP_BASE_URL%/}"; api="${VITE_SUPABASE_URL%/}"; key="$VITE_SUPABASE_ANON_KEY"
 
+static="${STATIC_HOST:-}"
+
 # 1. the web app is served, and deep links fall back to the SPA
 for path in / /reception /staff/login /admin/knowledge; do
   code=$(curl -s -o /tmp/smoke.html -w "%{http_code}" "$base$path")
-  if [[ "$code" == "200" ]] && grep -q 'id="root"' /tmp/smoke.html; then ok "web $path → 200"; else bad "web $path → $code"; fi
+  served=0
+  [[ "$code" == "200" ]] && served=1
+  [[ "$static" == "github-pages" && "$path" != "/" && "$code" == "404" ]] && served=1
+  if [[ $served == 1 ]] && grep -q 'id="root"' /tmp/smoke.html; then ok "web $path → $code (app shell)"; else bad "web $path → $code"; fi
 done
 
 # 2. security headers are present
-hdr=$(curl -sI "$base/")
-grep -qi "x-frame-options: DENY" <<<"$hdr" && ok "header X-Frame-Options" || bad "header X-Frame-Options missing"
-grep -qi "x-content-type-options: nosniff" <<<"$hdr" && ok "header X-Content-Type-Options" || bad "header X-Content-Type-Options missing"
+if [[ "$static" == "github-pages" ]]; then
+  echo "SKIP security headers — GitHub Pages cannot set response headers (staging only; production serves them from netlify.toml)"
+else
+  hdr=$(curl -sI "$base/")
+  grep -qi "x-frame-options: DENY" <<<"$hdr" && ok "header X-Frame-Options" || bad "header X-Frame-Options missing"
+  grep -qi "x-content-type-options: nosniff" <<<"$hdr" && ok "header X-Content-Type-Options" || bad "header X-Content-Type-Options missing"
+fi
 
 # 3. anonymous clients cannot read operational tables (RLS / grants) — must be refused or empty
 for t in reservations financial_vouchers knowledge_entries staff_profiles; do

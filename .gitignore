@@ -5,8 +5,11 @@ dist
 dist-demo
 test-results
 playwright-report
+test-results-staging
+playwright-report-staging
 *.tsbuildinfo
 .env.*
 !.env.example
+!.env.staging
 supabase/.temp
 supabase/.branches

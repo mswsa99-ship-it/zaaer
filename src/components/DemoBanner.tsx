@@ -2,21 +2,9 @@ import { useState } from "react";
 import { FlaskConical, RotateCcw, X } from "lucide-react";
 import { isDemo } from "../lib/supabase";
 
-const APP_ENV = (import.meta.env.VITE_APP_ENV ?? "").toLowerCase();
-
-/**
- * Shown on every screen of the demo build (data is synthetic and lives in this browser only), and on
- * every screen of a non-production deployment (staging), so nobody mistakes it for the live system.
- */
+/** Shown on every screen of the demo build: data is synthetic and lives in this browser only. */
 export function DemoBanner() {
   const [hidden, setHidden] = useState(false);
-  if (!isDemo && APP_ENV && APP_ENV !== "production") {
-    return (
-      <div className="relative z-30 flex items-center justify-center gap-2 bg-brand-600 px-4 py-1 text-center text-[12px] font-medium text-white" role="status">
-        <FlaskConical className="h-3.5 w-3.5" /> بيئة التطوير ({APP_ENV}) — بيانات تجريبية فقط، لا تُدخل بيانات نزلاء حقيقية
-      </div>
-    );
-  }
   if (!isDemo || hidden) return null;
   const reset = async () => { const m = await import("../demo/client"); m.resetDemo(); window.location.reload(); };
   return (

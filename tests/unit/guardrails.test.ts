@@ -106,6 +106,13 @@ describe("output gate — leak prevention", () => {
     expect(v.text).toContain("app.example.sa");
     expect(v.violations).toContain("url_not_allowed");
   });
+  it("an unset base URL (empty allow-list entry) does not open the allow-list to every URL", () => {
+    // ai-reception passes APP_BASE_URL as the first entry; when the secret is missing it is "" — and every
+    // string starts with "", so without the guard any link the model wrote would have been let through
+    const v = gateOutput("ادخل على https://evil.example/pay لإكمال الحجز", { allowedUrls: ["", "/booking/"], userWroteEnglish: false });
+    expect(v.text).not.toContain("evil.example");
+    expect(v.violations).toContain("url_not_allowed");
+  });
   it("rewrites provider self-identification", () => {
     const v = gateOutput("أنا Gemini من Google AI وسأساعدك في الحجز.", ctx);
     expect(v.text).not.toMatch(/gemini|google ai/i);

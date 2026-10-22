@@ -1,0 +1,210 @@
+name: staging
+
+# develop → the staging environment: a parallel, internet-reachable copy of the whole system for development and
+# acceptance testing. Synthetic data only (the demo seed) — never real guests, real payments or real keys in it.
+#
+#   verify (the full gate) → backend → web (built against the staging project) → GitHub Pages → live checks
+#
+# backend  applies pending migrations, deploys the edge functions and sets their secrets on the staging Supabase
+#          project — once the repository secrets SUPABASE_ACCESS_TOKEN and STAGING_DB_PASSWORD exist
+#          (STAGING.md §3). Without them the job only leaves a notice, and backend changes are applied by hand.
+# web      the public build settings come from .env.staging (committed: URL + anon key, nothing secret);
+#          repository variables STAGING_SUPABASE_URL / STAGING_SUPABASE_ANON_KEY override them if set.
+# live     read-only checks of the published site and the staging API (scripts/smoke-deployed.sh), then a browser
+#          walk through the real stack (tests/staging/). One guest conversation per run; nothing else is written.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false   # never interrupt a migration or a Pages deployment half-way
+
+env:
+  OVERRIDE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+  OVERRIDE_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
+  OVERRIDE_DEFAULT_BRANCH_ID: ${{ vars.STAGING_DEFAULT_BRANCH_ID }}
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  backend:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Credentials present?
+        id: creds
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$STAGING_DB_PASSWORD" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Backend not deployed::Add the repository secrets SUPABASE_ACCESS_TOKEN and STAGING_DB_PASSWORD to deploy migrations and edge functions to staging automatically (STAGING.md §3)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/checkout@v4
+      - if: steps.creds.outputs.ready == 'true'
+        id: cfg
+        name: Resolve the staging project
+        run: |
+          set -euo pipefail
+          set -a; . ./.env.staging; set +a
+          url="${OVERRIDE_SUPABASE_URL:-$VITE_SUPABASE_URL}"
+          echo "ref=$(sed -E 's#^https://([a-z0-9]+)\.supabase\.co.*#\1#' <<<"$url")" >> "$GITHUB_OUTPUT"
+      - if: steps.creds.outputs.ready == 'true'
+        uses: ./.github/actions/supabase-backend
+        with:
+          project-ref: ${{ steps.cfg.outputs.ref }}
+          access-token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          db-password: ${{ secrets.STAGING_DB_PASSWORD }}
+          app-base-url: ${{ vars.STAGING_APP_BASE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+          gemini-api-key: ${{ secrets.STAGING_GEMINI_API_KEY }}
+
+  web:
+    needs: [verify, backend]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.backend.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      entry: ${{ steps.build.outputs.entry }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - id: pages
+        uses: actions/configure-pages@v6
+        continue-on-error: true   # Pages not switched on yet: still build and check; the last step says what to do
+      - id: build
+        name: Build against the staging project, served under the Pages path
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path || format('/{0}', github.event.repository.name) }}
+        run: |
+          set -euo pipefail
+          # .env.staging is read by --mode staging; a repository variable, when set, takes precedence
+          if [ -n "$OVERRIDE_SUPABASE_URL" ]; then export VITE_SUPABASE_URL="$OVERRIDE_SUPABASE_URL"; fi
+          if [ -n "$OVERRIDE_SUPABASE_ANON_KEY" ]; then export VITE_SUPABASE_ANON_KEY="$OVERRIDE_SUPABASE_ANON_KEY"; fi
+          if [ -n "$OVERRIDE_DEFAULT_BRANCH_ID" ]; then export VITE_DEFAULT_BRANCH_ID="$OVERRIDE_DEFAULT_BRANCH_ID"; fi
+          npx vite build --mode staging --base "${BASE_PATH%/}/"
+          # GitHub Pages has no rewrites: a deep link (…/reception) is answered with 404.html, so that page is the
+          # app itself and the router takes over from there.
+          cp dist/index.html dist/404.html
+          echo "entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1)" >> "$GITHUB_OUTPUT"
+          echo "base=${BASE_PATH%/}" >> "$GITHUB_OUTPUT"
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Check this build against the real staging backend before publishing
+        env:
+          BASE: ${{ steps.build.outputs.base }}
+          STATIC_HOST: github-pages
+        run: |
+          set -euo pipefail
+          set -a; . ./.env.staging; set +a
+          export VITE_SUPABASE_URL="${OVERRIDE_SUPABASE_URL:-$VITE_SUPABASE_URL}"
+          export VITE_SUPABASE_ANON_KEY="${OVERRIDE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}"
+          export VITE_DEFAULT_BRANCH_ID="${OVERRIDE_DEFAULT_BRANCH_ID:-}"
+          node scripts/serve-pages.mjs dist "$BASE" 4390 &
+          for _ in $(seq 1 20); do curl -fsS "http://localhost:4390$BASE/" > /dev/null && break; sleep 0.5; done
+          APP_BASE_URL="http://localhost:4390$BASE" bash scripts/smoke-deployed.sh
+          STAGING_URL="http://localhost:4390$BASE/" npx playwright test -c playwright.staging.config.ts
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - name: GitHub Pages switched on?
+        if: steps.pages.outcome != 'success'
+        run: |
+          echo "::error title=GitHub Pages is not enabled::The build passed its checks against the staging backend but cannot be published yet. Repository Settings → Pages → Build and deployment → Source: GitHub Actions, then re-run this workflow (STAGING.md §2)."
+          exit 1
+      - name: Upload pre-publish report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-prepublish-report
+          path: |
+            playwright-report-staging
+            test-results-staging
+          retention-days: 7
+          if-no-files-found: ignore
+
+  pages:
+    needs: web
+    # explicit: a skipped or no-op job further up the chain must not silently skip the release
+    if: ${{ !cancelled() && needs.web.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  live:
+    needs: [web, pages]
+    if: ${{ !cancelled() && needs.pages.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      STAGING_URL: ${{ needs.pages.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Staging API settings
+        run: |
+          set -euo pipefail
+          set -a; . ./.env.staging; set +a
+          {
+            echo "VITE_SUPABASE_URL=${OVERRIDE_SUPABASE_URL:-$VITE_SUPABASE_URL}"
+            echo "VITE_SUPABASE_ANON_KEY=${OVERRIDE_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}"
+            echo "VITE_DEFAULT_BRANCH_ID=${OVERRIDE_DEFAULT_BRANCH_ID:-}"
+          } >> "$GITHUB_ENV"
+      - name: Wait until this build is the one being served
+        env:
+          ENTRY: ${{ needs.web.outputs.entry }}
+        run: |
+          for i in $(seq 1 36); do
+            if curl -fsS "${STAGING_URL}?run=${GITHUB_RUN_ID}-${i}" | grep -q "$ENTRY"; then echo "serving $ENTRY"; exit 0; fi
+            sleep 5
+          done
+          echo "::error::$STAGING_URL is not serving $ENTRY after 3 minutes"; exit 1
+      - name: API and hosting checks (read-only)
+        env:
+          APP_BASE_URL: ${{ needs.pages.outputs.url }}
+          STATIC_HOST: github-pages
+        run: bash scripts/smoke-deployed.sh
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser walk through the live stack
+        run: npx playwright test -c playwright.staging.config.ts
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-live-report
+          path: |
+            playwright-report-staging
+            test-results-staging
+          retention-days: 7

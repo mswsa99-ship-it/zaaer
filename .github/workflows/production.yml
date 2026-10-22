@@ -1,0 +1,87 @@
+name: production
+
+# main → production. The full gate runs on every push to main; the release itself is opt-in. It runs when the
+# repository variable PRODUCTION_DEPLOY is "enabled" (or when started by hand from the Actions tab), and every
+# value comes from the "production" GitHub environment — give it required reviewers so nothing reaches guests
+# without a person approving it (STAGING.md §6).
+#
+#   verify → backend (migrations, edge functions, function secrets) → web (Netlify) → post-deploy smoke
+#
+# Encryption keys are created inside the database by migration 0014 (Supabase Vault) on the first push;
+# they never pass through this workflow.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false   # never interrupt a migration half-way
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  deploy:
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' || vars.PRODUCTION_DEPLOY == 'enabled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.APP_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check web configuration
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          missing=0
+          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY NETLIFY_SITE_ID APP_BASE_URL NETLIFY_AUTH_TOKEN; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not set in the production environment (STAGING.md §6)"; missing=1; fi
+          done
+          exit $missing
+
+      - uses: ./.github/actions/supabase-backend
+        with:
+          project-ref: ${{ vars.SUPABASE_PROJECT_REF }}
+          access-token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          db-password: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          app-base-url: ${{ vars.APP_BASE_URL }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Web — build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_DEFAULT_BRANCH_ID: ${{ vars.VITE_DEFAULT_BRANCH_ID }}
+        run: npm run build
+
+      - name: Web — deploy to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+        run: npx --yes netlify-cli@27.11.2 deploy --dir dist --prod --site "$NETLIFY_SITE_ID" --auth "$NETLIFY_AUTH_TOKEN" --message "${{ github.sha }} (production)"
+
+      - name: Post-deploy smoke
+        env:
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_DEFAULT_BRANCH_ID: ${{ vars.VITE_DEFAULT_BRANCH_ID }}
+        run: bash scripts/smoke-deployed.sh

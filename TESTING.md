@@ -37,7 +37,11 @@ tests/sql/knowledge_tests.sql  ← قاعدة المعرفة والأسئلة ب
 tests/sql/concurrency.sh       ← سباقات بجلستين (X*)
 tests/unit/*.test.ts           ← منطق خالص بلا قاعدة: guardrails, ops, knowledge, contract, demo-invariants
 tests/e2e/*.spec.ts            ← Playwright على نسخة العرض (A/R/F/H/D/U/S/K)
+tests/sql/platform_tests.sql   ← خصائص المنصة المستضافة: search_path، امتدادات في schema extensions، مفاتيح Vault (PL*)
+tests/staging/*.spec.ts        ← فحص حي بعد كل نشر للـstaging: الويب المنشور + Supabase + Edge Functions الحقيقية (L*)
 ```
+
+الفحص الحي (`playwright.staging.config.ts` + `scripts/smoke-deployed.sh`) لا يدخل `npm run verify` لأنه يحتاج بيئة منشورة؛ يشغّله `staging.yml` بعد كل نشر، ومحليًا: `STAGING_URL=<رابط الموقع> npx playwright test -c playwright.staging.config.ts`. تفاصيله في [STAGING.md](STAGING.md) §8.
 
 - **قاعدة عمل جديدة** (مال، تخصيص، صلاحية) → اختبار SQL أولًا؛ ثم انعكاسها في `src/demo` يثبتها `demo-invariants.test.ts`.
 - **دالة RPC جديدة** → يجب أن تظهر في SQL وفي `src/demo/client.ts` معًا، وإلا فشل `contract.test.ts`.

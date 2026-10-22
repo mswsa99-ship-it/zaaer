@@ -1,5 +1,6 @@
-# Netlify — one site per environment (staging, production). Environment variables are set per site
-# (Site settings → Environment variables) or injected by .github/workflows/deploy.yml at build time.
+# Netlify — the production web host. Environment variables are set on the site (Site settings → Environment
+# variables) or injected by .github/workflows/production.yml at build time. Staging is served by GitHub Pages
+# (.github/workflows/staging.yml), which cannot apply the redirects and headers below — see STAGING.md.
 [build]
   command = "npm ci && npm run build"
   publish = "dist"

@@ -281,7 +281,7 @@ export function gateOutput(raw: string, ctx: OutputContext): OutputVerdict {
   // URL allow-list
   const urls = text.match(/https?:\/\/[^\s)]+|\/(booking|checkin|kiosk|privacy|terms)[^\s)]*/g) ?? [];
   for (const u of urls) {
-    const ok = ctx.allowedUrls.some((a) => u.startsWith(a));
+    const ok = ctx.allowedUrls.some((a) => !!a && u.startsWith(a));   // an empty entry (unset APP_BASE_URL) must not allow everything
     if (!ok) { violations.push("url_not_allowed"); text = text.replace(u, "[رابط محذوف]"); }
   }
 

@@ -4,11 +4,11 @@ name: verify
 # migrations from scratch + SQL suites on PostgreSQL 16, two-session race tests,
 # production + demo builds, and the Playwright end-to-end suite against the demo build.
 on:
-  # develop / main pushes run this gate through deploy.yml (verify → deploy), so it is not run twice
+  # develop / main pushes run this gate as the first job of staging.yml / production.yml, so it is not run twice
   push:
     branches-ignore: [main, develop]
   pull_request:
-  workflow_call:   # deploy.yml runs the full gate first; nothing is deployed unless it passes
+  workflow_call:   # staging.yml and production.yml run the full gate first; nothing is released unless it passes
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
