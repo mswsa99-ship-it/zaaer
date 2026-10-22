@@ -1,0 +1,19 @@
+# Supabase CLI configuration (used by `supabase functions deploy` / `supabase db push` in CI and locally).
+# The hosted project's ref is passed at deploy time (--project-ref); nothing environment-specific lives here.
+project_id = "zaaer-facility-management"
+
+[db]
+major_version = 16
+
+# Public guest endpoint: called by the browser with the public (anon / publishable) key. The function
+# validates and rate-limits its own input and never trusts the caller; guest data needs a verified token.
+[functions.ai-reception]
+verify_jwt = false
+
+# Staff-only endpoints: the platform verifies the signed-in user's JWT before the function runs, and the
+# function then reads data AS that user (RLS + role checks), never with elevated rights.
+[functions.ai-ops]
+verify_jwt = true
+
+[functions.ai-health]
+verify_jwt = true
