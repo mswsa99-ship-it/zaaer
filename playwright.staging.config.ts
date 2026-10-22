@@ -22,7 +22,8 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   forbidOnly: !!process.env.CI,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "playwright-report-staging" }]] : [["list"]],
+  // "github" turns each failure into an annotation on the run, readable without downloading the logs
+  reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report-staging" }]] : [["list"]],
   outputDir: "test-results-staging",
   use: {
     baseURL: target.endsWith("/") ? target : `${target}/`,

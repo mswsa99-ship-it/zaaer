@@ -8,7 +8,7 @@
 set -uo pipefail
 fail=0
 ok()   { echo "PASS $1"; }
-bad()  { echo "FAIL $1"; fail=1; }
+bad()  { echo "FAIL $1"; if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::error title=smoke::$1"; fi; fail=1; }
 base="${APP_BASE_URL%/}"; api="${VITE_SUPABASE_URL%/}"; key="$VITE_SUPABASE_ANON_KEY"
 
 static="${STATIC_HOST:-}"
