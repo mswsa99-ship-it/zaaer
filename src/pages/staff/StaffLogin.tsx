@@ -15,6 +15,7 @@ export default function StaffLogin() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     // each role lands where its work starts (housekeeping → tasks, finance → ledger, others → operations board)
@@ -24,19 +25,24 @@ export default function StaffLogin() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setLoading(true);
     if (mode === "login") {
       const { error } = await signIn(email, password);
-      if (error) setError(error);
+      if (error) setError(/email not confirmed/i.test(error) ? "لم يُؤكَّد البريد بعد. افتح رسالة التأكيد المرسلة إلى بريدك ثم أعد تسجيل الدخول." : error);
     } else {
       if (fullName.trim().length < 3) {
         setError("الرجاء إدخال الاسم الكامل.");
         setLoading(false);
         return;
       }
-      const { error } = await signUp(email, password, fullName);
+      const { error, needsConfirmation } = await signUp(email, password, fullName);
       if (error) setError(error);
-      else setError(null);
+      else if (needsConfirmation) {
+        setNotice(`أُنشئ الحساب. أرسلنا رابط تأكيد إلى ${email} — افتحه من بريدك (وتحقق من الرسائل غير المرغوب فيها)، ثم سجّل الدخول هنا.`);
+        setMode("login");
+        setPassword("");
+      }
     }
     setLoading(false);
   }
@@ -89,6 +95,7 @@ export default function StaffLogin() {
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" dir="ltr" required minLength={6} />
             </div>
 
+            {notice && <div role="status" className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
             {error && <ErrorBanner message={error} />}
 
             <button type="submit" className="btn-primary w-full" disabled={loading}>
@@ -97,7 +104,7 @@ export default function StaffLogin() {
           </form>
 
           {mode === "signup" && (
-            <p className="mt-3 text-center text-xs text-ink-400">يُنشأ حسابك بصلاحية مالك للمنشأة التجريبية تلقائيًا.</p>
+            <p className="mt-3 text-center text-xs text-ink-400">سجّل بالبريد الذي دعاك به المالك؛ يُربط حسابك بدورك وفروعك تلقائيًا عند أول دخول بعد تأكيد البريد.</p>
           )}
         </div>
 

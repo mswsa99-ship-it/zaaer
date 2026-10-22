@@ -18,7 +18,8 @@ interface AuthContextValue {
   profile: StaffProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  /** needsConfirmation: the account exists but the email must be confirmed (link sent) before the first sign-in */
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation?: boolean }>;
   signOut: () => Promise<void>;
 }
 
@@ -95,14 +96,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(email: string, password: string, fullName: string) {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    // the confirmation link brings the person back to this app's staff login (under its sub-path, if any);
+    // the URL must be in the project's Auth redirect allow-list, otherwise Supabase falls back to the Site URL
+    let emailRedirectTo: string | undefined;
+    try { emailRedirectTo = new URL("staff/login", new URL(import.meta.env.BASE_URL, window.location.href)).toString(); } catch { /* Site URL */ }
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
     if (error) return { error: error.message };
     if (data.session) {
       const { data: claim } = await supabase.rpc("fn_claim_staff_profile", { p_full_name: fullName });
       const c = claim as { ok?: boolean; error?: string } | null;
       if (!c?.ok) return { error: c?.error === "NO_INVITATION" ? "لا توجد دعوة لهذا البريد. اطلب من مالك المنشأة إضافتك من صفحة الموظفين." : "تعذّر ربط الحساب بملف موظف." };
+      return { error: null };
     }
-    return { error: null };
+    // email confirmation is on: no session until the link is opened; the invitation is linked at the first sign-in
+    return { error: null, needsConfirmation: true };
   }
 
   async function signOut() {
