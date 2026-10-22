@@ -21,7 +21,8 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 3,
   retries: process.env.CI ? 1 : 0,
   forbidOnly: !!process.env.CI,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]] : [["list"]],
+  // "github": a failing test becomes an annotation on the run page (file, line, error) — readable without the job log
+  reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]] : [["list"]],
   outputDir: "test-results",
   use: {
     baseURL: `http://localhost:${PORT}`,

@@ -39,7 +39,18 @@ run_gate() { # name, level(P0|P1), skip-env, command...
   fi
   echo; echo "== [$name] $*"
   t0=$(date +%s)
-  if "$@"; then status="PASS"; else status="FAIL"; [[ "$level" == "P0" || -z "${ALLOW_P1_FAIL:-}" ]] && overall=1; fi
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    # On GitHub the end of a failing gate's output is also put on the run page as an annotation: the job log
+    # itself is not always reachable (and a summary that only says "exit code 1" helps nobody).
+    local log; log=$(mktemp)
+    if "$@" 2>&1 | tee "$log"; then status="PASS"; else status="FAIL"; [[ "$level" == "P0" || -z "${ALLOW_P1_FAIL:-}" ]] && overall=1; fi
+    if [[ "$status" == "FAIL" ]]; then
+      local tail_text
+      tail_text=$(tail -n 40 "$log" | sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{ printf "%s%%0A", $0 }')
+      echo "::error title=verify gate ${name//:/-} failed::${tail_text}"
+    fi
+    rm -f "$log"
+  elif "$@"; then status="PASS"; else status="FAIL"; [[ "$level" == "P0" || -z "${ALLOW_P1_FAIL:-}" ]] && overall=1; fi
   t1=$(date +%s)
   NAMES+=("$name"); STATUSES+=("$status ($level)"); TIMES+=("$((t1 - t0))s")
   echo "== [$name] $status in $((t1 - t0))s"
