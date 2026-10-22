@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { aiHealth } from "../../lib/api";
+import { isFreeTierError, providerErrorHint } from "../../lib/providerErrors";
 import { SectionTitle, Card, Badge, Spinner } from "../../components/ui";
 import { Plug, Check, Clock, AlertCircle, XCircle } from "lucide-react";
 
@@ -32,10 +33,14 @@ export default function AdminIntegrations() {
       const base = { name: "مزود الذكاء الاصطناعي (Gemini)", link: "/admin/ai-settings" };
       if (!s || !s.enabled || s.provider === "none") setAi({ ...base, status: "disabled", description: "معطّل من الإعدادات — يعمل المسار الحواري التقليدي" });
       else if (!health.configured) setAi({ ...base, status: "awaiting", description: "مفعّل لكن مفتاح GEMINI_API_KEY غير مضبوط على الخادم" });
-      else if (!health.ok) setAi({ ...base, status: "error", description: `فشل الاتصال: ${health.error ?? "غير معروف"}` });
       else {
-        const viaFallback = health.primary && health.model && health.model !== health.primary;
-        setAi({ ...base, status: "connected", description: `متصل — ${health.model ?? s.model}${typeof health.latency_ms === "number" ? ` · ${health.latency_ms} ms` : ""}${viaFallback ? ` (احتياطي؛ ${health.primary} لا يجيب حاليًا)` : ""}` });
+        const hint = providerErrorHint(health.error);
+        const freeTier = [health.error, ...(health.checked ?? []).map((c) => c.error)].some(isFreeTierError) ? " — المفتاح على الخطة المجانية لدى Google (حدود منخفضة)" : "";
+        if (!health.ok) setAi({ ...base, status: "error", description: `فشل الاتصال: ${hint ?? health.error ?? "غير معروف"}${freeTier}` });
+        else {
+          const viaFallback = health.primary && health.model && health.model !== health.primary;
+          setAi({ ...base, status: "connected", description: `متصل — ${health.model ?? s.model}${typeof health.latency_ms === "number" ? ` · ${health.latency_ms} ms` : ""}${viaFallback ? ` (احتياطي؛ ${health.primary} لا يجيب حاليًا${hint ? `: ${hint}` : ""})` : ""}${freeTier}` });
+        }
       }
     })();
   }, []);

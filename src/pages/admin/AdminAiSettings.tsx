@@ -6,6 +6,7 @@ import { SectionTitle, LoadingScreen, Card, Badge, Spinner, ErrorBanner } from "
 import { Bot, Check, KeyRound, ShieldCheck, Activity, Gauge } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { formatDateTime } from "../../lib/utils";
+import { isFreeTierError, providerErrorHint } from "../../lib/providerErrors";
 
 interface AiSettings {
   enabled: boolean;
@@ -205,9 +206,20 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
               )}
               {typeof health.latency_ms === "number" && <Row k="زمن الاستجابة" v={`${health.latency_ms} ms`} />}
               {health.checked && health.checked.length > 1 && health.checked.map((c) => (
-                <Row key={c.model} k={c.model} v={c.ok ? `يعمل · ${c.latency_ms ?? "—"} ms` : "لا يجيب"} ok={c.ok} />
+                <div key={c.model}>
+                  <Row k={c.model} v={c.ok ? `يعمل · ${c.latency_ms ?? "—"} ms` : "لا يجيب"} ok={c.ok} />
+                  {!c.ok && providerErrorHint(c.error) && <p className="px-3 pt-0.5 text-danger-600">{providerErrorHint(c.error)}</p>}
+                </div>
               ))}
-              {health.error && <p className="text-danger-600" dir="ltr">{health.error}</p>}
+              {health.error && (
+                <div className="text-danger-600">
+                  {providerErrorHint(health.error) && <p>{health.primary ?? "النموذج الأساسي"}: {providerErrorHint(health.error)}</p>}
+                  <p className="break-words text-ink-400" dir="ltr">{health.error}</p>
+                </div>
+              )}
+              {[health.error, ...(health.checked ?? []).map((c) => c.error)].some(isFreeTierError) && (
+                <p className="rounded-lg bg-warning-500/10 px-3 py-2 text-warning-600">مفتاح Gemini الحالي على <strong>الخطة المجانية</strong> لدى Google: حدودها منخفضة لكل نموذج (عدد الطلبات في الدقيقة وفي اليوم)، والنماذج الاحتياطية تخفّف أثرها. للتشغيل الفعلي فعّل الفوترة لمشروع المفتاح في Google AI Studio.</p>
+              )}
             </div>
           )}
         </Card>

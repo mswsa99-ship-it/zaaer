@@ -1,9 +1,26 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { GeminiProvider, parseGeminiResponse, isThinkingGemini, toGeminiDeclaration, providerErrorText, ProviderError, THINKING_ALLOWANCE_TOKENS, FOREIGN_THOUGHT_SIGNATURE, resetModelCooldowns, createProvider, type ChatTurn } from "../../supabase/functions/_shared/llm";
+import { GeminiProvider, parseGeminiResponse, isThinkingGemini, toGeminiDeclaration, providerErrorText, providerErrorInfo, cooldownMs, ProviderError, THINKING_ALLOWANCE_TOKENS, FOREIGN_THOUGHT_SIGNATURE, resetModelCooldowns, createProvider, type ChatTurn } from "../../supabase/functions/_shared/llm";
 import { TOOL_DECLARATIONS } from "../../supabase/functions/_shared/tools";
 import { OPS_TOOL_DECLARATIONS } from "../../supabase/functions/_shared/ops";
 
 const base = { system: "sys", tools: [], temperature: 0.2, maxOutputTokens: 400, timeoutMs: 5000 };
+
+/** The shape Gemini answers a free-tier key with when a per-model limit runs out (google.rpc details). */
+const QUOTA_429 = {
+  error: {
+    code: 429,
+    status: "RESOURCE_EXHAUSTED",
+    message: "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.6-flash\nPlease retry in 41.2s.",
+    details: [
+      { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [
+        { quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests", quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier", quotaDimensions: { location: "global", model: "gemini-3.6-flash" }, quotaValue: "5" },
+        { quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests", quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier", quotaDimensions: { location: "global", model: "gemini-3.6-flash" }, quotaValue: "20" },
+      ] },
+      { "@type": "type.googleapis.com/google.rpc.Help", links: [{ description: "Learn more about Gemini API quotas", url: "https://ai.google.dev/gemini-api/docs/rate-limits" }] },
+      { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "41.2s" },
+    ],
+  },
+};
 
 describe("Gemini adapter — request shape per model generation", () => {
   it("Gemini 3+ / 4 / -latest: thinkingLevel low, output allowance for thought tokens, default temperature", () => {
@@ -109,6 +126,33 @@ describe("Gemini adapter — errors", () => {
     }
   });
 
+  it("a quota error (429) names the limit that ran out, the plan, and Google's wait — before the boilerplate", () => {
+    const { text, retryAfterMs } = providerErrorInfo(429, JSON.stringify(QUOTA_429));
+    expect(text).toMatch(/^http 429: \[free tier quota requests\/min=5 \+ requests\/day=20, retry in 42s\] You exceeded your current quota/);
+    expect(retryAfterMs).toBe(41_200);
+    expect(text).not.toMatch(/AIza/);
+    expect(text.length).toBeLessThanOrEqual(250);
+    // a fallback log entry is cut at 160 characters: the limit and the wait must survive the cut
+    expect(`gemini-3.6-flash: ${text}`.slice(0, 160)).toMatch(/free tier quota requests\/min=5 .+ retry in 42s\]/);
+  });
+
+  it("a paid-tier quota error says which limit without 'free tier'; errors without details keep the old shape", () => {
+    const paid = { error: { code: 429, message: "Quota exceeded.", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel", quotaValue: "10000" }] }] } };
+    expect(providerErrorText(429, JSON.stringify(paid))).toBe("http 429: [quota requests/day=10000] Quota exceeded.");
+    expect(providerErrorText(503, JSON.stringify({ error: { message: "This model is currently experiencing high demand." } }))).toBe("http 503: This model is currently experiencing high demand.");
+    expect(providerErrorText(502, "<html>Bad Gateway</html>")).toBe("http 502: <html>Bad Gateway</html>");
+    expect(providerErrorInfo(503, "{}").retryAfterMs).toBeUndefined();
+  });
+
+  it("a 429 becomes a 'quota' ProviderError that carries Google's wait", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(QUOTA_429), { status: 429 })));
+    const err = await new GeminiProvider("k", "gemini-3.6-flash").generate({ ...base, history: [{ role: "user", text: "x" }] }).catch((e) => e) as ProviderError;
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.kind).toBe("quota");
+    expect(err.status).toBe(429);
+    expect(err.retryAfterMs).toBe(41_200);
+  });
+
   it("sends the key only in the x-goog-api-key header, never in the URL", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text: "أهلًا" }] } }] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -190,6 +234,27 @@ describe("Gemini adapter — fallback models (Google's 503 'high demand' lasts h
     const next = await chain().generate(step);                 // a new request, a new provider instance
     expect(next.fallbackFrom).toEqual([]);
     expect(called(f)).toEqual(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash"]);
+  });
+
+  it("a model out of quota is moved last for as long as Google asked (5 s – 10 min); without a wait, 60 s", async () => {
+    expect(cooldownMs(429, 41_200)).toBe(41_200);
+    expect(cooldownMs(429, 200)).toBe(5_000);
+    expect(cooldownMs(429, 86_400_000)).toBe(600_000);
+    expect(cooldownMs(429)).toBe(60_000);
+    expect(cooldownMs(503)).toBe(120_000);
+    expect(cooldownMs(404)).toBe(600_000);
+
+    let now = 5_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const quota = (retry: string) => new Response(JSON.stringify({ error: { code: 429, message: "quota", details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: retry }] } }), { status: 429 });
+    const f = byModel({ "gemini-3.8-flash": () => quota("20s"), "gemini-3.6-flash": () => ok("x") });
+    vi.stubGlobal("fetch", f);
+    await chain().generate(step);                                 // 3.8 → 429 (wait 20 s) → 3.6 answers
+    now += 10_000;
+    await chain().generate(step);                                 // 10 s later: 3.6 first, 3.8 not tried
+    now += 11_000;
+    await chain().generate(step);                                 // 21 s later: 3.8 first again
+    expect(called(f)).toEqual(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.6-flash"]);
   });
 
   it("another model is tried only while enough of the step's time budget is left", async () => {

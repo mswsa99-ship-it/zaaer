@@ -67,7 +67,13 @@ export interface LLMProvider {
 }
 
 export class ProviderError extends Error {
-  constructor(message: string, public readonly kind: "timeout" | "auth" | "quota" | "http" | "parse", public readonly status?: number) {
+  constructor(
+    message: string,
+    public readonly kind: "timeout" | "auth" | "quota" | "http" | "parse",
+    public readonly status?: number,
+    /** the wait the provider asked for (Gemini sends one with quota errors) */
+    public readonly retryAfterMs?: number,
+  ) {
     super(message);
   }
 }
@@ -97,11 +103,58 @@ export function toGeminiDeclaration(t: ToolDeclaration): Record<string, unknown>
 }
 
 const KEY_LIKE = /AIza[0-9A-Za-z_-]{20,}/g;
-/** Provider error text for logs: Google's own message, shortened; anything key-shaped is masked. */
+
+/** "GenerateRequestsPerMinutePerProjectPerModel" → "requests/min"; an id it does not know is kept as it is. */
+function quotaLabel(quotaId: string): string {
+  const id = quotaId.replace(/-?FreeTier$/i, "");
+  if (/Requests?PerMinute/i.test(id)) return "requests/min";
+  if (/Requests?PerDay/i.test(id)) return "requests/day";
+  if (/Tokens?.*PerMinute/i.test(id)) return "input tokens/min";
+  if (/Tokens?.*PerDay/i.test(id)) return "input tokens/day";
+  return id;
+}
+
+/**
+ * Google's error, for the logs and the owner's connection test: its own message, shortened, anything key-shaped
+ * masked. A quota error (429) names the limit that ran out and the wait Google asks for first —
+ * "http 429: [free tier quota requests/min=5, retry in 41s] You exceeded…" — because the message before them is the
+ * same sentence on every 429 and would push them past the log limit. "free tier" means the key's Google project has
+ * no billing: low per-model limits per minute and per day.
+ */
+export function providerErrorInfo(status: number, body: string): { text: string; retryAfterMs?: number } {
+  let msg = body;
+  let freeTier = false;
+  const limits: string[] = [];
+  let retryAfterMs: number | undefined;
+  try {
+    const err = (JSON.parse(body) as { error?: { message?: unknown; details?: unknown } }).error;
+    msg = String(err?.message ?? "");
+    for (const d of Array.isArray(err?.details) ? (err!.details as Array<Record<string, unknown>>) : []) {
+      const type = String(d?.["@type"] ?? "");
+      if (type.endsWith("QuotaFailure") && Array.isArray(d.violations)) {
+        for (const v of d.violations as Array<{ quotaId?: unknown; quotaValue?: unknown }>) {
+          if (typeof v?.quotaId !== "string" || !v.quotaId) continue;
+          if (/FreeTier/i.test(v.quotaId)) freeTier = true;
+          const limit = quotaLabel(v.quotaId) + (v.quotaValue != null && v.quotaValue !== "" ? `=${String(v.quotaValue).slice(0, 12)}` : "");
+          if (!limits.includes(limit)) limits.push(limit);
+        }
+      } else if (type.endsWith("RetryInfo")) {
+        const m = /^(\d+(?:\.\d+)?)s$/.exec(String(d.retryDelay ?? ""));
+        if (m) retryAfterMs = Math.round(Number(m[1]) * 1000);
+      }
+    }
+  } catch { /* not JSON (a proxy page, a cut body): the body itself */ }
+  const head = [
+    limits.length ? `${freeTier ? "free tier " : ""}quota ${limits.slice(0, 3).join(" + ")}` : "",
+    retryAfterMs !== undefined ? `retry in ${Math.ceil(retryAfterMs / 1000)}s` : "",
+  ].filter(Boolean).join(", ");
+  const text = `http ${status}: ${head ? `[${head}] ` : ""}${msg.replace(KEY_LIKE, "[key]").replace(/\s+/g, " ").trim()}`;
+  return { text: text.slice(0, 250), retryAfterMs };
+}
+
+/** Provider error text for logs (see providerErrorInfo). */
 export function providerErrorText(status: number, body: string): string {
-  let msg = "";
-  try { msg = String((JSON.parse(body) as { error?: { message?: string; status?: string } }).error?.message ?? ""); } catch { msg = body; }
-  return `http ${status}: ${msg.replace(KEY_LIKE, "[key]").replace(/\s+/g, " ").trim().slice(0, 240)}`;
+  return providerErrorInfo(status, body).text;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,8 +169,15 @@ export function providerErrorText(status: number, body: string): string {
  * 400 (the request), 401/403 (the key) and network failures are the same for every model: the chain stops.
  */
 const MODEL_UNAVAILABLE = new Set([404, 408, 429, 500, 502, 503, 504]);
-/** How long later requests on this instance try a model that just failed that way last (ms). */
-const cooldownMs = (status?: number): number => (status === 404 ? 600_000 : status === 429 ? 60_000 : 120_000);
+/**
+ * How long later requests on this instance try a model that just failed that way last (ms): the wait Google asked
+ * for when it sent one (quota errors: until the minute's quota frees up, or much longer once a day's is spent),
+ * kept within 5 s – 10 min; otherwise by status.
+ */
+export const cooldownMs = (status?: number, retryAfterMs?: number): number =>
+  retryAfterMs !== undefined && Number.isFinite(retryAfterMs)
+    ? Math.min(Math.max(retryAfterMs, 5_000), 600_000)
+    : status === 404 ? 600_000 : status === 429 ? 60_000 : 120_000;
 const cooldowns = new Map<string, number>();   // model id → deprioritised until (epoch ms); shared by all requests of this isolate
 /** Test hook: forget which models were cooling down. */
 export function resetModelCooldowns(): void { cooldowns.clear(); }
@@ -221,11 +281,11 @@ export class GeminiProvider implements LLMProvider {
         failed.push(`${model}: ${e.message}`.slice(0, 160));
         if (e.kind === "timeout") { cooldowns.set(model, Date.now() + 60_000); break; }   // the step's budget is spent
         if (e.status === undefined || !MODEL_UNAVAILABLE.has(e.status)) break;          // would fail the same on any model
-        cooldowns.set(model, Date.now() + cooldownMs(e.status));
+        cooldowns.set(model, Date.now() + cooldownMs(e.status, e.retryAfterMs));
       }
     }
     if (!last) throw new ProviderError("no model configured", "http");
-    throw failed.length > 1 ? new ProviderError(failed.join(" | "), last.kind, last.status) : last;
+    throw failed.length > 1 ? new ProviderError(failed.join(" | "), last.kind, last.status, last.retryAfterMs) : last;
   }
 
   private async call(model: string, req: GenerateRequest, timeoutMs: number): Promise<GenerateResponse> {
@@ -250,10 +310,10 @@ export class GeminiProvider implements LLMProvider {
     clearTimeout(timer);
 
     if (!res.ok) {
-      const detail = providerErrorText(res.status, await res.text().catch(() => ""));
+      const { text: detail, retryAfterMs } = providerErrorInfo(res.status, await res.text().catch(() => ""));
       if (res.status === 401 || res.status === 403) throw new ProviderError(detail, "auth", res.status);
-      if (res.status === 429) throw new ProviderError(detail, "quota", res.status);
-      throw new ProviderError(detail, "http", res.status);
+      if (res.status === 429) throw new ProviderError(detail, "quota", res.status, retryAfterMs);
+      throw new ProviderError(detail, "http", res.status, retryAfterMs);
     }
 
     let json: Record<string, unknown>;
