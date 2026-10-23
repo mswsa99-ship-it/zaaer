@@ -2,8 +2,9 @@
  * whatsapp-send — staff side of WhatsApp (signed-in staff only; verify_jwt).
  *
  * POST { mode: "reply", conversation_id, text }   a supervisor answers a guest's WhatsApp thread from the inbox
- *   → { ok, delivered, error? }   the message is stored either way; "delivered" says whether WhatsApp accepted it
- *     (WhatsApp only allows free text within 24 hours of the guest's last message)
+ *   → { ok, delivered, queued?, bridge_online?, error? }   the message is stored either way; "delivered" says whether
+ *     WhatsApp accepted it (free text only within 24 hours of the guest's last message). On a branch that answers
+ *     from the reception computer the reply is "queued" for it instead (fn_wa_bridge_enqueue) and typed there.
  * POST { mode: "check", branch_id }               the owner's connection test for a branch number
  *   → { ok, verified_name?, display_phone_number?, quality_rating?, matches_number?, error? }
  *
@@ -55,6 +56,11 @@ Deno.serve(async (req) => {
 
   const { data: ch } = await admin.rpc("fn_whatsapp_channel", { p_branch: conv.branch_id });
   const c = ch as WaChannel | null;
+  if (c?.mode === "web_bridge") {
+    // the reception computer types it (wa-bridge picks it up within seconds); the assistant steps back in this chat
+    const { data: q } = await admin.rpc("fn_wa_bridge_enqueue", { p_message: msg.id });
+    return json({ ok: true, delivered: false, queued: q?.queued === true, bridge_online: q?.bridge_online === true, error: q?.queued ? undefined : (q?.error ?? "send_failed") });
+  }
   if (!usable(c)) {
     await admin.from("conversation_messages").update({ meta: { channel: "whatsapp", delivery: "failed", error: "channel_unavailable" } }).eq("id", msg.id);
     return json({ ok: true, delivered: false, error: "channel_unavailable" });

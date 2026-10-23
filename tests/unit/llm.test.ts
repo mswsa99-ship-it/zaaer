@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { GeminiProvider, parseGeminiResponse, isThinkingGemini, toGeminiDeclaration, providerErrorText, providerErrorInfo, cooldownMs, ProviderError, THINKING_ALLOWANCE_TOKENS, FOREIGN_THOUGHT_SIGNATURE, resetModelCooldowns, createProvider, type ChatTurn } from "../../supabase/functions/_shared/llm";
+import { GeminiProvider, parseGeminiResponse, isThinkingGemini, toGeminiDeclaration, providerErrorText, providerErrorInfo, cooldownMs, ProviderError, THINKING_ALLOWANCE_TOKENS, FOREIGN_THOUGHT_SIGNATURE, ATTEMPT_SHARE, MIN_ATTEMPT_MS, resetModelCooldowns, createProvider, type ChatTurn } from "../../supabase/functions/_shared/llm";
 import { TOOL_DECLARATIONS } from "../../supabase/functions/_shared/tools";
 import { OPS_TOOL_DECLARATIONS } from "../../supabase/functions/_shared/ops";
 
@@ -265,6 +265,55 @@ describe("Gemini adapter — fallback models (Google's 503 'high demand' lasts h
     const err = await chain().generate({ ...step, timeoutMs: 2000 }).catch((e) => e) as ProviderError;
     expect(f).toHaveBeenCalledTimes(1);                         // 1 s left < MIN_ATTEMPT_MS
     expect(err.message).toMatch(/^http 503: /);
+  });
+
+  it("a model that hangs gets only its share of the time; the next model still answers within the step's budget", async () => {
+    vi.useFakeTimers();
+    try {
+      // fetch that never answers until the adapter aborts it (Google "high demand" can hang this way)
+      const hang = (init: RequestInit) => new Promise<Response>((_, reject) => init.signal!.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+      const seen: Array<{ model: string; at: number }> = [];
+      const f = vi.fn(async (url: string, init: RequestInit) => {
+        const model = modelOf(url);
+        seen.push({ model, at: Date.now() });
+        return model === "gemini-3.8-flash" ? fail(429, "quota") : model === "gemini-3.6-flash" ? hang(init) : ok("أهلًا");
+      });
+      vi.stubGlobal("fetch", f);
+      const t0 = Date.now();
+      const pending = chain().generate({ ...step, timeoutMs: 12_000 });
+      await vi.advanceTimersByTimeAsync(12_000);
+      const r = await pending;
+      expect(r.model).toBe("gemini-3.5-flash-lite");
+      expect(r.fallbackFrom).toEqual([expect.stringMatching(/^gemini-3\.8-flash: http 429/), "gemini-3.6-flash: timeout"]);
+      // 3.6 was cut at its share of the 12 s (not the whole budget), so the last model started well before the deadline
+      expect(seen.map((x) => x.model)).toEqual(["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
+      expect(seen[2].at - t0).toBe(Math.round(12_000 * ATTEMPT_SHARE));
+      expect(12_000 - (seen[2].at - t0)).toBeGreaterThanOrEqual(MIN_ATTEMPT_MS);
+
+      // the next request on this instance does not wait for the slow model again: it goes last
+      const next = await chain().generate(step);
+      expect(next.model).toBe("gemini-3.5-flash-lite");
+      expect(next.fallbackFrom).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the only model left gets all the remaining time", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = vi.fn(async (_url: string, init: RequestInit) => new Promise<Response>((_, reject) => init.signal!.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })))));
+      vi.stubGlobal("fetch", f);
+      const t0 = Date.now();
+      const pending = new GeminiProvider("k", "gemini-3.6-flash").generate({ ...step, timeoutMs: 5_000 }).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(5_000);
+      const err = await pending as ProviderError;
+      expect(err.kind).toBe("timeout");
+      expect(Date.now() - t0).toBe(5_000);
+      expect(f).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a tool loop stays on its model; if it must move, the new model gets the placeholder signature, never the old one's", async () => {

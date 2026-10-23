@@ -1,5 +1,5 @@
 /**
- * Guest reception — acceptance ids A01–A11. Guests reach the reception through the branch's WhatsApp QR code on the
+ * Guest reception — acceptance ids A01–A14. Guests reach the reception through the branch's WhatsApp QR code on the
  * website (A01, A09); the assistant's answers are exercised through /admin/assistant, the same assistant (A02–A06).
  * Controls covered: G05 (no access code in chat), G22 (facts only from the property's records),
  * G26 (handed-off conversation keeps answering facts), G28 (staff portal reachable from the guest UI).
@@ -115,25 +115,104 @@ test.describe("guest reception", () => {
     await expect(page.locator("input.input")).toHaveCount(0);
   });
 
-  test("A10 the owner sets each branch's own WhatsApp number; secrets are write-only; enabling needs a complete setup", async ({ page, loginAs, go }) => {
+  test("A10 Cloud API path: the owner adopts it for a branch; secrets are write-only; enabling needs a complete setup", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/admin/whatsapp");
-    const jeddah = page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first();
-    await expect(jeddah.getByText("غير مكتمل")).toBeVisible();
-    await expect(jeddah.getByRole("button", { name: /تفعيل للنزلاء/ })).toBeDisabled();
-    await jeddah.getByPlaceholder("05xxxxxxxx").fill("0500000200");
-    await jeddah.getByPlaceholder("1234567890…").fill("100000000000002");
-    await jeddah.getByPlaceholder("EAAG…").fill("EAAGdemoTokenForJeddah1234ABCD");
-    await jeddah.getByPlaceholder("من إعدادات التطبيق ← Basic").fill("jeddah-app-secret-0001");
-    await jeddah.getByRole("button", { name: "حفظ" }).click();
-    const saved = page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first();
-    await expect(saved.getByText("مكتمل — بانتظار اختبار الاتصال")).toBeVisible();
-    await expect(saved.getByPlaceholder(/محفوظ ••••ABCD/)).toBeVisible();          // the token never comes back, only its last 4
-    await saved.getByRole("button", { name: /تفعيل للنزلاء/ }).click();
-    await expect(page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first().getByText("مفعّل للنزلاء")).toBeVisible();
+    const jeddah = () => page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first();
+    await expect(jeddah().getByText("غير مكتمل").first()).toBeVisible();
+    await expect(jeddah().getByRole("button", { name: /تفعيل للنزلاء/ })).toBeDisabled();
+    await jeddah().getByRole("tab", { name: /Cloud API/ }).click();
+    await jeddah().getByRole("button", { name: "اعتماد هذه الطريقة" }).click();
+    await expect(jeddah().getByText("Cloud API", { exact: true })).toBeVisible();
+    await jeddah().getByPlaceholder("05xxxxxxxx").fill("0500000200");
+    await jeddah().getByPlaceholder("1234567890…").fill("100000000000002");
+    await jeddah().getByPlaceholder("EAAG…").fill("EAAGdemoTokenForJeddah1234ABCD");
+    await jeddah().getByPlaceholder("من إعدادات التطبيق ← Basic").fill("jeddah-app-secret-0001");
+    await jeddah().getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(jeddah().getByText("مكتمل — بانتظار اختبار الاتصال")).toBeVisible();
+    await expect(jeddah().getByPlaceholder(/محفوظ ••••ABCD/)).toBeVisible();          // the token never comes back, only its last 4
+    await jeddah().getByRole("button", { name: /تفعيل للنزلاء/ }).click();
+    await expect(jeddah().getByText("مفعّل للنزلاء")).toBeVisible();
     await go("/");
     await page.getByLabel("الفرع").selectOption({ label: "فرع جدة — الكورنيش" });
     await expect(page.getByTestId("wa-open")).toHaveAttribute("href", /wa\.me\/966500000200/);
+  });
+
+  test("A12 reception-computer path: number, a branch key shown once in bridge-config.json, live status, auto-reply switch", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/admin/whatsapp");
+    const jeddah = () => page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first();
+    await expect(jeddah().getByRole("tab", { name: /كمبيوتر الاستقبال/ })).toHaveAttribute("aria-selected", "true");   // the default path
+    await expect(jeddah().getByRole("button", { name: /إنشاء مفتاح الربط/ })).toBeDisabled();                          // number first
+    await jeddah().getByPlaceholder("05xxxxxxxx").fill("0500000300");
+    await jeddah().getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(jeddah().getByText("+966500000300")).toBeVisible();
+    const download = page.waitForEvent("download");
+    await jeddah().getByRole("button", { name: /إنشاء مفتاح الربط/ }).click();
+    expect((await download).suggestedFilename()).toBe("bridge-config.json");
+    const cfg = jeddah().getByTestId("bridge-config");
+    await expect(cfg).toContainText(/"key": "zb_[0-9a-f]{64}"/);
+    await expect(cfg).toContainText("/functions/v1/wa-bridge");
+    await expect(jeddah().getByTestId("bridge-status")).toContainText("لم يتصل البرنامج بعد");
+    await jeddah().getByRole("button", { name: "تم الحفظ — إخفاء" }).click();
+    await expect(jeddah().getByTestId("bridge-config")).toHaveCount(0);                  // never shown again
+    await expect(jeddah().getByText(/^••••[0-9a-f]{4}$/)).toBeVisible();
+    await jeddah().getByRole("button", { name: "إيقاف الرد الآلي" }).click();
+    await expect(jeddah().getByRole("button", { name: "تشغيل الرد الآلي" })).toBeVisible();
+    await jeddah().getByRole("button", { name: /تفعيل للنزلاء/ }).click();
+    await expect(jeddah().getByText("مفعّل للنزلاء")).toBeVisible();
+    await go("/");
+    await page.getByLabel("الفرع").selectOption({ label: "فرع جدة — الكورنيش" });
+    await expect(page.getByTestId("wa-open")).toHaveAttribute("href", /wa\.me\/966500000300/);
+  });
+
+  test("A13 WhatsApp simulator (reception computer): «حجوزاتي» → numbered list → «2» → the booking with its secure link, which opens", async ({ page, go, errors }) => {
+    await go("/");
+    await page.getByTestId("wa-sim-link").click();
+    await expect(page.getByTestId("sim-input")).toBeEnabled();
+    await expect(page.getByTestId("sim-guest-select")).toContainText("حجزان");
+    await page.getByTestId("sim-input").fill("حجوزاتي");
+    await page.getByTestId("sim-send").click();
+    const bot = page.getByTestId("sim-bubble-bot");
+    await expect(bot.last()).toContainText("لديك حجزان");
+    await expect(bot.last()).toContainText("1️⃣");
+    await expect(bot.last()).toContainText("أرسل رقم الخيار.");
+    await page.getByTestId("sim-input").fill("2");
+    await page.getByTestId("sim-send").click();
+    await expect(bot.last()).toContainText("حجزك");
+    await expect(bot.last()).toContainText("2️⃣ التحدث مع موظف");
+    await bot.last().getByRole("link", { name: /booking\/status/ }).click();
+    await expect(page).toHaveURL(/#\/booking\/status\/DEMO/);
+    await expect(page.getByRole("heading", { name: "حالة الحجز" })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test("A14 a receptionist on the chat silences the assistant there; an inbox reply is typed by the reception computer", async ({ page, go, loginAs }) => {
+    await go("/whatsapp-demo");
+    await page.getByTestId("sim-input").fill("مرحبا");
+    await page.getByTestId("sim-send").click();
+    await expect(page.getByTestId("sim-bubble-bot").last()).toBeVisible();
+    await page.getByText("تجربة رد الموظف من جوال الفرع").click();
+    await page.getByTestId("sim-staff-input").fill("أهلًا، معك موظف الاستقبال");
+    await page.getByRole("button", { name: "إرسال كموظف" }).click();
+    const bots = await page.getByTestId("sim-bubble-bot").count();
+    await page.getByTestId("sim-input").fill("متى الدخول؟");
+    await page.getByTestId("sim-send").click();
+    await expect(page.getByText("لا رد آلي: موظف يتابع هذه المحادثة الآن")).toBeVisible();
+    await expect(page.getByTestId("sim-bubble-bot")).toHaveCount(bots);
+
+    await loginAs("supervisor");
+    await go("/staff/inbox");
+    await page.locator("button.card", { hasText: "واتساب" }).first().click();
+    await expect(page.getByTestId("assistant-paused")).toBeVisible();
+    await page.getByPlaceholder(/اكتب ردًا|استلم المحادثة/).fill("الغرفة جاهزة، تفضل");
+    await page.getByRole("button", { name: "إرسال" }).click();
+    await expect(page.getByText(/كمبيوتر الاستقبال/).first()).toBeVisible();
+    await page.getByRole("button", { name: /إعادة للمساعد الذكي/ }).click();
+    await expect(page.getByTestId("assistant-paused")).toHaveCount(0);
+
+    await go("/whatsapp-demo");
+    await expect(page.getByTestId("sim-bubble-staff").filter({ hasText: "الغرفة جاهزة، تفضل" })).toBeVisible({ timeout: 10_000 });
   });
 
   test("A11 a supervisor has no WhatsApp settings and no data purge", async ({ page, loginAs, go }) => {

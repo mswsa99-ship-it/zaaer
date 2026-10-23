@@ -29,3 +29,8 @@ verify_jwt = false
 # Staff replies to WhatsApp threads and the owner's connection test: signed-in staff only
 [functions.whatsapp-send]
 verify_jwt = true
+
+# The program on a branch's reception computer (WhatsApp Web): no Supabase JWT; every call carries that branch's
+# bridge key (x-bridge-key), checked against its SHA-256 (fn_wa_bridge_auth) before anything else runs
+[functions.wa-bridge]
+verify_jwt = false

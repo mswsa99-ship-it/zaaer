@@ -73,8 +73,8 @@ reset role;
 update branches set timezone = (select v from ld where k = 'tz_before') where id = '00000000-0000-0000-0000-000000000010';
 
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),110) as detail from test_results order by ok, name;
-select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from test_results;
+select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if exists (select 1 from test_results where not ok) then raise exception 'LOCAL DATE TESTS FAILED'; end if;
+  if exists (select 1 from test_results where ok is not true) then raise exception 'LOCAL DATE TESTS FAILED'; end if;
 end $$;

@@ -10,6 +10,7 @@
 #    P0  edge          tsc (Deno shim)             edge functions compile
 #    P0  sql           tests/sql/run.sh            migrations from scratch + 51 security + 90+ core acceptance tests
 #    P0  race          tests/sql/concurrency.sh    two real sessions: booking race, refund race
+#    P0  bridge        scripts/bridge/check.sh     the reception-computer WhatsApp program packages and loads
 #    P0  build         vite build                  production bundle
 #    P0  build:demo    VITE_DEMO=1 vite build      demo bundle (what the E2E suite runs against)
 #    P1  e2e           playwright                  guest reception, reservation lifecycle, money, housekeeping, copilot, admin, smoke
@@ -71,6 +72,7 @@ if [[ "${QUICK:-}" != "1" ]]; then
     echo "== [sql] SKIPPED: PostgreSQL not reachable (set PGHOST/PGUSER/PGPASSWORD, or start a local 16 cluster)"
     overall=1
   fi
+  run_gate bridge     P0 SKIP_BRIDGE bash scripts/bridge/check.sh
   run_gate build      P0 SKIP_BUILD npx vite build
   run_gate build:demo P0 SKIP_BUILD env VITE_DEMO=1 npx vite build --base ./ --outDir dist-demo
   run_gate e2e        P1 SKIP_E2E   npx playwright test

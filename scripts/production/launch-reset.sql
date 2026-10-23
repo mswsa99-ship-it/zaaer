@@ -28,6 +28,7 @@ delete from guest_lookup_attempts;
 delete from guest_phone_challenges;           -- «حجوزاتي» codes and phone sessions (0020)
 delete from guest_phone_sessions;
 delete from whatsapp_inbound_messages;        -- handled WhatsApp message ids (0021); the branch numbers themselves are settings and stay
+delete from whatsapp_outbox;                  -- staff replies waiting for the reception computer (0023)
 delete from integration_events;
 delete from notifications;
 -- operations

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import QRCode from "qrcode";
-import { MessageCircle, Phone, Clock, MapPin } from "lucide-react";
+import { MessageCircle, Phone, Clock, MapPin, PlayCircle } from "lucide-react";
 import { whatsappApi, type PublicWhatsapp } from "../lib/api";
+import { isDemo } from "../lib/supabase";
 import { useBranch } from "../lib/branch";
 import { Spinner } from "./ui";
 
@@ -63,6 +65,11 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
             <MessageCircle className="h-5 w-5" /> افتح واتساب
           </a>
           <p className="mt-3 text-sm text-ink-400" dir="ltr">+{info.wa_phone}</p>
+          {isDemo && (
+            <Link to="/whatsapp-demo" className="btn-outline mx-auto mt-4 inline-flex w-full max-w-xs justify-center text-sm" data-testid="wa-sim-link">
+              <PlayCircle className="h-4 w-4" /> جرّب المحادثة هنا (محاكاة العرض)
+            </Link>
+          )}
         </>
       ) : (
         <>

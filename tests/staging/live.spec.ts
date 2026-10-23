@@ -14,6 +14,8 @@
  *      not a prompt-injection pattern, so routine runs do not add guardrail-block events.
  *  L05 the WhatsApp webhook is deployed and closed: a wrong verify token is refused, an unsigned call for a number
  *      this system does not manage is ignored, and the public QR endpoint exposes no credentials.
+ *  L06 the reception-computer endpoint (wa-bridge) is deployed and answers only a valid branch key: no key, a
+ *      malformed key and an unknown well-formed key are all refused by the function itself (not by the platform).
  */
 import { readFileSync } from "node:fs";
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
@@ -125,4 +127,14 @@ test("L05 the WhatsApp webhook is deployed and closed to strangers; the public Q
   const text = JSON.stringify(await pub.json());
   expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "branch_name", "branch_phone", "wa_phone"]);
   expect(text).not.toMatch(/EAA|token|secret|phone_number_id/i);
+});
+
+test("L06 the reception computer's endpoint is deployed and refuses anything but a valid branch key", async ({ request }) => {
+  const { url } = supabaseEnv();
+  const bridge = `${url}/functions/v1/wa-bridge`;
+  for (const headers of [{}, { "x-bridge-key": "not-a-key" }, { "x-bridge-key": "zb_" + "0".repeat(64) }]) {
+    const r = await request.post(bridge, { headers: { "content-type": "application/json", ...headers }, data: { action: "poll", status: "starting" } });
+    expect(r.status(), JSON.stringify(headers)).toBe(401);
+    expect(await r.json(), "refused by the function's own key check").toEqual({ error: "bad_key" });
+  }
 });

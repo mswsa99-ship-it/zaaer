@@ -31,7 +31,7 @@ do $$ declare r jsonb; l jsonb; begin
     perform t_record('WA01 a channel cannot be enabled before number, id, token and secret are set', false, 'accepted');
   exception when others then perform t_record('WA01 a channel cannot be enabled before number, id, token and secret are set', sqlerrm like 'VALIDATION%', sqlerrm); end;
 
-  r := fn_admin_whatsapp_save(t_branch(), jsonb_build_object('display_phone', '0551234567', 'phone_number_id', '123456789012345',
+  r := fn_admin_whatsapp_save(t_branch(), jsonb_build_object('mode', 'cloud_api', 'display_phone', '0551234567', 'phone_number_id', '123456789012345',
         'access_token', 'EAAGtesttoken0123456789XYZW', 'app_secret', 'abcdef0123456789abcdef', 'otp_template', 'Booking_Code', 'enabled', true));
   l := fn_admin_whatsapp_channels();
   perform t_record('WA02 owner sets up a branch number: phone normalized, enabled, status configured',
@@ -50,7 +50,9 @@ end $$;
 reset role;
 
 select t_record('WA05 secrets are stored encrypted and the audit holds no secret',
-  (select access_token_encrypted is not null and convert_from(access_token_encrypted, 'latin1') not like '%EAAGtesttoken%' from branch_whatsapp_channels where branch_id = t_branch())
+  -- (a byte search: the ciphertext is random bytes, and a text conversion fails whenever it holds a zero byte)
+  (select access_token_encrypted is not null and position(convert_to('EAAGtesttoken', 'UTF8') in access_token_encrypted) = 0
+     and position(convert_to('abcdef0123', 'UTF8') in app_secret_encrypted) = 0 from branch_whatsapp_channels where branch_id = t_branch())
   and not exists (select 1 from audit_events where action = 'whatsapp_channel_updated' and (details::text like '%EAAG%' or details::text like '%abcdef0123%' or details::text like '%' || (select v from kv where k = 'verify') || '%')));
 
 set role service_role;
@@ -177,8 +179,10 @@ end $$;
 reset role;
 
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),140) as detail from test_results order by ok, name;
-select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from test_results;
+select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if exists (select 1 from test_results where not ok) then raise exception 'WHATSAPP/PURGE TESTS FAILED'; end if;
+  if exists (select 1 from test_results where ok is not true) then raise exception 'WHATSAPP/PURGE TESTS FAILED'; end if;
+  -- a statement that errors before recording its check would otherwise just be missing
+  if (select count(*) from test_results) < 22 then raise exception 'WHATSAPP/PURGE TESTS INCOMPLETE: % of 22 checks ran', (select count(*) from test_results); end if;
 end $$;

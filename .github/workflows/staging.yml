@@ -105,6 +105,11 @@ jobs:
           cp dist/index.html dist/404.html
           echo "entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1)" >> "$GITHUB_OUTPUT"
           echo "base=${BASE_PATH%/}" >> "$GITHUB_OUTPUT"
+      - name: Package the reception-computer WhatsApp program (Windows) next to the site
+        # bridge/ + its dependencies + the official node.exe (checksum-verified) → dist/bridge/zaaer-whatsapp-bridge.zip.
+        # If nodejs.org cannot be reached the site still ships; the owner's WhatsApp page then says the package is not ready.
+        continue-on-error: true
+        run: bash scripts/bridge/package.sh dist/bridge
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Check this build against the real staging backend before publishing

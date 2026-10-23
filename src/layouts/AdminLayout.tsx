@@ -75,7 +75,7 @@ export default function AdminLayout() {
         <header className="sticky top-0 z-10 border-b border-ink-100 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
           <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة — منازل الراحة</Link>
         </header>
-        <main className="flex-1 p-4 lg:p-8">
+        <main className="flex-1 p-4 pb-24 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
           <Outlet />
         </main>
       </div>

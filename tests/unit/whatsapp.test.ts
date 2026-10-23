@@ -92,6 +92,7 @@ describe("sending (WA-U04)", () => {
   it("a switched-off or incomplete branch is not usable", () => {
     expect(usable({ ...channel, enabled: false })).toBe(false);
     expect(usable({ ...channel, access_token: null })).toBe(false);
+    expect(usable({ ...channel, mode: "web_bridge" })).toBe(false);   // answered from the reception computer, never via Meta
     expect(usable(channel)).toBe(true);
   });
 });

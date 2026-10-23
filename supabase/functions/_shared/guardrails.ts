@@ -31,7 +31,7 @@ export interface OutputVerdict {
 // ---------------------------------------------------------------------------
 // Normalisation helpers
 // ---------------------------------------------------------------------------
-const ARABIC_DIACRITICS = /[ً-ْٰـ]/g;
+const ARABIC_DIACRITICS = /[\u{64B}-\u{652}\u{670}\u{640}]/gu;
 const AR_DIGITS = "٠١٢٣٤٥٦٧٨٩";
 const FA_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
 
@@ -55,9 +55,9 @@ export function normalizeArabic(s: string): string {
 }
 
 export function isMostlyArabic(s: string): boolean {
-  const letters = s.replace(/[^A-Za-z؀-ۿ]/g, "");
+  const letters = s.replace(/[^A-Za-z\u{600}-\u{6FF}]/gu, "");
   if (!letters) return true;
-  const ar = (letters.match(/[؀-ۿ]/g) ?? []).length;
+  const ar = (letters.match(/[\u{600}-\u{6FF}]/gu) ?? []).length;
   return ar / letters.length >= 0.5;
 }
 

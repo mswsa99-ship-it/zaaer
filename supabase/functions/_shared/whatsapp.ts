@@ -11,6 +11,9 @@ export const WA_API_VERSION = "v23.0";
 export interface WaChannel {
   branch_id: string;
   organization_id: string;
+  /** cloud_api: this file; web_bridge: the branch answers from the reception computer (wa-bridge), never via Meta */
+  mode?: "cloud_api" | "web_bridge";
+  auto_reply?: boolean;
   enabled: boolean;
   status: string;
   display_phone: string | null;
@@ -28,7 +31,7 @@ export interface WaSendResult { ok: boolean; id?: string; status?: number; error
 export const maskTokens = (s: string) => s.replace(/EAA[A-Za-z0-9]{10,}/g, "[token]");
 
 export function usable(c: WaChannel | null | undefined): c is WaChannel & { phone_number_id: string; access_token: string } {
-  return !!c && c.enabled && !!c.phone_number_id && !!c.access_token;
+  return !!c && c.enabled && c.mode !== "web_bridge" && !!c.phone_number_id && !!c.access_token;
 }
 
 export async function waSend(c: WaChannel, payload: Record<string, unknown>, fetcher: typeof fetch = fetch): Promise<WaSendResult> {

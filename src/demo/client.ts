@@ -11,7 +11,7 @@ import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
 import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 
-const KEY = "zaaer_demo_store_v4";
+const KEY = "zaaer_demo_store_v5";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
 function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); return s; }
 const SESSION_KEY = "zaaer_demo_session";
@@ -133,7 +133,8 @@ function visible(table: string, r: Row): boolean {
 class QB implements PromiseLike<any> {
   private filters: Filter[] = []; private mode: "select" | "insert" | "update" | "delete" | "upsert" = "select"; private sel = "*"; private payload: any = null;
   private orders: Array<{ col: string; asc: boolean; nullsFirst?: boolean }> = []; private lim: number | null = null; private off = 0; private countMode = false; private head = false; private one: "maybe" | "one" | null = null;
-  constructor(private table: string) {}
+  /** service = the server's view (edge functions with the service role): no row-level filtering */
+  constructor(private table: string, private service = false) {}
   select(sel = "*", opts?: { count?: string; head?: boolean }) { if (this.mode === "select") this.sel = sel; else this.sel = sel; this.countMode = !!opts?.count; this.head = !!opts?.head; return this; }
   insert(p: any) { this.mode = "insert"; this.payload = p; return this; }
   upsert(p: any) { this.mode = "upsert"; this.payload = p; return this; }
@@ -166,6 +167,10 @@ class QB implements PromiseLike<any> {
       const match = (r: Row) => this.filters.every((f) => f(r));
       if (this.mode === "insert" || this.mode === "upsert") {
         const list: Row[] = (Array.isArray(this.payload) ? this.payload : [this.payload]).map((p: Row) => ({ id: uid(), created_at: nowISO(), ...p }));
+        // primary key of the handled-message log (0021): a second insert of the same id fails, as in Postgres
+        if (this.table === "whatsapp_inbound_messages") {
+          for (const p of list) { p.received_at ??= nowISO(); if (rows.some((r) => r.wa_message_id === p.wa_message_id)) return { data: null, error: { message: "duplicate key value violates unique constraint", code: "23505" }, count: null }; }
+        }
         for (const p of list) { const i = this.mode === "upsert" ? rows.findIndex((r) => r.id === p.id || (this.table === "ai_usage_daily" && r.organization_id === p.organization_id && r.day === p.day)) : -1; if (i >= 0) rows[i] = { ...rows[i], ...p }; else rows.push(p); }
         emit(this.table);
         const data = list.map((r: Row) => project(this.table, r, this.sel));
@@ -173,7 +178,7 @@ class QB implements PromiseLike<any> {
       }
       if (this.mode === "update") { const hit = rows.filter(match); for (const r of hit) Object.assign(r, this.payload); emit(this.table); return { data: hit.map((r) => project(this.table, r, this.sel)), error: null, count: null }; }
       if (this.mode === "delete") { const keep = rows.filter((r) => !match(r)); S[this.table] = keep; emit(this.table); return { data: [], error: null, count: null }; }
-      let out = rows.filter(match).filter((r) => visible(this.table, r));   // RLS emulation (read side)
+      let out = rows.filter(match).filter((r) => this.service || visible(this.table, r));   // RLS emulation (read side)
       for (const o of [...this.orders].reverse()) out = [...out].sort((a, b) => { const x = a[o.col], y = b[o.col]; if (x == null && y == null) return 0; if (x == null) return o.nullsFirst ? -1 : 1; if (y == null) return o.nullsFirst ? 1 : -1; return (x < y ? -1 : x > y ? 1 : 0) * (o.asc ? 1 : -1); });
       const count = out.length;
       if (this.off) out = out.slice(this.off);
@@ -495,11 +500,14 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const ev = evaluate(r.id); if (!ev.allowed || !["delivered", "acknowledged"].includes(r.access_status)) return { allowed: false, reasons: ev.allowed ? ["لم يُسلَّم الرمز بعد"] : ev.reasons }; return { allowed: true, code: "4" + String(1000 + (r.internal_ref.charCodeAt(2) * 7) % 8999), room_number: roomNo(r.room_id) }; },
   ...knowledgeRpcs({ T, byId, me, myBranches, hasRole, requireRole, requireBranch, checkVersion, audit, emit, staffId }),
 
-  // ---- WhatsApp per branch (0021): settings only — the demo sends nothing ----
-  fn_admin_whatsapp_channels: () => { requireRole("owner"); return T("branches").filter((b) => !b.archived_at).map((b) => { const c = T("branch_whatsapp_channels").find((x) => x.branch_id === b.id); return { branch_id: b.id, branch_name: b.name_ar, branch_phone: b.phone, enabled: !!c?.enabled, display_phone: c?.display_phone ?? null, phone_number_id: c?.phone_number_id ?? null, waba_id: c?.waba_id ?? null, has_token: !!c?.has_token, token_last4: c?.token_last4 ?? null, has_app_secret: !!c?.has_app_secret, verify_token: c?.verify_token ?? null, otp_template: c?.otp_template ?? null, template_lang: c?.template_lang ?? "ar", status: c?.status ?? "not_configured", last_error: c?.last_error ?? null, last_checked_at: c?.last_checked_at ?? null, verified_name: c?.verified_name ?? null, updated_at: c?.updated_at ?? null }; }); },
+  // ---- WhatsApp per branch (0021) + the reception computer (0023): the demo sends nothing; the WhatsApp simulator
+  //      (src/demo/whatsappSim.ts) stands in for the reception computer and runs the server's own code ----
+  fn_admin_whatsapp_channels: () => { requireRole("owner"); return T("branches").filter((b) => !b.archived_at).map((b) => { const c = T("branch_whatsapp_channels").find((x) => x.branch_id === b.id); return { branch_id: b.id, branch_name: b.name_ar, branch_phone: b.phone, mode: c?.mode ?? "web_bridge", enabled: !!c?.enabled, display_phone: c?.display_phone ?? null, phone_number_id: c?.phone_number_id ?? null, waba_id: c?.waba_id ?? null, has_token: !!c?.has_token, token_last4: c?.token_last4 ?? null, has_app_secret: !!c?.has_app_secret, verify_token: c?.verify_token ?? null, otp_template: c?.otp_template ?? null, template_lang: c?.template_lang ?? "ar", status: c?.status ?? "not_configured", last_error: c?.last_error ?? null, last_checked_at: c?.last_checked_at ?? null, verified_name: c?.verified_name ?? null, updated_at: c?.updated_at ?? null,
+    auto_reply: c?.auto_reply ?? true, human_pause_minutes: c?.human_pause_minutes ?? 60, has_bridge_key: !!c?.has_bridge_key, bridge_key_last4: c?.bridge_key_last4 ?? null, bridge_key_created_at: c?.bridge_key_created_at ?? null, bridge_status: c?.bridge_status ?? null, bridge_phone: c?.bridge_phone ?? null, bridge_name: c?.bridge_name ?? null, bridge_version: c?.bridge_version ?? null, bridge_last_seen: c?.bridge_last_seen ?? null, bridge_online: !!c?.bridge_last_seen && Date.now() - Date.parse(c.bridge_last_seen) < 90_000 }; }); },
   fn_admin_whatsapp_save: ({ p_branch, p }) => { requireRole("owner"); if (!byId("branches", p_branch)) throw new Error("NOT_FOUND: branch");
-    let c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); if (!c) { c = { branch_id: p_branch, organization_id: ORG, enabled: false, display_phone: null, phone_number_id: null, waba_id: null, has_token: false, token_last4: null, has_app_secret: false, verify_token: "demo-" + uid().replace(/-/g, ""), otp_template: null, template_lang: "ar", status: "not_configured", last_error: null, last_checked_at: null, verified_name: null, created_at: nowISO() }; T("branch_whatsapp_channels").push(c); }
-    const changed: string[] = [];
+    let c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); if (!c) { c = { branch_id: p_branch, organization_id: ORG, mode: "web_bridge", enabled: false, display_phone: null, phone_number_id: null, waba_id: null, has_token: false, token_last4: null, has_app_secret: false, verify_token: "demo-" + uid().replace(/-/g, ""), otp_template: null, template_lang: "ar", status: "not_configured", last_error: null, last_checked_at: null, verified_name: null, auto_reply: true, human_pause_minutes: 60, has_bridge_key: false, bridge_key: null, bridge_key_last4: null, bridge_key_created_at: null, bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null, created_at: nowISO() }; T("branch_whatsapp_channels").push(c); }
+    const changed: string[] = []; let key: string | null = null;
+    if ("mode" in p) { if (!["cloud_api", "web_bridge"].includes(p.mode)) throw new Error("VALIDATION: mode"); if (p.mode !== c.mode) { c.mode = p.mode; changed.push("mode"); } }
     if ("display_phone" in p) { const v = String(p.display_phone ?? "").trim() ? normPhone(p.display_phone) : null; if (String(p.display_phone ?? "").trim() && !v) throw new Error("VALIDATION: display_phone"); if (v !== c.display_phone) { c.display_phone = v; changed.push("display_phone"); } }
     if ("phone_number_id" in p) { const v = String(p.phone_number_id ?? "").trim() || null; if (v && !/^\d{5,30}$/.test(v)) throw new Error("VALIDATION: phone_number_id"); if (v && T("branch_whatsapp_channels").some((x) => x.phone_number_id === v && x.branch_id !== p_branch)) throw new Error("VALIDATION: phone_number_id already used by another branch"); if (v !== c.phone_number_id) { c.phone_number_id = v; changed.push("phone_number_id"); } }
     if ("waba_id" in p) c.waba_id = String(p.waba_id ?? "").trim() || null;
@@ -508,14 +516,24 @@ const rpcsMore: Record<string, (a: any) => any> = {
     const tok = String(p.access_token ?? "").trim(); if (tok) { if (tok.length < 20 || /\s/.test(tok)) throw new Error("VALIDATION: access_token"); c.has_token = true; c.token_last4 = tok.slice(-4); changed.push("access_token"); }
     const sec = String(p.app_secret ?? "").trim(); if (sec) { if (sec.length < 16 || /\s/.test(sec)) throw new Error("VALIDATION: app_secret"); c.has_app_secret = true; changed.push("app_secret"); }
     if (p.regenerate_verify_token) { c.verify_token = "demo-" + uid().replace(/-/g, ""); changed.push("verify_token"); }
-    const complete = !!(c.display_phone && c.phone_number_id && c.has_token && c.has_app_secret);
-    if (changed.some((k) => ["display_phone", "phone_number_id", "access_token", "app_secret"].includes(k))) { c.status = "configured"; c.last_error = null; c.verified_name = null; }
-    if (!complete) c.status = "not_configured"; else if (c.status === "not_configured") c.status = "configured";
-    if ("enabled" in p) { if (p.enabled && !complete) throw new Error("VALIDATION: channel_incomplete"); c.enabled = !!p.enabled; changed.push("enabled"); }
-    if (!complete) c.enabled = false;
-    c.updated_at = nowISO(); emit("branch_whatsapp_channels"); audit(p_branch, "whatsapp_channel_updated", "branch", p_branch, { changed, enabled: c.enabled, status: c.status });
-    return { ok: true, status: c.status, enabled: c.enabled, changed }; },
-  fn_public_whatsapp: ({ p_branch }) => { const b = byId("branches", p_branch); if (!b || !b.is_active || b.archived_at) return null; const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); const active = !!c?.enabled && ["configured", "active"].includes(c.status); return { active, wa_phone: active ? c!.display_phone : null, branch_name: b.name_ar, branch_phone: b.phone }; },
+    // the reception computer's key: shown once (the real server keeps only its SHA-256; the demo keeps it to simulate the program)
+    if (p.regenerate_bridge_key) { key = "zb_" + randomHex(32); Object.assign(c, { bridge_key: key, has_bridge_key: true, bridge_key_last4: key.slice(-4), bridge_key_created_at: nowISO(), bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null }); changed.push("bridge_key"); }
+    else if (p.revoke_bridge_key && c.has_bridge_key) { Object.assign(c, { bridge_key: null, has_bridge_key: false, bridge_key_last4: null, bridge_key_created_at: null, bridge_status: null, bridge_last_seen: null }); changed.push("bridge_key_revoked"); }
+    if ("auto_reply" in p) { if (typeof p.auto_reply !== "boolean") throw new Error("VALIDATION: auto_reply"); if (p.auto_reply !== c.auto_reply) { c.auto_reply = p.auto_reply; changed.push("auto_reply"); } }
+    if ("human_pause_minutes" in p) { if (typeof p.human_pause_minutes !== "number") throw new Error("VALIDATION: human_pause_minutes"); const v = Math.round(p.human_pause_minutes); if (v < 5 || v > 720) throw new Error("VALIDATION: human_pause_minutes"); if (v !== c.human_pause_minutes) { c.human_pause_minutes = v; changed.push("human_pause_minutes"); } }
+    if (changed.some((k) => ["mode", "display_phone", "phone_number_id", "access_token", "app_secret", "bridge_key", "bridge_key_revoked"].includes(k))) { c.status = "configured"; c.last_error = null; c.verified_name = null; }
+    c.status = waStatus(c);
+    if ("enabled" in p) { if (p.enabled && c.status === "not_configured") throw new Error("VALIDATION: channel_incomplete"); if (!!p.enabled !== c.enabled) { c.enabled = !!p.enabled; changed.push("enabled"); } }
+    if (c.status === "not_configured") c.enabled = false;
+    c.updated_at = nowISO(); emit("branch_whatsapp_channels"); audit(p_branch, "whatsapp_channel_updated", "branch", p_branch, { changed, mode: c.mode, enabled: c.enabled, status: c.status, auto_reply: c.auto_reply });
+    return { ok: true, status: c.status, enabled: c.enabled, mode: c.mode, changed, ...(key ? { bridge_key: key } : {}) }; },
+  fn_public_whatsapp: ({ p_branch }) => { const b = byId("branches", p_branch); if (!b || !b.is_active || b.archived_at) return null; const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); const active = !!c?.enabled && (["configured", "active"].includes(c.status) || (c.mode === "web_bridge" && c.status === "error")); return { active, wa_phone: active ? c!.display_phone : null, branch_name: b.name_ar, branch_phone: b.phone }; },
+  // inbox: take a conversation (the assistant steps back; on WhatsApp for the branch's pause) or return it — audited (0023)
+  fn_conversation_take: ({ p_conversation, p_take }) => { requireRole("owner", "manager", "supervisor"); const cv = byId("conversations", p_conversation); if (!cv) throw new Error("NOT_FOUND: conversation"); if (cv.branch_id && !myBranches().includes(cv.branch_id)) throw new Error("FORBIDDEN: branch"); const before = cv.status;
+    if (p_take) { const pause = T("branch_whatsapp_channels").find((x) => x.branch_id === cv.branch_id)?.human_pause_minutes ?? 60; Object.assign(cv, { status: "handed_off", handed_off_at: cv.handed_off_at ?? nowISO(), human_active_until: cv.channel === "whatsapp" ? new Date(Date.now() + pause * 60_000).toISOString() : cv.human_active_until ?? null }); }
+    else Object.assign(cv, { status: "active", handed_off_at: null, human_active_until: null });
+    emit("conversations"); audit(cv.branch_id ?? null, p_take ? "conversation_taken" : "conversation_returned_to_assistant", "conversation", cv.id, { before, after: cv.status, channel: cv.channel });
+    return { ok: true, status: cv.status, human_active_until: p_take ? cv.human_active_until : null }; },
 
   // ---- data purge (0022): the same kinds, period and three confirmations; the demo resets with the seed ----
   fn_admin_purge_preview: ({ p_branch, p_from, p_to, p_categories }) => { requireRole("owner"); const cats = purgeValidate(p_branch, p_from, p_to, p_categories); const snapshot = JSON.stringify(S); const counts = purgeRun(p_branch, p_from, p_to, cats); S = JSON.parse(snapshot); const token = "PURGE" + uid().replace(/-/g, ""); purgeRequests.set(token, { branch: p_branch ?? null, from: p_from, to: p_to, cats, staff: staffId(), expires: Date.now() + 15 * 60_000, used: false }); return { request_id: uid(), token, counts, categories: cats, phrase: "احذف نهائيا", expires_in_minutes: 15 }; },
@@ -691,14 +709,64 @@ function normPhone(p: unknown): string | null {
 function phoneReservationIds(ph: string): string[] {
   return T("reservations").filter((r) => r.status !== "rejected" && T("reservation_guests").some((g) => g.reservation_id === r.id && g.is_primary && normPhone(g.phone) === ph)).map((r) => r.id);
 }
+// ---- WhatsApp on the reception computer (0023) ----
+function waStatus(c: Row): string {
+  const complete = c.mode === "web_bridge" ? !!(c.display_phone && c.has_bridge_key) : !!(c.display_phone && c.phone_number_id && c.has_token && c.has_app_secret);
+  if (!complete) return "not_configured";
+  return ["active", "error"].includes(c.status) ? c.status : "configured";
+}
+function randomHex(bytes: number): string {
+  const a = new Uint8Array(bytes);
+  try { crypto.getRandomValues(a); } catch { for (let i = 0; i < bytes; i++) a[i] = Math.floor(Math.random() * 256); }
+  return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+const bridgeOnline = (c: Row | undefined) => !!c?.bridge_last_seen && Date.now() - Date.parse(c.bridge_last_seen) < 90_000;
+/** server-only functions (service role in the real system): only the service client below reaches them */
+const serviceRpcs: Record<string, (a: any) => any> = {
+  fn_whatsapp_phone_session: ({ p_phone }) => { const ph = normPhone(p_phone); if (!ph) throw new Error("VALIDATION: phone"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, ph); return token; },
+  fn_wa_bridge_auth: ({ p_key }) => { if (!/^zb_[0-9a-f]{64}$/.test(String(p_key ?? ""))) return null; const c = T("branch_whatsapp_channels").find((x) => x.mode === "web_bridge" && !!x.bridge_key && x.bridge_key === p_key); if (!c) return null; return { branch_id: c.branch_id, organization_id: c.organization_id, enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, status: c.status, display_phone: c.display_phone, human_pause_minutes: c.human_pause_minutes ?? 60, branch_name: byId("branches", c.branch_id)?.name_ar ?? null }; },
+  fn_wa_bridge_beat: ({ p_branch, p_status, p_phone, p_name, p_version, p_detail }) => { if (!["starting", "qr", "connected", "disconnected", "stopped"].includes(p_status)) throw new Error("VALIDATION: status"); const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch && x.mode === "web_bridge"); if (!c) return null; const ph = String(p_phone ?? "").replace(/\D/g, ""); const complete = waStatus(c) !== "not_configured";
+    Object.assign(c, { bridge_status: p_status, bridge_last_seen: nowISO(), bridge_phone: /^\d{8,15}$/.test(ph) ? ph : c.bridge_phone ?? null, bridge_name: p_name || c.bridge_name || null, bridge_version: p_version || c.bridge_version || null });
+    if (complete && p_status === "connected") Object.assign(c, { status: "active", last_error: null, last_checked_at: nowISO() });
+    if (complete && p_status === "disconnected") Object.assign(c, { status: "error", last_error: String(p_detail || "disconnected").slice(0, 300), last_checked_at: nowISO() });
+    emit("branch_whatsapp_channels"); return { enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, human_pause_minutes: c.human_pause_minutes ?? 60 }; },
+  fn_wa_bridge_poll: ({ p_branch, p_limit }) => { const now = Date.now(); const out: Row[] = [];
+    const fail = (o: Row, status: string, error: string) => { Object.assign(o, { status, error, finished_at: nowISO() }); const m = byId("conversation_messages", o.message_id); if (m) m.meta = { ...(m.meta ?? {}), delivery: "failed", error }; };
+    for (const o of T("whatsapp_outbox").filter((x) => x.branch_id === p_branch)) { if (o.status === "sending" && now - Date.parse(o.picked_at) > 5 * 60_000) fail(o, "failed", "no_ack"); else if (o.status === "pending" && now - Date.parse(o.created_at) > 12 * 3600_000) fail(o, "expired", "expired"); }
+    for (const o of T("whatsapp_outbox").filter((x) => x.branch_id === p_branch && x.status === "pending").sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).slice(0, Math.max(1, Math.min(Number(p_limit) || 5, 20)))) {
+      const m = byId("conversation_messages", o.message_id); const cv = m ? byId("conversations", m.conversation_id) : undefined;
+      if (!m || !cv?.wa_chat_id || cv.branch_id !== p_branch) { Object.assign(o, { status: "expired", error: "message_gone", finished_at: nowISO() }); continue; }
+      Object.assign(o, { status: "sending", picked_at: nowISO(), attempts: (o.attempts ?? 0) + 1 }); out.push({ id: o.id, chat_id: cv.wa_chat_id, text: m.content });
+    }
+    emit("conversation_messages"); return out; },
+  fn_wa_bridge_ack: ({ p_branch, p_id, p_ok, p_wa_id, p_error }) => { const o = T("whatsapp_outbox").find((x) => x.id === p_id && x.branch_id === p_branch && x.status === "sending"); if (!o) return false;
+    Object.assign(o, { status: p_ok ? "sent" : "failed", wa_id: p_wa_id ?? null, error: p_ok ? null : String(p_error || "send_failed").slice(0, 200), finished_at: nowISO() });
+    const m = byId("conversation_messages", o.message_id); if (m) m.meta = { ...(m.meta ?? {}), delivery: p_ok ? "sent" : "failed", ...(p_ok ? {} : { error: o.error }) }; emit("conversation_messages"); return true; },
+  fn_wa_bridge_enqueue: ({ p_message }) => { const m = T("conversation_messages").find((x) => x.id === p_message && x.sender === "supervisor"); if (!m) return { queued: false, error: "not_found" };
+    const cv = byId("conversations", m.conversation_id)!; const c = T("branch_whatsapp_channels").find((x) => x.branch_id === cv.branch_id); let err: string | null = null;
+    if (cv.channel !== "whatsapp" || !cv.wa_chat_id) err = "not_whatsapp";
+    else if (!c || c.mode !== "web_bridge" || !c.enabled || !c.has_bridge_key) err = "channel_unavailable";
+    else { const threads = new Set(T("conversations").filter((y) => y.branch_id === cv.branch_id && y.wa_contact === cv.wa_contact).map((y) => y.id)); const last = Math.max(0, ...T("conversation_messages").filter((x) => x.sender === "guest" && threads.has(x.conversation_id)).map((x) => Date.parse(x.created_at))); if (!last || Date.now() - last > 24 * 3600_000) err = "window_closed"; }
+    if (err) { m.meta = { ...(m.meta ?? {}), channel: "whatsapp", delivery: "failed", error: err }; emit("conversation_messages"); return { queued: false, error: err }; }
+    T("whatsapp_outbox").push({ id: uid(), branch_id: cv.branch_id, message_id: m.id, status: "pending", attempts: 0, wa_id: null, error: null, created_at: nowISO(), picked_at: null, finished_at: null });
+    Object.assign(cv, { human_active_until: new Date(Date.now() + (c!.human_pause_minutes ?? 60) * 60_000).toISOString(), last_message_at: nowISO() });
+    m.meta = { ...(m.meta ?? {}), channel: "whatsapp", delivery: "queued" }; emit("conversations"); emit("conversation_messages");
+    return { queued: true, bridge_online: bridgeOnline(c) }; },
+};
+
 function invoke(name: string, opts: any) {
   const body = opts?.body ?? {};
   if (name === "guest-otp") return { data: { status: "channel_unavailable" }, error: null };
   // WhatsApp (demo): the connection test answers from the demo row; a supervisor's reply is stored but nothing is sent
   if (name === "whatsapp-send") {
     if (body.mode === "check") { if (!hasRole("owner")) return { data: null, error: { message: "forbidden" } }; const ch = T("branch_whatsapp_channels").find((x) => x.branch_id === body.branch_id); if (!ch || ch.status === "not_configured") return { data: { ok: false, error: "channel_incomplete" }, error: null }; Object.assign(ch, { last_checked_at: nowISO() }); return { data: { ok: false, error: "وضع العرض التجريبي — لا اتصال حقيقي بـ Meta" }, error: null }; }
-    const conv = byId("conversations", body.conversation_id); if (!conv) return { data: null, error: { message: "forbidden" } };
-    T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "supervisor", content: String(body.text ?? ""), meta: { channel: "whatsapp", delivery: "failed", error: "demo" }, created_at: nowISO() }); emit("conversation_messages");
+    const conv = byId("conversations", body.conversation_id); if (!conv || (conv.branch_id && !myBranches().includes(conv.branch_id))) return { data: null, error: { message: "forbidden" } };
+    const text = String(body.text ?? "").trim(); if (!text || text.length > 4000) return { data: null, error: { message: "invalid_text" } };
+    const msg = { id: uid(), conversation_id: conv.id, sender: "supervisor", content: text, meta: { channel: "whatsapp" } as Row, created_at: nowISO() }; T("conversation_messages").push(msg); conv.last_message_at = nowISO(); emit("conversation_messages");
+    if (conv.channel !== "whatsapp" || !conv.wa_contact) return { data: { ok: true, delivered: false, error: "not_whatsapp" }, error: null };
+    const ch = T("branch_whatsapp_channels").find((x) => x.branch_id === conv.branch_id);
+    if (ch?.mode === "web_bridge") { const q = serviceRpcs.fn_wa_bridge_enqueue({ p_message: msg.id }); return { data: { ok: true, delivered: false, queued: !!q.queued, bridge_online: !!q.bridge_online, error: q.queued ? undefined : q.error }, error: null }; }
+    msg.meta = { channel: "whatsapp", delivery: "failed", error: "demo" };
     return { data: { ok: true, delivered: false, error: "channel_unavailable" }, error: null };
   }
   if (name === "ai-health") return { data: { configured: false, ok: false, model: null, error: "وضع العرض التجريبي — لا مزود متصل" }, error: null };
@@ -730,3 +798,23 @@ export function createDemoClient() {
   };
 }
 export const DEMO_LOGINS = DEMO_ACCOUNTS.map((a) => ({ email: a.email, name: a.name, role: a.role }));
+
+/** The server's view of the demo store (what edge functions see with the service role) — the WhatsApp simulator
+ *  runs the real wa-bridge code (supabase/functions/_shared/wa_bridge.ts) against it. */
+export function createDemoServiceClient() {
+  return {
+    from: (table: string) => new QB(table, true),
+    rpc: async (fn: string, args: any = {}) => { const impl = serviceRpcs[fn] ?? rpcs[fn]; if (!impl) return { data: null, error: { message: `FN_NOT_IMPLEMENTED_IN_DEMO: ${fn}` } }; try { return { data: impl(args) ?? null, error: null }; } catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" } }; } },
+  };
+}
+/** fetch for the demo's edge functions (the WhatsApp flow asks ai-reception over HTTP on the server) */
+export const demoFunctionsFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const name = String(input).split("/functions/v1/")[1]?.split("?")[0] ?? "";
+  let body: unknown = {}; try { body = JSON.parse(String(init?.body ?? "{}")); } catch { /* empty */ }
+  const r = invoke(name, { body }) as { data: unknown; error: { message: string } | null };
+  return new Response(JSON.stringify(r.error ? { error: r.error.message } : r.data), { status: r.error ? 400 : 200, headers: { "content-type": "application/json" } });
+}) as typeof fetch;
+/** the key of a branch linked to the reception computer — the simulator plays that program */
+export function demoBridgeKey(branchId: string): string | null {
+  return T("branch_whatsapp_channels").find((x) => x.branch_id === branchId && x.mode === "web_bridge")?.bridge_key ?? null;
+}

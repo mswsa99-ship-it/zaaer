@@ -40,10 +40,13 @@ export function seed(): Store {
     { id: BRANCH_A, organization_id: ORG, name_ar: "فرع الرياض — طريق الملك فهد", name_en: "Riyadh - King Fahd Rd", city: "الرياض", address: "طريق الملك فهد، حي العليا", map_url: null, phone: "+966500000000", email: "riyadh@demo.sa", check_in_time: "16:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 1500, prices_include_tax: false, default_deposit_halalas: 20000, tax_number: "300000000000003", commercial_register: "1010000000", archived_at: null, archived_by: null, archive_reason: null, version: 3, created_at: ts(-400), updated_at: ts(-30) },
     { id: BRANCH_B, organization_id: ORG, name_ar: "فرع جدة — الكورنيش", name_en: "Jeddah - Corniche", city: "جدة", address: "طريق الكورنيش", map_url: null, phone: "+966500000001", email: "jeddah@demo.sa", check_in_time: "15:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 1500, prices_include_tax: false, default_deposit_halalas: 0, tax_number: null, commercial_register: null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-200) },
   ]);
-  // WhatsApp per branch (0021): Riyadh is connected (a demo number — nothing is sent), Jeddah is not set up yet
+  // WhatsApp per branch (0021, 0023): Riyadh answers from the reception computer (a demo number and key — nothing is
+  // sent; the WhatsApp simulator plays the program), Jeddah is not set up yet
   put("branch_whatsapp_channels", [
-    { branch_id: BRANCH_A, organization_id: ORG, enabled: true, display_phone: "966500000100", phone_number_id: "100000000000001", waba_id: null, has_token: true, token_last4: "DEMO", has_app_secret: true, verify_token: "demo-verify-token-0000000000000000", otp_template: null, template_lang: "ar", status: "active", last_error: null, last_checked_at: ts(-1), verified_name: "منازل الراحة (عرض)", updated_at: ts(-1), created_at: ts(-30) },
+    { branch_id: BRANCH_A, organization_id: ORG, mode: "web_bridge", enabled: true, display_phone: "966500000100", phone_number_id: null, waba_id: null, has_token: false, token_last4: null, has_app_secret: false, verify_token: "demo-verify-token-0000000000000000", otp_template: null, template_lang: "ar", status: "configured", last_error: null, last_checked_at: null, verified_name: null,
+      auto_reply: true, human_pause_minutes: 60, has_bridge_key: true, bridge_key: "zb_" + "d3m0".repeat(16).replace(/m/g, "e"), bridge_key_last4: "d3e0", bridge_key_created_at: ts(-2), bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null, updated_at: ts(-1), created_at: ts(-30) },
   ]);
+  put("whatsapp_outbox", []);
   put("staff_profiles", Object.values(STAFF).map((x) => ({ id: x.id, auth_user_id: x.auth, organization_id: ORG, full_name: x.name, email: x.email, phone: null, role: x.role, is_active: true, created_at: ts(-300) })));
   put("branch_memberships", [
     { id: uid(), staff_id: STAFF.manager.id, branch_id: BRANCH_A }, { id: uid(), staff_id: STAFF.supervisor.id, branch_id: BRANCH_A },
@@ -183,6 +186,8 @@ export function seed(): Store {
   mkRes({ guest: "Rami Nasser", phone: "0501110017", nat: "لبناني", cat: cat.one, ci: -1, co: 1, status: "no_show", receipts: [], identity: "not_started", createdDays: -6 });
   // history
   for (let i = 1; i <= 6; i++) mkRes({ guest: ["عمر الحربي", "Sara Khan", "ياسر العمري", "Mohammed Ali", "دلال الراشد", "Noura Fahad"][i - 1], phone: "05011100" + (20 + i), cat: [cat.studio, cat.one, cat.two][i % 3], room: ["101", "203", "205", "U1", "102", "204"][i - 1], ci: -10 - i * 3, co: -7 - i * 3, status: "checked_out", receipts: [[86250, 138000, 207000][i % 3]], deposit: 20000, depositRefund: 20000, actualOut: true });
+  // a returning guest with a second, later stay (WhatsApp lists both bookings of her number)
+  mkRes({ guest: "لطيفة حمد السبيعي", phone: "0501110010", cat: cat.one, ci: 20, co: 23, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false, createdDays: -1 });
   // mark cancelled/no_show rows
   for (const r of res) { if (r.status === "cancelled") { r.cancelled_at = ts(-3); r.cancel_reason = "إلغاء من المنصة"; r.cancel_source = "ota"; } if (r.status === "no_show") { r.no_show_at = ts(0, 9); r.cancel_reason = "لم يحضر ولم يرد"; } }
   put("reservations", res); put("reservation_guests", guests); put("reservation_allocations", allocs); put("reservation_charges", charges); put("financial_vouchers", vouchers);

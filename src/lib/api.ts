@@ -92,7 +92,8 @@ const VALIDATION_AR: Record<string, string> = {
   action: "إجراء غير مسموح.", summary: "وصف الاقتراح مطلوب.", timezone: "المنطقة الزمنية غير صالحة (مثال: Asia/Riyadh).",
   display_phone: "رقم واتساب غير صحيح (مثال: 05xxxxxxxx أو 9665xxxxxxxx).", phone_number_id: "Phone Number ID أرقام فقط (من Meta)، ولا يُستخدم لفرعين.",
   waba_id: "WhatsApp Business Account ID أرقام فقط.", access_token: "رمز الوصول غير صالح (انسخه كاملًا من Meta).", app_secret: "App Secret غير صالح.",
-  channel_incomplete: "أكمل الرقم وPhone Number ID ورمز الوصول وApp Secret قبل التفعيل.", period: "الفترة غير صحيحة (من قبل إلى).",
+  channel_incomplete: "أكمل الإعداد قبل التفعيل: رقم واتساب الفرع ومفتاح ربط كمبيوتر الاستقبال (أو بيانات Meta في وضع Cloud API).", period: "الفترة غير صحيحة (من قبل إلى).",
+  mode: "طريقة الربط غير صحيحة.", auto_reply: "قيمة الرد الآلي غير صحيحة.", human_pause_minutes: "مدة توقف الرد الآلي بين 5 و720 دقيقة.",
   period_after_today: "لا يمكن أن تنتهي الفترة بعد اليوم.", choose_category: "اختر نوعًا واحدًا من البيانات على الأقل.", unknown_category: "نوع بيانات غير معروف.",
   confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
 };
@@ -226,12 +227,19 @@ export async function aiHealth(): Promise<AiHealth> {
 // ---------------------------------------------------------------------------
 // WhatsApp per branch (0021) and data purge (0022) — owner only
 // ---------------------------------------------------------------------------
+export type WaMode = "web_bridge" | "cloud_api";
+export type BridgeStatus = "starting" | "qr" | "connected" | "disconnected" | "stopped";
 export interface WaChannelRow {
-  branch_id: string; branch_name: string; branch_phone: string | null; enabled: boolean; display_phone: string | null;
+  branch_id: string; branch_name: string; branch_phone: string | null; mode: WaMode; enabled: boolean; display_phone: string | null;
   phone_number_id: string | null; waba_id: string | null; has_token: boolean; token_last4: string | null; has_app_secret: boolean;
   verify_token: string | null; otp_template: string | null; template_lang: string; status: "not_configured" | "configured" | "active" | "error";
   last_error: string | null; last_checked_at: string | null; verified_name: string | null; updated_at: string | null;
+  // the reception computer (0023)
+  auto_reply: boolean; human_pause_minutes: number; has_bridge_key: boolean; bridge_key_last4: string | null; bridge_key_created_at: string | null;
+  bridge_status: BridgeStatus | null; bridge_phone: string | null; bridge_name: string | null; bridge_version: string | null;
+  bridge_last_seen: string | null; bridge_online: boolean;
 }
+export interface WaReplyResult { ok: boolean; delivered: boolean; queued?: boolean; bridge_online?: boolean; error?: string }
 export interface WaCheck { ok: boolean; verified_name?: string; display_phone_number?: string; quality_rating?: string; matches_number?: boolean; error?: string }
 export interface PublicWhatsapp { active: boolean; wa_phone: string | null; branch_name: string; branch_phone: string | null }
 export type PurgeCategory = "conversations" | "reservations" | "finance" | "guests" | "operations" | "logs" | "audit";
@@ -240,19 +248,29 @@ export interface PurgeHistoryRow { id: string; branch_name: string | null; from:
 
 export const whatsappApi = {
   channels: () => rpc<WaChannelRow[]>("fn_admin_whatsapp_channels", {}),
-  save: (branchId: string, patch: Record<string, unknown>) => rpc<{ ok: boolean; status: string; enabled: boolean }>("fn_admin_whatsapp_save", { p_branch: branchId, p: patch }),
+  /** bridge_key comes back once, only when it was just created (regenerate_bridge_key) */
+  save: (branchId: string, patch: Record<string, unknown>) => rpc<{ ok: boolean; status: string; enabled: boolean; mode: WaMode; bridge_key?: string }>("fn_admin_whatsapp_save", { p_branch: branchId, p: patch }),
   publicInfo: (branchId: string) => rpc<PublicWhatsapp | null>("fn_public_whatsapp", { p_branch: branchId }),
   async check(branchId: string): Promise<WaCheck> {
     const { data, error } = await supabase.functions.invoke<WaCheck>("whatsapp-send", { body: { mode: "check", branch_id: branchId } });
     if (error || !data) return { ok: false, error: error?.message ?? "unavailable" };
     return data;
   },
-  async reply(conversationId: string, text: string): Promise<{ ok: boolean; delivered: boolean; error?: string }> {
-    const { data, error } = await supabase.functions.invoke<{ ok: boolean; delivered: boolean; error?: string }>("whatsapp-send", { body: { mode: "reply", conversation_id: conversationId, text } });
+  async reply(conversationId: string, text: string): Promise<WaReplyResult> {
+    const { data, error } = await supabase.functions.invoke<WaReplyResult>("whatsapp-send", { body: { mode: "reply", conversation_id: conversationId, text } });
     if (error || !data) throw new ApiError(error?.message ?? "WHATSAPP_UNAVAILABLE");
     return data;
   },
+  /** inbox: take a conversation (the assistant steps back; on WhatsApp for the branch's pause) or return it */
+  take: (conversationId: string, take: boolean) => rpc<{ ok: boolean; status: string; human_active_until: string | null }>("fn_conversation_take", { p_conversation: conversationId, p_take: take }),
 };
+
+/** where the reception-computer program is published (next to the website, built by CI) */
+export const BRIDGE_DOWNLOAD_PATH = "bridge/zaaer-whatsapp-bridge.zip";
+/** bridge-config.json for the program on the reception computer (the key is shown this once) */
+export function bridgeConfig(branchName: string, displayPhone: string | null, key: string, supabaseUrl: string) {
+  return { server: `${supabaseUrl.replace(/\/$/, "")}/functions/v1/wa-bridge`, key, branch: branchName, branch_phone: displayPhone, created_at: new Date().toISOString() };
+}
 
 export const purgeApi = {
   preview: (branchId: string | null, from: string, to: string, categories: PurgeCategory[]) =>

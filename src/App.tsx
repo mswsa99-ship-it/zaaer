@@ -1,4 +1,7 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { isDemo } from "./lib/supabase";
+import { LoadingScreen } from "./components/ui";
 import { useAuth } from "./lib/auth";
 import GuestLayout from "./layouts/GuestLayout";
 import StaffLayout from "./layouts/StaffLayout";
@@ -56,6 +59,8 @@ import AdminServices from "./pages/admin/AdminServices";
 import AdminAssistant from "./pages/admin/AdminAssistant";
 import AdminDataPurge from "./pages/admin/AdminDataPurge";
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
+/** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
+const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
 
 function ProtectedStaff({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -78,6 +83,7 @@ export default function App() {
         <Route path="/booking/payment/:token" element={<BookingStatus />} />
         <Route path="/checkin/:token" element={<CheckIn />} />
         <Route path="/kiosk" element={<Kiosk />} />
+        {WhatsAppDemo && <Route path="/whatsapp-demo" element={<Suspense fallback={<LoadingScreen />}><WhatsAppDemo /></Suspense>} />}
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
       </Route>

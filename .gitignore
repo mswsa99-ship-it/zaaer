@@ -13,3 +13,9 @@ playwright-report-staging
 !.env.staging
 supabase/.temp
 supabase/.branches
+# WhatsApp bridge on the reception computer: its session, logs, key and bundled Node stay on that computer
+bridge/session
+bridge/logs
+bridge/node
+bridge/bridge-config*.json
+bridge/.wwebjs_cache

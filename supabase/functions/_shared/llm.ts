@@ -194,6 +194,14 @@ export function resetModelCooldowns(): void { cooldowns.clear(); }
 /** Another model is tried only while at least this much of the request's time budget is left. */
 export const MIN_ATTEMPT_MS = 1500;
 /**
+ * Share of the time still left that one model may use while another could still be tried after it. Under "high
+ * demand" a model can hang until the step's whole budget is gone, and the fallback that would have answered never
+ * gets its turn; capped, it does. The last model in the order gets everything that is left.
+ */
+export const ATTEMPT_SHARE = 0.6;
+/** A model that timed out is moved last for this long on this instance (it is usually slow for a while). */
+export const TIMEOUT_COOLDOWN_MS = 180_000;
+/**
  * Google's documented placeholder for a function call the receiving model did not produce itself (thought-signature
  * docs: traces moved between models, injected calls). Used when a tool loop continues on another model: that model
  * cannot validate the first one's signatures. A step always goes back to its own model verbatim.
@@ -273,23 +281,28 @@ export class GeminiProvider implements LLMProvider {
 
   /**
    * One step. `req.timeoutMs` is the budget for the whole step, fallbacks included, so a guest never waits longer
-   * because a model was down. Throws the provider's error when nothing answered (several attempts → all of them).
+   * because a model was down; a model that hangs only gets its share (ATTEMPT_SHARE) while another could follow.
+   * Throws the provider's error when nothing answered (several attempts → all of them).
    */
   async generate(req: GenerateRequest): Promise<GenerateResponse> {
     const deadline = Date.now() + req.timeoutMs;
     const failed: string[] = [];
     let last: ProviderError | null = null;
-    for (const model of this.candidates(req.history)) {
+    const order = this.candidates(req.history);
+    for (let i = 0; i < order.length; i++) {
+      const model = order[i];
       const left = deadline - Date.now();
       if (last && left < MIN_ATTEMPT_MS) break;
+      // while another model could still follow, this one gets a share of what is left, never less than two minimal attempts
+      const budget = i < order.length - 1 ? Math.min(left, Math.max(Math.round(left * ATTEMPT_SHARE), MIN_ATTEMPT_MS * 2)) : left;
       try {
-        const res = await this.call(model, req, Math.max(left, 1));
+        const res = await this.call(model, req, Math.max(budget, 1));
         return { ...res, model, raw: res.raw ? { ...(res.raw as Record<string, unknown>), model } : undefined, fallbackFrom: failed };
       } catch (e) {
         if (!(e instanceof ProviderError)) throw e;
         last = e;
         failed.push(`${model}: ${e.message}`.slice(0, 160));
-        if (e.kind === "timeout") { cooldowns.set(model, Date.now() + 60_000); break; }   // the step's budget is spent
+        if (e.kind === "timeout") { cooldowns.set(model, Date.now() + TIMEOUT_COOLDOWN_MS); continue; }   // slow right now: the rest of the time goes to the next model
         if (e.status === undefined || !MODEL_UNAVAILABLE.has(e.status)) break;          // would fail the same on any model
         cooldowns.set(model, Date.now() + cooldownMs(e.status, e.retryAfterMs));
       }

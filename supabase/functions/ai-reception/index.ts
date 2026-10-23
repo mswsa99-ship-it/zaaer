@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
   // the prompt states the branch's own date (dayKey is the UTC day the usage counters use)
   // the property's own facts go into the prompt, so most questions are answered in ONE model call (no tool round trip)
   const system = buildSystemPrompt({ propertyName: org.name_ar, branchName: branch.name_ar, verified: !!guestToken, extra: s.strict_scope ? s.extra_instructions : s.extra_instructions, today: localDay(branch.timezone), facts: propertyFacts(await loadKnowledge()) });
-  const userWroteEnglish = /[A-Za-z]{3,}/.test(message) && !/[؀-ۿ]/.test(message);
+  const userWroteEnglish = /[A-Za-z]{3,}/.test(message) && !/[\u{600}-\u{6FF}]/u.test(message);
 
   let tokensIn = 0, tokensOut = 0;
   let finalText: string | null = null;
