@@ -56,7 +56,7 @@ function bridgeLine(live: WaChannelRow): { icon: JSX.Element; text: string; cls:
       ? { icon: <WifiOff className="h-4 w-4" />, text: `كمبيوتر الاستقبال غير متصل — آخر اتصال ${formatDateTime(live.bridge_last_seen)}. تأكد أنه يعمل وأن البرنامج مفتوح.`, cls: "bg-warning-500/10 text-warning-600" }
       : { icon: <WifiOff className="h-4 w-4" />, text: "لم يتصل البرنامج بعد. شغّله على كمبيوتر الاستقبال بملف الإعداد الذي نزّلته.", cls: "bg-ink-50 text-ink-500" };
   }
-  if (live.bridge_status === "connected") return { icon: <Wifi className="h-4 w-4" />, text: `متصل — واتساب مربوط بالرقم +${live.bridge_phone ?? "؟"}${live.bridge_name ? ` (${live.bridge_name})` : ""}.`, cls: "bg-success-500/10 text-success-600" };
+  if (live.bridge_status === "connected") return { icon: <Wifi className="h-4 w-4" />, text: `متصل — ${live.bridge_phone ? `واتساب مربوط بالرقم +${live.bridge_phone}` : "واتساب الفرع مربوط"}${live.bridge_name ? ` (${live.bridge_name})` : ""}.`, cls: "bg-success-500/10 text-success-600" };
   if (live.bridge_status === "qr") return { icon: <QrCode className="h-4 w-4" />, text: "البرنامج يعمل وينتظر مسح رمز QR من جوال الفرع: واتساب ← الأجهزة المرتبطة ← ربط جهاز.", cls: "bg-warning-500/10 text-warning-600" };
   if (live.bridge_status === "disconnected") return { icon: <AlertTriangle className="h-4 w-4" />, text: `واتساب غير مربوط${live.last_error ? ` (${live.last_error})` : ""}. امسح الرمز من جديد في نافذة البرنامج.`, cls: "bg-danger-500/10 text-danger-600" };
   return { icon: <Spinner className="h-4 w-4" />, text: "البرنامج يبدأ التشغيل…", cls: "bg-ink-50 text-ink-500" };
@@ -279,10 +279,10 @@ function BranchChannel({ row, live, onSaved, flash, setFlash }: { row: WaChannel
       {open && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2 rounded-2xl bg-ink-50 p-1" role="tablist" aria-label="طريقة الربط">
-            {([["web_bridge", "واتساب ويب — كمبيوتر الاستقبال", Monitor], ["cloud_api", "WhatsApp Cloud API — Meta", Cloud]] as const).map(([m, label, Icon]) => (
-              <button key={m} type="button" role="tab" aria-selected={view === m} onClick={() => setView(m)}
+            {([["web_bridge", "واتساب ويب — كمبيوتر الاستقبال", "كمبيوتر الاستقبال", Monitor], ["cloud_api", "WhatsApp Cloud API — Meta", "Cloud API — Meta", Cloud]] as const).map(([m, label, short, Icon]) => (
+              <button key={m} type="button" role="tab" aria-selected={view === m} aria-label={label} onClick={() => setView(m)}
                 className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-semibold transition ${view === m ? "bg-white text-brand-700 shadow-sm" : "text-ink-500 hover:text-ink-700"}`}>
-                <Icon className="h-4 w-4 shrink-0" /><span className="truncate">{label}</span>
+                <Icon className="h-4 w-4 shrink-0" /><span className="truncate sm:hidden">{short}</span><span className="hidden truncate sm:inline">{label}</span>
               </button>
             ))}
           </div>
