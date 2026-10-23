@@ -6,7 +6,6 @@ import AdminLayout from "./layouts/AdminLayout";
 import { RequireRole } from "./components/RequireRole";
 
 import Landing from "./pages/guest/Landing";
-import Reception from "./pages/guest/Reception";
 import BookingLookup from "./pages/guest/BookingLookup";
 import BookingNew from "./pages/guest/BookingNew";
 import Registration from "./pages/guest/Registration";
@@ -54,6 +53,8 @@ import AdminStructure from "./pages/admin/AdminStructure";
 import AdminFacilities from "./pages/admin/AdminFacilities";
 import AdminTaskTypes from "./pages/admin/AdminTaskTypes";
 import AdminServices from "./pages/admin/AdminServices";
+import AdminAssistant from "./pages/admin/AdminAssistant";
+import AdminDataPurge from "./pages/admin/AdminDataPurge";
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
 
 function ProtectedStaff({ children }: { children: React.ReactNode }) {
@@ -69,7 +70,7 @@ export default function App() {
       {/* Guest */}
       <Route element={<GuestLayout />}>
         <Route path="/" element={<Landing />} />
-        <Route path="/reception" element={<Reception />} />
+        <Route path="/reception" element={<Landing />} />
         <Route path="/booking/lookup" element={<BookingLookup />} />
         <Route path="/booking/new" element={<BookingNew />} />
         <Route path="/booking/registration/:token" element={<Registration />} />
@@ -124,6 +125,8 @@ export default function App() {
           <Route path="/admin/booking-sources" element={<AdminBookingSources />} />
           <Route path="/admin/ai-settings" element={<AdminAiSettings />} />
           <Route path="/admin/whatsapp" element={<AdminWhatsapp />} />
+          <Route path="/admin/assistant" element={<AdminAssistant />} />
+          <Route path="/admin/data-purge" element={<AdminDataPurge />} />
           <Route path="/admin/payment-providers" element={<AdminPaymentProviders />} />
           <Route path="/admin/policies" element={<AdminPolicies />} />
         <Route path="/admin/knowledge" element={<AdminKnowledge />} />

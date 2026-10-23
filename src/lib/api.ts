@@ -65,6 +65,7 @@ const ERROR_AR: Record<string, string> = {
   ALLOCATION_MISMATCH: "تخصيص الوحدة لا يطابق فترة الحجز؛ راجع سجل التخصيص قبل التمديد.",
   IDEMPOTENCY_CANCELLED: "هذا السند أُلغي سابقًا؛ أنشئ عملية جديدة بدل إعادة الإرسال.",
   TASK_TYPE_MISSING: "نوع مهمة التنظيف النظامي غير موجود لهذا الفرع.",
+  REAUTH_REQUIRED: "أعد إدخال كلمة المرور للتأكيد.",
 };
 
 const VALIDATION_AR: Record<string, string> = {
@@ -89,6 +90,11 @@ const VALIDATION_AR: Record<string, string> = {
   arrival_not_due: "لا يمكن إعلان عدم الحضور قبل موعد الوصول.", kind: "نوع العملية غير صحيح.", method: "طريقة الدفع مطلوبة.",
   entity: "نوع العنصر غير صحيح.", capacity: "السعة القصوى يجب ألا تقل عن الأساسية.", cleanliness: "حالة النظافة غير صحيحة.", quantity: "الكمية غير صحيحة.",
   action: "إجراء غير مسموح.", summary: "وصف الاقتراح مطلوب.", timezone: "المنطقة الزمنية غير صالحة (مثال: Asia/Riyadh).",
+  display_phone: "رقم واتساب غير صحيح (مثال: 05xxxxxxxx أو 9665xxxxxxxx).", phone_number_id: "Phone Number ID أرقام فقط (من Meta)، ولا يُستخدم لفرعين.",
+  waba_id: "WhatsApp Business Account ID أرقام فقط.", access_token: "رمز الوصول غير صالح (انسخه كاملًا من Meta).", app_secret: "App Secret غير صالح.",
+  channel_incomplete: "أكمل الرقم وPhone Number ID ورمز الوصول وApp Secret قبل التفعيل.", period: "الفترة غير صحيحة (من قبل إلى).",
+  period_after_today: "لا يمكن أن تنتهي الفترة بعد اليوم.", choose_category: "اختر نوعًا واحدًا من البيانات على الأقل.", unknown_category: "نوع بيانات غير معروف.",
+  confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
 };
 
 export function toArabicError(e: unknown): string {
@@ -216,6 +222,44 @@ export async function aiHealth(): Promise<AiHealth> {
   if (error) return { configured: false, ok: false, error: error.message };
   return data as AiHealth;
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp per branch (0021) and data purge (0022) — owner only
+// ---------------------------------------------------------------------------
+export interface WaChannelRow {
+  branch_id: string; branch_name: string; branch_phone: string | null; enabled: boolean; display_phone: string | null;
+  phone_number_id: string | null; waba_id: string | null; has_token: boolean; token_last4: string | null; has_app_secret: boolean;
+  verify_token: string | null; otp_template: string | null; template_lang: string; status: "not_configured" | "configured" | "active" | "error";
+  last_error: string | null; last_checked_at: string | null; verified_name: string | null; updated_at: string | null;
+}
+export interface WaCheck { ok: boolean; verified_name?: string; display_phone_number?: string; quality_rating?: string; matches_number?: boolean; error?: string }
+export interface PublicWhatsapp { active: boolean; wa_phone: string | null; branch_name: string; branch_phone: string | null }
+export type PurgeCategory = "conversations" | "reservations" | "finance" | "guests" | "operations" | "logs" | "audit";
+export interface PurgePreview { request_id: string; token: string; counts: Record<string, number>; categories: PurgeCategory[]; phrase: string; expires_in_minutes: number }
+export interface PurgeHistoryRow { id: string; branch_name: string | null; from: string; to: string; categories: PurgeCategory[]; counts: Record<string, number>; executed_at: string; by: string | null }
+
+export const whatsappApi = {
+  channels: () => rpc<WaChannelRow[]>("fn_admin_whatsapp_channels", {}),
+  save: (branchId: string, patch: Record<string, unknown>) => rpc<{ ok: boolean; status: string; enabled: boolean }>("fn_admin_whatsapp_save", { p_branch: branchId, p: patch }),
+  publicInfo: (branchId: string) => rpc<PublicWhatsapp | null>("fn_public_whatsapp", { p_branch: branchId }),
+  async check(branchId: string): Promise<WaCheck> {
+    const { data, error } = await supabase.functions.invoke<WaCheck>("whatsapp-send", { body: { mode: "check", branch_id: branchId } });
+    if (error || !data) return { ok: false, error: error?.message ?? "unavailable" };
+    return data;
+  },
+  async reply(conversationId: string, text: string): Promise<{ ok: boolean; delivered: boolean; error?: string }> {
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; delivered: boolean; error?: string }>("whatsapp-send", { body: { mode: "reply", conversation_id: conversationId, text } });
+    if (error || !data) throw new ApiError(error?.message ?? "WHATSAPP_UNAVAILABLE");
+    return data;
+  },
+};
+
+export const purgeApi = {
+  preview: (branchId: string | null, from: string, to: string, categories: PurgeCategory[]) =>
+    rpc<PurgePreview>("fn_admin_purge_preview", { p_branch: branchId, p_from: from, p_to: to, p_categories: categories }),
+  execute: (token: string, phrase: string) => rpc<{ ok: boolean; counts: Record<string, number> }>("fn_admin_purge_execute", { p_token: token, p_phrase: phrase }),
+  history: () => rpc<PurgeHistoryRow[]>("fn_admin_purge_history", {}),
+};
 
 function fingerprint(): string {
   try {

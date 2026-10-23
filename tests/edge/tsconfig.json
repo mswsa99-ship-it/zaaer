@@ -24,6 +24,8 @@
     "../../supabase/functions/ai-ops/index.ts",
     "../../supabase/functions/ai-reception/index.ts",
     "../../supabase/functions/ai-health/index.ts",
-    "../../supabase/functions/guest-otp/index.ts"
+    "../../supabase/functions/guest-otp/index.ts",
+    "../../supabase/functions/whatsapp-webhook/index.ts",
+    "../../supabase/functions/whatsapp-send/index.ts"
   ]
 }

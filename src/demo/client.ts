@@ -494,8 +494,90 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_guest_submit_checkin: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; if (r.access_status === "locked") r.access_status = "eligibility_review"; emit("reservations"); return { ok: true, access_status: r.access_status }; },
   fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const ev = evaluate(r.id); if (!ev.allowed || !["delivered", "acknowledged"].includes(r.access_status)) return { allowed: false, reasons: ev.allowed ? ["لم يُسلَّم الرمز بعد"] : ev.reasons }; return { allowed: true, code: "4" + String(1000 + (r.internal_ref.charCodeAt(2) * 7) % 8999), room_number: roomNo(r.room_id) }; },
   ...knowledgeRpcs({ T, byId, me, myBranches, hasRole, requireRole, requireBranch, checkVersion, audit, emit, staffId }),
+
+  // ---- WhatsApp per branch (0021): settings only — the demo sends nothing ----
+  fn_admin_whatsapp_channels: () => { requireRole("owner"); return T("branches").filter((b) => !b.archived_at).map((b) => { const c = T("branch_whatsapp_channels").find((x) => x.branch_id === b.id); return { branch_id: b.id, branch_name: b.name_ar, branch_phone: b.phone, enabled: !!c?.enabled, display_phone: c?.display_phone ?? null, phone_number_id: c?.phone_number_id ?? null, waba_id: c?.waba_id ?? null, has_token: !!c?.has_token, token_last4: c?.token_last4 ?? null, has_app_secret: !!c?.has_app_secret, verify_token: c?.verify_token ?? null, otp_template: c?.otp_template ?? null, template_lang: c?.template_lang ?? "ar", status: c?.status ?? "not_configured", last_error: c?.last_error ?? null, last_checked_at: c?.last_checked_at ?? null, verified_name: c?.verified_name ?? null, updated_at: c?.updated_at ?? null }; }); },
+  fn_admin_whatsapp_save: ({ p_branch, p }) => { requireRole("owner"); if (!byId("branches", p_branch)) throw new Error("NOT_FOUND: branch");
+    let c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); if (!c) { c = { branch_id: p_branch, organization_id: ORG, enabled: false, display_phone: null, phone_number_id: null, waba_id: null, has_token: false, token_last4: null, has_app_secret: false, verify_token: "demo-" + uid().replace(/-/g, ""), otp_template: null, template_lang: "ar", status: "not_configured", last_error: null, last_checked_at: null, verified_name: null, created_at: nowISO() }; T("branch_whatsapp_channels").push(c); }
+    const changed: string[] = [];
+    if ("display_phone" in p) { const v = String(p.display_phone ?? "").trim() ? normPhone(p.display_phone) : null; if (String(p.display_phone ?? "").trim() && !v) throw new Error("VALIDATION: display_phone"); if (v !== c.display_phone) { c.display_phone = v; changed.push("display_phone"); } }
+    if ("phone_number_id" in p) { const v = String(p.phone_number_id ?? "").trim() || null; if (v && !/^\d{5,30}$/.test(v)) throw new Error("VALIDATION: phone_number_id"); if (v && T("branch_whatsapp_channels").some((x) => x.phone_number_id === v && x.branch_id !== p_branch)) throw new Error("VALIDATION: phone_number_id already used by another branch"); if (v !== c.phone_number_id) { c.phone_number_id = v; changed.push("phone_number_id"); } }
+    if ("waba_id" in p) c.waba_id = String(p.waba_id ?? "").trim() || null;
+    if ("otp_template" in p) c.otp_template = String(p.otp_template ?? "").trim().toLowerCase() || null;
+    if ("template_lang" in p) c.template_lang = String(p.template_lang ?? "").trim() || "ar";
+    const tok = String(p.access_token ?? "").trim(); if (tok) { if (tok.length < 20 || /\s/.test(tok)) throw new Error("VALIDATION: access_token"); c.has_token = true; c.token_last4 = tok.slice(-4); changed.push("access_token"); }
+    const sec = String(p.app_secret ?? "").trim(); if (sec) { if (sec.length < 16 || /\s/.test(sec)) throw new Error("VALIDATION: app_secret"); c.has_app_secret = true; changed.push("app_secret"); }
+    if (p.regenerate_verify_token) { c.verify_token = "demo-" + uid().replace(/-/g, ""); changed.push("verify_token"); }
+    const complete = !!(c.display_phone && c.phone_number_id && c.has_token && c.has_app_secret);
+    if (changed.some((k) => ["display_phone", "phone_number_id", "access_token", "app_secret"].includes(k))) { c.status = "configured"; c.last_error = null; c.verified_name = null; }
+    if (!complete) c.status = "not_configured"; else if (c.status === "not_configured") c.status = "configured";
+    if ("enabled" in p) { if (p.enabled && !complete) throw new Error("VALIDATION: channel_incomplete"); c.enabled = !!p.enabled; changed.push("enabled"); }
+    if (!complete) c.enabled = false;
+    c.updated_at = nowISO(); emit("branch_whatsapp_channels"); audit(p_branch, "whatsapp_channel_updated", "branch", p_branch, { changed, enabled: c.enabled, status: c.status });
+    return { ok: true, status: c.status, enabled: c.enabled, changed }; },
+  fn_public_whatsapp: ({ p_branch }) => { const b = byId("branches", p_branch); if (!b || !b.is_active || b.archived_at) return null; const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); const active = !!c?.enabled && ["configured", "active"].includes(c.status); return { active, wa_phone: active ? c!.display_phone : null, branch_name: b.name_ar, branch_phone: b.phone }; },
+
+  // ---- data purge (0022): the same kinds, period and three confirmations; the demo resets with the seed ----
+  fn_admin_purge_preview: ({ p_branch, p_from, p_to, p_categories }) => { requireRole("owner"); const cats = purgeValidate(p_branch, p_from, p_to, p_categories); const snapshot = JSON.stringify(S); const counts = purgeRun(p_branch, p_from, p_to, cats); S = JSON.parse(snapshot); const token = "PURGE" + uid().replace(/-/g, ""); purgeRequests.set(token, { branch: p_branch ?? null, from: p_from, to: p_to, cats, staff: staffId(), expires: Date.now() + 15 * 60_000, used: false }); return { request_id: uid(), token, counts, categories: cats, phrase: "احذف نهائيا", expires_in_minutes: 15 }; },
+  fn_admin_purge_execute: ({ p_token, p_phrase }) => { requireRole("owner"); const q = purgeRequests.get(p_token); if (!q || q.used || q.expires < Date.now()) throw new Error("VALIDATION: preview_expired"); if (q.staff !== staffId()) throw new Error("FORBIDDEN: only the owner who previewed can confirm"); if (String(p_phrase ?? "").replace(/[\u064B-\u0652]/g, "").trim() !== "احذف نهائيا") throw new Error("VALIDATION: confirmation_phrase"); if (Date.now() - lastSignInAt > 10 * 60_000) throw new Error("REAUTH_REQUIRED: sign in again to confirm"); const counts = purgeRun(q.branch, q.from, q.to, q.cats); q.used = true; emitAll(); audit(q.branch, "data_purge_executed", "organization", ORG, { from: q.from, to: q.to, categories: q.cats, counts }); purgeHistory.unshift({ id: uid(), branch_name: q.branch ? byId("branches", q.branch)?.name_ar ?? null : null, from: q.from, to: q.to, categories: q.cats, counts, executed_at: nowISO(), by: me()?.full_name ?? null }); return { ok: true, counts }; },
+  fn_admin_purge_history: () => { requireRole("owner"); return purgeHistory; },
 };
 Object.assign(rpcs, rpcsMore);
+
+// ---- data purge (demo): same rules as fn_purge_run in 0022 ----
+const purgeRequests = new Map<string, { branch: string | null; from: string; to: string; cats: string[]; staff: string | null; expires: number; used: boolean }>();
+const purgeHistory: Row[] = [];
+let lastSignInAt = Date.now();
+const PURGE_KINDS = ["conversations", "reservations", "finance", "guests", "operations", "logs", "audit"];
+function purgeValidate(branch: string | null, from: string, to: string, cats: string[]): string[] {
+  if (!from || !to || from > to) throw new Error("VALIDATION: period");
+  if (to > branchToday()) throw new Error("VALIDATION: period_after_today");
+  if (branch && !byId("branches", branch)) throw new Error("NOT_FOUND: branch");
+  const c = [...new Set(cats ?? [])].sort(); if (!c.length) throw new Error("VALIDATION: choose_category"); if (c.some((x) => !PURGE_KINDS.includes(x))) throw new Error("VALIDATION: unknown_category");
+  return c;
+}
+function purgeRun(branch: string | null, from: string, to: string, cats: string[]): Record<string, number> {
+  const inBranch = (b: string | null | undefined) => (branch ? b === branch : true);
+  const day = (iso: unknown) => String(iso ?? "").slice(0, 10);
+  const inRange = (iso: unknown) => day(iso) >= from && day(iso) <= to;
+  const has = (k: string) => cats.includes(k);
+  const c: Record<string, number> = {};
+  const drop = (table: string, pred: (r: Row) => boolean) => { const before = T(table).length; S[table] = T(table).filter((r) => !pred(r)); return before - T(table).length; };
+  const finished = (r: Row) => ["checked_out", "closed", "cancelled", "rejected", "no_show"].includes(r.status) || (["draft", "pending_verification", "confirmed"].includes(r.status) && r.check_out < branchToday());
+  let res = T("reservations").filter((r) => inBranch(r.branch_id) && r.check_in >= from && r.check_in <= to && finished(r)).map((r) => r.id);
+  const money = (id: string) => T("financial_vouchers").some((v) => v.reservation_id === id) || T("invoices").some((v) => v.reservation_id === id) || T("reservation_charges").some((v) => v.reservation_id === id);
+  if (has("reservations")) {
+    const skipped = has("finance") ? [] : res.filter(money); c.reservations_skipped_with_money = skipped.length; res = res.filter((id) => !skipped.includes(id));
+    c.reservations_kept_active_or_with_money = T("reservations").filter((r) => inBranch(r.branch_id) && r.check_in >= from && r.check_in <= to && !res.includes(r.id)).length;
+  }
+  if (has("conversations")) {
+    const conv = T("conversations").filter((x) => inBranch(x.branch_id) && inRange(x.created_at)).map((x) => x.id);
+    c.conversation_messages = drop("conversation_messages", (m) => conv.includes(m.conversation_id));
+    c.handoff_tickets = drop("human_handoff_tickets", (t) => inBranch(t.branch_id) && inRange(t.created_at));
+    c.conversations = drop("conversations", (x) => conv.includes(x.id));
+    c.staff_assistant_chats = drop("ai_ops_conversations", (x) => inBranch(x.branch_id) && inRange(x.created_at));
+    c.unanswered_questions = drop("unanswered_questions", (x) => inBranch(x.branch_id) && inRange(x.last_asked_at));
+  }
+  if (has("operations")) {
+    c.housekeeping_tasks = drop("housekeeping_tasks", (x) => inBranch(x.branch_id) && inRange(x.created_at) && ["completed", "cancelled"].includes(x.status));
+    c.maintenance_tickets = drop("maintenance_tickets", (x) => inBranch(x.branch_id) && inRange(x.created_at) && x.status === "resolved");
+    c.released_slots = drop("released_slots", (x) => inBranch(x.branch_id) && x.date >= from && x.date <= to && x.date < branchToday());
+  }
+  if (has("finance")) {
+    const ok = (rid: string | null) => !rid || res.includes(rid);
+    c.vouchers = drop("financial_vouchers", (v) => inBranch(v.branch_id) && ok(v.reservation_id) && (inRange(v.occurred_at ?? v.created_at) || (has("reservations") && res.includes(v.reservation_id))));
+    c.payments = drop("payment_transactions", (p) => res.includes(p.reservation_id) && (inRange(p.created_at) || has("reservations")));
+    c.invoices = drop("invoices", (i) => inBranch(i.branch_id) && ok(i.reservation_id) && (inRange(i.issued_at) || (has("reservations") && res.includes(i.reservation_id))));
+  }
+  if (has("reservations")) {
+    for (const t of ["reservation_guests", "reservation_charges", "reservation_allocations", "registration_sessions", "access_release_requests", "access_delivery_events", "payment_transactions"]) drop(t, (x) => res.includes(x.reservation_id));
+    c.reservations = drop("reservations", (r) => res.includes(r.id));
+  }
+  if (has("guests")) c.guest_profiles = drop("guest_profiles", (g) => !T("reservation_guests").some((x) => x.guest_profile_id === g.id) && (!branch && inRange(g.created_at)));
+  if (has("logs")) { c.notifications = drop("notifications", (n) => inBranch(n.branch_id) && inRange(n.created_at)); if (!branch) c.integration_events = drop("integration_events", (e) => inRange(e.created_at)); }
+  if (has("audit")) c.audit_events = drop("audit_events", (a) => inBranch(a.branch_id) && inRange(a.created_at));
+  return c;
+}
 
 const TABLE_OF: Record<string, string> = { branch: "branches", block: "blocks", floor: "floors", room_category: "room_categories", room: "rooms", facility: "facilities", task_type: "task_types", service: "service_definitions" };
 function upsertDef(table: string, entity: string, p: Row, fields: string[], validate: (x: Row) => void, uniqueOn: string[], scopeCol = "branch_id") {
@@ -612,6 +694,13 @@ function phoneReservationIds(ph: string): string[] {
 function invoke(name: string, opts: any) {
   const body = opts?.body ?? {};
   if (name === "guest-otp") return { data: { status: "channel_unavailable" }, error: null };
+  // WhatsApp (demo): the connection test answers from the demo row; a supervisor's reply is stored but nothing is sent
+  if (name === "whatsapp-send") {
+    if (body.mode === "check") { if (!hasRole("owner")) return { data: null, error: { message: "forbidden" } }; const ch = T("branch_whatsapp_channels").find((x) => x.branch_id === body.branch_id); if (!ch || ch.status === "not_configured") return { data: { ok: false, error: "channel_incomplete" }, error: null }; Object.assign(ch, { last_checked_at: nowISO() }); return { data: { ok: false, error: "وضع العرض التجريبي — لا اتصال حقيقي بـ Meta" }, error: null }; }
+    const conv = byId("conversations", body.conversation_id); if (!conv) return { data: null, error: { message: "forbidden" } };
+    T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "supervisor", content: String(body.text ?? ""), meta: { channel: "whatsapp", delivery: "failed", error: "demo" }, created_at: nowISO() }); emit("conversation_messages");
+    return { data: { ok: true, delivered: false, error: "channel_unavailable" }, error: null };
+  }
   if (name === "ai-health") return { data: { configured: false, ok: false, model: null, error: "وضع العرض التجريبي — لا مزود متصل" }, error: null };
   if (name === "ai-ops") { if (body.mode === "briefing") { const ctx = rpcs.fn_ai_ops_context({ p_branch: body.branch_id, p_date: body.date ?? null }); if (!ctx) return { data: null, error: { message: "forbidden" } }; const b = buildBriefing(ctx); return { data: { ...b, insights: null, mode: "deterministic", ai_status: "demo", generated_at: ctx.generated_at, date: ctx.summary?.date }, error: null }; } const r = opsChat(body); return r.error ? { data: null, error: r.error } : { data: r.data, error: null }; }
   if (name === "ai-reception") { const branch = body.branch_id ?? T("branches")[0]?.id; let conv = body.conversation_id ? byId("conversations", body.conversation_id) : null; if (!conv) { conv = { id: uid(), reservation_id: null, channel: "screen", status: "active", branch_id: branch, guest_token: body.guest_token ?? null, client_fingerprint: body.client_fingerprint ?? null, created_at: nowISO(), last_message_at: nowISO(), handed_off_at: null, handoff_reason: null }; T("conversations").unshift(conv); } const msg = String(body.message ?? ""); T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "guest", content: msg, meta: { mode: "scripted" }, created_at: nowISO() }); const bb = byId("branches", branch); const knowledge = { branchName: bb?.name_ar, checkInTime: bb?.check_in_time, checkOutTime: bb?.check_out_time, address: bb?.address, phone: bb?.phone, policies: T("property_policies").filter((x) => x.branch_id === branch && x.is_public).map((x) => ({ topic: x.topic, title: x.title, content: x.content_ar })), entries: rpcs.fn_public_knowledge({ p_branch: branch }) };
@@ -631,7 +720,7 @@ export function createDemoClient() {
     auth: {
       getSession: async () => ({ data: { session }, error: null }),
       onAuthStateChange: (cb: (e: string, s: Session) => void) => { authListeners.add(cb); return { data: { subscription: { unsubscribe: () => authListeners.delete(cb) } } }; },
-      signInWithPassword: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo" }); return { data: { session }, error: null }; },
+      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo" }); return { data: { session }, error: null }; },
       signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo" }); return { data: { session }, error: null }; },
       signOut: async () => { setSession(null); return { error: null }; },
     },

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useBranch } from "../../lib/branch";
-import { toArabicError } from "../../lib/api";
+import { toArabicError, whatsappApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge } from "../../components/ui";
 import { Inbox as InboxIcon, MessageCircle, Send, Bot, UserCheck, ShieldCheck } from "lucide-react";
 import { formatDateTime } from "../../lib/utils";
@@ -28,7 +28,7 @@ interface MessageRow {
 const STATUS_LABELS: Record<string, string> = { active: "نشطة", handed_off: "محوّلة", closed: "مغلقة" };
 const STATUS_COLORS: Record<string, string> = { active: "bg-success-500/10 text-success-600", handed_off: "bg-warning-500/10 text-warning-600", closed: "bg-ink-100 text-ink-400" };
 
-function channelLabel(c: string) { return c === "whatsapp" ? "واتساب" : "شاشة"; }
+function channelLabel(c: string) { return c === "whatsapp" ? "واتساب" : "شاشة (تجربة)"; }
 
 export default function Inbox() {
   const { branchId, loading: branchLoading } = useBranch();
@@ -87,8 +87,15 @@ export default function Inbox() {
     if (!selected || !reply.trim()) return;
     setActing("send"); setError(null);
     try {
-      const { error: err } = await supabase.from("conversation_messages").insert({ conversation_id: selected, sender: "supervisor", content: reply.trim() });
-      if (err) throw err;
+      const conv = conversations.find((c) => c.id === selected);
+      if (conv?.channel === "whatsapp") {
+        // stored and sent to the guest's WhatsApp by the branch's number; the inbox says honestly when WhatsApp refused it
+        const r = await whatsappApi.reply(selected, reply.trim());
+        if (!r.delivered) setError(r.error === "window_closed" ? "حُفظت الرسالة لكن واتساب لم يسلّمها: مرّ أكثر من 24 ساعة على آخر رسالة من النزيل." : r.error === "channel_unavailable" ? "حُفظت الرسالة لكن واتساب هذا الفرع غير مفعّل." : "حُفظت الرسالة لكن تعذّر إرسالها عبر واتساب.");
+      } else {
+        const { error: err } = await supabase.from("conversation_messages").insert({ conversation_id: selected, sender: "supervisor", content: reply.trim() });
+        if (err) throw err;
+      }
       setReply("");
       await loadMessages(selected);
     } catch (err) {

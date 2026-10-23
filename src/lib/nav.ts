@@ -14,7 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
-  BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen,
+  BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
 } from "lucide-react";
 import type { Role } from "./types";
 
@@ -83,7 +83,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/booking-sources", label: "منصات الحجز", icon: Link2, area: "admin", group: "الإدارة", roles: ADMIN_ROLES, scope: "org" },
 
   { path: "/admin/ai-settings", label: "إعدادات الذكاء الاصطناعي", icon: Bot, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
-  { path: "/admin/whatsapp", label: "واتساب", icon: MessageCircle, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
+  { path: "/admin/whatsapp", label: "واتساب الفروع", icon: MessageCircle, area: "admin", group: "التكاملات", roles: ["owner"], scope: "org" },
+  { path: "/admin/assistant", label: "تجربة المساعد", icon: MessagesSquare, area: "admin", group: "التكاملات", roles: ["owner", "manager", "supervisor"] },
   { path: "/admin/payment-providers", label: "مزودو الدفع", icon: CreditCard, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
   { path: "/admin/integrations", label: "التكاملات", icon: Plug, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
 
@@ -91,6 +92,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/policies", label: "السياسات", icon: FileText, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"] },
   { path: "/admin/reports", label: "التقارير", icon: BarChart3, area: "admin", group: "الحوكمة", roles: ADMIN_FINANCE },
   { path: "/admin/audit-logs", label: "سجل الإجراءات", icon: ScrollText, area: "admin", group: "الحوكمة", roles: ADMIN_FINANCE },
+  { path: "/admin/data-purge", label: "تفريغ البيانات", icon: Trash2, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org" },
 ];
 
 const ADMIN_GROUP_ORDER = ["نظرة عامة", "المنشآت", "العمليات", "الإدارة", "التكاملات", "الحوكمة"];

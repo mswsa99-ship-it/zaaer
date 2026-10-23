@@ -25,6 +25,9 @@ delete from ai_tool_executions;
 delete from ai_usage_daily;
 delete from unanswered_questions;
 delete from guest_lookup_attempts;
+delete from guest_phone_challenges;           -- «حجوزاتي» codes and phone sessions (0020)
+delete from guest_phone_sessions;
+delete from whatsapp_inbound_messages;        -- handled WhatsApp message ids (0021); the branch numbers themselves are settings and stay
 delete from integration_events;
 delete from notifications;
 -- operations

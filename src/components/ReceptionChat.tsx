@@ -1,5 +1,6 @@
 /**
- * AI reception — the guest-facing conversational front desk.
+ * AI reception chat — the same assistant guests reach on WhatsApp, as a chat window. Guests no longer see it on the
+ * website (the site shows the branch's WhatsApp QR code); staff use it on /admin/assistant to try the assistant.
  * Everything the assistant says comes from the `ai-reception` Edge Function (model with 13 narrow tools,
  * or the deterministic scripted path). The browser never computes availability/prices itself: the inline
  * availability card calls fn_get_public_availability, which applies the sequential-release rules.
@@ -7,11 +8,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Hotel, Send, BookCheck, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Clock, Headset, RotateCcw, BedDouble, Users, ExternalLink } from "lucide-react";
-import { cn, formatCurrency, todayISO } from "../../lib/utils";
-import { aiChat, guestApi, type AiReply } from "../../lib/api";
-import { useBranch } from "../../lib/branch";
-import { supabase } from "../../lib/supabase";
-import { scriptedReply } from "../../../supabase/functions/_shared/guardrails";
+import { cn, formatCurrency, todayISO } from "../lib/utils";
+import { aiChat, guestApi, type AiReply } from "../lib/api";
+import { useBranch } from "../lib/branch";
+import { supabase } from "../lib/supabase";
+import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 
 interface Message { id: string; sender: "assistant" | "guest"; content: string; mode?: "ai" | "scripted"; actions?: { label: string; route?: string; value?: string }[]; widget?: "availability" }
 type Availability = Array<{ category_id: string; category_name: string; base_price_halalas: number; base_capacity: number; max_capacity: number; available_to_show: number; total_available: number }>;
@@ -32,7 +33,7 @@ const QUICK = [
   { icon: Headset, label: "موظف الاستقبال", value: "أرغب بالتحدث مع موظف الاستقبال" },
 ];
 
-export default function Reception() {
+export default function ReceptionChat({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { branchId, branch } = useBranch();
@@ -96,7 +97,7 @@ export default function Reception() {
   }
 
   return (
-    <div className={cn("mx-auto flex max-w-6xl gap-4 px-4 py-4", kiosk ? "h-[calc(100vh-110px)]" : "h-[calc(100vh-120px)]")}>
+    <div className={cn("mx-auto flex max-w-6xl gap-4", embedded ? "h-[72vh]" : "px-4 py-4", !embedded && (kiosk ? "h-[calc(100vh-110px)]" : "h-[calc(100vh-120px)]"))}>
       {/* Side panel (desktop) */}
       <aside className="hidden w-72 shrink-0 flex-col gap-3 lg:flex">
         <div className="card p-4">
@@ -120,7 +121,7 @@ export default function Reception() {
       {/* Chat */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-3 flex items-center gap-3">
-          {!kiosk && <button onClick={() => navigate("/")} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100" aria-label="رجوع"><ArrowLeft className="h-5 w-5" /></button>}
+          {!kiosk && !embedded && <button onClick={() => navigate("/")} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100" aria-label="رجوع"><ArrowLeft className="h-5 w-5" /></button>}
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-600 text-white lg:hidden"><Hotel className="h-5 w-5" /></div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-ink-800">مساعد الاستقبال الذكي</p>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { aiHealth } from "../../lib/api";
+import { aiHealth, whatsappApi } from "../../lib/api";
 import { isFreeTierError, providerErrorHint } from "../../lib/providerErrors";
 import { SectionTitle, Card, Badge, Spinner } from "../../components/ui";
 import { Plug, Check, Clock, AlertCircle, XCircle } from "lucide-react";
@@ -11,7 +11,6 @@ type Status = "connected" | "awaiting" | "future" | "disabled" | "error" | "chec
 interface Integration { name: string; status: Status; description: string; link?: string }
 
 const STATIC: Integration[] = [
-  { name: "WhatsApp Business Platform", status: "awaiting", description: "بانتظار بيانات اعتماد Meta", link: "/admin/whatsapp" },
   { name: "مزود الدفع الإلكتروني", status: "awaiting", description: "بانتظار اعتماد مزود محلي", link: "/admin/payment-providers" },
   { name: "جهاز نقاط البيع (POS)", status: "awaiting", description: "يدوي حاليًا" },
   { name: "الفوترة الإلكترونية", status: "future", description: "تكامل مستقبلي مشروط بالمتطلبات" },
@@ -21,6 +20,18 @@ const STATIC: Integration[] = [
 export default function AdminIntegrations() {
   const [ai, setAi] = useState<Integration>({ name: "مزود الذكاء الاصطناعي (Gemini)", status: "checking", description: "جارٍ الفحص…", link: "/admin/ai-settings" });
   const [db, setDb] = useState<Integration>({ name: "Supabase (قاعدة البيانات)", status: "checking", description: "قاعدة البيانات والمصادقة وRealtime" });
+  const [wa, setWa] = useState<Integration>({ name: "واتساب الفروع (WhatsApp Business)", status: "checking", description: "جارٍ الفحص…", link: "/admin/whatsapp" });
+
+  // per-branch numbers (owner only — other roles see the generic state)
+  useEffect(() => {
+    whatsappApi.channels().then((rows) => {
+      const live = rows.filter((r) => r.enabled && (r.status === "active" || r.status === "configured")).length;
+      const broken = rows.filter((r) => r.status === "error").length;
+      setWa({ name: "واتساب الفروع (WhatsApp Business)", link: "/admin/whatsapp",
+        status: broken ? "error" : live ? "connected" : "awaiting",
+        description: `${live} من ${rows.length} فرع مفعّل للنزلاء${broken ? ` — ${broken} بخطأ اتصال` : ""}` });
+    }).catch(() => setWa({ name: "واتساب الفروع (WhatsApp Business)", link: "/admin/whatsapp", status: "awaiting", description: "يضبطه المالك لكل فرع" }));
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -45,7 +56,7 @@ export default function AdminIntegrations() {
     })();
   }, []);
 
-  const integrations = [db, ai, ...STATIC];
+  const integrations = [db, ai, wa, ...STATIC];
 
   return (
     <div>

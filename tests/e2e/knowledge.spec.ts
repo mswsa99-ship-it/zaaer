@@ -5,8 +5,8 @@
 import { test, expect } from "./fixtures";
 
 test.describe("knowledge base", () => {
-  test("K20 a guest question is answered from the knowledge base, verbatim", async ({ go, ask }) => {
-    await go("/reception");
+  test("K20 a guest question is answered from the knowledge base, verbatim", async ({ openAssistant, ask }) => {
+    await openAssistant();
     const pool = await ask("هل يوجد مسبح؟");
     expect(pool).toMatch(/مسبح خارجي مشترك/);
     const breakfast = await ask("عندكم فطور؟");
@@ -15,13 +15,12 @@ test.describe("knowledge base", () => {
     expect(pets).toMatch(/لا يُسمح باصطحاب الحيوانات/);
   });
 
-  test("K21 an unknown question is logged, then answered by staff, then answered to the next guest", async ({ page, go, ask, loginAs }) => {
-    await go("/reception");
+  test("K21 an unknown question is logged, then answered by staff, then answered to the next guest", async ({ page, openAssistant, ask }) => {
+    await openAssistant();
     const unknown = await ask("هل يوجد ملعب تنس في المبنى؟");
     expect(unknown).toMatch(/سجّلت سؤالك/);
 
-    // staff: the question is waiting in the unanswered tab
-    await loginAs("supervisor");
+    // staff (already signed in as a supervisor): the question is waiting in the unanswered tab
     await page.goto("/#/admin/knowledge", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: /بلا إجابة/ }).click();
     const row = page.locator(".card", { hasText: "هل يوجد ملعب تنس في المبنى؟" }).first();
@@ -37,7 +36,7 @@ test.describe("knowledge base", () => {
     await expect(page.locator(".card", { hasText: "هل يوجد ملعب تنس في المبنى؟" })).toHaveCount(0);
 
     // the entry is live for guests immediately (same browser context → same demo store)
-    await page.goto("/#/reception?new=1", { waitUntil: "networkidle" });
+    await page.goto("/#/admin/assistant?new=1", { waitUntil: "networkidle" });
     const answered = await ask("فيه ملعب تنس؟");
     expect(answered).toMatch(/لا يوجد ملعب تنس داخل المبنى/);
   });
@@ -55,7 +54,7 @@ test.describe("knowledge base", () => {
     await expect(dlg).toBeHidden();
     await expect(page.locator(".card", { hasText: "هل يوجد مصلى؟" })).toHaveCount(0);
 
-    await page.goto("/#/reception?new=1", { waitUntil: "networkidle" });
+    await page.goto("/#/admin/assistant?new=1", { waitUntil: "networkidle" });
     const r = await ask("هل يوجد مصلى؟");
     expect(r).not.toMatch(/مصلى للرجال/);
 

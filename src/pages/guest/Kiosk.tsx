@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Hotel, RotateCcw } from "lucide-react";
+import WhatsAppEntry from "../../components/WhatsAppEntry";
 
 const IDLE_LIMIT_MS = Number(import.meta.env.VITE_KIOSK_IDLE_MS ?? 90_000);
 
@@ -48,19 +49,11 @@ export default function Kiosk() {
     );
   }
 
+  // the lobby screen shows the branch's WhatsApp QR: guests continue on their own phone (nothing typed on a shared screen)
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-white px-6 text-center">
-      <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl bg-brand-600 text-white">
-        <Hotel className="h-10 w-10" />
-      </div>
-      <h1 className="text-4xl font-bold text-ink-800">أهلًا وسهلًا بك</h1>
-      <p className="mt-4 max-w-md text-lg text-ink-500">مساعد الاستقبال الذكي جاهز لخدمتك. اختر كيف تبدأ.</p>
-      <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-        <Link to="/reception?kiosk=1" className="btn-primary px-10 py-5 text-lg">تحدث مع الاستقبال الذكي</Link>
-        <Link to="/booking/lookup" className="btn-outline px-10 py-5 text-lg">حجوزاتي</Link>
-        <Link to="/booking/new" className="btn-accent px-10 py-5 text-lg">حجز جديد</Link>
-      </div>
-      <p className="mt-8 text-xs text-ink-300">تعود الشاشة للبداية تلقائيًا بعد دقيقة من الخمول.</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-white">
+      <WhatsAppEntry large />
+      <p className="mt-2 text-xs text-ink-300">تعود الشاشة للبداية تلقائيًا بعد دقيقة من الخمول.</p>
     </div>
   );
 }

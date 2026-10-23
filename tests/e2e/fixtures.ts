@@ -5,7 +5,9 @@
  *   (a UI that "works" while throwing in the console is not stable).
  * - `go(path)` navigates the HashRouter app (the demo build uses hash routes).
  * - `loginAs(role)` uses the demo one-click accounts on /staff/login.
- * - `ask(question)` sends a message in the guest reception and returns the last reply.
+ * - `openAssistant()` signs in as a supervisor (once per test) and opens a fresh chat on /admin/assistant — the same
+ *   assistant guests reach on WhatsApp (the website itself only shows the branch's WhatsApp QR code).
+ * - `ask(question)` sends a message in that chat and returns the last reply.
  */
 import { test as base, expect, type Page } from "@playwright/test";
 
@@ -21,7 +23,7 @@ export const ROLE_BUTTON: Record<DemoRole, string> = {
 
 const IGNORED_CONSOLE = /favicon|fonts\.g(oogleapis|static)|ERR_TUNNEL|net::ERR|Download the React DevTools|third-party cookie/i;
 
-export const test = base.extend<{ errors: string[]; go: (path: string) => Promise<void>; loginAs: (role: DemoRole) => Promise<void>; ask: (q: string) => Promise<string> }>({
+export const test = base.extend<{ errors: string[]; go: (path: string) => Promise<void>; loginAs: (role: DemoRole) => Promise<void>; openAssistant: () => Promise<void>; ask: (q: string) => Promise<string> }>({
   errors: async ({ page }, use) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
@@ -45,9 +47,17 @@ export const test = base.extend<{ errors: string[]; go: (path: string) => Promis
       await page.waitForTimeout(300);
     });
   },
+  openAssistant: async ({ page, loginAs }, use) => {
+    let signedIn = false;
+    await use(async () => {
+      if (!signedIn) { await loginAs("supervisor"); signedIn = true; }
+      await page.goto("/#/admin/assistant?new=1", { waitUntil: "networkidle" });
+      await page.waitForTimeout(250);
+    });
+  },
   ask: async ({ page }, use) => {
     await use(async (q: string) => {
-      const input = page.locator("input.input").first();
+      const input = page.getByPlaceholder(/اكتب سؤالك|اكتب لموظف/).first();
       const bubbles = page.locator("div.whitespace-pre-line");
       const before = await bubbles.count();
       await input.fill(q);

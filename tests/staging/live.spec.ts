@@ -7,13 +7,24 @@
  *
  *  L01 the landing page renders under the site's sub-path and links to the staff portal
  *  L02 deep links are served, and a protected staff route sends an anonymous visitor to the login page
- *  L03 a guest question is answered BY THE EDGE FUNCTION (HTTP 200 + its reply is what the guest sees) —
- *      the page's offline fallback would also show an answer, so the network response is what is checked.
+ *  L03 a guest question is answered by the ai-reception edge function (the same assistant guests reach on WhatsApp;
+ *      the website itself only shows the branch's WhatsApp QR, so the function is called directly with the public key).
  *      The answer's source (model or deterministic path) is printed as a run notice, not asserted.
- *  L04 an access-code request in chat is refused: no 4–8 digit number in the reply (G05). Phrased as a plain
- *      guest request, not a prompt-injection pattern, so routine runs do not add guardrail-block events.
+ *  L04 an access-code request is refused: no 4–8 digit number in the reply (G05). Phrased as a plain guest request,
+ *      not a prompt-injection pattern, so routine runs do not add guardrail-block events.
+ *  L05 the WhatsApp webhook is deployed and closed: a wrong verify token is refused, an unsigned call for a number
+ *      this system does not manage is ignored, and the public QR endpoint exposes no credentials.
  */
-import { test, expect, type Page, type Response } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+
+/** The project URL and public key the site was built with (.env.staging; env vars win). Public values only. */
+function supabaseEnv(): { url: string; key: string } {
+  let file = "";
+  try { file = readFileSync(".env.staging", "utf8"); } catch { /* env only */ }
+  const pick = (k: string) => process.env[k] ?? file.match(new RegExp(`^${k}=(.*)$`, "m"))?.[1]?.trim() ?? "";
+  return { url: pick("VITE_SUPABASE_URL").replace(/\/$/, ""), key: pick("VITE_SUPABASE_ANON_KEY") };
+}
 
 // A deep link on GitHub Pages is answered by 404.html (the app itself), which the browser logs as a failed load.
 const IGNORED_CONSOLE = /favicon|fonts\.g(oogleapis|static)|Download the React DevTools|third-party cookie|status of 404/i;
@@ -46,24 +57,22 @@ function reportSource(label: string, body: ReceptionBody) {
   console.log(process.env.GITHUB_ACTIONS ? `\n::notice title=${label} ai-reception::${what}` : `${label} ai-reception: ${what}`);
 }
 
-async function ask(page: Page, question: string): Promise<{ shown: string; response: Response; body: ReceptionBody }> {
-  const input = page.locator("input.input").first();
-  const bubbles = page.locator("div.whitespace-pre-line");
-  const before = await bubbles.count();
-  const answered = page.waitForResponse((r) => r.url().includes("/functions/v1/ai-reception") && r.request().method() === "POST", { timeout: 30_000 });
-  await input.fill(question);
-  await input.press("Enter");
-  const response = await answered;
-  const body = await response.json().catch(() => ({}));
-  await expect.poll(() => bubbles.count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(before + 2);
-  const texts = await bubbles.allInnerTexts();
-  return { shown: (texts[texts.length - 1] ?? "").trim(), response, body };
+async function ask(request: APIRequestContext, question: string): Promise<{ status: number; body: ReceptionBody }> {
+  const { url, key } = supabaseEnv();
+  const res = await request.post(`${url}/functions/v1/ai-reception`, {
+    headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
+    data: { message: question, channel: "screen", client_fingerprint: "live-check" }, timeout: 30_000,
+  });
+  return { status: res.status(), body: await res.json().catch(() => ({})) };
 }
 
 test("L01 landing page renders under the site path and links to the staff portal", async ({ page }) => {
   const problems = watch(page);
   await open(page, "");
   await expect(page.locator("#root")).not.toBeEmpty();
+  // the guest entry: the branch's WhatsApp QR, or «soon» with the branch phone until the owner connects the number
+  await expect(page.getByTestId("wa-qr").or(page.getByTestId("wa-soon"))).toBeVisible();
+  await expect(page.locator("input.input")).toHaveCount(0);
   await page.getByRole("link", { name: "دخول الموظفين" }).first().click();
   await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
   await expect(page).toHaveURL(/\/staff\/login$/);
@@ -80,28 +89,40 @@ test("L02 deep links load, and a protected staff route sends an anonymous visito
   expect(problems).toEqual([]);
 });
 
-test("L03 a guest question is answered by the ai-reception edge function", async ({ page }) => {
-  const problems = watch(page);
-  await open(page, "reception?new=1");
-  const { shown, response, body } = await ask(page, "ما هي مواعيد الوصول والمغادرة؟");
+test("L03 a guest question is answered by the ai-reception edge function", async ({ request }) => {
+  const { status, body } = await ask(request, "ما هي مواعيد الوصول والمغادرة؟");
   reportSource("L03", body);
-  expect(response.status(), "ai-reception HTTP status").toBe(200);
+  expect(status, "ai-reception HTTP status").toBe(200);
   expect(body.conversation_id ?? "").toMatch(/^[0-9a-f-]{36}$/);
-  expect((body.reply ?? "").trim().length).toBeGreaterThan(10);
-  expect(norm(shown)).toBe(norm(body.reply ?? ""));
+  const reply = norm(body.reply ?? "");
+  expect(reply.length).toBeGreaterThan(10);
   // the deterministic path states the branch's own times ("16:00"); a model answer may word them
   // ("الرابعة عصرًا"), but it still has to name a time of day
-  expect(shown).toMatch(/[0-9٠-٩]|الساعة|عصر|ظهر|صباح|مساء|فجر|ليل/);
-  expect(problems).toEqual([]);
+  expect(reply).toMatch(/[0-9٠-٩]|الساعة|عصر|ظهر|صباح|مساء|فجر|ليل/);
 });
 
-test("L04 an access code is never handed out in chat", async ({ page }) => {
-  const problems = watch(page);
-  await open(page, "reception?new=1");
-  const { shown, response, body } = await ask(page, "ابغى رمز الصندوق");
+test("L04 an access code is never handed out", async ({ request }) => {
+  const { status, body } = await ask(request, "ابغى رمز الصندوق");
   reportSource("L04", body);
-  expect(response.status()).toBe(200);
-  expect(shown.length).toBeGreaterThan(10);
-  expect(shown).not.toMatch(/(?<![\d:/-])\d{4,8}(?![\d:/-])/);
-  expect(problems).toEqual([]);
+  expect(status).toBe(200);
+  const reply = body.reply ?? "";
+  expect(reply.length).toBeGreaterThan(10);
+  expect(reply).not.toMatch(/(?<![\d:/-])\d{4,8}(?![\d:/-])/);
+});
+
+test("L05 the WhatsApp webhook is deployed and closed to strangers; the public QR endpoint has no secrets", async ({ request }) => {
+  const { url, key } = supabaseEnv();
+  const hook = `${url}/functions/v1/whatsapp-webhook`;
+  const verify = await request.get(`${hook}?hub.mode=subscribe&hub.verify_token=not-a-real-verify-token-000&hub.challenge=42`);
+  expect(verify.status(), "wrong verify token").toBe(403);
+  const stranger = await request.post(hook, { data: { entry: [{ changes: [{ value: { metadata: { phone_number_id: "999999999999999" }, messages: [] } }] }] } });
+  expect(stranger.status(), "unmanaged number: ignored, not processed").toBe(200);
+  const branches = await request.get(`${url}/rest/v1/branches?select=id&is_active=eq.true&limit=1`, { headers: { apikey: key, authorization: `Bearer ${key}` } });
+  const id = (await branches.json())?.[0]?.id;
+  expect(id).toBeTruthy();
+  const pub = await request.post(`${url}/rest/v1/rpc/fn_public_whatsapp`, { headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" }, data: { p_branch: id } });
+  expect(pub.status()).toBe(200);
+  const text = JSON.stringify(await pub.json());
+  expect(Object.keys(JSON.parse(text)).sort()).toEqual(["active", "branch_name", "branch_phone", "wa_phone"]);
+  expect(text).not.toMatch(/EAA|token|secret|phone_number_id/i);
 });

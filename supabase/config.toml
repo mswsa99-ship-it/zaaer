@@ -21,3 +21,11 @@ verify_jwt = true
 # Guest booking code by WhatsApp: called before sign-in (the guest has no account); the code never leaves the server
 [functions.guest-otp]
 verify_jwt = false
+
+# Meta calls this for guest messages: no Supabase JWT; every POST must carry the branch's app-secret signature
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+# Staff replies to WhatsApp threads and the owner's connection test: signed-in staff only
+[functions.whatsapp-send]
+verify_jwt = true
