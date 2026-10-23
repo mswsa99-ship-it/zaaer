@@ -57,7 +57,7 @@ export default function Kiosk() {
       <p className="mt-4 max-w-md text-lg text-ink-500">مساعد الاستقبال الذكي جاهز لخدمتك. اختر كيف تبدأ.</p>
       <div className="mt-10 flex flex-col gap-4 sm:flex-row">
         <Link to="/reception?kiosk=1" className="btn-primary px-10 py-5 text-lg">تحدث مع الاستقبال الذكي</Link>
-        <Link to="/booking/lookup" className="btn-outline px-10 py-5 text-lg">لدي حجز سابق</Link>
+        <Link to="/booking/lookup" className="btn-outline px-10 py-5 text-lg">حجوزاتي</Link>
         <Link to="/booking/new" className="btn-accent px-10 py-5 text-lg">حجز جديد</Link>
       </div>
       <p className="mt-8 text-xs text-ink-300">تعود الشاشة للبداية تلقائيًا بعد دقيقة من الخمول.</p>

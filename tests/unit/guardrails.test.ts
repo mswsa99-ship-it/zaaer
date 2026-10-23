@@ -190,3 +190,16 @@ describe("digits", () => {
     expect(normalizeDigits("٠١٢٣٤٥٦٧٨٩ ۰۱۲")).toBe("0123456789 012");
   });
 });
+
+import { propertyFacts as facts } from "../../supabase/functions/_shared/guardrails";
+describe("property facts in the prompt (one model call for factual questions)", () => {
+  it("lists times, address, policies and knowledge by priority, within the size cap", () => {
+    const f = facts({ checkInTime: "16:00:00", checkOutTime: "12:00:00", address: "طريق الملك فهد", policies: [{ topic: "parking", title: "المواقف", content: "مواقف مجانية" }],
+      entries: [{ id: "1", question: "هل يوجد مسبح؟", keywords: [], answer: "لا", priority: 1 }, { id: "2", question: "هل يوجد إفطار؟", keywords: [], answer: "نعم", priority: 9 }] });
+    expect(f).toContain("الوصول من 16:00، والمغادرة حتى 12:00");
+    expect(f).toContain("المواقف: مواقف مجانية");
+    expect(f.indexOf("إفطار")).toBeLessThan(f.indexOf("مسبح"));
+    expect(facts({ entries: Array.from({ length: 200 }, (_, i) => ({ id: String(i), question: "سؤال طويل ".repeat(10), keywords: [], answer: "جواب", priority: 0 })) }, 1000).length).toBeLessThanOrEqual(1000);
+    expect(facts(null)).toBe("");
+  });
+});

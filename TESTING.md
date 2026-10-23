@@ -40,6 +40,7 @@ tests/unit/*.test.ts           ← منطق خالص بلا قاعدة: guardrai
 tests/e2e/*.spec.ts            ← Playwright على نسخة العرض (A/R/F/H/D/U/S/K)
 tests/sql/platform_tests.sql   ← خصائص المنصة المستضافة: search_path، امتدادات في schema extensions، مفاتيح Vault، لا تاريخ من منطقة الجلسة (PL*)
 tests/sql/local_date_tests.sql ← التواريخ التشغيلية بتوقيت الفرع والجلسة بتوقيت UTC كما في Supabase: سندات قبل منتصف الليل وبعده، وإقامة تبدأ «اليوم» بتوقيت الفرع (LD*)
+tests/sql/phone_lookup_tests.sql ← «حجوزاتي» برقم الجوال: توحيد الصيغ، رمز مجزّأ وصلاحيته ومحاولاته وحدوده، رقم حجز جوال آخر لا يفتح شيئًا، الزائر لا يستدعي الإرسال، التدقيق (PH*)
 tests/staging/*.spec.ts        ← فحص حي بعد كل نشر للـstaging: الويب المنشور + Supabase + Edge Functions الحقيقية (L*)
 ```
 

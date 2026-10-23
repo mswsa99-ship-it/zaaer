@@ -17,3 +17,7 @@ verify_jwt = true
 
 [functions.ai-health]
 verify_jwt = true
+
+# Guest booking code by WhatsApp: called before sign-in (the guest has no account); the code never leaves the server
+[functions.guest-otp]
+verify_jwt = false

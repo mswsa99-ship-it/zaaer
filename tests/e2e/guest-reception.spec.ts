@@ -80,4 +80,25 @@ test.describe("guest reception", () => {
     expect(inj).toMatch(/لا أستطيع تنفيذ هذا الطلب|لم أفهم طلبك|خارج نطاق/);
     await expect(page.getByRole("button", { name: "التحدث مع موظف" }).first()).toBeVisible();
   });
+
+  test("A07 «حجوزاتي»: the phone is the key — without WhatsApp one booking number proves it, then the bookings of that phone open in one tap", async ({ page, go, errors }) => {
+    await go("/booking/lookup");
+    await page.getByPlaceholder("05xxxxxxxx").fill("٠٥٠١١١٠٠٠٦");
+    await page.getByRole("button", { name: "متابعة" }).click();
+    await page.getByPlaceholder("رقم الحجز").fill("bk-4471029");                 // a wrong number would say "لم نجد حجزًا"
+    await page.getByRole("button", { name: "عرض حجوزاتي" }).click();
+    await expect(page).toHaveURL(/\/booking\/status\//);                          // one booking on this phone: opened directly
+    await page.goBack();
+    await expect(page.getByText("حجز واحد")).toBeVisible();                       // the verified list stays for this tab
+    expect(errors).toEqual([]);
+  });
+
+  test("A08 a booking number of another phone does not open anything", async ({ page, go }) => {
+    await go("/booking/lookup");
+    await page.getByPlaceholder("05xxxxxxxx").fill("0501110006");
+    await page.getByRole("button", { name: "متابعة" }).click();
+    await page.getByPlaceholder("رقم الحجز").fill("HMABC123");
+    await page.getByRole("button", { name: "عرض حجوزاتي" }).click();
+    await expect(page.getByText("لم نجد حجزًا بهذا الرقم على هذا الجوال.")).toBeVisible();
+  });
 });

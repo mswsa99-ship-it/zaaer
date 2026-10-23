@@ -23,11 +23,11 @@ const QUOTA_429 = {
 };
 
 describe("Gemini adapter — request shape per model generation", () => {
-  it("Gemini 3+ / 4 / -latest: thinkingLevel low, output allowance for thought tokens, default temperature", () => {
-    for (const model of ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-4-argon", "gemini-flash-latest"]) {
+  it("Gemini 3+ / 4 / -latest: the least thinking each model accepts (minimal on 3.6-flash and 3.5-flash-lite, else low), output allowance for thought tokens, default temperature", () => {
+    for (const [model, level] of [["gemini-3.8-flash", "low"], ["gemini-3.5-flash-lite", "minimal"], ["gemini-3.6-flash", "minimal"], ["gemini-4-argon", "low"], ["gemini-flash-latest", "low"]]) {
       expect(isThinkingGemini(model), model).toBe(true);
       const g = new GeminiProvider("k", model).buildBody({ ...base, history: [{ role: "user", text: "مرحبا" }] }).generationConfig as Record<string, unknown>;
-      expect(g.thinkingConfig).toEqual({ thinkingLevel: "low" });
+      expect(g.thinkingConfig, model).toEqual({ thinkingLevel: level });
       expect(g.maxOutputTokens).toBe(400 + THINKING_ALLOWANCE_TOKENS);
       expect(g).not.toHaveProperty("temperature");
       expect(g).not.toHaveProperty("thinkingBudget");

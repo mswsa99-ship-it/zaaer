@@ -53,3 +53,5 @@ echo "== running AI settings tests"
 psql -d "$DB" -f tests/sql/ai_settings_tests.sql
 echo "== running branch-local date tests"
 psql -d "$DB" -f tests/sql/local_date_tests.sql
+echo "== running phone lookup tests"
+psql -d "$DB" -f tests/sql/phone_lookup_tests.sql

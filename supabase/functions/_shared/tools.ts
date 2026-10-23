@@ -90,7 +90,7 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
     }
     case "request_booking_verification": {
       const ref = String(args.external_ref ?? "");
-      return { instruction: "وجّه النزيل إلى الرابط لإدخال رقم الحجز وآخر 4 أرقام من جواله المسجل.", link: `${ctx.appBaseUrl}/booking/lookup?ref=${encodeURIComponent(ref)}` };
+      return { instruction: "وجّه النزيل إلى «حجوزاتي»: يكتب رقم جواله الذي حجز به فتظهر حجوزاته بعد خطوة تحقق قصيرة. لا تطلب منه رقم الجوال في المحادثة.", link: `${ctx.appBaseUrl}/booking/lookup?ref=${encodeURIComponent(ref)}` };
     }
     case "get_verified_booking_summary": {
       const s = await session(ctx);

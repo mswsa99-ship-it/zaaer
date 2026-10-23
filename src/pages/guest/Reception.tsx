@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Hotel, Send, BookCheck, Plus, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Wifi, Car, Clock, MapPin, Headset, RotateCcw, BedDouble, Users, ExternalLink } from "lucide-react";
+import { Hotel, Send, BookCheck, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Clock, Headset, RotateCcw, BedDouble, Users, ExternalLink } from "lucide-react";
 import { cn, formatCurrency, todayISO } from "../../lib/utils";
 import { aiChat, guestApi, type AiReply } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
@@ -18,20 +18,18 @@ type Availability = Array<{ category_id: string; category_name: string; base_pri
 
 const WELCOME = (name: string): Message => ({
   id: "init", sender: "assistant",
-  content: `أهلًا وسهلًا بك في ${name}. أنا مساعد الاستقبال الذكي، أساعدك في الحجز، والوصول، ومعلومات الإقامة على مدار الساعة. كيف أقدر أخدمك؟`,
-  actions: [{ label: "لدي حجز سابق", value: "لدي حجز سابق" }, { label: "أرغب بحجز جديد", value: "أرغب بحجز جديد" }, { label: "ما هي مواعيد الوصول والمغادرة؟", value: "ما هي مواعيد الوصول والمغادرة؟" }],
+  content: `أهلًا بك في ${name}. كيف أخدمك؟`,
+  actions: [{ label: "احجز الآن", value: "__availability__" }, { label: "حجوزاتي", route: "/booking/lookup" }, { label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" }],
 });
 const CONV_KEY = "reception_conversation_id";
 const CONV_AT_KEY = "reception_conversation_at";
 const CONV_MAX_AGE_MS = 6 * 60 * 60 * 1000;   // a conversation older than 6h starts fresh: the guest's situation has usually changed
+// four shortcuts only — everything else is one question away in the chat
 const QUICK = [
-  { icon: CalendarDays, label: "التوفر والأسعار", value: "__availability__" },
-  { icon: BookCheck, label: "متابعة حجزي", route: "/booking/lookup" },
-  { icon: Clock, label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" },
-  { icon: Wifi, label: "الإنترنت", value: "ما هي بيانات الإنترنت؟" },
-  { icon: Car, label: "المواقف", value: "هل توجد مواقف سيارات؟" },
-  { icon: MapPin, label: "الموقع", value: "أين يقع الفرع؟" },
-  { icon: Headset, label: "التحدث مع موظف", value: "أرغب بالتحدث مع موظف الاستقبال" },
+  { icon: CalendarDays, label: "احجز الآن", value: "__availability__" },
+  { icon: BookCheck, label: "حجوزاتي", route: "/booking/lookup" },
+  { icon: Clock, label: "المواعيد والموقع", value: "ما هي مواعيد الوصول والمغادرة وأين يقع الفرع؟" },
+  { icon: Headset, label: "موظف الاستقبال", value: "أرغب بالتحدث مع موظف الاستقبال" },
 ];
 
 export default function Reception() {
@@ -109,8 +107,7 @@ export default function Reception() {
           {branch?.check_in_time && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-500"><Clock className="h-3.5 w-3.5" /> الوصول {branch.check_in_time.slice(0, 5)} · المغادرة {branch.check_out_time?.slice(0, 5)}</p>}
         </div>
         <div className="card p-3">
-          <p className="mb-2 px-1 text-[11px] font-semibold text-ink-400">خدمات سريعة</p>
-          <div className="space-y-1">
+                    <div className="space-y-1">
             {QUICK.map((q) => (
               <button key={q.label} onClick={() => (q.route ? navigate(q.route) : send(q.value!))} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-right text-sm text-ink-700 hover:bg-brand-50 hover:text-brand-700">
                 <q.icon className="h-4 w-4 text-brand-500" /> {q.label}
@@ -118,7 +115,6 @@ export default function Reception() {
             ))}
           </div>
         </div>
-        <div className="card flex items-start gap-2 p-3 text-[11px] text-ink-500"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-500" /> المساعد لا يطلب أرقام الوثائق في المحادثة ولا يسلّم رموز الدخول؛ يتم ذلك عبر صفحات آمنة بعد التحقق.</div>
       </aside>
 
       {/* Chat */}
@@ -167,15 +163,9 @@ export default function Reception() {
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); send(input); setInput(""); }} className="mt-2 flex items-center gap-2">
-          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={status.handedOff ? "اكتب لموظف الاستقبال…" : "اكتب رسالتك… (لا تكتب رقم وثيقتك هنا)"} className={cn("input flex-1", kiosk && "py-3 text-base")} maxLength={2000} disabled={thinking} autoFocus />
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={status.handedOff ? "اكتب لموظف الاستقبال…" : "اكتب سؤالك…"} className={cn("input flex-1", kiosk && "py-3 text-base")} maxLength={2000} disabled={thinking} autoFocus />
           <button type="submit" className="btn-primary" disabled={!input.trim() || thinking} aria-label="إرسال"><Send className="h-4 w-4" /></button>
         </form>
-        {!kiosk && (
-          <div className="mt-2 flex items-center justify-center gap-4 text-xs text-ink-400">
-            <button onClick={() => navigate("/booking/lookup")} className="inline-flex items-center gap-1 hover:text-brand-600"><BookCheck className="h-3.5 w-3.5" /> حجز سابق</button>
-            <button onClick={() => navigate("/booking/new")} className="inline-flex items-center gap-1 hover:text-brand-600"><Plus className="h-3.5 w-3.5" /> حجز جديد</button>
-          </div>
-        )}
       </div>
     </div>
   );

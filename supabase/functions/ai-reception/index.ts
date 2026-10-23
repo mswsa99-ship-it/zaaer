@@ -12,7 +12,7 @@
  * Secrets: GEMINI_API_KEY, SUPABASE_SERVICE_ROLE_KEY, APP_BASE_URL (Edge secrets).
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { gateInput, gateOutput, scriptedReply, buildSystemPrompt, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
+import { gateInput, gateOutput, scriptedReply, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
 import { localDay } from "../_shared/dates.ts";
@@ -97,12 +97,16 @@ Deno.serve(async (req) => {
   await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "guest", content: input.redacted, meta: { pii: input.piiFound, scope: input.scope, channel } });
 
   // ---- property facts the deterministic path may state (never invented) ------
-  const loadKnowledge = async () => {
-    const { data: bfull } = await db.from("branches").select("name_ar, check_in_time, check_out_time, address, phone").eq("id", branch.id).maybeSingle();
-    const { data: pols } = await db.from("property_policies").select("topic, title, content_ar").eq("branch_id", branch.id).eq("is_public", true).order("sort_order");
-    const { data: kb } = await db.rpc("fn_public_knowledge", { p_branch: branch.id });
-    return { branchName: bfull?.name_ar, checkInTime: bfull?.check_in_time, checkOutTime: bfull?.check_out_time, address: bfull?.address, phone: bfull?.phone, policies: (pols ?? []).map((p) => ({ topic: p.topic, title: p.title, content: p.content_ar })), entries: (kb ?? []) as PropertyKnowledge["entries"] };
-  };
+  // loaded once per request (three queries in parallel), shared by the scripted path, the knowledge pre-check and the prompt
+  let knowledgeOnce: Promise<PropertyKnowledge> | null = null;
+  const loadKnowledge = () => knowledgeOnce ??= (async () => {
+    const [{ data: bfull }, { data: pols }, { data: kb }] = await Promise.all([
+      db.from("branches").select("name_ar, check_in_time, check_out_time, address, phone").eq("id", branch.id).maybeSingle(),
+      db.from("property_policies").select("topic, title, content_ar").eq("branch_id", branch.id).eq("is_public", true).order("sort_order"),
+      db.rpc("fn_public_knowledge", { p_branch: branch.id }),
+    ]);
+    return { branchName: bfull?.name_ar, checkInTime: bfull?.check_in_time, checkOutTime: bfull?.check_out_time, address: bfull?.address, phone: bfull?.phone, policies: (pols ?? []).map((p: { topic: string; title: string; content_ar: string }) => ({ topic: p.topic, title: p.title, content: p.content_ar })), entries: (kb ?? []) as PropertyKnowledge["entries"] };
+  })();
   // what the deterministic path learned: count answer usage, log questions nobody has answered yet
   const noteScripted = async (r: { intent: string; knowledgeId?: string }) => {
     if (r.knowledgeId) await db.rpc("fn_knowledge_usage_bump", { p_entry: r.knowledgeId });
@@ -183,7 +187,8 @@ Deno.serve(async (req) => {
   // the current (redacted) message is already the last element
 
   // the prompt states the branch's own date (dayKey is the UTC day the usage counters use)
-  const system = buildSystemPrompt({ propertyName: org.name_ar, branchName: branch.name_ar, verified: !!guestToken, extra: s.strict_scope ? s.extra_instructions : s.extra_instructions, today: localDay(branch.timezone) });
+  // the property's own facts go into the prompt, so most questions are answered in ONE model call (no tool round trip)
+  const system = buildSystemPrompt({ propertyName: org.name_ar, branchName: branch.name_ar, verified: !!guestToken, extra: s.strict_scope ? s.extra_instructions : s.extra_instructions, today: localDay(branch.timezone), facts: propertyFacts(await loadKnowledge()) });
   const userWroteEnglish = /[A-Za-z]{3,}/.test(message) && !/[؀-ۿ]/.test(message);
 
   let tokensIn = 0, tokensOut = 0;
@@ -214,10 +219,10 @@ Deno.serve(async (req) => {
           try {
             const args = validateToolArgs(call.name, call.args);
             result = await executeTool(call.name, args, ctx());
-            if (call.name === "request_booking_verification") actions.push({ label: "التحقق من الحجز", route: "/booking/lookup" });
+            if (call.name === "request_booking_verification") actions.push({ label: "حجوزاتي", route: "/booking/lookup" });
             if (call.name === "create_registration_session" && guestToken) actions.push({ label: "تسجيل بيانات النزلاء", route: `/booking/registration/${guestToken}` });
             if (call.name === "get_verified_booking_summary" && guestToken) actions.push({ label: "حالة الحجز", route: `/booking/status/${guestToken}` });
-            if (call.name === "get_booking_sources" || call.name === "get_public_availability") actions.push({ label: "استكشاف الغرف", route: "/booking/new" });
+            if (call.name === "get_booking_sources" || call.name === "get_public_availability") actions.push({ label: "احجز الآن", route: "/booking/new" });
           } catch (e) {
             status = "error"; result = { error: String((e as Error).message).slice(0, 120) };
           }

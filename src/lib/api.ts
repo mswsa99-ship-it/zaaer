@@ -109,6 +109,12 @@ async function rpc<T = unknown>(fn: string, args: Record<string, unknown>): Prom
 // ---------------------------------------------------------------------------
 // Guest (token-scoped)
 // ---------------------------------------------------------------------------
+export interface PhoneReservation {
+  ref: string; internal_ref: string; status: string; check_in: string; check_out: string; nights: number;
+  branch_name: string | null; category_name: string | null; payment_status: string; access_status: string; identity_status: string;
+}
+export interface PhoneReservations { phone_last4: string; reservations: PhoneReservation[] }
+
 export interface GuestSession {
   reservation: {
     id: string; internal_ref: string; external_ref: string | null; status: string; check_in: string; check_out: string;
@@ -123,6 +129,18 @@ export interface GuestSession {
 export const guestApi = {
   lookup: (externalRef: string, phoneLast4: string, sourceId?: string | null) =>
     rpc<{ status: "ok" | "unmatched" | "mismatch" | "throttled" | "invalid"; token?: string }>("fn_guest_lookup", { p_external_ref: externalRef, p_phone_last4: phoneLast4, p_source_id: sourceId ?? null, p_fingerprint: fingerprint() }),
+  /** Phone-first lookup (0020): code by WhatsApp, or a booking number until WhatsApp is connected. */
+  sendPhoneCode: async (phone: string): Promise<{ status: "sent" | "channel_unavailable" | "throttled" | "invalid" | "send_failed" }> => {
+    const { data, error } = await supabase.functions.invoke("guest-otp", { body: { phone, client_fingerprint: fingerprint() } });
+    if (error || !data) return { status: "send_failed" };
+    return data;
+  },
+  verifyPhoneCode: (phone: string, code: string) =>
+    rpc<{ status: "ok" | "mismatch" | "expired" | "throttled" | "invalid"; token?: string; attempts_left?: number }>("fn_guest_phone_verify", { p_phone: phone, p_code: code, p_fingerprint: fingerprint() }),
+  verifyPhoneRef: (phone: string, ref: string) =>
+    rpc<{ status: "ok" | "mismatch" | "throttled" | "invalid"; token?: string }>("fn_guest_phone_verify_ref", { p_phone: phone, p_ref: ref, p_fingerprint: fingerprint() }),
+  phoneReservations: (token: string) => rpc<PhoneReservations>("fn_guest_phone_reservations", { p_token: token }),
+  openPhoneReservation: (token: string, internalRef: string) => rpc<{ status: "ok"; token: string }>("fn_guest_phone_open", { p_token: token, p_internal_ref: internalRef }),
   session: (token: string) => rpc<GuestSession>("fn_guest_session", { p_token: token }),
   submit: (token: string, guestId: string | null, payload: Record<string, unknown>) => rpc<{ ok: boolean; guest_id: string }>("fn_guest_submit", { p_token: token, p_guest_id: guestId, p_payload: payload }),
   submitCheckin: (token: string) => rpc<{ ok: boolean; access_status: string }>("fn_guest_submit_checkin", { p_token: token }),

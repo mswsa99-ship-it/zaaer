@@ -95,6 +95,16 @@ export function isThinkingGemini(model: string): boolean {
   return /^gemini-(flash|pro|flash-lite)-latest$/.test(model);   // the aliases point at current (3+) models
 }
 
+/**
+ * The least thinking each model accepts: a front-desk answer needs speed, not deliberation. "minimal" exists only on
+ * some models (gemini-3.6-flash, gemini-3.5-flash-lite); the others take "low". A level a model does not know is a
+ * 400, which would stop the fallback chain, so the list is explicit.
+ */
+const MINIMAL_THINKING = /^gemini-(3\.6-flash|3\.5-flash-lite)(-|$)/;
+export function thinkingLevelFor(model: string): "minimal" | "low" {
+  return MINIMAL_THINKING.test(model) ? "minimal" : "low";
+}
+
 /** A parameterless tool is declared without `parameters`: an OBJECT schema with no properties is rejected. */
 export function toGeminiDeclaration(t: ToolDeclaration): Record<string, unknown> {
   const p = t.parameters as { type?: string; properties?: Record<string, unknown> } | undefined;
@@ -250,7 +260,7 @@ export class GeminiProvider implements LLMProvider {
       tools: req.tools.length ? [{ functionDeclarations: req.tools.map(toGeminiDeclaration) }] : undefined,
       toolConfig: req.tools.length ? { functionCallingConfig: { mode: "AUTO" } } : undefined,
       generationConfig: thinking
-        ? { maxOutputTokens: req.maxOutputTokens + THINKING_ALLOWANCE_TOKENS, candidateCount: 1, thinkingConfig: { thinkingLevel: "low" } }
+        ? { maxOutputTokens: req.maxOutputTokens + THINKING_ALLOWANCE_TOKENS, candidateCount: 1, thinkingConfig: { thinkingLevel: thinkingLevelFor(model) } }
         : { temperature: req.temperature, maxOutputTokens: req.maxOutputTokens, candidateCount: 1 },
       safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_LOW_AND_ABOVE" },

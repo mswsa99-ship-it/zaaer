@@ -73,7 +73,7 @@ test("L01 landing page renders under the site path and links to the staff portal
 test("L02 deep links load, and a protected staff route sends an anonymous visitor to login", async ({ page }) => {
   const problems = watch(page);
   await open(page, "booking/lookup");
-  await expect(page.getByPlaceholder("مثال: BK-DEMO-1001")).toBeVisible();
+  await expect(page.getByPlaceholder("05xxxxxxxx")).toBeVisible();
   await open(page, "staff/dashboard");
   await expect(page).toHaveURL(/\/staff\/login$/);
   await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
