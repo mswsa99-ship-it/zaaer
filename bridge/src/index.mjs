@@ -6,7 +6,8 @@
  * Started by start.bat (which restarts it if it ever stops). See README-AR.txt.
  */
 import fs from "node:fs";
-import os from "node:os";
+import net from "node:net";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -40,15 +41,19 @@ try {
   process.exit(EXIT_CONFIG);
 }
 
-// ---- one copy per computer (two would fight over the same WhatsApp session) ----
-const LOCK = path.join(ROOT, "session", ".lock");
-fs.mkdirSync(path.dirname(LOCK), { recursive: true });
-try {
-  const other = Number(fs.readFileSync(LOCK, "utf8"));
-  const stale = Date.now() - fs.statSync(LOCK).mtimeMs > os.uptime() * 1000;      // written before this boot
-  if (other && other !== process.pid && !stale) { process.kill(other, 0); log.error("البرنامج يعمل بالفعل في نافذة أخرى. أغلق هذه النافذة.", "The program is already running in another window. Close this one."); process.exit(EXIT_CONFIG); }
-} catch { /* no lock, or that process is gone */ }
-fs.writeFileSync(LOCK, String(process.pid));
+// ---- one copy per folder (two would fight over the same WhatsApp session) ----
+// A local port held while the program runs: the system frees it the moment the program ends, however it ends
+// (no lock file left behind by a crash). Each folder has its own port, so two branches can share a computer.
+const LOCK_PORT = 41000 + (parseInt(crypto.createHash("sha256").update(ROOT.toLowerCase()).digest("hex").slice(0, 8), 16) % 8000);
+const lock = net.createServer((s) => s.destroy());
+await new Promise((resolve) => {
+  lock.once("error", (e) => {
+    if (e?.code === "EADDRINUSE") { log.error("البرنامج يعمل بالفعل في نافذة أخرى. أغلق هذه النافذة.", "The program is already running in another window. Close this one."); process.exit(EXIT_CONFIG); }
+    log.warn(`تعذّر التحقق من تشغيل نسخة أخرى (${e?.code ?? e}) — يستمر البرنامج.`, `Could not check for another running copy (${e?.code ?? e}) — continuing.`);
+    resolve();
+  });
+  lock.listen(LOCK_PORT, "127.0.0.1", resolve);
+});
 
 const browser = findBrowser(config.browser_path);
 if (!browser) {
@@ -57,7 +62,8 @@ if (!browser) {
 }
 log.info(`المتصفح: ${path.basename(browser)}`, `Browser: ${path.basename(browser)}`);
 
-const core = new Bridge({ api: createApi(config), log, version: VERSION });
+const core = new Bridge({ api: createApi(config), log, version: VERSION, branchPhone: config.branch_phone });
+core.onTrouble = (why) => { core.setStatus("disconnected", why); restart(5_000); };
 core.runPollLoop();
 
 // ---- WhatsApp Web ----
@@ -83,9 +89,9 @@ async function start() {
   c.on("auth_failure", (m) => { core.setStatus("disconnected", "auth_failure"); log.error(`فشل الربط: ${m}`, `Link failed: ${m}`); restart(30_000); });
   c.on("ready", async () => {
     const phone = c.info?.wid?.user ?? null;
-    core.setMe({ phone, name: c.info?.pushname ?? null });
+    const link = core.setMe({ phone, name: c.info?.pushname ?? null });   // another phone than the branch's: nothing is worked
     core.setStatus("connected");
-    if (config.branch_phone && phone && phone !== config.branch_phone) log.warn(`تنبيه: الرقم المربوط (••••${phone.slice(-4)}) غير رقم الفرع في الإعداد (••••${config.branch_phone.slice(-4)}).`, `Note: the linked number (••••${phone.slice(-4)}) is not the branch number in the settings (••••${config.branch_phone.slice(-4)}).`);
+    if (link === "blocked") return;
     log.info("واتساب جاهز — الرد على الرسائل الجديدة يعمل. اترك هذه النافذة ونافذة واتساب مفتوحتين (يمكن تصغيرهما).", "WhatsApp is ready — new messages are answered. Keep this window and the WhatsApp window open (minimised is fine).");
     await core.catchUp();
   });
@@ -115,6 +121,23 @@ function restart(delay) {
   });
 }
 
+// ---- health check: WhatsApp Web can stop working without saying so (the tab crashed, a reload the library did not
+// follow). Every minute its own state is asked; two failed checks in a row → it is reopened. ----
+let healthFails = 0;
+setInterval(async () => {
+  const c = client;
+  if (stopping || restarting || !c || core.status !== "connected") { healthFails = 0; return; }
+  let state = null;
+  try { state = await Promise.race([c.getState(), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 20_000))]); } catch { state = null; }
+  if (client !== c) return;
+  if (state === "CONNECTED") { healthFails = 0; return; }
+  if (++healthFails < 2) return;
+  healthFails = 0;
+  log.warn(`واتساب ويب لا يستجيب (${state ?? "لا رد"}) — يُعاد فتحه.`, `WhatsApp Web is not responding (${state ?? "no answer"}) — reopening it.`);
+  core.setStatus("disconnected", "health_check");
+  restart(5_000);
+}, 60_000);
+
 async function stop(code = EXIT_STOP) {
   if (stopping) return;
   stopping = true;
@@ -123,7 +146,7 @@ async function stop(code = EXIT_STOP) {
   try { await core.api.poll({ status: "stopped", version: VERSION, wait: 0 }); } catch { /* best effort */ }
   core.stop();
   try { await client?.destroy(); } catch { /* ignore */ }
-  try { fs.rmSync(LOCK, { force: true }); } catch { /* ignore */ }
+  try { lock.close(); } catch { /* freed on exit anyway */ }
   process.exit(code);
 }
 

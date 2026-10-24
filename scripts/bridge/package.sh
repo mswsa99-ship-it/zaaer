@@ -7,12 +7,14 @@
 #   NODE_EXE=/path/node.exe uses a local file instead (offline checks).
 set -euo pipefail
 OUT="${1:?usage: package.sh <out-dir>}"
+mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"            # absolute: the zip below is written from inside the work folder
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NODE_MAJOR="${NODE_MAJOR:-24}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 APP="$WORK/zaaer-whatsapp-bridge"
-mkdir -p "$APP/node" "$OUT"
+mkdir -p "$APP/node"
 
 cp -r "$ROOT/bridge/src" "$APP/"
 cp "$ROOT/bridge/package.json" "$ROOT/bridge/package-lock.json" "$ROOT/bridge/start.bat" "$ROOT/bridge/install-startup.bat" \
@@ -40,8 +42,7 @@ echo "$V" > "$APP/node/VERSION"
 
 rm -f "$OUT/zaaer-whatsapp-bridge.zip"
 (cd "$WORK" && zip -q -r -9 -X "$OUT/zaaer-whatsapp-bridge.zip" zaaer-whatsapp-bridge)
-OUT_ABS="$(cd "$OUT" && pwd)"
-python3 - "$OUT_ABS/zaaer-whatsapp-bridge.zip" "$ROOT/bridge/package.json" "$V" > "$OUT/version.json" <<'PY'
+python3 - "$OUT/zaaer-whatsapp-bridge.zip" "$ROOT/bridge/package.json" "$V" > "$OUT/version.json" <<'PY'
 import hashlib, json, os, sys, datetime
 z, pkg, node = sys.argv[1], sys.argv[2], sys.argv[3]
 print(json.dumps({"version": json.load(open(pkg))["version"], "node": node, "bytes": os.path.getsize(z),

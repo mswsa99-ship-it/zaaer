@@ -1,14 +1,15 @@
 /**
- * The program on the reception computer (bridge/src) — BA01–BA16, with WhatsApp and the server faked:
+ * The program on the reception computer (bridge/src) — BA01–BA30, with WhatsApp and the server faked:
  * what it answers, how it types, what it leaves to staff, how it tells its own messages from a receptionist's,
- * the limits that keep the number safe, staff replies from the inbox, and the settings file and browser it finds.
+ * the limits that keep the number safe, staff replies from the inbox, the branch's own number only, and the
+ * settings file and browser it finds.
  */
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 // @ts-expect-error — plain JavaScript modules of the Windows program
-import { Bridge, mask } from "../../bridge/src/core.mjs";
+import { Bridge, mask, combine } from "../../bridge/src/core.mjs";
 // @ts-expect-error — plain JavaScript module
 import { findConfig, validateConfig } from "../../bridge/src/config.mjs";
 // @ts-expect-error — plain JavaScript module
@@ -18,37 +19,51 @@ import { createApi } from "../../bridge/src/api.mjs";
 // @ts-expect-error — plain JavaScript module
 import { createLogger } from "../../bridge/src/log.mjs";
 // @ts-expect-error — plain JavaScript module
-import { toMsg } from "../../bridge/src/wa.mjs";
+import { toMsg, waAdapter } from "../../bridge/src/wa.mjs";
 
 type Any = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 const GUEST = "966501110006@c.us";
 const KEY = "zb_" + "a1".repeat(32);
 
-function harness(o: { reply?: (b: Any) => Any; poll?: (b: Any) => Any; unread?: Any[]; lidPhone?: string | null; sendFails?: boolean; failMessage?: Any } = {}) {
+const BRANCH_PHONE = "966500000100";
+
+function harness(o: { reply?: (b: Any) => Any; poll?: (b: Any) => Any; unread?: Any[]; lidPhone?: string | null; sendFails?: boolean | (() => boolean); sendNoId?: boolean;
+  failMessage?: Any; failAck?: () => Any; branchPhone?: string | null; me?: string | null } = {}) {
   let t = Date.parse("2026-10-24T10:00:00Z");
   const now = () => t;
   const sleeps: number[] = [];
   const sleep = async (ms: number) => { sleeps.push(ms); t += ms; };
   const lines: Array<[string, string, string?]> = [];
   const log = { info: (a: string, e?: string) => lines.push(["info", a, e]), warn: (a: string, e?: string) => lines.push(["warn", a, e]), error: (a: string, e?: string) => lines.push(["error", a, e]) };
-  const sent: Array<{ chatId: string; text: string; id: string }> = []; const seen: string[] = []; const typing: string[] = [];
-  let seq = 0;
+  const sent: Array<{ chatId: string; text: string; id: string; at: number }> = []; const seen: string[] = []; const typing: string[] = [];
+  const events: string[] = [];
+  let seq = 0; let typingNow = 0; let maxTyping = 0;
   const wa = {
-    sendText: async (chatId: string, text: string) => { if (o.sendFails) throw new Error("not on WhatsApp"); const id = `true_${chatId}_OUT${++seq}`; sent.push({ chatId, text, id }); return { id }; },
-    markSeen: async (c: string) => { seen.push(c); }, typing: async (c: string) => { typing.push(c); }, clearTyping: async () => {},
+    sendText: async (chatId: string, text: string) => {
+      const fails = typeof o.sendFails === "function" ? o.sendFails() : o.sendFails;
+      if (fails) throw new Error("not on WhatsApp");
+      if (o.sendNoId) return { id: null };
+      const id = `true_${chatId}_OUT${++seq}`; sent.push({ chatId, text, id, at: t }); events.push("send:" + chatId); return { id };
+    },
+    markSeen: async (c: string) => { seen.push(c); events.push("seen:" + c); },
+    typing: async (c: string) => { typing.push(c); typingNow++; maxTyping = Math.max(maxTyping, typingNow); },
+    clearTyping: async () => { typingNow = Math.max(0, typingNow - 1); },
     resolvePhone: async () => o.lidPhone ?? null, unreadChats: async () => o.unread ?? [],
   };
   const calls: Array<[string, Any]> = [];
   const api = {
     message: async (b: Any) => { calls.push(["message", b]); if (o.failMessage) throw o.failMessage; return o.reply ? o.reply(b) : { ok: true, replies: ["أهلًا بك"] }; },
     human: async (b: Any) => { calls.push(["human", b]); return { ok: true }; },
-    poll: async (b: Any) => { calls.push(["poll", b]); return o.poll ? o.poll(b) : { ok: true, enabled: true, auto_reply: true, outbox: [] }; },
-    ack: async (b: Any) => { calls.push(["ack", b]); return { ok: true }; },
+    poll: async (b: Any) => { calls.push(["poll", b]); return o.poll ? o.poll(b) : { ok: true, enabled: true, auto_reply: true, display_phone: BRANCH_PHONE, outbox: [] }; },
+    ack: async (b: Any) => { calls.push(["ack", b]); const f = o.failAck?.(); if (f) throw f; return { ok: true }; },
+    undelivered: async (b: Any) => { calls.push(["undelivered", b]); return { ok: true }; },
   };
-  const core = new Bridge({ api, log, now, sleep, random: () => 0.5, version: "test" });
+  const core = new Bridge({ api, log, now, sleep, random: () => 0.5, version: "test", branchPhone: o.branchPhone === undefined ? BRANCH_PHONE : o.branchPhone });
   core.attach(wa);
+  if (o.me !== null) core.setMe({ phone: o.me ?? BRANCH_PHONE, name: "الاستقبال" });
   const msg = (over: Any = {}) => ({ id: `false_${GUEST}_${++seq}`, chatId: GUEST, fromMe: false, type: "chat", body: "مرحبا", timestamp: Math.floor(t / 1000), name: "ضيف", ...over });
-  return { core, calls, sent, seen, typing, lines, sleeps, msg, advance: (ms: number) => { t += ms; } };
+  return { core, calls, sent, seen, typing, lines, sleeps, events, msg, advance: (ms: number) => { t += ms; }, now, maxTyping: () => maxTyping,
+    of: (kind: string) => calls.filter((c) => c[0] === kind).map((c) => c[1]) };
 }
 
 describe("reception computer program (bridge/src/core.mjs)", () => {
@@ -116,17 +131,20 @@ describe("reception computer program (bridge/src/core.mjs)", () => {
     expect(h.sent.map((s) => s.text)).toEqual(["رد 1", "رد 2"]);
   });
 
-  it("BA07 a chat that floods (another bot, a loop) is left to staff for a while", async () => {
-    const h = harness();
+  it("BA07 a chat that loops (another bot) is kept quiet for a while: nothing more is typed, its messages still reach the inbox", async () => {
+    // the fake server answers even "record only" messages: the program must not type into a quiet chat anyway
+    const h = harness({ reply: () => ({ ok: true, replies: ["أهلًا بك"], turn: { thread: "T1", after: null } }) });
     for (let i = 0; i < 15; i++) await h.core.onIncoming(h.msg({ body: "x" + i }));
-    // 6 replies a minute per chat; the 7th message is still handed in (recorded for staff) but not answered,
-    // and the chat is then left to staff
+    // 6 assistant replies a minute per chat; the 7th answer is not typed (the inbox is told) and the chat goes quiet
     expect(h.sent.length).toBe(6);
-    expect(h.calls.length).toBe(7);
+    expect(h.of("undelivered")).toEqual([{ turn: { thread: "T1", after: null }, reason: "limit" }]);
+    const msgs = h.of("message");
+    expect(msgs).toHaveLength(15);                                            // every message reaches the inbox …
+    expect(msgs.slice(0, 7).every((b: Any) => b.answer === undefined)).toBe(true);
+    expect(msgs.slice(7).every((b: Any) => b.answer === false)).toBe(true);    // … the quiet ones as "record only"
     expect(h.lines.some(([lvl]) => lvl === "warn")).toBe(true);
     h.advance(16 * 60_000);
     await h.core.onIncoming(h.msg({ body: "بعد" }));
-    expect(h.calls.length).toBe(8);
     expect(h.sent.length).toBe(7);
   });
 
@@ -202,6 +220,148 @@ describe("reception computer program (bridge/src/core.mjs)", () => {
     const text = fs.readFileSync(path.join(dir, "bridge-2026-10-24.log"), "utf8");
     expect(text).toContain("••••0006");
     expect(text).not.toContain("966501110006");
+  });
+
+  it("BA19 a phone other than the branch's is linked: nothing is answered, reported or typed from it, and the owner's page is told", async () => {
+    const h = harness({ me: "966555000111", poll: () => ({ ok: true, enabled: true, auto_reply: true, display_phone: BRANCH_PHONE, outbox: [{ id: "OB9", chat_id: GUEST, text: "رد" }] }) });
+    expect(h.core.blocked).toBe("wrong_number");
+    expect(h.lines.some(([lvl, ar]) => lvl === "error" && ar.includes("ليس رقم الفرع"))).toBe(true);
+    await h.core.onIncoming(h.msg());
+    await h.core.onOwnMessage({ id: "true_x_PERSONAL", chatId: GUEST, fromMe: true, type: "chat", body: "رسالة شخصية" });
+    expect(await h.core.catchUp()).toBe(0);
+    h.core.setStatus("connected");
+    await h.core.pollOnce();
+    expect(h.of("message")).toEqual([]);
+    expect(h.of("human")).toEqual([]);
+    expect(h.sent).toEqual([]);
+    expect(h.of("poll")[0]).toMatchObject({ status: "disconnected", detail: "wrong_number", phone: "966555000111", wait: 0 });
+    expect(h.of("ack")).toEqual([expect.objectContaining({ id: "OB9", ok: false, error: "wrong_number" })]);
+  });
+
+  it("BA20 the number on the owner's page decides: once it matches the linked phone, answering resumes; the server's refusal blocks too", async () => {
+    let display = BRANCH_PHONE;
+    const h = harness({ me: "966555000111", poll: () => ({ ok: true, enabled: true, auto_reply: true, display_phone: display, outbox: [] }) });
+    h.core.setStatus("connected");
+    display = "966555000111";                                                   // the owner corrects the branch number
+    await h.core.pollOnce();
+    expect(h.core.blocked).toBeNull();
+    await h.core.onIncoming(h.msg());
+    expect(h.of("message")[0]).toMatchObject({ linked: "966555000111" });
+    expect(h.sent).toHaveLength(1);
+
+    const s = harness({ branchPhone: null, failMessage: Object.assign(new Error("wrong_number"), { status: 409 }) });
+    await s.core.onIncoming(s.msg());
+    expect(s.core.blocked).toBe("wrong_number");
+    expect(s.of("message")).toHaveLength(1);                                   // refused at once, not retried
+    await s.core.onIncoming(s.msg({ body: "ثانية" }));
+    expect(s.of("message")).toHaveLength(1);
+  });
+
+  it("BA21 messages from many chats at once are typed one at a time, never more than 20 in any minute", async () => {
+    const h = harness();
+    const chats = Array.from({ length: 30 }, (_, i) => `9665011101${String(i).padStart(2, "0")}@c.us`);
+    await Promise.all(chats.map((c) => h.core.onIncoming(h.msg({ chatId: c, id: "id-" + c }))));
+    expect(h.sent).toHaveLength(30);
+    expect(h.maxTyping()).toBe(1);
+    for (const s of h.sent) expect(h.sent.filter((x) => x.at > s.at - 60_000 && x.at <= s.at).length).toBeLessThanOrEqual(20);
+  });
+
+  it("BA22 at start, the waiting messages of a chat are answered once, together; chats are taken one after another", async () => {
+    const t0 = Math.floor(Date.parse("2026-10-24T10:00:00Z") / 1000);
+    const other = "966501110007@c.us";
+    const h = harness({ unread: [
+      { chatId: GUEST, messages: [
+        { id: "u1", chatId: GUEST, fromMe: false, type: "chat", body: "السلام عليكم", timestamp: t0 - 900 },
+        { id: "u2", chatId: GUEST, fromMe: false, type: "image", body: "", timestamp: t0 - 800 },
+        { id: "u3", chatId: GUEST, fromMe: false, type: "chat", body: "متى الدخول؟", timestamp: t0 - 700 }] },
+      { chatId: other, messages: [{ id: "u4", chatId: other, fromMe: false, type: "chat", body: "مرحبا", timestamp: t0 - 600 }] },
+    ] });
+    expect(await h.core.catchUp()).toBe(2);
+    expect(h.of("message")).toEqual([
+      expect.objectContaining({ id: "u3", chat: GUEST, type: "text", text: "السلام عليكم\n[image]\nمتى الدخول؟" }),
+      expect.objectContaining({ id: "u4", chat: other, text: "مرحبا" }),
+    ]);
+    expect(h.sent.map((s) => s.chatId)).toEqual([GUEST, other]);
+    expect(combine([{ id: "a", type: "image", body: "" }, { id: "b", type: "ptt", body: "" }])).toMatchObject({ id: "b", type: "ptt", body: "[image]\n[voice]" });
+  });
+
+  it("BA23 a chat is marked read only after the answer went out; a failed send leaves it unread, tells the inbox, and repeated failures reopen WhatsApp", async () => {
+    const ok = harness();
+    await ok.core.onIncoming(ok.msg());
+    expect(ok.events).toEqual(["send:" + GUEST, "seen:" + GUEST]);
+
+    const troubles: string[] = [];
+    const h = harness({ sendFails: true, reply: () => ({ ok: true, replies: ["أهلًا"], turn: { thread: "T2", after: "2026-10-24T09:00:00Z" } }) });
+    h.core.onTrouble = (why: string) => troubles.push(why);
+    for (const c of ["966501110021@c.us", "966501110022@c.us", "966501110023@c.us"]) await h.core.onIncoming(h.msg({ chatId: c, id: "f-" + c }));
+    expect(h.seen).toEqual([]);
+    expect(h.of("undelivered")).toHaveLength(3);
+    expect(h.of("undelivered")[0]).toEqual({ turn: { thread: "T2", after: "2026-10-24T09:00:00Z" }, reason: "send_failed" });
+    expect(troubles).toEqual(["send_failed"]);
+  });
+
+  it("BA24 a send WhatsApp did not confirm is not counted as sent (a staff reply is reported failed, not marked sent)", async () => {
+    const h = harness({ sendNoId: true, poll: () => ({ ok: true, enabled: true, auto_reply: true, display_phone: BRANCH_PHONE, outbox: [{ id: "OB3", chat_id: GUEST, text: "تفضل" }] }) });
+    h.core.setStatus("connected");
+    await h.core.pollOnce();
+    expect(h.of("ack")).toEqual([expect.objectContaining({ id: "OB3", ok: false, error: "send_failed" })]);
+  });
+
+  it("BA25 a confirmation the server did not get is kept and sent with a later poll (the reply is never typed twice)", async () => {
+    let down = true; let first = true;
+    const h = harness({ failAck: () => (down ? Object.assign(new Error("network"), { status: 0 }) : null),
+      poll: () => { const r = { ok: true, enabled: true, auto_reply: true, display_phone: BRANCH_PHONE, outbox: first ? [{ id: "OB4", chat_id: GUEST, text: "الغرفة جاهزة" }] : [] }; first = false; return r; } });
+    h.core.setStatus("connected");
+    await h.core.pollOnce();
+    expect(h.sent).toHaveLength(1);
+    expect(h.of("ack")).toHaveLength(3);                                       // three tries, then kept
+    down = false;
+    await h.core.pollOnce();
+    expect(h.of("ack")).toHaveLength(4);
+    expect(h.of("ack")[3]).toMatchObject({ id: "OB4", ok: true, wa_id: expect.stringContaining("OUT") });
+    await h.core.pollOnce();
+    expect(h.of("ack")).toHaveLength(4);                                       // confirmed once, then forgotten
+    expect(h.sent).toHaveLength(1);
+  });
+
+  it("BA26 a quiet chat: at most 10 of its messages reach the inbox per quiet spell; staff replies to it are still typed", async () => {
+    const h = harness({ reply: (b: Any) => (b.answer === false ? { ok: true, replies: [], silent: "paused" } : { ok: true, replies: ["أهلًا"] }),
+      poll: () => ({ ok: true, enabled: true, auto_reply: true, display_phone: BRANCH_PHONE, outbox: [{ id: "OB5", chat_id: GUEST, text: "معك الاستقبال" }] }) });
+    for (let i = 0; i < 30; i++) await h.core.onIncoming(h.msg({ body: "spam" + i }));
+    expect(h.of("message").filter((b: Any) => b.answer === false)).toHaveLength(10);
+    h.core.setStatus("connected");
+    await h.core.pollOnce();
+    expect(h.of("ack")).toEqual([expect.objectContaining({ id: "OB5", ok: true })]);
+    expect(h.sent.at(-1)!.text).toBe("معك الاستقبال");
+  });
+
+  it("BA27 a message the server already handled is not answered again, and the log says so", async () => {
+    const h = harness({ reply: () => ({ ok: true, replies: [], duplicate: true }) });
+    await h.core.onIncoming(h.msg());
+    expect(h.sent).toEqual([]);
+    expect(h.lines.some(([lvl, ar]) => lvl === "info" && ar.includes("عولجت من قبل"))).toBe(true);
+  });
+
+  it("BA28 the branch's per-minute limit on the server (429) is waited out, not hammered", async () => {
+    let n = 0;
+    const h = harness({ reply: () => { if (++n === 1) throw Object.assign(new Error("rate_limited"), { status: 429 }); return { ok: true, replies: ["تم"] }; } });
+    await h.core.onIncoming(h.msg());
+    expect(h.sleeps).toContain(30_000);
+    expect(h.sent.map((s) => s.text)).toEqual(["تم"]);
+  });
+
+  it("BA29 WhatsApp side: a chat marked unread by hand, groups and channels are left alone at start; an unconfirmed send has no id", async () => {
+    const mk = (id: string, unreadCount: number, isGroup = false, n = 3) => ({ id: { _serialized: id }, isGroup, unreadCount,
+      fetchMessages: async ({ limit }: Any) => Array.from({ length: n }, (_, i) => ({ id: { _serialized: `${id}_${i}` }, from: id, fromMe: false, type: "chat", body: "m" + i, timestamp: 1 })).slice(-limit) });
+    const client = {
+      getChats: async () => [mk("966501110031@c.us", 2), mk("966501110032@c.us", -1), mk("120363025246125486@g.us", 4, true), mk("120363041234567890@newsletter", 1), mk("966501110033@c.us", 0)],
+      sendMessage: async () => undefined,
+    };
+    const wa = waAdapter(client);
+    const list = await wa.unreadChats(5);
+    expect(list.map((c: Any) => c.chatId)).toEqual(["966501110031@c.us"]);
+    expect(list[0].messages.map((m: Any) => m.body)).toEqual(["m1", "m2"]);
+    expect(await wa.sendText("966501110031@c.us", "x")).toEqual({ id: null });
   });
 });
 

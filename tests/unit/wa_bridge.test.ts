@@ -1,9 +1,9 @@
 /**
- * wa-bridge decisions (_shared/wa_bridge.ts) — WB-U01–WB-U06: who wrote, whether the assistant answers, and what a
- * numbered answer means.
+ * wa-bridge decisions (_shared/wa_bridge.ts) — WB-U01–WB-U07: who wrote, whether the assistant answers, what a
+ * numbered answer means, and whose phone the program may work.
  */
 import { describe, it, expect } from "vitest";
-import { contactOf, silentReason, toInbound, sha256Hex, BRIDGE_REPLY_MAX_AGE_MS, type BridgeChannel } from "../../supabase/functions/_shared/wa_bridge";
+import { contactOf, silentReason, toInbound, sha256Hex, wrongNumber, BRIDGE_REPLY_MAX_AGE_MS, type BridgeChannel } from "../../supabase/functions/_shared/wa_bridge";
 import { BTN } from "../../supabase/functions/_shared/whatsapp";
 
 const ch: BridgeChannel = { branch_id: "B", organization_id: "O", enabled: true, auto_reply: true, human_pause_minutes: 60 };
@@ -48,5 +48,13 @@ describe("reception computer (wa-bridge) decisions", () => {
     const h = await sha256Hex("false_966501110006@c.us_3EB0C431D6B7F7F3A2C1");
     expect(h).toMatch(/^[0-9a-f]{64}$/);
     expect(h).not.toContain("966501110006");
+  });
+
+  it("WB-U07 the linked number must be the branch's: another number is named, the same (in any format) or an unknown one is not", () => {
+    const b = { display_phone: "966500000100" };
+    expect(wrongNumber(b, "966555000111")).toBe("966555000111");
+    expect(wrongNumber(b, "+966 50 000 0100")).toBeNull();
+    expect(wrongNumber(b, null)).toBeNull();
+    expect(wrongNumber({ display_phone: null }, "966555000111")).toBeNull();
   });
 });

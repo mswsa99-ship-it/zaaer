@@ -739,9 +739,12 @@ const serviceRpcs: Record<string, (a: any) => any> = {
       Object.assign(o, { status: "sending", picked_at: nowISO(), attempts: (o.attempts ?? 0) + 1 }); out.push({ id: o.id, chat_id: cv.wa_chat_id, text: m.content });
     }
     emit("conversation_messages"); return out; },
-  fn_wa_bridge_ack: ({ p_branch, p_id, p_ok, p_wa_id, p_error }) => { const o = T("whatsapp_outbox").find((x) => x.id === p_id && x.branch_id === p_branch && x.status === "sending"); if (!o) return false;
+  // 0024: a confirmation that arrives after the 5-minute wait (the reply WAS typed) still turns it into "sent"
+  fn_wa_bridge_ack: ({ p_branch, p_id, p_ok, p_wa_id, p_error }) => { const o = T("whatsapp_outbox").find((x) => x.id === p_id && x.branch_id === p_branch && (x.status === "sending" || (!!p_ok && x.status === "failed" && x.error === "no_ack"))); if (!o) return false;
     Object.assign(o, { status: p_ok ? "sent" : "failed", wa_id: p_wa_id ?? null, error: p_ok ? null : String(p_error || "send_failed").slice(0, 200), finished_at: nowISO() });
-    const m = byId("conversation_messages", o.message_id); if (m) m.meta = { ...(m.meta ?? {}), delivery: p_ok ? "sent" : "failed", ...(p_ok ? {} : { error: o.error }) }; emit("conversation_messages"); return true; },
+    const m = byId("conversation_messages", o.message_id);
+    if (m) { const { error: _gone, ...rest } = (m.meta ?? {}) as Row; void _gone; m.meta = p_ok ? { ...rest, delivery: "sent" } : { ...(m.meta ?? {}), delivery: "failed", error: o.error }; }
+    emit("conversation_messages"); return true; },
   fn_wa_bridge_enqueue: ({ p_message }) => { const m = T("conversation_messages").find((x) => x.id === p_message && x.sender === "supervisor"); if (!m) return { queued: false, error: "not_found" };
     const cv = byId("conversations", m.conversation_id)!; const c = T("branch_whatsapp_channels").find((x) => x.branch_id === cv.branch_id); let err: string | null = null;
     if (cv.channel !== "whatsapp" || !cv.wa_chat_id) err = "not_whatsapp";

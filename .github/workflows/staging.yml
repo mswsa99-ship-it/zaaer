@@ -107,9 +107,11 @@ jobs:
           echo "base=${BASE_PATH%/}" >> "$GITHUB_OUTPUT"
       - name: Package the reception-computer WhatsApp program (Windows) next to the site
         # bridge/ + its dependencies + the official node.exe (checksum-verified) → dist/bridge/zaaer-whatsapp-bridge.zip.
-        # If nodejs.org cannot be reached the site still ships; the owner's WhatsApp page then says the package is not ready.
-        continue-on-error: true
-        run: bash scripts/bridge/package.sh dist/bridge
+        # If nodejs.org cannot be reached the site still ships; the owner's WhatsApp page then says the package is not ready,
+        # and the run says so too (a warning on its summary page).
+        run: |
+          if bash scripts/bridge/package.sh dist/bridge; then cat dist/bridge/version.json
+          else echo "::warning title=WhatsApp program not packaged::The reception-computer program (dist/bridge/zaaer-whatsapp-bridge.zip) could not be built in this run; the site ships without it. Re-run the workflow (STAGING.md §0-C)."; fi
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Check this build against the real staging backend before publishing

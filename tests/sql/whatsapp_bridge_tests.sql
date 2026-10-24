@@ -1,5 +1,5 @@
 -- =====================================================================
--- WhatsApp Web bridge on the reception computer (WB01–WB17, migration 0023).
+-- WhatsApp Web bridge on the reception computer (WB01–WB29, migrations 0023 and 0024).
 -- A branch of its own in org 1 ("فرع الجسر"), so the Cloud API tests (whatsapp_purge_tests.sql) keep theirs.
 -- org 1: owner a…01, supervisor a…02 (member of branch …010 only), housekeeping a…03; org 2: owner a…05.
 -- =====================================================================
@@ -188,6 +188,24 @@ do $$ declare p jsonb; begin
 end $$;
 reset role;
 
+-- a confirmation that arrives after the 5-minute wait still counts (0024): the reply WAS typed, so it must not be
+-- offered for sending again; a late failure, or a reply that expired unsent, changes nothing
+set role service_role;
+do $$ declare v_b5 uuid; v_b6 uuid; late_fail boolean; late_ok boolean; expired_ok boolean; begin
+  select id into v_b5 from whatsapp_outbox where message_id = 'd0000000-0000-0000-0000-0000000000b5';
+  select id into v_b6 from whatsapp_outbox where message_id = 'd0000000-0000-0000-0000-0000000000b6';
+  late_fail := fn_wa_bridge_ack(t_bb(), v_b5, false, null, 'send_failed');
+  late_ok := fn_wa_bridge_ack(t_bb(), v_b5, true, 'true_966501110006@c.us_LATE');
+  expired_ok := fn_wa_bridge_ack(t_bb(), v_b6, true, 'true_966501110006@c.us_X');
+  perform t_record('WB29 a late confirmation turns "no_ack" into sent; a late failure or an expired reply changes nothing',
+    not late_fail and late_ok and not expired_ok
+    and (select status from whatsapp_outbox where id = v_b5) = 'sent'
+    and (select meta->>'delivery' = 'sent' and not (meta ? 'error') from conversation_messages where id = 'd0000000-0000-0000-0000-0000000000b5')
+    and (select status from whatsapp_outbox where id = v_b6) = 'expired',
+    format('fail=%s ok=%s expired=%s', late_fail, late_ok, expired_ok));
+end $$;
+reset role;
+
 select t_blogin('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 set role authenticated;
 do $$ declare n int; begin
@@ -241,5 +259,5 @@ select count(*) filter (where ok) as passed, count(*) filter (where ok is not tr
 do $$ begin
   if exists (select 1 from test_results where ok is not true) then raise exception 'WHATSAPP BRIDGE TESTS FAILED'; end if;
   -- a statement that errors before recording its check would otherwise just be missing
-  if (select count(*) from test_results) < 30 then raise exception 'WHATSAPP BRIDGE TESTS INCOMPLETE: % of 30 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 31 then raise exception 'WHATSAPP BRIDGE TESTS INCOMPLETE: % of 31 checks ran', (select count(*) from test_results); end if;
 end $$;

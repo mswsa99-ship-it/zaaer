@@ -6,14 +6,16 @@
  * POST { action: "poll", status, phone?, name?, version?, detail?, wait? }
  *   heartbeat + the staff replies waiting to be typed (long poll, up to `wait` seconds, ≤ 25)
  *   → { ok, enabled, auto_reply, branch_name, display_phone, outbox: [{ id, chat_id, text }] }
- * POST { action: "message", id, chat, phone?, name?, type, text, ts? }      a guest wrote
- *   → { ok, replies: string[], silent?: reason, duplicate?: true }
+ * POST { action: "message", id, chat, phone?, linked?, name?, type, text, ts?, answer? }      a guest wrote
+ *   → { ok, replies: string[], turn?, silent?: reason, duplicate?: true }
  *     The same conversation as on the Cloud API (_shared/wa_flow.ts + ai-reception), typed as plain text with
  *     numbered options (_shared/wa_text.ts). "silent": recorded for staff only — the owner switched auto-reply off,
- *     a receptionist is handling this chat, or the message is from long ago.
- * POST { action: "human", id, chat, phone?, text }   a receptionist answered in WhatsApp itself → the assistant steps
- *   back in that chat for the branch's pause, and the reply appears in the inbox → { ok }
+ *     a receptionist is handling this chat, the message is from long ago, or the program keeps the chat quiet
+ *     (answer: false). `linked`: the number the program is linked to; another than the branch's → 409 wrong_number.
+ * POST { action: "human", id, chat, phone?, linked?, text }   a receptionist answered in WhatsApp itself → the assistant
+ *   steps back in that chat for the branch's pause, and the reply appears in the inbox → { ok }
  * POST { action: "ack", id, ok, wa_id?, error? }      a staff reply was typed (or could not be) → { ok }
+ * POST { action: "undelivered", turn, reason }        the replies of `turn` could not be typed → shown so in the inbox
  *
  * The logic is _shared/wa_bridge.ts (the demo's WhatsApp simulator runs the same code against its own store).
  */

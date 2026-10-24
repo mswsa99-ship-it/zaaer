@@ -58,7 +58,12 @@ function bridgeLine(live: WaChannelRow): { icon: JSX.Element; text: string; cls:
   }
   if (live.bridge_status === "connected") return { icon: <Wifi className="h-4 w-4" />, text: `متصل — ${live.bridge_phone ? `واتساب مربوط بالرقم +${live.bridge_phone}` : "واتساب الفرع مربوط"}${live.bridge_name ? ` (${live.bridge_name})` : ""}.`, cls: "bg-success-500/10 text-success-600" };
   if (live.bridge_status === "qr") return { icon: <QrCode className="h-4 w-4" />, text: "البرنامج يعمل وينتظر مسح رمز QR من جوال الفرع: واتساب ← الأجهزة المرتبطة ← ربط جهاز.", cls: "bg-warning-500/10 text-warning-600" };
-  if (live.bridge_status === "disconnected") return { icon: <AlertTriangle className="h-4 w-4" />, text: `واتساب غير مربوط${live.last_error ? ` (${live.last_error})` : ""}. امسح الرمز من جديد في نافذة البرنامج.`, cls: "bg-danger-500/10 text-danger-600" };
+  if (live.bridge_status === "disconnected") {
+    const why = live.last_error ?? "";
+    if (why.startsWith("wrong_number")) return { icon: <AlertTriangle className="h-4 w-4" />, text: `المربوط في البرنامج جوال آخر غير رقم الفرع${live.bridge_phone ? ` (+${live.bridge_phone})` : ""} — البرنامج لا يرد على أي رسالة ولا ينقل شيئًا منه. من ذلك الجوال: واتساب ← الأجهزة المرتبطة ← تسجيل الخروج من هذا الكمبيوتر، ثم امسح الرمز من جوال الفرع. وإن كان رقم الفرع المكتوب هنا هو الخطأ فصحّحه.`, cls: "bg-danger-500/10 text-danger-600" };
+    if (why === "send_failed" || why === "health_check") return { icon: <AlertTriangle className="h-4 w-4" />, text: "واتساب ويب توقف عن الإرسال أو الاستجابة — البرنامج يعيد فتحه تلقائيًا. إن تكرر هذا فنزّل البرنامج من جديد من هذه الصفحة.", cls: "bg-warning-500/10 text-warning-600" };
+    return { icon: <AlertTriangle className="h-4 w-4" />, text: `واتساب غير مربوط${why ? ` (${why})` : ""}. امسح الرمز من جديد في نافذة البرنامج.`, cls: "bg-danger-500/10 text-danger-600" };
+  }
   return { icon: <Spinner className="h-4 w-4" />, text: "البرنامج يبدأ التشغيل…", cls: "bg-ink-50 text-ink-500" };
 }
 

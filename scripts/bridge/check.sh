@@ -7,7 +7,8 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 for f in "$ROOT"/bridge/src/*.mjs; do node --check "$f"; done
 head -c 4096 /dev/urandom > "$T/node.exe"
-NODE_EXE="$T/node.exe" bash "$ROOT/scripts/bridge/package.sh" "$T/out" > /dev/null
+# a relative output folder, as the staging pipeline passes it (dist/bridge)
+(cd "$T" && NODE_EXE="$T/node.exe" bash "$ROOT/scripts/bridge/package.sh" out > /dev/null)
 (cd "$T" && unzip -q out/zaaer-whatsapp-bridge.zip)
 P="$T/zaaer-whatsapp-bridge"
 for f in start.bat install-startup.bat uninstall-startup.bat README-AR.txt package.json src/index.mjs src/core.mjs node/node.exe node/VERSION \

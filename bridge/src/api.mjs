@@ -26,5 +26,6 @@ export function createApi({ server, key }, { fetchImpl = globalThis.fetch, timeo
     human: (b) => call("human", b, 30_000),
     poll: (b) => call("poll", b, ((b?.wait ?? 0) + 20) * 1000),
     ack: (b) => call("ack", b, 30_000),
+    undelivered: (b) => call("undelivered", b, 30_000),
   };
 }

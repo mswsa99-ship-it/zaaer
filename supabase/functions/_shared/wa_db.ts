@@ -67,6 +67,11 @@ export function dbPorts(db: Db, ch: WaBranch, c: WaContact, send: (payload: Reco
       return error || !data?.token ? null : String(data.token);
     },
     async bindThread(id, guestToken) { await db.from("conversations").update({ guest_token: guestToken, last_message_at: now() }).eq("id", id); },
+    async recentBot(id, withinMs) {
+      const { data } = await db.from("conversation_messages").select("content").eq("conversation_id", id).eq("sender", "assistant")
+        .gte("created_at", new Date(Date.now() - withinMs).toISOString()).order("created_at", { ascending: false }).limit(5);
+      return ((data ?? []) as Array<{ content: string }>).map((r) => r.content);
+    },
 
     async ask(thread, message) {
       try {

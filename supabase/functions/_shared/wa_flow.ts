@@ -23,6 +23,8 @@ export const WA_STATUS_AR: Record<string, string> = {
 const CURRENT = new Set(["draft", "pending_verification", "confirmed", "checked_in"]);
 /** a thread is the guest's conversation with one branch; after this long without messages a new one starts */
 export const WA_THREAD_HOURS = 24;
+/** the "text only" notice is not repeated within this time (an album of photos arrives as one message per photo) */
+export const WA_NOTICE_REPEAT_MS = 3 * 60_000;
 
 export interface WaBooking {
   ref: string; internal_ref: string; status: string; check_in: string; check_out: string; nights: number;
@@ -49,6 +51,8 @@ export interface WaFlowPorts {
   bindThread(threadId: string, guestToken: string): Promise<void>;
   /** the reception assistant for a free-text message; null when it could not be reached */
   ask(thread: WaThread, message: string): Promise<WaAssistantAnswer | null>;
+  /** what the assistant said in this thread during the last `withinMs` (so an album of photos gets one notice, not one each) */
+  recentBot?(threadId: string, withinMs: number): Promise<string[]>;
   /** one WhatsApp message (Cloud API payload without messaging_product) */
   send(payload: Record<string, unknown>): Promise<unknown>;
 }
@@ -135,9 +139,13 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
 
   // ---- not text: say what works (documents are never taken in the chat) ----
   if (!["text", "interactive", "button"].includes(m.type)) {
+    // the notice once: the next photos of an album (each one a message) are recorded without repeating it
+    const said = fresh ? [] : ((await p.recentBot?.(t.id, WA_NOTICE_REPEAT_MS).catch(() => [])) ?? []);
     await saveGuest(`[${m.type}]`);
-    await p.send(buttonsPayload(m.from, WA_TEXTS.textOnly, [{ id: BTN.BOOKINGS, title: "حجوزاتي" }, { id: BTN.HUMAN, title: "التحدث مع موظف" }]));
-    await saveBot(WA_TEXTS.textOnly);
+    if (!said.includes(WA_TEXTS.textOnly)) {
+      await p.send(buttonsPayload(m.from, WA_TEXTS.textOnly, [{ id: BTN.BOOKINGS, title: "حجوزاتي" }, { id: BTN.HUMAN, title: "التحدث مع موظف" }]));
+      await saveBot(WA_TEXTS.textOnly);
+    }
     await p.touch(t.id);
     return;
   }

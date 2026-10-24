@@ -1,5 +1,5 @@
 /**
- * The guest's WhatsApp conversation (_shared/wa_flow.ts) — WF01–WF14. The same code runs in whatsapp-webhook (database
+ * The guest's WhatsApp conversation (_shared/wa_flow.ts) — WF01–WF15. The same code runs in whatsapp-webhook (database
  * + Cloud API) and in the demo's WhatsApp simulator; here it runs against fakes, so every branch of the flow is pinned.
  */
 import { describe, it, expect } from "vitest";
@@ -167,5 +167,20 @@ describe("WhatsApp conversation flow", () => {
     expect(guest).not.toContain("0551234567");
     expect(guest).not.toContain("1012345678");
     expect(guest).toContain("4567");
+  });
+
+  it("WF15 an album (one message per photo) gets the «text only» notice once; every photo is still recorded", async () => {
+    const w = world();
+    // what the assistant said in the thread lately, as the database port reports it
+    w.ports.recentBot = async (thread) => w.saved.filter((s) => s.thread === thread && s.sender === "assistant").map((s) => s.content);
+    const photo = (): WaInbound => ({ phoneNumberId: "1", from: FROM, id: "p" + Math.random(), type: "image", text: "" });
+    for (let i = 0; i < 4; i++) await runWaFlow(photo(), w.ports);
+    expect(w.sent).toHaveLength(1);
+    expect(bodyOf(w.sent[0])).toBe(WA_TEXTS.textOnly);
+    expect(w.saved.filter((s) => s.sender === "guest").map((s) => s.content)).toEqual(["[image]", "[image]", "[image]", "[image]"]);
+    // without that port (an older caller) every photo still gets its notice, as before
+    const old = world();
+    for (let i = 0; i < 2; i++) await runWaFlow(photo(), old.ports);
+    expect(old.sent).toHaveLength(2);
   });
 });

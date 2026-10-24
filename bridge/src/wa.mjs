@@ -18,10 +18,13 @@ export function toMsg(m) {
 export function waAdapter(client) {
   const chat = (id) => client.getChatById(id);
   return {
+    /** { id } of the sent message; { id: null } when WhatsApp did not confirm it (the caller treats that as not sent) */
     async sendText(chatId, text) {
       const m = await client.sendMessage(chatId, text, { linkPreview: false });
       return { id: m?.id?._serialized ?? null };
     },
+    /** WhatsApp Web's own connection state ("CONNECTED" when working) */
+    async state() { return client.getState(); },
     async markSeen(chatId) { await client.sendSeen(chatId); },
     async typing(chatId) { await (await chat(chatId)).sendStateTyping(); },
     async clearTyping(chatId) { await (await chat(chatId)).clearState(); },
@@ -32,14 +35,18 @@ export function waAdapter(client) {
       const pn = r?.[0]?.pn;
       return pn ? String(pn).split("@")[0] : null;
     },
-    /** one-to-one chats with unread messages: their latest unread guest messages */
+    /**
+     * one-to-one chats with unread messages: their latest unread guest messages. A chat a receptionist marked unread
+     * by hand (WhatsApp reports -1) has no unread message: it is theirs, and is left alone.
+     */
     async unreadChats(maxPerChat = 5) {
       const out = [];
       for (const c of await client.getChats()) {
         const id = c?.id?._serialized ?? "";
-        if (c.isGroup || !c.unreadCount || !/^\d{5,20}@(c\.us|lid)$/.test(id)) continue;
-        const msgs = await c.fetchMessages({ limit: Math.min(c.unreadCount, maxPerChat), fromMe: false });
-        out.push({ chatId: id, messages: msgs.map(toMsg) });
+        const unread = Number(c?.unreadCount) || 0;
+        if (c.isGroup || unread <= 0 || !/^\d{5,20}@(c\.us|lid)$/.test(id)) continue;
+        const msgs = await c.fetchMessages({ limit: Math.max(1, Math.min(unread, maxPerChat)), fromMe: false });
+        out.push({ chatId: id, messages: msgs.slice(-Math.min(unread, maxPerChat)).map(toMsg) });
       }
       return out;
     },
