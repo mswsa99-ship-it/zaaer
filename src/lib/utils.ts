@@ -82,6 +82,25 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/** Arabic count with the right word form: 1 → واحد, 2 → المثنى, 3–10 → الجمع, 11+ → المفرد المنصوب/المجرور. */
+export function arabicCount(n: number, [one, two, few, many]: readonly [string, string, string, string]): string {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+/** How long ago, in Arabic: «الآن», «منذ دقيقتين», «منذ 3 ساعات», «منذ 11 يومًا». */
+export function sinceArabic(iso: string, now: number = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000));
+  if (!Number.isFinite(minutes)) return "";
+  if (minutes < 1) return "الآن";
+  if (minutes < 60) return "منذ " + arabicCount(minutes, ["دقيقة", "دقيقتين", "دقائق", "دقيقة"]);
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return "منذ " + arabicCount(hours, ["ساعة", "ساعتين", "ساعات", "ساعة"]);
+  return "منذ " + arabicCount(Math.floor(hours / 24), ["يوم", "يومين", "أيام", "يومًا"]);
+}
+
 /**
  * Business dates ("today", arrivals, report days) are the PROPERTY's dates, not UTC's and not the browser's:
  * between 00:00 and 03:00 in Riyadh the UTC date is still yesterday. Same rule as fn_branch_today() in SQL

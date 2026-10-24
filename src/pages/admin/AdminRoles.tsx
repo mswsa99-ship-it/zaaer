@@ -10,7 +10,7 @@ const permissions = [
   { name: "مطابقة الهويات", owner: true, manager: true, supervisor: true, finance: false, housekeeping: false },
   { name: "مراجعة المدفوعات", owner: true, manager: true, supervisor: true, finance: true, housekeeping: false },
   { name: "اعتماد الدخول وتسليم الرمز", owner: true, manager: true, supervisor: true, finance: false, housekeeping: false },
-  { name: "عرض رموز صناديق المفاتيح", owner: true, manager: true, supervisor: true, finance: false, housekeeping: false },
+  { name: "«الرموز»: عرض رمز الصندوق وتغييره بعد المغادرة (خدمة الغرف: لا وحدة فيها نزيل مقيم)", owner: true, manager: true, supervisor: true, finance: false, housekeeping: true },
   { name: "عرض السجلات المالية", owner: true, manager: true, supervisor: false, finance: true, housekeeping: false },
   { name: "مهام النظافة", owner: true, manager: true, supervisor: true, finance: false, housekeeping: true },
   { name: "إدارة الموظفين والصلاحيات", owner: true, manager: false, supervisor: false, finance: false, housekeeping: false },

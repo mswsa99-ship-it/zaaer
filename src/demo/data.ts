@@ -102,7 +102,15 @@ export function seed(): Store {
   rooms.push({ id: fixed(199), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-1", floor: 1, status: "ready", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   rooms.push({ id: fixed(198), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-2", floor: 1, status: "available", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   put("rooms", rooms);
-  put("keyboxes", rooms.filter((r) => r.branch_id === BRANCH_A).map((r) => ({ id: uid(), room_id: r.id, branch_id: BRANCH_A, code_encrypted: null, code_version: 3, code_status: r.cleanliness !== "clean" || r.room_number === "103" ? "needs_change" : "active", last_changed_at: ts(-2), last_changed_by: STAFF.supervisor.id, field_tested: r.cleanliness === "clean", last_reservation_id: null, requires_rotation: true, last_delivered_at: r.status === "occupied" ? ts(-1, 17) : null, created_at: ts(-400) })));
+  // Key boxes of branch A. The demo keeps a synthetic code in the browser (code_plain) so «الرموز» can show and change it;
+  // the real system keeps it encrypted on the server only. Units left by a guest wait for a new code (red) since then.
+  put("keyboxes", rooms.filter((r) => r.branch_id === BRANCH_A).map((r, i) => {
+    const change = r.cleanliness !== "clean" || r.room_number === "103";
+    return { id: uid(), room_id: r.id, branch_id: BRANCH_A, code_encrypted: null, code_plain: String(2000 + ((i * 7919) % 7000)), code_version: 3,
+      code_status: change ? "needs_change" : "active", needs_change_since: change ? new Date(Date.now() - (35 + i * 15) * 60_000).toISOString() : null,
+      last_changed_at: ts(-2), last_changed_by: STAFF.supervisor.id, field_tested: r.cleanliness === "clean", last_reservation_id: null, requires_rotation: true,
+      last_delivered_at: r.status === "occupied" ? ts(-1, 17) : null, created_at: ts(-400) };
+  }));
   put("facilities", [
     { id: fixed(430), organization_id: ORG, branch_id: BRANCH_A, block_id: blockMain, floor_id: fl.g, name: "الممر الرئيسي", description: "ممر الطابق الأرضي", images: [], is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: STAFF.owner.id, created_at: ts(-400), updated_at: ts(-400) },
     { id: fixed(431), organization_id: ORG, branch_id: BRANCH_A, block_id: blockMain, floor_id: null, name: "البوابة الرئيسية", description: null, images: [], is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: STAFF.owner.id, created_at: ts(-400), updated_at: ts(-400) },

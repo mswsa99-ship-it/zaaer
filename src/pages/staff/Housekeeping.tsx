@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Sparkles, CheckCircle2, KeyRound, Wrench, Play, Plus, UserPlus, XCircle, Landmark, DoorClosed } from "lucide-react";
+import { Sparkles, CheckCircle2, Wrench, Play, Plus, UserPlus, XCircle, Landmark, DoorClosed } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
@@ -12,18 +12,15 @@ import { formatDateTime } from "../../lib/utils";
 
 interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
 interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string }
-interface KeyboxRow { id: string; room_id: string; code_status: string; code_version: number; field_tested: boolean; room?: { room_number: string } | null }
 interface Opt { id: string; name: string }
-const CODE_RE = /^\d{4,8}$/;
 
 export default function Housekeeping() {
   const { profile } = useAuth();
   const { branchId, loading: branchLoading } = useBranch();
   const role = profile?.role;
-  const canRotate = role === "owner" || role === "manager" || role === "supervisor";
-  const canManage = canRotate;
+  const canManage = role === "owner" || role === "manager" || role === "supervisor";
 
-  const [tasks, setTasks] = useState<Task[]>([]); const [rooms, setRooms] = useState<RoomLite[]>([]); const [keyboxes, setKeyboxes] = useState<KeyboxRow[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]); const [rooms, setRooms] = useState<RoomLite[]>([]);
   const [facilities, setFacilities] = useState<Opt[]>([]); const [types, setTypes] = useState<Opt[]>([]); const [staff, setStaff] = useState<Opt[]>([]);
   const [loading, setLoading] = useState(true); const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);
@@ -31,21 +28,19 @@ export default function Housekeeping() {
   const [create, setCreate] = useState<null | { target: "room" | "facility"; room_id?: string; facility_id?: string; task_type_id?: string; priority: string; assignee_id?: string; description?: string }>(null);
   const [cancelTask, setCancelTask] = useState<Task | null>(null); const [cancelReason, setCancelReason] = useState("");
   const [assignTask, setAssignTask] = useState<Task | null>(null); const [assignee, setAssignee] = useState("");
-  const [rotateTarget, setRotateTarget] = useState<KeyboxRow | null>(null); const [code1, setCode1] = useState(""); const [code2, setCode2] = useState(""); const [tested, setTested] = useState(false); const [rotateError, setRotateError] = useState<string | null>(null);
   const [maintTarget, setMaintTarget] = useState<RoomLite | null>(null); const [maintTitle, setMaintTitle] = useState(""); const [maintDesc, setMaintDesc] = useState("");
 
   const load = useCallback(async () => {
     if (!branchId) { setLoading(false); return; }
-    const [t, r, k, f, tt, s] = await Promise.all([
+    const [t, r, f, tt, s] = await Promise.all([
       supabase.from("housekeeping_tasks").select("id, status, priority, room_id, facility_id, task_type_name_snapshot, assignee_id, scheduled_start, description, created_at, version, room:rooms(room_number, status, cleanliness), facility:facilities(name), assignee:staff_profiles!housekeeping_tasks_assignee_id_fkey(full_name)").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(300),
       supabase.from("rooms").select("id, room_number, status, cleanliness").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("room_number"),
-      supabase.from("keyboxes").select("id, room_id, code_status, code_version, field_tested, room:rooms(room_number)").eq("branch_id", branchId).eq("code_status", "needs_change"),
       supabase.from("facilities").select("id, name").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("task_types").select("id, name, code").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("staff_profiles").select("id, full_name, role").eq("is_active", true),
     ]);
     if (t.error) setError(toArabicError(t.error));
-    setTasks((t.data as unknown as Task[]) ?? []); setRooms((r.data as RoomLite[]) ?? []); setKeyboxes(k.error ? [] : ((k.data as unknown as KeyboxRow[]) ?? []));
+    setTasks((t.data as unknown as Task[]) ?? []); setRooms((r.data as RoomLite[]) ?? []);
     setFacilities((f.data as Opt[]) ?? []); setTypes(((tt.data ?? []) as Opt[])); setStaff(((s.data ?? []) as { id: string; full_name: string }[]).map((x) => ({ id: x.id, name: x.full_name })));
     setLoading(false);
   }, [branchId]);
@@ -119,22 +114,6 @@ export default function Housekeeping() {
         <div className="space-y-2">{doneTasks.map((t) => <div key={t.id} className="card flex items-center justify-between px-4 py-2 text-sm"><span>{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name} · {t.task_type_name_snapshot} · {t.assignee?.full_name ?? "—"}</span><Badge className={t.status === "completed" ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge></div>)}</div>
       ))}
 
-      {canRotate && (
-        <div className="mt-8">
-          <SectionTitle title="صناديق تحتاج تغيير الرمز" subtitle={`${keyboxes.length} صندوق — النظافة لا تعني جاهزية الدخول`} />
-          {keyboxes.length === 0 ? <EmptyState icon={<KeyRound className="h-10 w-10" />} title="جميع الرموز محدّثة" /> : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {keyboxes.map((kb) => (
-                <Card key={kb.id} className="flex items-center justify-between">
-                  <div><p className="text-sm font-medium text-ink-800">وحدة {kb.room?.room_number ?? "—"}</p><p className="mt-0.5 text-xs text-ink-400">الإصدار {kb.code_version} · {kb.field_tested ? "مُختبر" : "غير مُختبر"}</p></div>
-                  <button onClick={() => { setRotateTarget(kb); setCode1(""); setCode2(""); setTested(false); setRotateError(null); }} className="btn-outline text-xs"><KeyRound className="h-3.5 w-3.5" /> تغيير الرمز</button>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* create task */}
       <Modal open={!!create} title="مهمة جديدة" onClose={() => setCreate(null)}>
         {create && (
@@ -168,17 +147,6 @@ export default function Housekeeping() {
           <ReasonInput value={cancelReason} onChange={setCancelReason} />
           <Submit label="إلغاء المهمة" onCancel={() => setCancelTask(null)} danger />
         </ActionForm>
-      </Modal>
-      <Modal open={!!rotateTarget} title={`تغيير رمز الصندوق · وحدة ${rotateTarget?.room?.room_number ?? ""}`} onClose={() => setRotateTarget(null)}>
-        <form onSubmit={async (e) => { e.preventDefault(); if (!rotateTarget) return; setRotateError(null); if (!CODE_RE.test(code1)) { setRotateError("الرمز يجب أن يكون من 4 إلى 8 أرقام."); return; } if (code1 !== code2) { setRotateError("الرمزان غير متطابقين."); return; }
-          try { const r = await staffApi.rotateKeybox(rotateTarget.room_id, code1, tested); setNotice(`تم تغيير الرمز (الإصدار ${r.code_version}). حالة الوحدة: ${ROOM_STATUS_LABELS[r.room_status as RoomStatus] ?? r.room_status}`); setRotateTarget(null); await load(); } catch (err) { setRotateError(toArabicError(err)); } }} className="space-y-3">
-          <p className="text-xs text-ink-400">الرمز من 4 إلى 8 أرقام ويجب أن يختلف عن السابق. لا يُخزَّن في المتصفح.</p>
-          <Field label="الرمز الجديد"><input type="password" inputMode="numeric" autoComplete="off" value={code1} onChange={(e) => setCode1(e.target.value.replace(/\D/g, "").slice(0, 8))} className="input" dir="ltr" /></Field>
-          <Field label="تأكيد الرمز"><input type="password" inputMode="numeric" autoComplete="off" value={code2} onChange={(e) => setCode2(e.target.value.replace(/\D/g, "").slice(0, 8))} className="input" dir="ltr" /></Field>
-          <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={tested} onChange={(e) => setTested(e.target.checked)} /> تم اختبار الرمز ميدانيًا</label>
-          {rotateError && <ErrorBanner message={rotateError} />}
-          <div className="flex gap-2"><button type="submit" disabled={!CODE_RE.test(code1) || code1 !== code2} className="btn-primary text-sm"><KeyRound className="h-4 w-4" /> حفظ الرمز</button><button type="button" onClick={() => setRotateTarget(null)} className="btn-outline text-sm">إلغاء</button></div>
-        </form>
       </Modal>
       <Modal open={!!maintTarget} title={`بلاغ صيانة · وحدة ${maintTarget?.room_number ?? ""}`} onClose={() => setMaintTarget(null)}>
         <ActionForm onSubmit={async () => { if (!maintTitle.trim()) throw new Error("VALIDATION: title"); if (maintTarget) await staffApi.createMaintenance(maintTarget.id, maintTitle.trim(), maintDesc.trim() || null); setMaintTarget(null); setNotice("تم فتح بلاغ الصيانة؛ الوحدة الآن خارج التسكين حتى الإغلاق."); await load(); }}>

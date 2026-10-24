@@ -5,8 +5,8 @@
 import { test, expect } from "./fixtures";
 
 const GUEST = ["/", "/reception", "/booking/lookup", "/booking/new", "/kiosk", "/privacy", "/terms"];
-const STAFF = ["/staff/dashboard", "/staff/arrivals", "/staff/reservations", "/staff/reservations/new", "/staff/identity-verification", "/staff/payments", "/staff/access-approvals", "/staff/rooms", "/staff/housekeeping", "/staff/tickets", "/staff/inbox"];
-const ADMIN = ["/admin/dashboard", "/admin/branches", "/admin/room-categories", "/admin/rooms", "/admin/structure", "/admin/facilities", "/admin/task-types", "/admin/services", "/admin/availability", "/admin/availability-rules", "/admin/reservations", "/admin/guests", "/admin/finance", "/admin/keyboxes", "/admin/staff", "/admin/roles", "/admin/booking-sources", "/admin/ai-settings", "/admin/whatsapp", "/admin/payment-providers", "/admin/policies", "/admin/knowledge", "/admin/reports", "/admin/audit-logs", "/admin/integrations", "/admin/assistant", "/admin/data-purge"];
+const STAFF = ["/staff/dashboard", "/staff/arrivals", "/staff/reservations", "/staff/reservations/new", "/staff/identity-verification", "/staff/payments", "/staff/access-approvals", "/staff/rooms", "/staff/housekeeping", "/staff/codes", "/staff/tickets", "/staff/inbox"];
+const ADMIN = ["/admin/dashboard", "/admin/branches", "/admin/room-categories", "/admin/rooms", "/admin/structure", "/admin/facilities", "/admin/task-types", "/admin/services", "/admin/availability", "/admin/availability-rules", "/admin/reservations", "/admin/guests", "/admin/finance", "/admin/staff", "/admin/roles", "/admin/booking-sources", "/admin/ai-settings", "/admin/whatsapp", "/admin/payment-providers", "/admin/policies", "/admin/knowledge", "/admin/reports", "/admin/audit-logs", "/admin/integrations", "/admin/assistant", "/admin/data-purge"];
 
 test("S01 guest routes render", async ({ page, go }) => {
   for (const path of GUEST) {

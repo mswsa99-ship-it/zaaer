@@ -100,6 +100,7 @@ function project(table: string, row: Row, sel: string): Row {
   const { cols, embeds } = parseSelect(sel);
   const out: Row = {};
   if (cols.includes("*") || cols.length === 0) Object.assign(out, row); else for (const c of cols) out[c] = row[c];
+  if (table === "keyboxes") delete out.code_plain;   // like code_encrypted on the server: never readable through a query, only fn_keybox_reveal
   for (const e of embeds) {
     const col = (e.hint && FK_HINT[e.hint]) || FK[table]?.[e.table];
     if (!col) { out[e.alias] = null; continue; }
@@ -264,9 +265,11 @@ function createCleaningTask(branchId: string, roomId: string, resId: string | nu
   const t = roomCleaningType(branchId); const rm = byId("rooms", roomId)!; rm.cleanliness = "dirty"; rm.status = "cleaning"; rm.updated_at = nowISO();
   const existing = T("housekeeping_tasks").find((h) => h.room_id === roomId && h.reservation_id === resId && ["pending", "in_progress"].includes(h.status));
   if (!existing) T("housekeeping_tasks").push({ id: uid(), organization_id: ORG, branch_id: branchId, room_id: roomId, facility_id: null, task_type_id: t.id, task_type_name_snapshot: t.name, reservation_id: resId, priority, status: "pending", assignee_id: null, scheduled_start: nowISO(), scheduled_end: null, started_at: null, completed_at: null, completed_by: null, cancelled_at: null, cancel_reason: null, description: desc, result_note: null, images: [], version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() });
-  const kb = T("keyboxes").find((k) => k.room_id === roomId); if (kb) { kb.code_status = "needs_change"; kb.field_tested = false; }
+  const kb = T("keyboxes").find((k) => k.room_id === roomId); if (kb) { if (kb.code_status !== "needs_change" || !kb.needs_change_since) kb.needs_change_since = nowISO(); kb.code_status = "needs_change"; kb.field_tested = false; }
   emit("housekeeping_tasks"); emit("rooms"); emit("keyboxes");
 }
+/** a guest is in house in this unit (housekeeping never sees or changes its code) — mirrors fn_room_guest_in_house */
+const guestInHouse = (roomId: string) => T("reservations").some((r) => r.room_id === roomId && r.status === "checked_in");
 const guestName = (resId: string) => T("reservation_guests").find((g) => g.reservation_id === resId && g.is_primary)?.full_name ?? null;
 const roomNo = (roomId: string | null) => (roomId ? byId("rooms", roomId)?.room_number ?? null : null);
 
@@ -409,8 +412,57 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_hk_assign_task: ({ p_task, p_assignee }) => { requireRole("owner", "manager", "supervisor"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); if (p_assignee && !staffInBranch(p_assignee, t.branch_id)) throw new Error("ASSIGNEE_NOT_IN_BRANCH"); t.assignee_id = p_assignee; t.version++; emit("housekeeping_tasks"); return { ok: true }; },
   fn_hk_set_cleanliness: ({ p_room, p_state, p_reason }) => { requireRole("owner", "manager", "supervisor", "housekeeping"); const rm = byId("rooms", p_room); if (!rm) throw new Error("ROOM_NOT_FOUND"); requireBranch(rm.branch_id); if (p_state === "clean" && T("housekeeping_tasks").some((h) => h.room_id === p_room && ["pending", "in_progress"].includes(h.status) && byId("task_types", h.task_type_id)?.code === "room_cleaning")) throw new Error("OPEN_CLEANING_TASK"); const before = rm.cleanliness; rm.cleanliness = p_state; recomputeRoomReady(p_room); audit(rm.branch_id, "room.cleanliness_changed", "room", p_room, { before: { cleanliness: before }, after: { cleanliness: p_state }, reason: p_reason }); return { ok: true, room_status: rm.status }; },
   fn_staff_complete_cleaning: ({ p_task }) => rpcs.fn_hk_complete_task({ p_task }),
-  fn_staff_rotate_keybox_code: ({ p_room, p_new_code, p_field_tested }) => { requireRole("owner", "manager", "supervisor"); if (!/^\d{4,8}$/.test(p_new_code)) throw new Error("VALIDATION: code_must_be_4_to_8_digits"); const kb = T("keyboxes").find((k) => k.room_id === p_room); if (!kb) throw new Error("ROOM_NOT_FOUND"); T("code_rotation_events").unshift({ id: uid(), room_id: p_room, from_version: kb.code_version, to_version: kb.code_version + 1, field_tested: !!p_field_tested, created_at: nowISO() }); Object.assign(kb, { code_version: kb.code_version + 1, code_status: "active", field_tested: !!p_field_tested, last_changed_at: nowISO(), last_changed_by: staffId() }); emit("keyboxes"); emit("code_rotation_events"); const st = recomputeRoomReady(p_room); return { ok: true, room_status: st, code_version: kb.code_version }; },
-  fn_staff_mark_keybox_tested: ({ p_room }) => { requireRole("owner", "manager", "supervisor"); const kb = T("keyboxes").find((k) => k.room_id === p_room); if (!kb) throw new Error("ROOM_NOT_FOUND"); kb.field_tested = true; emit("keyboxes"); return { ok: true, room_status: recomputeRoomReady(p_room) }; },
+  // «الرموز» (0025): housekeeping may see and change a unit's code — never with a guest in house; the same code is refused
+  fn_staff_rotate_keybox_code: ({ p_room, p_new_code, p_field_tested }) => {
+    requireRole("owner", "manager", "supervisor", "housekeeping"); const rm = byId("rooms", p_room); if (!rm) throw new Error("ROOM_NOT_FOUND"); requireBranch(rm.branch_id);
+    const inHouse = guestInHouse(p_room); if (inHouse && !hasRole("owner", "manager", "supervisor")) throw new Error("GUEST_IN_HOUSE");
+    if (!/^\d{4,8}$/.test(String(p_new_code ?? ""))) throw new Error("VALIDATION: code_must_be_4_to_8_digits");
+    const tested = !!p_field_tested; let kb = T("keyboxes").find((k) => k.room_id === p_room); let before: Row;
+    if (!kb) {
+      before = { code_status: "none" };
+      kb = { id: uid(), room_id: p_room, branch_id: rm.branch_id, code_encrypted: null, code_plain: p_new_code, code_version: 1, code_status: "active", needs_change_since: null, last_changed_at: nowISO(), last_changed_by: staffId(), field_tested: tested, last_reservation_id: null, requires_rotation: true, last_delivered_at: null, created_at: nowISO() };
+      T("keyboxes").push(kb); T("code_rotation_events").unshift({ id: uid(), keybox_id: kb.id, room_id: p_room, from_version: null, to_version: 1, rotated_by: staffId(), field_tested: tested, created_at: nowISO() });
+    } else {
+      before = { code_version: kb.code_version, code_status: kb.code_status, field_tested: kb.field_tested, needs_change_since: kb.needs_change_since ?? null };
+      if (kb.code_plain && kb.code_plain === p_new_code) throw new Error("CODE_MUST_DIFFER_FROM_PREVIOUS");
+      T("code_rotation_events").unshift({ id: uid(), keybox_id: kb.id, room_id: p_room, from_version: kb.code_version, to_version: kb.code_version + 1, rotated_by: staffId(), field_tested: tested, created_at: nowISO() });
+      Object.assign(kb, { code_plain: p_new_code, code_version: kb.code_version + 1, code_status: "active", needs_change_since: null, field_tested: tested, last_changed_at: nowISO(), last_changed_by: staffId(), last_reservation_id: null });
+    }
+    emit("keyboxes"); emit("code_rotation_events"); const st = recomputeRoomReady(p_room);
+    audit(rm.branch_id, "rotate_keybox_code", "room", p_room, { before, after: { code_version: kb.code_version, code_status: "active", field_tested: tested, room_status: st, guest_in_house: inHouse } });
+    return { ok: true, room_status: st, code_version: kb.code_version };
+  },
+  fn_staff_mark_keybox_tested: ({ p_room }) => {
+    requireRole("owner", "manager", "supervisor", "housekeeping"); const rm = byId("rooms", p_room); if (!rm) throw new Error("ROOM_NOT_FOUND"); requireBranch(rm.branch_id);
+    if (guestInHouse(p_room) && !hasRole("owner", "manager", "supervisor")) throw new Error("GUEST_IN_HOUSE");
+    const kb = T("keyboxes").find((k) => k.room_id === p_room); if (!kb || !kb.code_plain) throw new Error("NO_KEYBOX_CODE"); if (kb.code_status !== "active") throw new Error("CODE_NEEDS_CHANGE");
+    const was = kb.field_tested; kb.field_tested = true; emit("keyboxes"); const st = recomputeRoomReady(p_room);
+    audit(rm.branch_id, "keybox_field_tested", "room", p_room, { before: { field_tested: was }, after: { field_tested: true, code_version: kb.code_version, room_status: st } });
+    return { ok: true, room_status: st };
+  },
+  fn_keybox_board: ({ p_branch }) => {
+    requireRole("owner", "manager", "supervisor", "housekeeping"); requireBranch(p_branch); const full = hasRole("owner", "manager", "supervisor");
+    return T("rooms").filter((r) => r.branch_id === p_branch && !r.archived_at && r.is_active).sort((a, b) => (a.room_number < b.room_number ? -1 : 1)).map((rm) => {
+      const kb = T("keyboxes").find((k) => k.room_id === rm.id); const inHouse = guestInHouse(rm.id); const hasCode = !!kb?.code_plain;
+      const state = !kb ? "none" : kb.code_status !== "active" || !hasCode ? "change" : !kb.field_tested ? "untested" : "ok";
+      return { room_id: rm.id, room_number: rm.room_number, block: byId("blocks", rm.block_id)?.name ?? null, floor: byId("floors", rm.floor_id)?.name ?? null, room_status: rm.status, cleanliness: rm.cleanliness,
+        guest_in_house: inHouse, state, has_code: hasCode, code_version: kb?.code_version ?? null, field_tested: !!kb?.field_tested, needs_change_since: kb?.needs_change_since ?? null,
+        last_changed_at: kb?.last_changed_at ?? null, last_changed_by: byId("staff_profiles", kb?.last_changed_by)?.full_name ?? null, can_change: full || !inHouse, can_view: hasCode && (full || !inHouse) };
+    });
+  },
+  fn_keybox_alerts: ({ p_branch }) => {
+    requireRole("owner", "manager", "supervisor", "housekeeping"); requireBranch(p_branch);
+    const waiting = T("keyboxes").filter((k) => k.branch_id === p_branch && (k.code_status !== "active" || !k.code_plain)).map((k) => ({ k, rm: byId("rooms", k.room_id) })).filter((x) => x.rm && !x.rm.archived_at && x.rm.is_active)
+      .sort((a, b) => (a.k.needs_change_since ?? "~").localeCompare(b.k.needs_change_since ?? "~") || (a.rm!.room_number < b.rm!.room_number ? -1 : 1));
+    return { count: waiting.length, oldest_since: waiting.map((x) => x.k.needs_change_since).filter(Boolean).sort()[0] ?? null, rooms: waiting.map((x) => x.rm!.room_number) };
+  },
+  fn_keybox_reveal: ({ p_room }) => {
+    requireRole("owner", "manager", "supervisor", "housekeeping"); const rm = byId("rooms", p_room); if (!rm || rm.archived_at) throw new Error("ROOM_NOT_FOUND"); requireBranch(rm.branch_id);
+    const inHouse = guestInHouse(p_room); if (inHouse && !hasRole("owner", "manager", "supervisor")) throw new Error("GUEST_IN_HOUSE");
+    const kb = T("keyboxes").find((k) => k.room_id === p_room); if (!kb || !kb.code_plain) throw new Error("NO_KEYBOX_CODE");
+    audit(rm.branch_id, "keybox.code_viewed", "room", p_room, { after: { code_version: kb.code_version, code_status: kb.code_status, guest_in_house: inHouse } });
+    return { ok: true, code: kb.code_plain, code_version: kb.code_version };
+  },
   fn_staff_create_maintenance: ({ p_room, p_title, p_description }) => { requireRole("owner", "manager", "supervisor", "housekeeping"); nonEmpty(p_title, "title"); const rm = byId("rooms", p_room); if (!rm) throw new Error("ROOM_NOT_FOUND"); const id = uid(); T("maintenance_tickets").unshift({ id, room_id: p_room, branch_id: rm.branch_id, title: p_title, description: p_description ?? null, status: "open", created_by: staffId(), created_at: nowISO() }); if (!["occupied"].includes(rm.status)) rm.status = "maintenance"; emit("maintenance_tickets"); emit("rooms"); return { ok: true, ticket_id: id }; },
   fn_staff_resolve_maintenance: ({ p_ticket }) => { requireRole("owner", "manager", "supervisor"); const t = byId("maintenance_tickets", p_ticket); if (!t) throw new Error("TICKET_NOT_FOUND"); t.status = "resolved"; emit("maintenance_tickets"); const rm = byId("rooms", t.room_id)!; if (rm.status === "maintenance") rm.status = "available"; return { ok: true, room_status: recomputeRoomReady(t.room_id) }; },
   fn_staff_resolve_ticket: ({ p_ticket }) => { requireRole("owner", "manager", "supervisor"); const t = byId("human_handoff_tickets", p_ticket); if (!t) throw new Error("TICKET_NOT_FOUND"); Object.assign(t, { status: "resolved", resolved_by: staffId(), resolved_at: nowISO() }); emit("human_handoff_tickets"); return { ok: true }; },
@@ -497,7 +549,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_guest_session: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const ev = evaluate(r.id); return { reservation: { id: r.id, internal_ref: r.internal_ref, external_ref: r.external_ref, status: r.status, check_in: r.check_in, check_out: r.check_out, adults: r.adults, companions: r.companions, payment_status: r.payment_status, identity_status: r.identity_status, government_registration: r.government_registration, access_status: r.access_status, total_halalas: r.total_halalas, paid_halalas: r.paid_halalas, branch_name: byId("branches", r.branch_id)?.name_ar ?? null, room_number: roomNo(r.room_id), category_name: byId("room_categories", r.room_category_id)?.name_ar ?? null }, guests: T("reservation_guests").filter((g) => g.reservation_id === r.id).map((g) => ({ id: g.id, is_primary: g.is_primary, full_name: g.full_name, identity_type: g.identity_type, identity_number_last4: g.identity_number_last4, nationality: g.nationality, birth_date: g.birth_date, relationship: g.relationship, verification_status: g.verification_status, data_submitted: g.data_submitted })), access: { allowed: ev.allowed, reasons: ev.reasons }, expires_at: s.expires_at }; },
   fn_guest_submit: ({ p_token, p_guest_id, p_payload }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const p = p_payload ?? {}; if (!p.full_name || p.full_name.trim().split(/\s+/).length < 3) throw new Error("VALIDATION: full_name_three_parts"); if (!/^[12]\d{9}$/.test(String(p.identity_number ?? "")) && ["national_id", "iqama"].includes(p.identity_type)) throw new Error("VALIDATION: identity_number_format"); if (String(p.consent) !== "true") throw new Error("VALIDATION: consent_required"); let g = p_guest_id ? byId("reservation_guests", p_guest_id) : null; if (!g) { const n = T("reservation_guests").filter((x) => x.reservation_id === r.id).length; if (n >= r.adults + r.companions) throw new Error("GUEST_LIMIT_REACHED"); g = { id: uid(), reservation_id: r.id, guest_profile_id: null, is_primary: n === 0, full_name: "", identity_type: null, identity_number_last4: null, nationality: null, birth_date: null, phone: null, relationship: null, verification_status: "not_started", data_submitted: false, created_at: nowISO() }; T("reservation_guests").push(g); } if (g.verification_status === "verified") throw new Error("GUEST_ALREADY_VERIFIED"); Object.assign(g, { full_name: p.full_name, identity_type: p.identity_type, identity_number_last4: String(p.identity_number ?? "").slice(-4), nationality: p.nationality, birth_date: p.birth_date, relationship: p.relationship ?? null, phone: p.phone ?? g.phone, verification_status: "data_submitted", data_submitted: true }); const all = T("reservation_guests").filter((x) => x.reservation_id === r.id); r.identity_status = all.length >= r.adults + r.companions && all.every((x) => x.data_submitted) ? "pending_supervisor" : "data_submitted"; emit("reservation_guests"); emit("reservations"); return { ok: true, guest_id: g.id }; },
   fn_guest_submit_checkin: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; if (r.access_status === "locked") r.access_status = "eligibility_review"; emit("reservations"); return { ok: true, access_status: r.access_status }; },
-  fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const ev = evaluate(r.id); if (!ev.allowed || !["delivered", "acknowledged"].includes(r.access_status)) return { allowed: false, reasons: ev.allowed ? ["لم يُسلَّم الرمز بعد"] : ev.reasons }; return { allowed: true, code: "4" + String(1000 + (r.internal_ref.charCodeAt(2) * 7) % 8999), room_number: roomNo(r.room_id) }; },
+  fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const ev = evaluate(r.id); if (!ev.allowed || !["delivered", "acknowledged"].includes(r.access_status)) return { allowed: false, reasons: ev.allowed ? ["لم يُسلَّم الرمز بعد"] : ev.reasons }; const kb = T("keyboxes").find((k) => k.room_id === r.room_id); return { allowed: true, code: kb?.code_plain ?? "4" + String(1000 + (r.internal_ref.charCodeAt(2) * 7) % 8999), room_number: roomNo(r.room_id) }; },
   ...knowledgeRpcs({ T, byId, me, myBranches, hasRole, requireRole, requireBranch, checkVersion, audit, emit, staffId }),
 
   // ---- WhatsApp per branch (0021) + the reception computer (0023): the demo sends nothing; the WhatsApp simulator

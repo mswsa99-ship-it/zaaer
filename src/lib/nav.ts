@@ -24,6 +24,8 @@ export const ALL_STAFF: readonly StaffRole[] = ["owner", "manager", "supervisor"
 /** Roles that may see money (mirrors MONEY_ROLES on the server). */
 export const MONEY_ROLES: readonly StaffRole[] = ["owner", "manager", "supervisor", "finance"];
 export const ADMIN_ROLES: readonly StaffRole[] = ["owner", "manager"];
+/** «الرموز» — key-box codes: the supervisor and housekeeping (who change them after each departure), and management. */
+export const CODES_ROLES: readonly StaffRole[] = ["owner", "manager", "supervisor", "housekeeping"];
 const ADMIN_FINANCE: readonly StaffRole[] = ["owner", "manager", "finance"];
 const ADMIN_OPS: readonly StaffRole[] = ["owner", "manager", "supervisor", "finance"];
 
@@ -57,6 +59,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/access-approvals", label: "اعتماد الدخول", icon: KeyRound, area: "staff", roles: MONEY_ROLES },
   { path: "/staff/rooms", label: "لوحة الوحدات", icon: DoorClosed, area: "staff", roles: ALL_STAFF },
   { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
+  { path: "/staff/codes", label: "الرموز", icon: KeyRound, area: "staff", roles: CODES_ROLES },
   { path: "/staff/tickets", label: "البلاغات", icon: Wrench, area: "staff", roles: ALL_STAFF },
   { path: "/staff/inbox", label: "الوارد", icon: Inbox, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
 
@@ -76,7 +79,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/reservations", label: "الحجوزات", icon: BookCheck, area: "admin", group: "العمليات", roles: ADMIN_OPS },
   { path: "/admin/guests", label: "النزلاء", icon: Users, area: "admin", group: "العمليات", roles: ADMIN_OPS },
   { path: "/admin/finance", label: "المالية", icon: Wallet, area: "admin", group: "العمليات", roles: ADMIN_FINANCE },
-  { path: "/admin/keyboxes", label: "صناديق المفاتيح", icon: KeyRound, area: "admin", group: "العمليات", roles: ADMIN_ROLES },
+  // the key boxes moved to the one screen «الرموز» (/staff/codes); the old address still leads there
+  { path: "/admin/keyboxes", label: "الرموز", icon: KeyRound, area: "admin", roles: CODES_ROLES, hidden: true },
 
   { path: "/admin/staff", label: "الموظفون", icon: UserCog, area: "admin", group: "الإدارة", roles: ADMIN_ROLES, scope: "org" },
   { path: "/admin/roles", label: "الصلاحيات", icon: ShieldCheck, area: "admin", group: "الإدارة", roles: ADMIN_ROLES, scope: "org" },

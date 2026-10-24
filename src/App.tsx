@@ -28,6 +28,7 @@ import StaffPayments from "./pages/staff/StaffPayments";
 import AccessApprovals from "./pages/staff/AccessApprovals";
 import StaffRooms from "./pages/staff/StaffRooms";
 import Housekeeping from "./pages/staff/Housekeeping";
+import Codes from "./pages/staff/Codes";
 import Tickets from "./pages/staff/Tickets";
 import Inbox from "./pages/staff/Inbox";
 
@@ -40,7 +41,6 @@ import AdminAvailabilityRules from "./pages/admin/AdminAvailabilityRules";
 import AdminReservations from "./pages/admin/AdminReservations";
 import AdminGuests from "./pages/admin/AdminGuests";
 import AdminFinance from "./pages/admin/AdminFinance";
-import AdminKeyboxes from "./pages/admin/AdminKeyboxes";
 import AdminStaff from "./pages/admin/AdminStaff";
 import AdminRoles from "./pages/admin/AdminRoles";
 import AdminBookingSources from "./pages/admin/AdminBookingSources";
@@ -104,6 +104,7 @@ export default function App() {
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
           <Route path="/staff/rooms" element={<StaffRooms />} />
           <Route path="/staff/housekeeping" element={<Housekeeping />} />
+          <Route path="/staff/codes" element={<Codes />} />
           <Route path="/staff/tickets" element={<Tickets />} />
           <Route path="/staff/inbox" element={<Inbox />} />
         </Route>
@@ -125,7 +126,8 @@ export default function App() {
           <Route path="/admin/reservations" element={<AdminReservations />} />
           <Route path="/admin/guests" element={<AdminGuests />} />
           <Route path="/admin/finance" element={<AdminFinance />} />
-          <Route path="/admin/keyboxes" element={<AdminKeyboxes />} />
+          {/* the key boxes moved to the one screen «الرموز» */}
+          <Route path="/admin/keyboxes" element={<Navigate to="/staff/codes" replace />} />
           <Route path="/admin/staff" element={<AdminStaff />} />
           <Route path="/admin/roles" element={<AdminRoles />} />
           <Route path="/admin/booking-sources" element={<AdminBookingSources />} />

@@ -5,6 +5,8 @@ import { cn } from "../lib/utils";
 import { adminNav, firstAdminPath } from "../lib/nav";
 import { LogOut, Hotel } from "lucide-react";
 import { OpsCopilot } from "../components/OpsCopilot";
+import { KeyboxAlertBanner } from "../components/KeyboxAlert";
+import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 
 export default function AdminLayout() {
   const { profile, signOut } = useAuth();
@@ -12,6 +14,7 @@ export default function AdminLayout() {
   // Groups/links come from the role table in lib/nav.ts (the route guard uses the same table); empty groups are hidden.
   const groups = adminNav(profile?.role).map((g) => ({ title: g.title, items: g.items.map((p) => ({ to: p.path, label: p.label, icon: p.icon })) }));
   const adminHome = firstAdminPath(profile?.role) ?? "/staff/dashboard";
+  const codeAlerts = useKeyboxAlerts();   // «الرموز»: red until the codes of the units left by guests are changed
 
   async function handleSignOut() {
     await signOut();
@@ -72,9 +75,12 @@ export default function AdminLayout() {
 
       <div className="flex w-full flex-col lg:pr-72">
         <DemoBanner />
-        <header className="sticky top-0 z-10 border-b border-ink-100 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-          <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة — منازل الراحة</Link>
-        </header>
+        <div className="sticky top-0 z-10">
+          <header className="border-b border-ink-100 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+            <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة — منازل الراحة</Link>
+          </header>
+          <KeyboxAlertBanner alerts={codeAlerts} />
+        </div>
         <main className="flex-1 p-4 pb-24 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
           <Outlet />
         </main>

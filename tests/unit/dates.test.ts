@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { todayISO, isoDateIn, addDaysISO } from "../../src/lib/utils";
+import { todayISO, isoDateIn, addDaysISO, sinceArabic, arabicCount } from "../../src/lib/utils";
 
 /**
  * Business dates are the property's (Asia/Riyadh by default), never UTC's: between 00:00 and 03:00 in Riyadh the
@@ -37,5 +37,28 @@ describe("edge functions: the branch-local day (prompt date, ops context)", asyn
     expect(localDay(null, at)).toBe("2026-10-23");
     expect(localDay("Riyadh", at)).toBe("2026-10-23");
     expect(localDay("UTC", at)).toBe("2026-10-22");
+  });
+});
+
+/** «منذ …» on «الرموز» and in its alert: how long a unit has waited for its new code, in correct Arabic. */
+describe("waiting time in Arabic", () => {
+  const now = Date.parse("2026-10-24T10:00:00Z");
+  const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+  it("uses the right word form for 1, 2, 3–10 and 11+", () => {
+    expect(sinceArabic(ago(0.5), now)).toBe("الآن");
+    expect(sinceArabic(ago(1), now)).toBe("منذ دقيقة");
+    expect(sinceArabic(ago(2), now)).toBe("منذ دقيقتين");
+    expect(sinceArabic(ago(5), now)).toBe("منذ 5 دقائق");
+    expect(sinceArabic(ago(25), now)).toBe("منذ 25 دقيقة");
+    expect(sinceArabic(ago(60), now)).toBe("منذ ساعة");
+    expect(sinceArabic(ago(150), now)).toBe("منذ ساعتين");
+    expect(sinceArabic(ago(5 * 60), now)).toBe("منذ 5 ساعات");
+    expect(sinceArabic(ago(13 * 60), now)).toBe("منذ 13 ساعة");
+    expect(sinceArabic(ago(26 * 60), now)).toBe("منذ يوم");
+    expect(sinceArabic(ago(3 * 24 * 60), now)).toBe("منذ 3 أيام");
+    expect(sinceArabic(ago(12 * 24 * 60), now)).toBe("منذ 12 يومًا");
+    expect(sinceArabic("not a date", now)).toBe("");
+    expect(sinceArabic(new Date(now + 60_000).toISOString(), now)).toBe("الآن");   // a clock a little ahead never shows a negative time
+    expect(arabicCount(11, ["وحدة", "وحدتان", "وحدات", "وحدة"])).toBe("11 وحدة");
   });
 });

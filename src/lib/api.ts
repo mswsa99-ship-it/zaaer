@@ -23,7 +23,10 @@ const ERROR_AR: Record<string, string> = {
   RESERVATION_STATUS_INVALID: "حالة الحجز لا تسمح بهذا الإجراء.",
   NOT_CHECKED_IN: "الحجز ليس في حالة دخول.",
   NOT_IN_DELIVERED_STATE: "لم يتم تسليم الرمز لهذا الحجز.",
-  CODE_MUST_DIFFER_FROM_PREVIOUS: "يجب أن يختلف الرمز الجديد عن الرمز السابق.",
+  CODE_MUST_DIFFER_FROM_PREVIOUS: "هذا هو الرمز الحالي نفسه — لا يُقبل. اضبط رمزًا جديدًا على الصندوق ثم احفظه.",
+  GUEST_IN_HOUSE: "في الوحدة نزيل مقيم؛ رمزها لا يُعرض ولا يُغيَّر من حساب خدمة الغرف.",
+  NO_KEYBOX_CODE: "لا يوجد رمز مسجّل لهذه الوحدة بعد.",
+  CODE_NEEDS_CHANGE: "الرمز الحالي يجب تغييره أولًا؛ التجربة تكون للرمز الجديد.",
   GUEST_LIMIT_REACHED: "اكتمل عدد النزلاء المسجلين لهذا الحجز.",
   DUPLICATE_GUEST: "هذه الوثيقة مسجلة مسبقًا في نفس الحجز.",
   GUEST_ALREADY_VERIFIED: "تم اعتماد هذا النزيل ولا يمكن تعديل بياناته.",
@@ -180,6 +183,30 @@ export const staffApi = {
   claimProfile: (fullName?: string) => rpc<{ ok: boolean; role?: string; claimed?: boolean; bootstrap?: boolean; error?: string }>("fn_claim_staff_profile", { p_full_name: fullName ?? null }),
   invite: (email: string, fullName: string, role: string, branchIds: string[]) => rpc<{ ok: boolean; staff_id: string }>("fn_staff_invite", { p_email: email, p_full_name: fullName, p_role: role, p_branch_ids: branchIds }),
   updateAiSettings: (patch: Record<string, unknown>) => rpc<{ ok: boolean }>("fn_admin_update_ai_settings", { p: patch }),
+};
+
+// ---------------------------------------------------------------------------
+// «الرموز» — the key-box codes of the units (supervisor and housekeeping; 0025)
+// ---------------------------------------------------------------------------
+/** change: must be changed (red) · untested: new code not yet tried on the box · ok · none: no key box for the unit */
+export type KeyboxState = "change" | "untested" | "ok" | "none";
+export interface KeyboxUnit {
+  room_id: string; room_number: string; block: string | null; floor: string | null;
+  room_status: string; cleanliness: string; guest_in_house: boolean;
+  state: KeyboxState; has_code: boolean; code_version: number | null; field_tested: boolean;
+  needs_change_since: string | null; last_changed_at: string | null; last_changed_by: string | null;
+  /** for the signed-in user: housekeeping never acts on a unit with a guest in house */
+  can_change: boolean; can_view: boolean;
+}
+export interface KeyboxAlerts { count: number; oldest_since: string | null; rooms: string[] }
+
+export const codesApi = {
+  board: (branchId: string) => rpc<KeyboxUnit[]>("fn_keybox_board", { p_branch: branchId }),
+  alerts: (branchId: string) => rpc<KeyboxAlerts>("fn_keybox_alerts", { p_branch: branchId }),
+  /** the current code (audited on the server, never stored in the browser) */
+  reveal: (roomId: string) => rpc<{ ok: boolean; code: string; code_version: number }>("fn_keybox_reveal", { p_room: roomId }),
+  change: (roomId: string, newCode: string, fieldTested: boolean) => staffApi.rotateKeybox(roomId, newCode, fieldTested),
+  markTested: (roomId: string) => staffApi.markKeyboxTested(roomId),
 };
 
 // ---------------------------------------------------------------------------

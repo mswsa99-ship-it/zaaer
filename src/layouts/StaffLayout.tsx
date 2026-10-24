@@ -6,6 +6,8 @@ import { cn } from "../lib/utils";
 import { staffNav, firstAdminPath } from "../lib/nav";
 import { LogOut, Hotel } from "lucide-react";
 import { OpsCopilot } from "../components/OpsCopilot";
+import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
+import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 
 export default function StaffLayout() {
   const { profile, signOut } = useAuth();
@@ -13,6 +15,8 @@ export default function StaffLayout() {
   // Links come from the role table in lib/nav.ts (the route guard uses the same table): a role never sees a link it cannot open.
   const nav = staffNav(profile?.role).map((p) => ({ to: p.path, label: p.label, icon: p.icon }));
   const adminHome = firstAdminPath(profile?.role);
+  // «الرموز»: units whose key-box code must still change after a guest left — red on every page until changed
+  const codeAlerts = useKeyboxAlerts();
 
   async function handleSignOut() {
     await signOut();
@@ -45,6 +49,7 @@ export default function StaffLayout() {
             >
               <item.icon className="h-4.5 w-4.5" />
               {item.label}
+              {item.to === "/staff/codes" && <KeyboxNavCount alerts={codeAlerts} />}
             </NavLink>
           ))}
         </nav>
@@ -69,30 +74,34 @@ export default function StaffLayout() {
       {/* Mobile top bar */}
       <div className="flex w-full flex-col lg:pr-64">
         <DemoBanner />
-        {/* phones/tablets only: on desktop the sidebar is the single navigation (no duplicate link rows) */}
-        <header className="sticky top-0 z-10 border-b border-ink-100 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin">
-            {nav.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium",
-                    isActive ? "bg-brand-50 text-brand-700" : "text-ink-600 hover:bg-ink-100"
-                  )
-                }
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </NavLink>
-            ))}
-            {adminHome && <Link to={adminHome} className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-ink-500 hover:bg-ink-100">الإدارة ↗</Link>}
-            <button onClick={handleSignOut} className="mr-auto shrink-0 rounded-lg p-2 text-ink-400 hover:bg-ink-100" aria-label="تسجيل الخروج">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
+        <div className="sticky top-0 z-10">
+          {/* phones/tablets only: on desktop the sidebar is the single navigation (no duplicate link rows) */}
+          <header className="border-b border-ink-100 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin">
+              {nav.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium",
+                      isActive ? "bg-brand-50 text-brand-700" : "text-ink-600 hover:bg-ink-100"
+                    )
+                  }
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                  {item.to === "/staff/codes" && <KeyboxNavCount alerts={codeAlerts} />}
+                </NavLink>
+              ))}
+              {adminHome && <Link to={adminHome} className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-ink-500 hover:bg-ink-100">الإدارة ↗</Link>}
+              <button onClick={handleSignOut} className="mr-auto shrink-0 rounded-lg p-2 text-ink-400 hover:bg-ink-100" aria-label="تسجيل الخروج">
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          </header>
+          <KeyboxAlertBanner alerts={codeAlerts} />
+        </div>
         <main className="flex-1 p-4 pb-24 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
           <Outlet />
         </main>

@@ -57,5 +57,7 @@ echo "== running phone lookup tests"
 psql -d "$DB" -f tests/sql/phone_lookup_tests.sql
 echo "== running WhatsApp Web bridge tests"
 psql -d "$DB" -f tests/sql/whatsapp_bridge_tests.sql
+echo "== running key-box code tests («الرموز»)"
+psql -d "$DB" -f tests/sql/keybox_codes_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

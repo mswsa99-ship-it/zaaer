@@ -166,7 +166,8 @@ do $$ begin
 end $$;
 
 -- =====================================================================
--- Housekeeping: no identity, no payments, no keyboxes, no rotation
+-- Housekeeping: no identity, no payments, no keybox rows; a code only through «الرموز» and never with a guest in
+-- house (0025 — the full rules are in keybox_codes_tests.sql)
 -- =====================================================================
 select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
 do $$ declare n int; begin
@@ -176,10 +177,11 @@ do $$ declare n int; begin
   perform t_record('Housekeeping sees no keyboxes', n = 0, 'rows=' || n);
   select count(*) into n from payment_transactions;
   perform t_record('Housekeeping sees no payments', n = 0, 'rows=' || n);
+  -- room 104 has the guest of BK-DEMO-1004 in house
   begin
-    perform fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100', '5555', true);
-    perform t_record('Housekeeping cannot rotate keybox code', false);
-  exception when insufficient_privilege then perform t_record('Housekeeping cannot rotate keybox code', true); end;
+    perform fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000103', '5555', true);
+    perform t_record('Housekeeping cannot change the code of a unit with a guest in house', false);
+  exception when insufficient_privilege then perform t_record('Housekeeping cannot change the code of a unit with a guest in house', sqlerrm = 'GUEST_IN_HOUSE', sqlerrm); end;
 end $$;
 
 -- =====================================================================
