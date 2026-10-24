@@ -62,6 +62,7 @@ import StaffReservationNew from "./pages/staff/StaffReservationNew";
 import PosSettlement from "./pages/staff/PosSettlement";
 import AdminCashAccounts from "./pages/admin/AdminCashAccounts";
 import AdminPlatformPayouts from "./pages/admin/AdminPlatformPayouts";
+import AdminRates from "./pages/admin/AdminRates";
 /** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
 const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
 
@@ -125,6 +126,7 @@ export default function App() {
           <Route path="/admin/facilities" element={<AdminFacilities />} />
           <Route path="/admin/task-types" element={<AdminTaskTypes />} />
           <Route path="/admin/services" element={<AdminServices />} />
+          <Route path="/admin/rates" element={<AdminRates />} />
           <Route path="/admin/availability" element={<AdminAvailability />} />
           <Route path="/admin/availability-rules" element={<AdminAvailabilityRules />} />
           <Route path="/admin/reservations" element={<AdminReservations />} />

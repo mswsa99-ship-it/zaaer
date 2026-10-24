@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert } from "lucide-react";
-import { opsApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance } from "../lib/api";
+import { opsApi, ratesApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
@@ -109,7 +109,8 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
         <Card>
           <h3 className="mb-2 text-sm font-semibold text-ink-700">سجل التخصيص (الوحدات والفترات)</h3>
           <Table rows={d.allocations.map((a) => [<span key="r" className="font-medium">{a.room_number}</span>, <span key="d" dir="ltr">{a.from_date} → {a.to_date}</span>, a.status === "active" ? <Badge key="s" className="bg-success-500/10 text-success-600">نشط</Badge> : a.status === "closed" ? <Badge key="s" className="bg-ink-100 text-ink-500">مغلق</Badge> : <Badge key="s" className="bg-danger-500/10 text-danger-600">ملغى</Badge>, <span key="x" className="text-xs text-ink-400">{a.reason ?? ""}</span>])} empty="لم تُخصص وحدة بعد" />
-          <p className="mt-3 text-xs text-ink-400">سعر الليلة المتفق عليه: {sar(r.nightly_rate_halalas)} · الوحدة الحالية: {d.room ? `${d.room.room_number} (${CLEANLINESS_LABELS[d.room.cleanliness]})` : "—"}</p>
+          <p className="mt-3 text-xs text-ink-400">متوسط سعر الليلة: {sar(r.nightly_rate_halalas)} · الوحدة الحالية: {d.room ? `${d.room.room_number} (${CLEANLINESS_LABELS[d.room.cleanliness]})` : "—"}</p>
+          {canMoney && <StayNights reservationId={reservationId} version={r.version} />}
         </Card>
       )}
 
@@ -280,16 +281,40 @@ function RefundDialog({ open, kind, reservationId, accounts, available, onClose,
   );
 }
 
+const NIGHT_BASIS_AR: Record<string, string> = { base: "أساسي", calendar: "التقويم", platform: "سعر المنصات", weekly: "أسبوعي", monthly: "شهري", manual: "يدوي", kept: "بنفس السعر", legacy: "سابق" };
+/** The price of each night, fixed when it was booked (0030); removed nights stay listed, struck through, with why. */
+function StayNights({ reservationId, version }: { reservationId: string; version: number }) {
+  const [rows, setRows] = useState<StayNight[] | null>(null);
+  useEffect(() => { let alive = true; ratesApi.nights(reservationId).then((x) => { if (alive) setRows(x ?? []); }, () => { if (alive) setRows([]); }); return () => { alive = false; }; }, [reservationId, version]);
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-ink-50 pt-3" data-testid="stay-nights">
+      <h4 className="mb-1.5 text-xs font-semibold text-ink-600">ليالي الإقامة وأسعارها</h4>
+      <div className="flex flex-wrap gap-1.5">
+        {rows.map((n) => (
+          <span key={n.night + n.status + (n.removed_at ?? "")} title={n.status === "removed" ? `أُزيلت: ${n.removed_reason ?? ""}` : NIGHT_BASIS_AR[n.basis] ?? n.basis}
+            className={`rounded-lg border px-2 py-1 text-[11px] ${n.status === "removed" ? "border-ink-100 text-ink-300 line-through" : "border-ink-100 text-ink-600"}`}>
+            <span dir="ltr">{n.night.slice(8, 10)}/{n.night.slice(5, 7)}</span> · {sar(n.price)} <span className="text-ink-400">{NIGHT_BASIS_AR[n.basis] ?? ""}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AdjustDialog({ open, reservationId, version, isMgr, onClose, onDone }: { open: boolean; reservationId: string; version: number; isMgr: boolean; onClose: () => void; onDone: () => Promise<void> }) {
-  const [kind, setKind] = useState<"discount" | "adjustment" | "penalty" | "addon">(isMgr ? "discount" : "addon"); const [amount, setAmount] = useState<number | null>(null); const [desc, setDesc] = useState(""); const [reason, setReason] = useState("");
+  // decision 9: the supervisor discounts too, before arrival and within limits; the window says how much
+  const [kind, setKind] = useState<"discount" | "adjustment" | "penalty" | "addon">("discount");
+  const [allow, setAllow] = useState<DiscountAllowance | null>(null);
+  useEffect(() => { if (!open) return; let alive = true; setAllow(null); ratesApi.allowance(reservationId).then((a) => { if (alive) setAllow(a); }, () => undefined); return () => { alive = false; }; }, [open, reservationId, version]); const [amount, setAmount] = useState<number | null>(null); const [desc, setDesc] = useState(""); const [reason, setReason] = useState("");
   return (
     <Modal open={open} title="تعديل إجمالي الحجز" onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!amount) throw new Error("VALIDATION: amount"); await opsApi.adjustPrice(reservationId, kind, amount, desc, reason.trim(), version); await onDone(); }}>
         <div className="space-y-3">
           <Field label="النوع"><select className="input" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-            {isMgr && <option value="discount">خصم (يخفض الإجمالي)</option>}{isMgr && <option value="adjustment">تسوية (موجبة أو سالبة)</option>}<option value="penalty">غرامة</option><option value="addon">إضافة</option>
+            <option value="discount">خصم (يخفض الإجمالي)</option>{isMgr && <option value="adjustment">تسوية (موجبة أو سالبة)</option>}<option value="penalty">غرامة</option><option value="addon">إضافة</option>
           </select></Field>
-          <Field label="المبلغ" hint={kind === "adjustment" ? "استخدم قيمة سالبة للتخفيض" : undefined}><MoneyInput valueHalalas={amount} onChange={setAmount} min={kind === "adjustment" ? -100000000 : 0} /></Field>
+          <Field label="المبلغ" hint={kind === "adjustment" ? "استخدم قيمة سالبة للتخفيض" : kind === "discount" && allow ? (allow.unlimited ? `حتى ${sar(allow.max)} (الإيجار ناقص الخصومات السابقة)` : allow.max > 0 ? `المسموح لك حتى ${sar(allow.max)} — ضمن ${allow.percent_bp / 100}% من الإيجار وبما لا ينزل تحت أدنى سعر لليلة` : allow.after_arrival ? "الخصم بعد الوصول للمالك أو المدير." : "لا يمكنك الخصم على هذا الحجز؛ يعتمده المالك أو المدير.") : undefined}><MoneyInput valueHalalas={amount} onChange={setAmount} min={kind === "adjustment" ? -100000000 : 0} /></Field>
           <Field label="الوصف"><input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
           <ReasonInput value={reason} onChange={setReason} />
         </div>

@@ -76,8 +76,10 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/facilities", label: "المرافق", icon: Landmark, area: "admin", group: "المنشآت", roles: ADMIN_ROLES },
   { path: "/admin/task-types", label: "أنواع المهام", icon: ListChecks, area: "admin", group: "المنشآت", roles: ADMIN_ROLES },
   { path: "/admin/services", label: "الخدمات", icon: ConciergeBell, area: "admin", group: "المنشآت", roles: ADMIN_ROLES },
-  { path: "/admin/availability", label: "التوفر", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES },
-  { path: "/admin/availability-rules", label: "قواعد الكشف", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES },
+  // decision 33: one price calendar; «التوفر» and «قواعد الكشف» are hidden, their data kept and their pages still reachable
+  { path: "/admin/rates", label: "تقويم الأسعار", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES },
+  { path: "/admin/availability", label: "التوفر", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, hidden: true },
+  { path: "/admin/availability-rules", label: "قواعد الكشف", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, hidden: true },
 
   { path: "/admin/reservations", label: "الحجوزات", icon: BookCheck, area: "admin", group: "العمليات", roles: ADMIN_OPS },
   { path: "/admin/guests", label: "النزلاء", icon: Users, area: "admin", group: "العمليات", roles: ADMIN_OPS },

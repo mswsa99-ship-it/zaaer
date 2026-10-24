@@ -24,7 +24,7 @@ const COUNT_AR: Record<string, string> = {
   conversations: "محادثات", conversation_messages: "رسائل", handoff_tickets: "تذاكر تحويل", staff_assistant_chats: "محادثات مساعد العمليات",
   unanswered_questions: "أسئلة بلا إجابة", reservations: "حجوزات", reservations_skipped_with_money: "حجوزات عليها مبالغ (ستبقى)",
   reservations_kept_active_or_with_money: "حجوزات في الفترة ستبقى (جارية/قادمة أو عليها مبالغ)", vouchers: "سندات", payments: "مدفوعات",
-  invoices: "فواتير", guest_profiles: "ملفات نزلاء", housekeeping_tasks: "مهام تنظيف", maintenance_tickets: "تذاكر صيانة", released_slots: "سجلات كشف",
+  invoices: "فواتير", pos_settlements: "تسويات الشبكة", platform_payouts: "مطابقات المنصات", guest_profiles: "ملفات نزلاء", housekeeping_tasks: "مهام تنظيف", maintenance_tickets: "تذاكر صيانة", released_slots: "سجلات كشف",
   notifications: "إشعارات", integration_events: "أحداث تكامل", audit_events: "سجلات تدقيق",
 };
 const KEPT = new Set(["reservations_skipped_with_money", "reservations_kept_active_or_with_money"]);

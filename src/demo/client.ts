@@ -214,6 +214,8 @@ function visible(table: string, r: Row): boolean {
   if (["keyboxes", "code_rotation_events", "audit_events", "access_delivery_events"].includes(table) && !["owner", "manager", "supervisor"].includes(m.role)) return false;
   if (["cash_accounts", "pos_settlements"].includes(table)) return MONEY_ROLES.includes(m.role) && branches.includes(r.branch_id);
   if (table === "platform_payouts") return ["owner", "manager", "finance"].includes(m.role) && branches.includes(r.branch_id);
+  if (table === "rate_calendar") return ["owner", "manager"].includes(m.role) && branches.includes(r.branch_id);
+  if (table === "reservation_nights") return MONEY_ROLES.includes(m.role) && branches.includes(r.branch_id);
   if (["ai_settings", "ai_usage_daily", "ai_tool_executions", "ai_guardrail_events", "integration_events"].includes(table) && !["owner", "manager"].includes(m.role)) return false;
   if (table === "knowledge_entries" || table === "unanswered_questions") return r.organization_id === m.organization_id && (r.branch_id == null || branches.includes(r.branch_id));
   if (table === "reservation_guests") { const res = byId("reservations", r.reservation_id); return !!res && branches.includes(res.branch_id); }
@@ -397,19 +399,35 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_admin_upsert_branch: ({ p }) => { requireRole("owner", "manager"); nonEmpty(p.name_ar, "name_ar"); if (p.timezone) { try { new Intl.DateTimeFormat("en", { timeZone: p.timezone }); } catch { throw new Error("VALIDATION: timezone"); } }
     if (p.tax_rate_bp != null && (!/^[0-9]{1,4}$/.test(String(p.tax_rate_bp)) || Number(p.tax_rate_bp) > 10000)) throw new Error("VALIDATION: tax_rate");
     if (p.default_deposit_halalas != null && !/^[0-9]{1,12}$/.test(String(p.default_deposit_halalas))) throw new Error("VALIDATION: amount");
-    if (!p.id) { requireRole("owner"); const b = { id: uid(), organization_id: ORG, name_ar: p.name_ar, name_en: p.name_en ?? null, city: p.city ?? null, address: p.address ?? null, map_url: null, phone: p.phone ?? null, email: p.email ?? null, check_in_time: p.check_in_time ?? "16:00", check_out_time: p.check_out_time ?? "12:00", logo_url: null, is_active: true, timezone: p.timezone ?? "Asia/Riyadh", tax_rate_bp: p.tax_rate_bp ?? 0, prices_include_tax: !!p.prices_include_tax, default_deposit_halalas: p.default_deposit_halalas ?? 5000, tax_number: (p.tax_number ?? "").trim() || null, commercial_register: p.commercial_register ?? null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: nowISO(), updated_at: nowISO() }; T("branches").push(b); roomCleaningType(b.id); bootstrapAccounts(b.id); emit("branches"); audit(b.id, "branch.created", "branch", b.id, { after: b }); return { ok: true, id: b.id, version: 1 }; }
+    if (p.supervisor_max_discount_bp != null && (!/^[0-9]{1,5}$/.test(String(p.supervisor_max_discount_bp)) || Number(p.supervisor_max_discount_bp) > 10000)) throw new Error("VALIDATION: discount_limit");
+    if (!p.id) { requireRole("owner"); const b = { id: uid(), supervisor_max_discount_bp: Number(p.supervisor_max_discount_bp ?? 0), organization_id: ORG, name_ar: p.name_ar, name_en: p.name_en ?? null, city: p.city ?? null, address: p.address ?? null, map_url: null, phone: p.phone ?? null, email: p.email ?? null, check_in_time: p.check_in_time ?? "16:00", check_out_time: p.check_out_time ?? "12:00", logo_url: null, is_active: true, timezone: p.timezone ?? "Asia/Riyadh", tax_rate_bp: p.tax_rate_bp ?? 0, prices_include_tax: !!p.prices_include_tax, default_deposit_halalas: p.default_deposit_halalas ?? 5000, tax_number: (p.tax_number ?? "").trim() || null, commercial_register: p.commercial_register ?? null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: nowISO(), updated_at: nowISO() }; T("branches").push(b); roomCleaningType(b.id); bootstrapAccounts(b.id); emit("branches"); audit(b.id, "branch.created", "branch", b.id, { after: b }); return { ok: true, id: b.id, version: 1 }; }
     const b = byId("branches", p.id); if (!b) throw new Error("NOT_FOUND"); requireBranch(b.id); checkVersionLenient(b.version, p.version); const before = { ...b };
     const newTaxNumber = p.tax_number !== undefined ? (String(p.tax_number ?? "").trim() || null) : b.tax_number;
     const taxChanged = (p.tax_rate_bp != null && Number(p.tax_rate_bp) !== b.tax_rate_bp) || (p.prices_include_tax != null && !!p.prices_include_tax !== !!b.prices_include_tax) || newTaxNumber !== b.tax_number;
     if (taxChanged && !hasRole("owner")) throw new Error("FORBIDDEN: tax settings are the owner's");
-    for (const k of ["name_ar", "name_en", "city", "address", "phone", "email", "check_in_time", "check_out_time", "timezone", "tax_rate_bp", "prices_include_tax", "default_deposit_halalas", "commercial_register", "is_active"]) if (p[k] !== undefined) b[k] = p[k];
+    for (const k of ["name_ar", "name_en", "city", "address", "phone", "email", "check_in_time", "check_out_time", "timezone", "tax_rate_bp", "prices_include_tax", "default_deposit_halalas", "supervisor_max_discount_bp", "commercial_register", "is_active"]) if (p[k] !== undefined) b[k] = p[k];
     b.tax_number = newTaxNumber;
     b.version++; b.updated_at = nowISO(); emit("branches"); audit(b.id, "branch.updated", "branch", b.id, { before, after: b });
     if (taxChanged) audit(b.id, "branch.tax_changed", "branch", b.id, { before: { tax_rate_bp: before.tax_rate_bp, prices_include_tax: before.prices_include_tax, tax_number: before.tax_number }, after: { tax_rate_bp: b.tax_rate_bp, prices_include_tax: b.prices_include_tax, tax_number: b.tax_number }, reason: "يسري على الحجوزات الجديدة فقط" });
     return { ok: true, id: b.id, version: b.version }; },
   fn_admin_upsert_block: ({ p }) => upsertDef("blocks", "block", p, ["name", "description", "sort_order", "is_active"], (x) => nonEmpty(x.name, "name"), ["name"]),
   fn_admin_upsert_floor: ({ p }) => { if (!p.id) { const blk = byId("blocks", p.block_id); if (!blk) throw new Error("NOT_FOUND: block"); p.branch_id = blk.branch_id; } return upsertDef("floors", "floor", p, ["name", "sort_order", "is_active", "block_id"], (x) => nonEmpty(x.name, "name"), ["name"], "block_id"); },
-  fn_admin_upsert_room_category: ({ p }) => upsertDef("room_categories", "room_category", p, ["name_ar", "name_en", "description", "base_capacity", "max_capacity", "base_price_halalas", "amenities", "is_public", "is_active", "sort_order"], (x) => { nonEmpty(x.name_ar, "name_ar"); if (x.base_price_halalas < 0) throw new Error("VALIDATION: amount"); if (x.max_capacity < x.base_capacity) throw new Error("VALIDATION: capacity"); }, ["name_ar"]),
+  fn_admin_upsert_room_category: ({ p }) => {
+    requireRole("owner", "manager"); const cur = p.id ? byId("room_categories", p.id) : null;
+    for (const k of ["weekly_price_halalas", "monthly_price_halalas", "min_nightly_halalas"]) { if (p[k] === "") p[k] = null; if (p[k] != null && !(Number(p[k]) > 0)) throw new Error("VALIDATION: amount"); }
+    if (p.price_mode !== undefined && !["unified", "by_channel"].includes(p.price_mode)) throw new Error("VALIDATION: price_mode");
+    const pick = (k: string) => (p[k] !== undefined ? p[k] : cur?.[k]); const num = (k: string) => (pick(k) == null ? null : Number(pick(k)));
+    const mn = num("min_nightly_halalas"), wk = num("weekly_price_halalas"), mo = num("monthly_price_halalas"), mode = pick("price_mode") ?? "unified";
+    if (mn != null) {
+      // no nightly price of the type under its minimum: base, weekly and monthly per night, and the calendar's coming nights
+      if ((num("base_price_halalas") ?? 0) < mn || (wk != null && wk / 7 < mn) || (mo != null && mo / 30 < mn)) throw new Error("VALIDATION: below_minimum");
+      if (cur && T("rate_calendar").some((x) => x.category_id === cur.id && x.night >= branchToday() && ((x.price_halalas != null && x.price_halalas < mn) || (mode === "by_channel" && x.platform_price_halalas != null && x.platform_price_halalas < mn)))) throw new Error("VALIDATION: calendar_below_minimum");
+    }
+    const oldMax = cur?.max_capacity;
+    const res = upsertDef("room_categories", "room_category", p, ["name_ar", "name_en", "description", "base_capacity", "max_capacity", "base_price_halalas", "amenities", "is_public", "is_active", "sort_order", "weekly_price_halalas", "monthly_price_halalas", "min_nightly_halalas", "price_mode"], (x) => { nonEmpty(x.name_ar, "name_ar"); if (x.base_price_halalas < 0) throw new Error("VALIDATION: amount"); if (x.max_capacity < x.base_capacity) throw new Error("VALIDATION: capacity"); }, ["name_ar"]);
+    const row = byId("room_categories", res.id)!; row.price_mode ??= "unified"; for (const k of ["weekly_price_halalas", "monthly_price_halalas", "min_nightly_halalas"]) row[k] ??= null;
+    return { ...res, stays_over_capacity: cur && oldMax != null && row.max_capacity < oldMax ? capacityImpact(row.id, row.max_capacity).length : 0 };
+  },
   fn_admin_upsert_room: ({ p }) => { requireRole("owner", "manager"); const rows = T("rooms"); let r = p.id ? byId("rooms", p.id) : null; if (p.id && !r) throw new Error("NOT_FOUND");
     const branch = r ? r.branch_id : p.branch_id; requireBranch(branch); const cat = p.category_id ?? r?.category_id; const blk = p.block_id === undefined ? r?.block_id ?? null : p.block_id; const flr = p.floor_id === undefined ? r?.floor_id ?? null : p.floor_id;
     if (!cat || byId("room_categories", cat)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: category"); if (blk && byId("blocks", blk)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: block"); if (flr && (byId("floors", flr)?.branch_id !== branch || (blk && byId("floors", flr)?.block_id !== blk))) throw new Error("BRANCH_MISMATCH: floor");
@@ -430,6 +448,57 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_admin_delete_definition: ({ p_entity, p_id }) => { requireRole("owner", "manager"); const table = TABLE_OF[p_entity]; const row = byId(table, p_id); if (!row) throw new Error("NOT_FOUND"); const d = deps(p_entity, p_id); if (Object.values(d).some((n) => n > 0)) return { ok: false, error: "HAS_DEPENDENCIES", dependencies: d }; if (p_entity === "task_type" && row.code) return { ok: false, error: "SYSTEM_DEFINITION" }; audit(p_entity === "branch" ? row.id : row.branch_id, p_entity + ".deleted", p_entity, p_id, { before: row }); S[table] = T(table).filter((x) => x.id !== p_id); emit(table); return { ok: true }; },
 
   // ---- reservations ----
+  // ---- rates (0030) ----
+  fn_quote_stay: ({ p }) => quoteStay(p),
+  fn_discount_allowance: ({ p_reservation }) => { requireRole("owner", "manager", "supervisor"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
+    const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active"); let rent = act.reduce((s, x) => s + x.price_halalas, 0), n = act.length; if (n === 0) { rent = r.rent_amount_halalas ?? 0; n = nightsBetween(r.check_in, r.check_out).length; }
+    const disc = discountsOf(r.id); const after = ["checked_in", "checked_out"].includes(r.status); const bp = byId("branches", r.branch_id)?.supervisor_max_discount_bp ?? 0; const mn = byId("room_categories", r.room_category_id)?.min_nightly_halalas ?? null;
+    const max = hasRole("owner", "manager") ? Math.max(0, rent - disc) : after || !["confirmed", "pending_verification"].includes(r.status) ? 0 : Math.max(0, Math.min(Math.floor((rent * bp) / 10000) - disc, rent - disc - (mn != null ? mn * n : 0)));
+    return { rent, discounts: disc, nights: n, after_arrival: after, max, percent_bp: bp, min_nightly: mn, unlimited: hasRole("owner", "manager") }; },
+  fn_reservation_nights: ({ p_reservation }) => { const r = byId("reservations", p_reservation); if (!r || !hasRole(...MONEY_ROLES) || !myBranches().includes(r.branch_id)) return null; ensureNights(r.id);
+    return T("reservation_nights").filter((x) => x.reservation_id === r.id).sort((a, b) => (a.night === b.night ? (a.created_at < b.created_at ? -1 : 1) : a.night < b.night ? -1 : 1)).map((x) => ({ night: x.night, price: x.price_halalas, basis: x.basis, status: x.status, removed_at: x.removed_at, removed_reason: x.removed_reason })); },
+  fn_reports_discounts: ({ p_branch, p_from, p_to }) => { requireRole("owner", "manager", "supervisor", "finance"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from) throw new Error("VALIDATION: range");
+    const full = hasRole("owner", "manager", "finance"); const dayOfIso = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+    const rows = T("reservation_charges").filter((c) => c.branch_id === p_branch && c.kind === "discount" && dayOfIso(c.created_at) >= p_from && dayOfIso(c.created_at) <= p_to).map((c) => { const r = byId("reservations", c.reservation_id)!; const s = byId("staff_profiles", c.created_by);
+      return { id: c.id, reservation_id: r.id, internal_ref: r.internal_ref, amount_halalas: roundHalfUp(Math.abs(Number(c.quantity) * c.unit_price_halalas)), reason: c.reason ?? c.description, staff: s?.full_name ?? null, role: s?.role ?? null, created_at: c.created_at, after_arrival: !!r.actual_check_in && c.created_at >= r.actual_check_in }; })
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    const by = new Map<string, { staff: string | null; role: string | null; count: number; total_halalas: number }>(); for (const x of rows) { const k = `${x.staff}|${x.role}`; const e = by.get(k) ?? { staff: x.staff, role: x.role, count: 0, total_halalas: 0 }; e.count++; e.total_halalas += x.amount_halalas; by.set(k, e); }
+    return { period: { from: p_from, to: p_to }, total_halalas: rows.reduce((s, x) => s + x.amount_halalas, 0), count: rows.length, by_staff: [...by.values()].sort((a, b) => b.total_halalas - a.total_halalas), rows: full ? rows : null }; },
+  fn_rate_calendar: ({ p_branch, p_from, p_to }) => { requireRole("owner", "manager"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || nightsBetween(p_from, p_to).length > 92) throw new Error("VALIDATION: range");
+    const days = [...nightsBetween(p_from, p_to), p_to];
+    return { today: branchToday(), from: p_from, to: p_to, categories: T("room_categories").filter((c) => c.branch_id === p_branch && !c.archived_at).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name_ar).localeCompare(String(b.name_ar))).map((c) => {
+      const units = T("rooms").filter((rm) => rm.category_id === c.id && !rm.archived_at && rm.is_active !== false).length;
+      return { id: c.id, name: c.name_ar, base_price: c.base_price_halalas, weekly_price: c.weekly_price_halalas ?? null, monthly_price: c.monthly_price_halalas ?? null, min_nightly: c.min_nightly_halalas ?? null, price_mode: c.price_mode ?? "unified", units,
+        days: days.map((night) => { const rc = T("rate_calendar").find((x) => x.category_id === c.id && x.night === night); const busy = T("reservations").filter((r) => r.room_category_id === c.id && ["confirmed", "checked_in"].includes(r.status) && night >= r.check_in && night < r.check_out).length;
+          return { night, price: rc?.price_halalas ?? null, platform_price: rc?.platform_price_halalas ?? null, available: Math.max(0, units - busy) }; }) }; }) }; },
+  fn_rate_calendar_set: ({ p }) => { requireRole("owner", "manager"); requireBranch(p.branch_id); const today = branchToday();
+    const setP = p.price_halalas != null && p.price_halalas !== "", setPP = p.platform_price_halalas != null && p.platform_price_halalas !== "";
+    const clear: "both" | "price" | "platform" | null = p.clear === true ? "both" : p.clear === "price" || p.clear === "platform" ? p.clear : null;
+    if (!clear && !setP && !setPP) throw new Error("VALIDATION: price"); if ((setP && !(Number(p.price_halalas) > 0)) || (setPP && !(Number(p.platform_price_halalas) > 0))) throw new Error("VALIDATION: amount");
+    const cats = T("room_categories").filter((c) => c.branch_id === p.branch_id && !c.archived_at);
+    let cells: Array<{ c: Row; night: string }>;
+    if (Array.isArray(p.cells)) cells = p.cells.map((x: Row) => ({ c: cats.find((c) => c.id === x.category_id)!, night: x.night })).filter((x: { c: Row | undefined }) => !!x.c);
+    else { if (!p.from || !p.to || p.to < p.from || nightsBetween(p.from, p.to).length > 731) throw new Error("VALIDATION: range"); const ids: string[] = Array.isArray(p.category_ids) ? p.category_ids : []; if (!ids.length) throw new Error("VALIDATION: categories");
+      const wd: number[] | null = Array.isArray(p.weekdays) && p.weekdays.length ? p.weekdays.map(Number) : null; const nights = [...nightsBetween(p.from, p.to), p.to].filter((d) => !wd || wd.includes(new Date(d + "T00:00:00Z").getUTCDay()));
+      cells = []; for (const night of nights) for (const c of cats.filter((x) => ids.includes(x.id))) cells.push({ c, night }); }
+    if (!cells.length) throw new Error("VALIDATION: cells"); if (cells.length > 5000) throw new Error("VALIDATION: too_many_cells");
+    const before: Row[] = []; let changed = 0;
+    for (const { c, night } of cells) {
+      if (night < today) throw new Error("VALIDATION: past_night");
+      if (setP && c.min_nightly_halalas != null && Number(p.price_halalas) < c.min_nightly_halalas) throw new Error("VALIDATION: below_minimum");
+      if (setPP && c.price_mode === "by_channel" && c.min_nightly_halalas != null && Number(p.platform_price_halalas) < c.min_nightly_halalas) throw new Error("VALIDATION: below_minimum");
+    }
+    for (const { c, night } of cells) {
+      let rc = T("rate_calendar").find((x) => x.category_id === c.id && x.night === night); const oldP = rc?.price_halalas ?? null, oldPP = rc?.platform_price_halalas ?? null;
+      const newP = clear === "both" || clear === "price" ? null : setP ? Number(p.price_halalas) : oldP; const newPP = clear === "both" || clear === "platform" ? null : setPP && c.price_mode === "by_channel" ? Number(p.platform_price_halalas) : oldPP;
+      if (newP === oldP && newPP === oldPP) continue;
+      if (!rc) { rc = { id: uid(), organization_id: ORG, branch_id: p.branch_id, category_id: c.id, night, created_at: nowISO() }; T("rate_calendar").push(rc); }
+      Object.assign(rc, { price_halalas: newP, platform_price_halalas: newPP, updated_by: staffId(), updated_at: nowISO() }); changed++;
+      if (before.length < 400) before.push({ category_id: c.id, night, price: oldP, platform_price: oldPP });
+    }
+    if (changed) { emit("rate_calendar"); audit(p.branch_id, "rates.updated", "rate_calendar", p.branch_id, { before: { cells: before, more: Math.max(changed - 400, 0) }, after: { changed, price_halalas: clear === "both" || clear === "price" ? null : setP ? Number(p.price_halalas) : null, platform_price_halalas: clear === "both" || clear === "platform" ? null : setPP ? Number(p.platform_price_halalas) : null, clear, from: p.from ?? null, to: p.to ?? null, cells: Array.isArray(p.cells) }, reason: p.reason ?? null }); }
+    return { ok: true, changed, matched: cells.length }; },
+  fn_category_capacity_impact: ({ p_category, p_max_capacity }) => { requireRole("owner", "manager"); const c = byId("room_categories", p_category); if (!c) throw new Error("NOT_FOUND"); requireBranch(c.branch_id); return capacityImpact(c.id, Number(p_max_capacity)); },
   fn_staff_quote: ({ p_branch, p_category, p_check_in, p_check_out, p_nightly_override, p_discount_halalas }) => quote(p_branch, p_category, p_check_in, p_check_out, p_nightly_override, p_discount_halalas ?? 0),
   fn_available_rooms: ({ p_branch, p_from, p_to, p_category, p_exclude_reservation }) => T("rooms").filter((r) => r.branch_id === p_branch && myBranches().includes(p_branch) && r.is_active && !r.archived_at && !["blocked", "out_of_service", "maintenance"].includes(r.status) && (!p_category || r.category_id === p_category) && roomAvailable(r.id, p_from, p_to, p_exclude_reservation)).map((r) => ({ room_id: r.id, room_number: r.room_number, category_id: r.category_id, category_name: byId("room_categories", r.category_id)?.name_ar, status: r.status, cleanliness: r.cleanliness, block_name: byId("blocks", r.block_id)?.name ?? null, floor_name: byId("floors", r.floor_id)?.name ?? null })).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })),
   fn_room_available: ({ p_room, p_from, p_to, p_exclude_reservation }) => roomAvailable(p_room, p_from, p_to, p_exclude_reservation),
@@ -456,25 +525,47 @@ function createReservationUnit(p: any, groupRef: string | null) { requireRole("o
     const br = byId("branches", p.branch_id); const arrival = p.arrival_time ? String(p.arrival_time).slice(0, 5) + ":00" : br?.check_in_time ?? "16:00:00"; const departure = p.departure_time ? String(p.departure_time).slice(0, 5) + ":00" : br?.check_out_time ?? "12:00:00";
     const src = byId("booking_sources", p.source_id); if (!src || !src.is_active) throw new Error("VALIDATION: source"); if (src.external_reference_required && !p.external_ref) throw new Error("VALIDATION: external_ref_required");
     const cat = byId("room_categories", p.category_id); if (!cat || cat.branch_id !== p.branch_id) throw new Error("BRANCH_MISMATCH: category"); const adults = p.adults ?? 1, comp = Math.max(p.companions ?? 0, details.length); if (adults < 1 || comp < 0) throw new Error("VALIDATION: guests"); if (adults + comp > cat.max_capacity) throw new Error("CAPACITY_EXCEEDED");
-    if ((p.discount_halalas ?? 0) > 0) requireRole("owner", "manager"); if (p.nightly_rate_halalas != null && p.nightly_rate_halalas < cat.base_price_halalas && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: rate below base price requires manager");
     if (p.external_ref && T("reservations").some((r) => r.source_id === src.id && r.external_ref === p.external_ref)) throw new Error("DUPLICATE_EXTERNAL_REF");
-    const q = quote(p.branch_id, p.category_id, p.check_in, p.check_out, p.nightly_rate_halalas ?? null, p.discount_halalas ?? 0);
+    const disc = Number(p.discount_halalas ?? 0); const ovr = p.nightly_rate_halalas == null || p.nightly_rate_halalas === "" ? null : Number(p.nightly_rate_halalas);
+    const q = quoteStay({ branch_id: p.branch_id, category_id: p.category_id, check_in: p.check_in, check_out: p.check_out, source_id: src.id, nightly_rate_halalas: ovr, discount_halalas: disc });
+    // a manual nightly price under what the stay would cost is a discount by another name: the owner's or a manager's (0030)
+    if (ovr != null && q.rent_gross < q.computed_rent && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: rate below the quoted price requires manager");
+    if (disc > 0 && !String(p.discount_reason ?? "").trim()) throw new Error("VALIDATION: discount_reason");
+    checkDiscount(cat.id, p.branch_id, q.nights, q.rent_gross, 0, disc, false);
     const id = uid(); const ref = "R-" + Math.random().toString(16).slice(2, 10).toUpperCase();
-    const r: Row = { id, organization_id: ORG, branch_id: p.branch_id, tax_rate_bp: br?.tax_rate_bp ?? 0, prices_include_tax: !!br?.prices_include_tax, internal_ref: ref, external_ref: p.external_ref ?? null, source_id: src.id, status: p.confirm === false ? "pending_verification" : "confirmed", booking_type: p.booking_type ?? "individual", company_name: p.company_name ?? null, visit_purpose: p.visit_purpose ?? null, check_in: p.check_in, check_out: p.check_out, adults, companions: comp, room_category_id: cat.id, room_id: null, rent_amount_halalas: 0, discount_halalas: 0, addons_halalas: 0, taxes_halalas: 0, total_halalas: 0, paid_halalas: 0, payment_status: "pending", identity_status: "not_started", government_registration: false, access_status: "locked", keybox_delivered: false, checkin_approved_by: null, checkin_approved_at: null, actual_check_in: null, actual_check_out: null, notes: p.notes ?? null, created_at: nowISO(), created_by: staffId(), security_hold: false, security_hold_reason: null, gov_registration_ref: null, updated_at: nowISO(), version: 1, rate_type: "daily", nightly_rate_halalas: q.nightly_rate, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: 0, refunded_halalas: 0, balance_due_halalas: 0, expected_arrival_time: arrival, expected_departure_time: departure, group_ref: groupRef };
+    const r: Row = { id, organization_id: ORG, branch_id: p.branch_id, tax_rate_bp: br?.tax_rate_bp ?? 0, prices_include_tax: !!br?.prices_include_tax, internal_ref: ref, external_ref: p.external_ref ?? null, source_id: src.id, status: p.confirm === false ? "pending_verification" : "confirmed", booking_type: p.booking_type ?? "individual", company_name: p.company_name ?? null, visit_purpose: p.visit_purpose ?? null, check_in: p.check_in, check_out: p.check_out, adults, companions: comp, room_category_id: cat.id, room_id: null, rent_amount_halalas: 0, discount_halalas: 0, addons_halalas: 0, taxes_halalas: 0, total_halalas: 0, paid_halalas: 0, payment_status: "pending", identity_status: "not_started", government_registration: false, access_status: "locked", keybox_delivered: false, checkin_approved_by: null, checkin_approved_at: null, actual_check_in: null, actual_check_out: null, notes: p.notes ?? null, created_at: nowISO(), created_by: staffId(), security_hold: false, security_hold_reason: null, gov_registration_ref: null, updated_at: nowISO(), version: 1, rate_type: "daily", nightly_rate_halalas: q.nightly_rate, price_basis: q.basis, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: 0, refunded_halalas: 0, balance_due_halalas: 0, expected_arrival_time: arrival, expected_departure_time: departure, group_ref: groupRef };
     T("reservations").push(r); T("reservation_guests").push({ id: uid(), reservation_id: id, guest_profile_id: null, is_primary: true, full_name: p.guest_name, identity_type: null, identity_number_last4: null, nationality: p.nationality ?? null, birth_date: null, phone: p.guest_phone ?? null, relationship: null, verification_status: "not_started", data_submitted: false, created_at: nowISO() });
     for (const d of details) T("reservation_guests").push({ id: uid(), reservation_id: id, guest_profile_id: null, is_primary: false, full_name: String(d.full_name).trim(), identity_type: null, identity_number_last4: null, nationality: d.nationality?.trim() || null, birth_date: null, phone: d.phone?.trim() || null, relationship: d.relationship?.trim() || null, verification_status: "not_started", data_submitted: false, created_at: nowISO() });
-    addCharge(id, "rent", `إيجار ${q.nights} ليلة × ${(q.nightly_rate / 100).toFixed(2)} ر.س`, q.nights, q.nightly_rate, true, null); if ((p.discount_halalas ?? 0) > 0) addCharge(id, "discount", p.discount_reason || "خصم", 1, p.discount_halalas, true, p.discount_reason ?? null);
+    bookNights(id, q.runs, "إيجار", null); if (disc > 0) addCharge(id, "discount", String(p.discount_reason).trim(), 1, disc, true, String(p.discount_reason).trim());
     if (p.room_id) { if (!roomAvailable(p.room_id, p.check_in, p.check_out)) throw new Error("ROOM_NOT_AVAILABLE"); allocate(id, p.room_id, p.check_in, p.check_out, "create"); }
     recompute(id); audit(p.branch_id, "reservation.created", "reservation", id, { after: { internal_ref: ref, check_in: p.check_in, check_out: p.check_out, quote: q, arrival_time: arrival, departure_time: departure, companions: comp, group_ref: groupRef } }); emit("reservation_guests"); return { ok: true, id, internal_ref: ref, quote: q, group_ref: groupRef }; }
 const rpcsMore: Record<string, (a: any) => any> = {
-  fn_staff_amend_stay: ({ p_reservation, p_new_check_out, p_pricing_mode, p_reason, p_expected_version }) => { requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version);
+  fn_staff_amend_stay: ({ p_reservation, p_new_check_out, p_pricing_mode, p_reason, p_expected_version }) => { requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); if (!["keep_rate", "reprice"].includes(p_pricing_mode)) throw new Error("VALIDATION: pricing_mode"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version);
     if (!["confirmed", "checked_in", "pending_verification"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); if (p_new_check_out <= r.check_in) throw new Error("VALIDATION: dates"); if (r.status === "checked_in" && p_new_check_out <= branchToday() && p_new_check_out < r.check_out) throw new Error("VALIDATION: checkout_in_past");
     const delta = Math.round((Date.parse(p_new_check_out) - Date.parse(r.check_out)) / 86400000); if (delta === 0) return { ok: true, unchanged: true };
-    const cat = byId("room_categories", r.room_category_id)!; const rate = p_pricing_mode === "keep_rate" ? r.nightly_rate_halalas : cat.base_price_halalas; const before = { check_out: r.check_out, total_halalas: r.total_halalas };
+    // leaving a weekly or monthly stay early is settled by the owner or a manager (decision 15)
+    if (delta < 0 && ["weekly", "monthly"].includes(r.price_basis) && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: shortening a weekly or monthly stay requires manager");
+    const before = { check_out: r.check_out, total_halalas: r.total_halalas }; ensureNights(r.id);
     const a = T("reservation_allocations").filter((x) => x.reservation_id === r.id && x.status === "active").sort((x, y) => (x.to_date < y.to_date ? 1 : -1))[0];
     if (a) { if (a.to_date !== r.check_out) throw new Error("ALLOCATION_MISMATCH"); if (p_new_check_out <= a.from_date) throw new Error("VALIDATION: dates"); if (T("reservation_allocations").some((o) => o.id !== a.id && o.room_id === a.room_id && o.status === "active" && overlaps(o.from_date, o.to_date, a.from_date, p_new_check_out))) throw new Error("ALLOCATION_CONFLICT: room is allocated during the added period"); a.to_date = p_new_check_out; emit("reservation_allocations"); }
-    if (delta > 0) addCharge(r.id, "rent", `تمديد ${delta} ليلة × ${(rate / 100).toFixed(2)} ر.س`, delta, rate, true, p_reason); else addCharge(r.id, "adjustment", `تقصير الإقامة ${-delta} ليلة`, 1, -(-delta * r.nightly_rate_halalas), true, p_reason);
-    r.check_out = p_new_check_out; if (p_pricing_mode === "reprice") r.nightly_rate_halalas = rate; r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f }; },
+    let refund = 0;
+    if (delta > 0) {
+      // keep_rate: the stay's last night's price; reprice: the calendar's (never re-priced as a weekly or monthly stay)
+      const last = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active").sort((x, y) => (x.night < y.night ? 1 : -1))[0];
+      const src = byId("booking_sources", r.source_id);
+      const runs: Run[] = p_pricing_mode === "keep_rate" ? [{ from: r.check_out, to: p_new_check_out, nights: delta, price: last?.price_halalas ?? r.nightly_rate_halalas, basis: "kept" }]
+        : stayRuns(stayPrices(r.room_category_id, r.check_out, p_new_check_out, !!src && src.kind !== "direct", null, false));
+      bookNights(r.id, runs, "تمديد", p_reason);
+    } else {
+      // the refund is exactly the removed nights' prices; the nights keep their rows, marked removed
+      const gone = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active" && x.night >= p_new_check_out && x.night < r.check_out);
+      refund = gone.reduce((s, x) => s + x.price_halalas, 0);
+      for (const x of gone) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: p_reason });
+      emit("reservation_nights");
+      addCharge(r.id, "adjustment", `تقصير الإقامة ${-delta} ليلة`, 1, -refund, true, p_reason);
+    }
+    const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
+    r.check_out = p_new_check_out; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f }; },
   fn_staff_switch_room: ({ p_reservation, p_room, p_effective, p_reason, p_expected_version }) => { requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version);
     if (!["confirmed", "checked_in", "pending_verification"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); const today = branchToday(); const eff = p_effective ?? (today > r.check_in ? today : r.check_in); if (eff < r.check_in || eff >= r.check_out) throw new Error("VALIDATION: effective_date"); if (r.status === "checked_in" && eff > today) throw new Error("VALIDATION: effective_date");
     const rm = byId("rooms", p_room); if (!rm || rm.branch_id !== r.branch_id) throw new Error("ROOM_NOT_FOUND"); if (r.room_id === p_room) throw new Error("SAME_ROOM"); if (r.status === "checked_in" && rm.cleanliness !== "clean") throw new Error("ROOM_NOT_CLEAN"); if (r.adults + r.companions > byId("room_categories", rm.category_id)!.max_capacity) throw new Error("CAPACITY_EXCEEDED");
@@ -483,7 +574,9 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (r.room_category_id !== rm.category_id) r.room_category_id = rm.category_id;
     allocate(r.id, p_room, eff, r.check_out, "switch: " + p_reason); if (r.status === "checked_in") { rm.status = "occupied"; const kb = T("keyboxes").find((k) => k.room_id === p_room); if (kb) kb.last_reservation_id = r.id; }
     r.version++; r.updated_at = nowISO(); emit("rooms"); emit("reservations"); audit(r.branch_id, "reservation.room_switched", "reservation", r.id, { before: { room_id: oldRoom }, after: { room_id: p_room, effective: eff }, reason: p_reason }); return { ok: true, from_room: oldRoom, to_room: p_room, effective: eff, entry_code_review_required: r.status === "checked_in" }; },
-  fn_staff_adjust_price: ({ p_reservation, p_kind, p_amount_halalas, p_description, p_reason, p_expected_version }) => { if (["discount", "adjustment"].includes(p_kind)) requireRole("owner", "manager"); else requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); if (!p_amount_halalas || (p_kind !== "adjustment" && p_amount_halalas < 0)) throw new Error("VALIDATION: amount"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); const before = { total_halalas: r.total_halalas }; addCharge(r.id, p_kind, p_description || p_kind, 1, p_amount_halalas, true, p_reason); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.total_changed", "reservation", r.id, { before, after: { total_halalas: r.total_halalas, kind: p_kind, amount_halalas: p_amount_halalas }, reason: p_reason }); return { ok: true, finance: f }; },
+  fn_staff_adjust_price: ({ p_reservation, p_kind, p_amount_halalas, p_description, p_reason, p_expected_version }) => { if (!["discount", "adjustment", "penalty", "addon"].includes(p_kind)) throw new Error("VALIDATION: kind"); if (p_kind === "adjustment") requireRole("owner", "manager"); else requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); if (!p_amount_halalas || (p_kind !== "adjustment" && p_amount_halalas < 0)) throw new Error("VALIDATION: amount"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
+    if (p_kind === "discount") { ensureNights(r.id); const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active"); checkDiscount(r.room_category_id, r.branch_id, act.length, act.reduce((s, x) => s + x.price_halalas, 0), discountsOf(r.id), p_amount_halalas, ["checked_in", "checked_out"].includes(r.status)); }
+    const before = { total_halalas: r.total_halalas }; addCharge(r.id, p_kind, p_description || p_kind, 1, p_amount_halalas, true, p_reason); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.total_changed", "reservation", r.id, { before, after: { total_halalas: r.total_halalas, kind: p_kind, amount_halalas: p_amount_halalas }, reason: p_reason }); return { ok: true, finance: f }; },
   fn_staff_add_service: ({ p_reservation, p_service, p_quantity, p_note }) => { requireRole("owner", "manager", "supervisor"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); const s = byId("service_definitions", p_service); if (!s || s.branch_id !== r.branch_id || s.archived_at || !s.is_active) throw new Error("SERVICE_NOT_AVAILABLE"); const nights = Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000); const qty = s.billing_unit === "night" ? nights : s.billing_unit === "person" ? r.adults + r.companions : s.billing_unit === "quantity" ? p_quantity ?? 1 : 1; addCharge(r.id, "addon", s.name_ar + (p_note ? " — " + p_note : ""), qty, s.is_free ? 0 : s.price_halalas, s.taxable, null, s.id); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.service_added", "reservation", r.id, { after: { service_id: s.id, name: s.name_ar, quantity: qty } }); return { ok: true, finance: f }; },
   fn_staff_cancel_reservation: ({ p_reservation, p_reason, p_source }) => { requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (["cancelled", "rejected", "no_show"].includes(r.status)) return { ok: true, duplicate: true, status: r.status }; if (["checked_in", "checked_out", "closed"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); releaseAllocations(r.id, "cancel"); Object.assign(r, { status: "cancelled", cancelled_at: nowISO(), cancel_reason: p_reason, cancel_source: p_source ?? "staff", access_status: "locked", version: r.version + 1, updated_at: nowISO() }); emit("reservations"); const f = financeOf(r.id); audit(r.branch_id, "reservation.cancelled", "reservation", r.id, { before: { status: "confirmed" }, after: { status: "cancelled" }, reason: p_reason }); return { ok: true, duplicate: false, status: "cancelled", refund_required_separately: f.net_collected > 0 || f.deposit_balance > 0 }; },
   fn_staff_no_show: ({ p_reservation, p_reason }) => { requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (!["confirmed", "pending_verification"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); if (r.check_in > branchToday()) throw new Error("VALIDATION: arrival_not_due"); releaseAllocations(r.id, "cancel"); Object.assign(r, { status: "no_show", no_show_at: nowISO(), cancel_reason: p_reason, access_status: "locked", version: r.version + 1 }); emit("reservations"); audit(r.branch_id, "reservation.no_show", "reservation", r.id, { reason: p_reason }); return { ok: true }; },
@@ -820,9 +913,12 @@ function purgeRun(branch: string | null, from: string, to: string, cats: string[
     c.vouchers = drop("financial_vouchers", (v) => inBranch(v.branch_id) && ok(v.reservation_id) && (inRange(v.occurred_at ?? v.created_at) || (has("reservations") && res.includes(v.reservation_id))));
     c.payments = drop("payment_transactions", (p) => res.includes(p.reservation_id) && (inRange(p.created_at) || has("reservations")));
     c.invoices = drop("invoices", (i) => inBranch(i.branch_id) && ok(i.reservation_id) && (inRange(i.issued_at) || (has("reservations") && res.includes(i.reservation_id))));
+    // the period's terminal settlements, and its platform payouts none of whose payments remain (0031)
+    c.pos_settlements = drop("pos_settlements", (s) => inBranch(s.branch_id) && s.business_date >= from && s.business_date <= to);
+    c.platform_payouts = drop("platform_payouts", (p) => inBranch(p.branch_id) && p.received_on >= from && p.received_on <= to && !T("financial_vouchers").some((v) => v.payout_id === p.id));
   }
   if (has("reservations")) {
-    for (const t of ["reservation_guests", "reservation_charges", "reservation_allocations", "registration_sessions", "access_release_requests", "access_delivery_events", "payment_transactions"]) drop(t, (x) => res.includes(x.reservation_id));
+    for (const t of ["reservation_guests", "reservation_charges", "reservation_allocations", "reservation_nights", "registration_sessions", "access_release_requests", "access_delivery_events", "payment_transactions"]) drop(t, (x) => res.includes(x.reservation_id));
     c.reservations = drop("reservations", (r) => res.includes(r.id));
   }
   if (has("guests")) c.guest_profiles = drop("guest_profiles", (g) => !T("reservation_guests").some((x) => x.guest_profile_id === g.id) && (!branch && inRange(g.created_at)));
@@ -842,10 +938,10 @@ function upsertDef(table: string, entity: string, p: Row, fields: string[], vali
 function deps(entity: string, id: string): Record<string, number> {
   const n = (t: string, f: (r: Row) => boolean) => T(t).filter(f).length;
   switch (entity) {
-    case "branch": return { rooms: n("rooms", (r) => r.branch_id === id), room_categories: n("room_categories", (r) => r.branch_id === id), reservations: n("reservations", (r) => r.branch_id === id), staff: n("branch_memberships", (r) => r.branch_id === id), blocks: n("blocks", (r) => r.branch_id === id), facilities: n("facilities", (r) => r.branch_id === id), vouchers: n("financial_vouchers", (r) => r.branch_id === id) };
+    case "branch": return { rooms: n("rooms", (r) => r.branch_id === id), room_categories: n("room_categories", (r) => r.branch_id === id), reservations: n("reservations", (r) => r.branch_id === id), staff: n("branch_memberships", (r) => r.branch_id === id), blocks: n("blocks", (r) => r.branch_id === id), facilities: n("facilities", (r) => r.branch_id === id), vouchers: n("financial_vouchers", (r) => r.branch_id === id) , pos_settlements: n("pos_settlements", (r) => r.branch_id === id), platform_payouts: n("platform_payouts", (r) => r.branch_id === id), rate_calendar: n("rate_calendar", (r) => r.branch_id === id && (r.price_halalas != null || r.platform_price_halalas != null)) };
     case "block": return { floors: n("floors", (r) => r.block_id === id), rooms: n("rooms", (r) => r.block_id === id), facilities: n("facilities", (r) => r.block_id === id) };
     case "floor": return { rooms: n("rooms", (r) => r.floor_id === id), facilities: n("facilities", (r) => r.floor_id === id) };
-    case "room_category": return { rooms: n("rooms", (r) => r.category_id === id), reservations: n("reservations", (r) => r.room_category_id === id) };
+    case "room_category": return { rooms: n("rooms", (r) => r.category_id === id), reservations: n("reservations", (r) => r.room_category_id === id), rate_calendar: n("rate_calendar", (r) => r.category_id === id && (r.price_halalas != null || r.platform_price_halalas != null)) };
     case "room": return { reservations: n("reservations", (r) => r.room_id === id), allocations: n("reservation_allocations", (r) => r.room_id === id), tasks: n("housekeeping_tasks", (r) => r.room_id === id), keyboxes: n("keyboxes", (r) => r.room_id === id) };
     case "facility": return { tasks: n("housekeeping_tasks", (r) => r.facility_id === id) };
     case "task_type": return { tasks: n("housekeeping_tasks", (r) => r.task_type_id === id), services: n("service_definitions", (r) => r.task_type_id === id) };
@@ -865,11 +961,91 @@ function openCommitments(entity: string, id: string) {
   return 0;
 }
 function staffInBranch(sid: string, branch: string) { const s = byId("staff_profiles", sid); return !!s && s.is_active && (s.role === "owner" || T("branch_memberships").some((m) => m.staff_id === sid && m.branch_id === branch)); }
+// ---------------------------------------------------------------------------
+// rates (0030): the price calendar, weekly and monthly prices, the nights of a stay, the supervisor's discount limits
+// ---------------------------------------------------------------------------
+const nightsBetween = (ci: string, co: string) => { const out: string[] = []; for (let d = ci; d < co; d = addDays(d, 1)) out.push(d); return out; };
+type NightPrice = { night: string; price: number; basis: string };
+type Run = { from: string; to: string; nights: number; price: number; basis: string };
+/** The price of each night: a manual price; 30+ nights → monthly, 7+ → weekly (spread evenly, remainder on the last night);
+ *  else the calendar's price (its platform row for a platform booking of a type priced by channel), else the base price. */
+function stayPrices(categoryId: string, ci: string, co: string, platform: boolean, override: number | null, periods = true): NightPrice[] {
+  const c = byId("room_categories", categoryId); if (!c) throw new Error("BRANCH_MISMATCH: category");
+  const days = nightsBetween(ci, co); const n = days.length; if (n <= 0) throw new Error("VALIDATION: dates");
+  if (override != null) { if (override < 0) throw new Error("VALIDATION: amount"); return days.map((night) => ({ night, price: override, basis: "manual" })); }
+  const period: [number, number, string] | null = periods && n >= 30 && c.monthly_price_halalas ? [30, c.monthly_price_halalas, "monthly"] : periods && n >= 7 && c.weekly_price_halalas ? [7, c.weekly_price_halalas, "weekly"] : null;
+  if (period) { const total = roundHalfUp((period[1] * n) / period[0]); const each = Math.floor(total / n); return days.map((night, i) => ({ night, price: i === n - 1 ? total - each * (n - 1) : each, basis: period[2] })); }
+  return days.map((night) => {
+    const rc = T("rate_calendar").find((x) => x.category_id === c.id && x.night === night);
+    const pp = platform && c.price_mode === "by_channel" ? rc?.platform_price_halalas ?? null : null;
+    return pp != null ? { night, price: pp, basis: "platform" } : rc?.price_halalas != null ? { night, price: rc.price_halalas, basis: "calendar" } : { night, price: c.base_price_halalas, basis: "base" };
+  });
+}
+function stayRuns(prices: NightPrice[]): Run[] {
+  const runs: Run[] = [];
+  for (const x of prices) { const cur = runs[runs.length - 1]; if (cur && cur.price === x.price && cur.basis === x.basis && cur.to === x.night) { cur.to = addDays(x.night, 1); cur.nights++; } else runs.push({ from: x.night, to: addDays(x.night, 1), nights: 1, price: x.price, basis: x.basis }); }
+  return runs;
+}
+function nightRow(r: Row, night: string, price: number, basis: string): Row { return { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, night, price_halalas: price, basis, status: "active", removed_at: null, removed_by: null, removed_reason: null, created_by: staffId(), created_at: nowISO() }; }
+/** Books the runs' nights on a stay and writes one rent line per run (tax per line). */
+function bookNights(resId: string, runs: Run[], label: string, reason: string | null) {
+  const r = byId("reservations", resId)!; let total = 0;
+  for (const x of runs) {
+    for (const night of nightsBetween(x.from, x.to)) T("reservation_nights").push(nightRow(r, night, x.price, x.basis));
+    addCharge(r.id, "rent", `${label} ${x.nights} ليلة × ${(x.price / 100).toFixed(2)} ر.س${x.basis === "weekly" ? " (السعر الأسبوعي)" : x.basis === "monthly" ? " (السعر الشهري)" : x.basis === "platform" ? " (سعر المنصات)" : ""}`, x.nights, x.price, true, reason);
+    total += x.nights * x.price;
+  }
+  emit("reservation_nights"); return total;
+}
+/** A stay without nights (the seed, or made before 0030) gets them from its rent line, else its nightly rate. */
+function ensureNights(resId: string) {
+  const r = byId("reservations", resId); if (!r || T("reservation_nights").some((x) => x.reservation_id === r.id)) return;
+  const days = nightsBetween(r.check_in, r.check_out); const rent = T("reservation_charges").filter((c) => c.reservation_id === r.id && c.kind === "rent");
+  const price = rent.length === 1 && Number(rent[0].quantity) === days.length ? rent[0].unit_price_halalas : r.nightly_rate_halalas ?? 0;
+  for (const night of days) T("reservation_nights").push({ ...nightRow(r, night, price, "legacy"), created_at: r.created_at ?? nowISO(), created_by: null });
+  emit("reservation_nights");
+}
+/** Decision 9: the supervisor discounts before arrival within the branch's percentage and never under the type's minimum. */
+function checkDiscount(categoryId: string, branchId: string, nights: number, rent: number, existing: number, add: number, afterArrival: boolean) {
+  if (!(add > 0)) return;
+  if (existing + add > rent) throw new Error("VALIDATION: discount_exceeds_rent");
+  if (hasRole("owner", "manager")) return;
+  if (!hasRole("supervisor")) throw new Error("FORBIDDEN: discount");
+  if (afterArrival) throw new Error("FORBIDDEN: post-arrival discount");
+  const bp = byId("branches", branchId)?.supervisor_max_discount_bp ?? 0;
+  if (existing + add > Math.floor((rent * bp) / 10000)) throw new Error("VALIDATION: discount_percent");
+  const mn = byId("room_categories", categoryId)?.min_nightly_halalas;
+  if (mn != null && rent - existing - add < mn * nights) throw new Error("VALIDATION: discount_minimum");
+}
+const discountsOf = (resId: string) => T("reservation_charges").filter((c) => c.reservation_id === resId && c.kind === "discount").reduce((s, c) => s + roundHalfUp(Math.abs(Number(c.quantity) * c.unit_price_halalas)), 0);
+/** The quote of a stay, exactly as the reservation would store it, and how much discount the caller may give (fn_quote_stay). */
+function quoteStay(p: Row) {
+  requireBranch(p.branch_id); const ci = p.check_in, co = p.check_out; if (!ci || !co || co <= ci) throw new Error("VALIDATION: dates");
+  const c = byId("room_categories", p.category_id); if (!c || c.branch_id !== p.branch_id) throw new Error("BRANCH_MISMATCH: category");
+  const b = byId("branches", p.branch_id)!; const src = p.source_id ? byId("booking_sources", p.source_id) : null; const platform = !!src && src.kind !== "direct";
+  const ovr = p.nightly_rate_halalas == null || p.nightly_rate_halalas === "" ? null : Number(p.nightly_rate_halalas); const disc = Number(p.discount_halalas ?? 0);
+  if (disc < 0) throw new Error("VALIDATION: amount");
+  const prices = stayPrices(c.id, ci, co, platform, ovr); const n = prices.length; if (n > 366) throw new Error("VALIDATION: dates"); const runs = stayRuns(prices);
+  let rentGross = 0, rentNet = 0, tax = 0;
+  for (const x of runs) { const g = x.nights * x.price; rentGross += g; const t = applyTax(p.branch_id, g, true); rentNet += t.net; tax += t.tax; }
+  if (disc > rentGross) throw new Error("VALIDATION: discount_exceeds_rent");
+  const d = disc > 0 ? applyTax(p.branch_id, -disc, true) : { net: 0, tax: 0 };
+  const computed = stayPrices(c.id, ci, co, platform, null).reduce((s, x) => s + x.price, 0);
+  const minTotal = c.min_nightly_halalas != null ? c.min_nightly_halalas * n : 0;
+  const supMax = Math.max(0, Math.min(Math.floor((rentGross * (b.supervisor_max_discount_bp ?? 0)) / 10000), rentGross - minTotal));
+  const myMax = hasRole("owner", "manager") ? rentGross : hasRole("supervisor") ? supMax : 0;
+  return { nights: n, runs, channel: platform ? "platform" : "system", basis: ovr != null ? "manual" : n >= 30 && c.monthly_price_halalas ? "monthly" : n >= 7 && c.weekly_price_halalas ? "weekly" : "daily",
+    nightly_rate: roundHalfUp(rentGross / n), rent_gross: rentGross, computed_rent: computed, rent: rentNet, discount: d.net, tax: tax + d.tax, total: rentNet + d.net + tax + d.tax,
+    tax_rate_bp: b.tax_rate_bp, prices_include_tax: b.prices_include_tax, min_nightly: c.min_nightly_halalas ?? null, discount_max: myMax, supervisor_discount_max: supMax, supervisor_max_discount_bp: b.supervisor_max_discount_bp ?? 0 };
+}
+/** The upcoming stays of a type with more guests than a new capacity (decision 32). */
+function capacityImpact(categoryId: string, maxCapacity: number) {
+  const today = branchToday();
+  return T("reservations").filter((r) => r.room_category_id === categoryId && ["pending_verification", "confirmed", "checked_in"].includes(r.status) && r.check_out > today && r.adults + r.companions > maxCapacity)
+    .sort((a, b) => (a.check_in < b.check_in ? -1 : 1)).map((r) => ({ id: r.id, internal_ref: r.internal_ref, check_in: r.check_in, check_out: r.check_out, guests: r.adults + r.companions, status: r.status }));
+}
 function quote(branch: string, category: string, ci: string, co: string, override: number | null, discount: number) {
-  requireBranch(branch); if (co <= ci) throw new Error("VALIDATION: dates"); const cat = byId("room_categories", category); if (!cat || cat.branch_id !== branch) throw new Error("BRANCH_MISMATCH: category");
-  const nights = Math.round((Date.parse(co) - Date.parse(ci)) / 86400000); const rate = override ?? cat.base_price_halalas; if (rate < 0 || discount < 0) throw new Error("VALIDATION: amount");
-  const rent = applyTax(branch, rate * nights, true); const disc = applyTax(branch, -discount, true); const b = byId("branches", branch)!;
-  return { nights, nightly_rate: rate, rent: rent.net, discount: disc.net, tax: rent.tax + disc.tax, total: rent.net + disc.net + rent.tax + disc.tax, tax_rate_bp: b.tax_rate_bp, prices_include_tax: b.prices_include_tax };
+  return quoteStay({ branch_id: branch, category_id: category, check_in: ci, check_out: co, nightly_rate_halalas: override, discount_halalas: discount ?? 0 });
 }
 function roomAvailablePublic(roomId: string, from: string, to: string) { const rm = byId("rooms", roomId)!; if (["blocked", "out_of_service", "maintenance"].includes(rm.status)) return false; return !T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && overlaps(a.from_date, a.to_date, from, to)); }
 function evaluate(resId: string, skipSupervisor = false) {

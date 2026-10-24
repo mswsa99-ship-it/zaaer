@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarPlus, Calculator, Plus, X, Users } from "lucide-reac
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
-import { opsApi, toArabicError, type Quote } from "../../lib/api";
+import { opsApi, toArabicError, type Quote, type PriceRun } from "../../lib/api";
 import { Card, SectionTitle, ErrorBanner, Spinner, LoadErrorCard } from "../../components/ui";
 import { Field, MoneyInput, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
@@ -22,7 +22,9 @@ const addDays = (d: string, n: number) => { const x = new Date(d + "T00:00:00Z")
 export default function StaffReservationNew() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const canDiscount = profile?.role === "owner" || profile?.role === "manager";
+  const isMgr = profile?.role === "owner" || profile?.role === "manager";
+  // decision 9: the supervisor discounts too, within the branch's percentage and the type's minimum (the quote says how much)
+  const canDiscount = isMgr || profile?.role === "supervisor";
   // G24 (decision 40): the unit types of the ACTIVE branch; booking sources are organisation-wide
   const opts = useBranchQuery<Options>(async (branchId) => {
     const [c, s] = await Promise.all([
@@ -61,7 +63,7 @@ export default function StaffReservationNew() {
     (async () => {
       try {
         const [q, r] = await Promise.all([
-          opsApi.quote(branchId, f.category_id, f.check_in, f.check_out, f.override ? f.nightly_rate : null, canDiscount ? f.discount : 0),
+          opsApi.quote(branchId, f.category_id, f.check_in, f.check_out, f.override ? f.nightly_rate : null, canDiscount ? f.discount : 0, f.source_id || null),
           opsApi.availableRooms(branchId, f.check_in, f.check_out, f.category_id),
         ]);
         if (!alive) return; setQuote(q); setRooms(r); setError(null);
@@ -69,7 +71,7 @@ export default function StaffReservationNew() {
       } catch (e) { if (alive) { setQuote(null); setError(toArabicError(e)); } }
     })();
     return () => { alive = false; };
-  }, [branchId, cats, f.category_id, f.check_in, f.check_out, f.override, f.nightly_rate, f.discount, nights, canDiscount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branchId, cats, f.category_id, f.check_in, f.check_out, f.override, f.nightly_rate, f.discount, f.source_id, nights, canDiscount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit() {
     setBusy(true); setError(null);
@@ -166,13 +168,19 @@ export default function StaffReservationNew() {
           <Card>
             <h3 className="mb-3 flex items-center gap-2 font-semibold text-ink-800"><Calculator className="h-4 w-4 text-brand-600" /> التسعير</h3>
             <div className="space-y-3">
-              <Toggle checked={f.override} onChange={(v) => setF({ ...f, override: v, nightly_rate: v ? (cat?.base_price_halalas ?? 0) : null })} label="سعر ليلة مختلف عن الأساسي" />
-              {f.override && <MoneyInput valueHalalas={f.nightly_rate} onChange={(h) => setF({ ...f, nightly_rate: h })} />}
-              {canDiscount && <><Field label="خصم (إجمالي)"><MoneyInput valueHalalas={f.discount} onChange={(h) => setF({ ...f, discount: h ?? 0 })} /></Field>{f.discount > 0 && <Field label="سبب الخصم"><input className="input" value={f.discount_reason} onChange={(e) => setF({ ...f, discount_reason: e.target.value })} /></Field>}</>}
+              <Toggle checked={f.override} onChange={(v) => setF({ ...f, override: v, nightly_rate: v ? (quote?.nightly_rate ?? cat?.base_price_halalas ?? 0) : null })} label="سعر ليلة يدوي لكل الليالي" />
+              {f.override && <><MoneyInput valueHalalas={f.nightly_rate} onChange={(h) => setF({ ...f, nightly_rate: h })} />{!isMgr && <p className="text-[11px] text-ink-400">لا يقل عن السعر المحسوب؛ الأقل خصمٌ ضمن حدك.</p>}</>}
+              {canDiscount && <>
+                <Field label="خصم (إجمالي)" hint={quote?.discount_max != null ? (isMgr ? undefined : `المسموح لك حتى ${formatCurrency(quote.discount_max / 100)}${quote.supervisor_max_discount_bp ? ` (حتى ${quote.supervisor_max_discount_bp / 100}% وبما لا ينزل تحت أدنى سعر)` : " — لا خصم للمشرف في هذا الفرع"}`) : undefined}>
+                  <MoneyInput valueHalalas={f.discount} onChange={(h) => setF({ ...f, discount: h ?? 0 })} />
+                </Field>
+                {f.discount > 0 && <Field label="سبب الخصم (إلزامي)"><input className="input" value={f.discount_reason} onChange={(e) => setF({ ...f, discount_reason: e.target.value })} aria-label="سبب الخصم" /></Field>}
+              </>}
             </div>
             {quote && (
               <div className="mt-4 space-y-1.5 rounded-xl bg-ink-50 p-3 text-sm">
-                <Row l={`الإيجار (${quote.nights} × ${formatCurrency(quote.nightly_rate / 100)})`} v={formatCurrency(quote.rent / 100)} />
+                {quote.runs && quote.runs.length > 0 ? <RunList runs={quote.runs} basis={quote.basis} channel={quote.channel} /> : <Row l={`الإيجار (${quote.nights} × ${formatCurrency(quote.nightly_rate / 100)})`} v={formatCurrency(quote.rent / 100)} />}
+                {quote.runs && quote.runs.length > 0 && <Row l={`الإيجار (${quote.nights} ${quote.nights === 1 ? "ليلة" : "ليالٍ"})`} v={formatCurrency(quote.rent / 100)} />}
                 {quote.discount !== 0 && <Row l="الخصم" v={formatCurrency(quote.discount / 100)} />}
                 {quote.tax_rate_bp > 0 && <Row l={`الضريبة ${quote.tax_rate_bp / 100}% ${quote.prices_include_tax ? "(مضمنة)" : ""}`} v={formatCurrency(quote.tax / 100)} />}
                 <div className="border-t border-ink-200 pt-1.5"><Row l="الإجمالي" v={formatCurrency(quote.total / 100)} strong /></div>
@@ -186,6 +194,25 @@ export default function StaffReservationNew() {
           </Card>
         </div>
       </form>
+    </div>
+  );
+}
+const BASIS_AR: Record<PriceRun["basis"], string> = { base: "أساسي", calendar: "التقويم", platform: "سعر المنصات", weekly: "أسبوعي", monthly: "شهري", manual: "يدوي", kept: "بنفس السعر", legacy: "سابق" };
+/** The stay night by night, grouped by price (0030): 3 ليالٍ × 250 · التقويم */
+function RunList({ runs, basis, channel }: { runs: PriceRun[]; basis?: string; channel?: string }) {
+  const shown = runs.slice(0, 6);
+  return (
+    <div className="space-y-0.5 border-b border-ink-200 pb-1.5 text-xs text-ink-500" data-testid="quote-runs">
+      {basis === "weekly" && <p className="font-medium text-brand-700">بالسعر الأسبوعي للنوع</p>}
+      {basis === "monthly" && <p className="font-medium text-brand-700">بالسعر الشهري للنوع</p>}
+      {channel === "platform" && basis === "daily" && <p className="font-medium text-brand-700">حجز منصة: سعر المنصات حيث وُجد</p>}
+      {shown.map((r) => (
+        <div key={r.from} className="flex justify-between gap-2">
+          <span><span dir="ltr">{r.from.slice(8, 10)}/{r.from.slice(5, 7)}</span> · {r.nights} {r.nights === 1 ? "ليلة" : "ليالٍ"} × {formatCurrency(r.price / 100)}</span>
+          <span className="text-ink-400">{BASIS_AR[r.basis]}</span>
+        </div>
+      ))}
+      {runs.length > shown.length && <p className="text-ink-400">و{runs.length - shown.length} فترات أخرى</p>}
     </div>
   );
 }

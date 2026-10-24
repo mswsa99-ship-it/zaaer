@@ -437,3 +437,151 @@ describe("G01/G03 — who may change the booking platforms (0029, §16)", () => 
     expect((ok.data as any[])[0]).toMatchObject({ id: src.id, booking_url: "https://example.test/book" });
   });
 });
+
+// The demo facet of tests/sql/rates_tests.sql (0030): same codes, same scenarios.
+describe("G06/G14/G27 — rates (decisions 9, 15, 32, 33, 47)", () => {
+  const D = 200;   // far from the seeded calendar (the next 60 days)
+  let CAT: string; let PLATFORM: string;
+  const day = (n: number) => fut(n);
+  const q = (from: number, to: number, extra: Record<string, unknown> = {}) => rpc<any>("fn_quote_stay", { p: { branch_id: BRANCH, category_id: CAT, check_in: day(from), check_out: day(to), source_id: SOURCE, ...extra } });
+  const setRates = (p: Record<string, unknown>) => rpc<any>("fn_rate_calendar_set", { p: { branch_id: BRANCH, ...p } });
+  const make = (from: number, to: number, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: BRANCH, category_id: CAT, check_in: day(from), check_out: day(to), guest_name: "ضيف الأسعار", guest_phone: "0500000001", source_id: SOURCE, adults: 1, companions: 0, ...extra } });
+  const nights = async (id: string) => ((await rpc<any[]>("fn_reservation_nights", { p_reservation: id })) ?? []).filter((x) => x.status === "active").map((x) => `${x.price}:${x.basis}`).join(",");
+  const version = async (id: string) => ((await client.from("reservations").select("version").eq("id", id).maybeSingle()).data as any).version;
+  const total = async (id: string) => ((await client.from("reservations").select("total_halalas").eq("id", id).maybeSingle()).data as any).total_halalas;
+
+  beforeEach(async () => {
+    const c = await rpc<any>("fn_admin_upsert_room_category", { p: { branch_id: BRANCH, name_ar: "نوع الأسعار", base_capacity: 2, max_capacity: 3, base_price_halalas: 20000, weekly_price_halalas: 125000, monthly_price_halalas: 455000, min_nightly_halalas: 15000, price_mode: "by_channel" } });
+    CAT = c.id;
+    await rpc("fn_admin_upsert_room", { p: { branch_id: BRANCH, category_id: CAT, room_number: "PR-1" } });
+    await rpc("fn_admin_upsert_room", { p: { branch_id: BRANCH, category_id: CAT, room_number: "PR-2" } });
+    PLATFORM = (((await client.from("booking_sources").select("id, kind").eq("is_active", true)).data as any[]).find((s) => s.kind !== "direct")).id;
+  });
+
+  it("PR01 a night without a calendar price takes the base price; a calendar price replaces it for that night only", async () => {
+    await setRates({ price_halalas: 25000, cells: [{ category_id: CAT, night: day(D + 1) }] });
+    const x = await q(D, D + 3);
+    expect(x.rent_gross).toBe(65000);
+    expect(x.runs.map((r: any) => r.basis)).toEqual(["base", "calendar", "base"]);
+    expect(x).toMatchObject({ basis: "daily", channel: "system" });
+  });
+
+  it("PR02 a platform booking of a type priced by channel takes the platform row; the reception takes the system row", async () => {
+    await setRates({ price_halalas: 25000, cells: [{ category_id: CAT, night: day(D + 1) }] });
+    await setRates({ platform_price_halalas: 22000, from: day(D), to: day(D + 2), category_ids: [CAT] });
+    expect((await q(D, D + 3, { source_id: PLATFORM })).rent_gross).toBe(66000);
+    expect((await q(D, D + 3)).rent_gross).toBe(65000);
+  });
+
+  it("PR03 7+ nights take the weekly price and 30+ the monthly, spread with the remainder on the last night; the stay keeps its prices", async () => {
+    const w = await q(D + 10, D + 17);
+    expect(w).toMatchObject({ basis: "weekly", rent_gross: 125000 });
+    expect(w.runs.map((r: any) => [r.nights, r.price])).toEqual([[6, 17857], [1, 17858]]);
+    const m = await q(D + 100, D + 130);
+    expect(m).toMatchObject({ basis: "monthly", rent_gross: 455000 });
+    expect(m.runs.map((r: any) => r.price)).toEqual([15166, 15186]);
+    const r = await make(D + 10, D + 17);
+    await setRates({ price_halalas: 40000, cells: [{ category_id: CAT, night: day(D + 12) }] });
+    expect(await nights(r.id)).toBe("17857:weekly,17857:weekly,17857:weekly,17857:weekly,17857:weekly,17857:weekly,17858:weekly");
+    expect(await total(r.id)).toBe(125000);
+  });
+
+  it("PR04 no price under the minimum, no past night, only the owner or a manager; each edit is audited with what it replaced", async () => {
+    await expect(setRates({ price_halalas: 14000, cells: [{ category_id: CAT, night: day(D + 5) }] })).rejects.toThrow(/below_minimum/);
+    await expect(setRates({ price_halalas: 30000, cells: [{ category_id: CAT, night: fut(-2) }] })).rejects.toThrow(/past_night/);
+    await setRates({ price_halalas: 30000, cells: [{ category_id: CAT, night: day(D + 5) }] });
+    await setRates({ price_halalas: 31000, cells: [{ category_id: CAT, night: day(D + 5) }] });
+    const edits = (await client.from("audit_events").select("action, details, created_at").eq("action", "rates.updated")).data as any[];
+    const a = edits[0];   // the demo keeps the newest audit row first (both edits may share a millisecond)
+    expect(a.details.before.cells[0].price).toBe(30000);
+    expect(a.details.after.price_halalas).toBe(31000);
+    await login("reception@demo.sa");
+    await expect(setRates({ price_halalas: 30000, cells: [{ category_id: CAT, night: day(D + 5) }] })).rejects.toThrow(/FORBIDDEN/);
+    await expect(rpc("fn_rate_calendar", { p_branch: BRANCH, p_from: day(D), p_to: day(D + 3) })).rejects.toThrow(/FORBIDDEN/);
+  });
+
+  it("PR05 a group edit (from–to × types × weekdays) sets exactly the matching nights; clearing returns them to the base price", async () => {
+    const r = await setRates({ price_halalas: 30000, from: day(D + 40), to: day(D + 53), weekdays: [5, 6], category_ids: [CAT] });
+    const expected = Array.from({ length: 14 }, (_, i) => new Date(day(D + 40 + i) + "T00:00:00Z").getUTCDay()).filter((d) => d === 5 || d === 6).length;
+    expect(r.changed).toBe(expected);
+    const cleared = await setRates({ clear: true, from: day(D + 40), to: day(D + 53), category_ids: [CAT] });
+    expect(cleared.changed).toBe(expected);
+    expect((await q(D + 40, D + 42)).rent_gross).toBe(40000);
+  });
+
+  it("PR06 the supervisor discounts with a reason within the percentage and the minimum; the manager goes beyond", async () => {
+    await login("reception@demo.sa");
+    expect((await q(D + 60, D + 63)).discount_max).toBe(6000);
+    const ok = await make(D + 60, D + 63, { discount_halalas: 6000, discount_reason: "ضيف دائم" });
+    await expect(make(D + 60, D + 63, { discount_halalas: 6001, discount_reason: "أكثر" })).rejects.toThrow(/discount_percent/);
+    await expect(make(D + 60, D + 63, { discount_halalas: 1000 })).rejects.toThrow(/discount_reason/);
+    await expect(make(D + 60, D + 63, { nightly_rate_halalas: 19000 })).rejects.toThrow(/FORBIDDEN/);
+    await expect(rpc("fn_staff_adjust_price", { p_reservation: ok.id, p_kind: "discount", p_amount_halalas: 100, p_description: "خصم", p_reason: "إضافي", p_expected_version: await version(ok.id) })).rejects.toThrow(/discount_percent/);
+    await login("owner@demo.sa");
+    const b = (await client.from("branches").select("name_ar, version").eq("id", BRANCH).maybeSingle()).data as any;
+    await rpc("fn_admin_upsert_branch", { p: { id: BRANCH, name_ar: b.name_ar, version: b.version, supervisor_max_discount_bp: 5000 } });
+    await login("reception@demo.sa");
+    expect((await q(D + 64, D + 67)).discount_max).toBe(15000);
+    await expect(make(D + 64, D + 67, { discount_halalas: 20000, discount_reason: "كثير" })).rejects.toThrow(/discount_minimum/);
+    await login("manager@demo.sa");
+    const big = await make(D + 64, D + 67, { discount_halalas: 20000, discount_reason: "تعويض" });
+    expect(await total(big.id)).toBe(40000);
+  });
+
+  it("PR07 shortening refunds exactly the removed nights' prices; extending keeps the last night's price or takes the calendar's", async () => {
+    await setRates({ price_halalas: 25000, cells: [{ category_id: CAT, night: day(D + 71) }] });
+    await setRates({ price_halalas: 26000, cells: [{ category_id: CAT, night: day(D + 75) }] });
+    await login("reception@demo.sa");
+    const r = await make(D + 70, D + 73);
+    expect(await total(r.id)).toBe(65000);
+    await rpc("fn_staff_amend_stay", { p_reservation: r.id, p_new_check_out: day(D + 72), p_pricing_mode: "keep_rate", p_reason: "خروج مبكر", p_expected_version: await version(r.id) });
+    expect(await total(r.id)).toBe(45000);
+    await rpc("fn_staff_amend_stay", { p_reservation: r.id, p_new_check_out: day(D + 75), p_pricing_mode: "keep_rate", p_reason: "تمديد", p_expected_version: await version(r.id) });
+    expect(await total(r.id)).toBe(120000);
+    await rpc("fn_staff_amend_stay", { p_reservation: r.id, p_new_check_out: day(D + 77), p_pricing_mode: "reprice", p_reason: "تمديد بسعر التقويم", p_expected_version: await version(r.id) });
+    expect(await total(r.id)).toBe(166000);
+    expect(await nights(r.id)).toBe("20000:base,25000:calendar,25000:kept,25000:kept,25000:kept,26000:calendar,20000:base");
+  });
+
+  it("PR07b shortening a weekly stay is the manager's; the refund is its removed nights at their weekly prices", async () => {
+    const r = await make(D + 10, D + 17);
+    await login("reception@demo.sa");
+    await expect(rpc("fn_staff_amend_stay", { p_reservation: r.id, p_new_check_out: day(D + 14), p_pricing_mode: "keep_rate", p_reason: "خروج مبكر", p_expected_version: await version(r.id) })).rejects.toThrow(/FORBIDDEN/);
+    await login("manager@demo.sa");
+    await rpc("fn_staff_amend_stay", { p_reservation: r.id, p_new_check_out: day(D + 14), p_pricing_mode: "keep_rate", p_reason: "خروج مبكر بقرار المدير", p_expected_version: await version(r.id) });
+    expect(125000 - (await total(r.id))).toBe(17857 * 2 + 17858);
+  });
+
+  it("PR08 the discount report shows who, how much and why; the supervisor gets the totals only", async () => {
+    await login("reception@demo.sa");
+    const r = await make(D + 60, D + 63, { discount_halalas: 6000, discount_reason: "ضيف دائم" });
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+    const sup = await rpc<any>("fn_reports_discounts", { p_branch: BRANCH, p_from: today, p_to: today });
+    expect(sup.rows).toBeNull();
+    await login("manager@demo.sa");
+    const full = await rpc<any>("fn_reports_discounts", { p_branch: BRANCH, p_from: today, p_to: today });
+    expect(full.rows.find((x: any) => x.reservation_id === r.id)).toMatchObject({ amount_halalas: 6000, reason: "ضيف دائم", role: "supervisor" });
+    expect(sup.total_halalas).toBe(full.total_halalas);
+  });
+
+  it("PR09 lowering a type's capacity lists the upcoming stays that no longer fit; PR10 the calendar shows free units of the total", async () => {
+    const rooms = await rpc<Array<{ room_id: string }>>("fn_available_rooms", { p_branch: BRANCH, p_from: day(D + 1), p_to: day(D + 2), p_category: CAT, p_exclude_reservation: null });
+    const r = await make(D + 1, D + 2, { adults: 2, companions: 1, room_id: rooms[0].room_id });
+    const impact = await rpc<any[]>("fn_category_capacity_impact", { p_category: CAT, p_max_capacity: 2 });
+    expect(impact.map((x) => x.id)).toEqual([r.id]);
+    const c = (await client.from("room_categories").select("name_ar, version").eq("id", CAT).maybeSingle()).data as any;
+    expect((await rpc<any>("fn_admin_upsert_room_category", { p: { id: CAT, name_ar: c.name_ar, version: c.version, max_capacity: 2 } })).stays_over_capacity).toBe(1);
+    const cal = await rpc<any>("fn_rate_calendar", { p_branch: BRANCH, p_from: day(D), p_to: day(D + 2) });
+    const row = cal.categories.find((x: any) => x.id === CAT);
+    expect(row.units).toBe(2);
+    expect(row.days.map((x: any) => x.available)).toEqual([2, 1, 2]);
+  });
+
+  it("PR12 a unit type with calendar prices is not removed: the answer lists them and the archive is offered", async () => {
+    const c = await rpc<any>("fn_admin_upsert_room_category", { p: { branch_id: BRANCH, name_ar: "نوع بلا حجوزات", base_price_halalas: 18000 } });
+    await setRates({ price_halalas: 19000, cells: [{ category_id: c.id, night: day(D + 3) }] });
+    const res = await rpc<any>("fn_admin_delete_definition", { p_entity: "room_category", p_id: c.id });
+    expect(res).toMatchObject({ ok: false, error: "HAS_DEPENDENCIES" });
+    expect(res.dependencies.rate_calendar).toBe(1);
+  });
+});

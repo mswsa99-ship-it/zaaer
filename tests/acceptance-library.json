@@ -630,6 +630,7 @@
     "P": "تكافؤ إنشاء الحجز مع زائر (tests/sql/parity_tests.sql)",
     "PH": "«حجوزاتي» برقم الجوال (tests/sql/phone_lookup_tests.sql)",
     "PL": "خصائص المنصة المستضافة (tests/sql/platform_tests.sql)",
+    "PR": "الأسعار — المرحلة 2: تقويم الأسعار، الأسبوعي والشهري، أسعار الليالي، حدود خصم المشرف وتقريره، أثر السعة (tests/sql/rates_tests.sql)",
     "RF": "إصلاحات المراجعة (tests/sql/review_tests.sql)",
     "RS": "جاهزية الوحدة المحسوبة (tests/sql/core_tests.sql)",
     "RV": "انحدار المراجعة (tests/sql/core_tests.sql)",

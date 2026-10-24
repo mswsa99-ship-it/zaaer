@@ -7,9 +7,9 @@ import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } fro
 import { formatCurrency } from "../../lib/utils";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
 
-interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean; default_deposit_halalas: number; tax_number: string | null; commercial_register: string | null; archived_at: string | null; version: number; rooms?: number }
+interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean; default_deposit_halalas: number; supervisor_max_discount_bp: number; tax_number: string | null; commercial_register: string | null; archived_at: string | null; version: number; rooms?: number }
 
-const EMPTY: Partial<Branch> = { name_ar: "", name_en: "", city: "", address: "", phone: "", email: "", check_in_time: "16:00", check_out_time: "12:00", timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, is_active: true };
+const EMPTY: Partial<Branch> = { name_ar: "", name_en: "", city: "", address: "", phone: "", email: "", check_in_time: "16:00", check_out_time: "12:00", timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, supervisor_max_discount_bp: 0, is_active: true };
 const taxText = (b: Pick<Branch, "tax_rate_bp" | "prices_include_tax">) => b.tax_rate_bp === 0 ? "بلا ضريبة" : `ضريبة ${(b.tax_rate_bp / 100).toFixed(2)}% ${b.prices_include_tax ? "(شاملة)" : "(غير شاملة)"}`;
 
 export default function AdminBranches() {
@@ -22,7 +22,7 @@ export default function AdminBranches() {
 
   const load = useCallback(async () => {
     const [b, r] = await Promise.all([
-      supabase.from("branches").select("id, name_ar, name_en, city, address, phone, email, is_active, check_in_time, check_out_time, timezone, tax_rate_bp, prices_include_tax, default_deposit_halalas, tax_number, commercial_register, archived_at, version").order("name_ar"),
+      supabase.from("branches").select("id, name_ar, name_en, city, address, phone, email, is_active, check_in_time, check_out_time, timezone, tax_rate_bp, prices_include_tax, default_deposit_halalas, supervisor_max_discount_bp, tax_number, commercial_register, archived_at, version").order("name_ar"),
       supabase.from("rooms").select("branch_id").is("archived_at", null),
     ]);
     if (b.error) setError(toArabicError(b.error));
@@ -71,6 +71,9 @@ export default function AdminBranches() {
               <Field label="المنطقة الزمنية"><input className="input" dir="ltr" value={draft.timezone ?? "Asia/Riyadh"} onChange={(e) => setDraft({ ...draft, timezone: e.target.value })} /></Field>
               <Field label="التأمين لكل وحدة" hint="المبلغ المقترح عند قبض التأمين، وهو منفصل عن الإيراد ويُرد بعد فحص المغادرة."><MoneyInput valueHalalas={draft.default_deposit_halalas ?? 0} onChange={(h) => setDraft({ ...draft, default_deposit_halalas: h ?? 0 })} /></Field>
               <Field label="السجل التجاري"><input className="input" dir="ltr" value={draft.commercial_register ?? ""} onChange={(e) => setDraft({ ...draft, commercial_register: e.target.value })} /></Field>
+              <Field label="أقصى خصم للمشرف %" hint="من إيجار الإقامة، قبل الوصول، ولا ينزل تحت أدنى سعر للنوع. صفر = لا يخصم المشرف؛ ما فوقه للمالك أو المدير.">
+                <input type="number" min={0} max={100} step="0.5" className="input" dir="ltr" aria-label="أقصى خصم للمشرف" value={((draft.supervisor_max_discount_bp ?? 0) / 100).toString()} onChange={(e) => setDraft({ ...draft, supervisor_max_discount_bp: Math.round(Number(e.target.value) * 100) })} />
+              </Field>
             </div>
             {/* decision 68: the tax policy is the owner's alone (the server refuses anyone else's change too) */}
             <fieldset className="mt-4 rounded-xl border border-ink-100 p-3" disabled={!isOwner} data-testid="branch-tax">

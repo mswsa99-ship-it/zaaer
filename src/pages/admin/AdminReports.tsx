@@ -11,7 +11,9 @@ import { BarChart3, Download, Info } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from "recharts";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { useBranchQuery } from "../../lib/useBranchQuery";
-import { opsApi, type ReportsFinance } from "../../lib/api";
+import { opsApi, ratesApi, type ReportsFinance, type DiscountReport } from "../../lib/api";
+import { Link } from "react-router-dom";
+import { ROLE_LABELS } from "../../lib/types";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/types";
 
 // Operational columns only — money is never read from the reservations table (GAP05).
@@ -221,7 +223,50 @@ export default function AdminReports() {
           </Card>
         )}
       </div>
+      <DiscountsCard from={period.from} to={period.to} />
     </div>
+  );
+}
+
+/** «تقرير الخصومات» (decision 9): who gave which discount, how much and why, in the period. */
+function DiscountsCard({ from, to }: { from: string; to: string }) {
+  const q = useBranchQuery<DiscountReport | null>((branchId) => ratesApi.discounts(branchId, from, to), [from, to], null);
+  const d = q.data;
+  return (
+    <Card className="mt-4" data-testid="discounts-report">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink-700">تقرير الخصومات ({from} → {to})</h3>
+        {d && <p className="text-sm text-ink-600">{d.count} خصم · <span className="font-semibold" dir="ltr">{sar(d.total_halalas)}</span></p>}
+      </div>
+      {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.count === 0 ? <p className="text-sm text-ink-400">لا خصومات في هذه الفترة.</p> : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-ink-500">حسب الموظف</p>
+            <div className="divide-y divide-ink-50 text-sm">
+              {d.by_staff.map((s) => <div key={`${s.staff}|${s.role}`} className="flex justify-between gap-2 py-1.5"><span>{s.staff ?? "—"} <span className="text-xs text-ink-400">{s.role ? ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role : ""}</span></span><span dir="ltr">{s.count} · {sar(s.total_halalas)}</span></div>)}
+            </div>
+          </div>
+          {d.rows && (
+            <div className="overflow-x-auto lg:col-span-2">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الحجز</th><th className="text-right font-medium">المبلغ</th><th className="text-right font-medium">السبب</th><th className="text-right font-medium">الموظف</th><th className="text-right font-medium">الوقت</th></tr></thead>
+                <tbody>
+                  {d.rows.map((r) => (
+                    <tr key={r.id} className="border-b border-ink-50">
+                      <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
+                      <td dir="ltr">{sar(r.amount_halalas)}</td>
+                      <td className="text-ink-600">{r.reason ?? "—"}{r.after_arrival && <Badge className="mr-1 bg-warning-500/10 text-warning-600">بعد الوصول</Badge>}</td>
+                      <td className="text-xs text-ink-500">{r.staff ?? "—"}</td>
+                      <td className="text-xs text-ink-400" dir="ltr">{r.created_at.slice(0, 16).replace("T", " ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

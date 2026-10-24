@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../lib/utils";
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("card p-5", className)}>{children}</div>;
+/** A white card; other attributes (data-testid, role…) reach the element. */
+export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, "className" | "children">) {
+  return <div className={cn("card p-5", className)} {...rest}>{children}</div>;
 }
 
 export function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {

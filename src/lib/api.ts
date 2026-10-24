@@ -77,6 +77,21 @@ const VALIDATION_AR: Record<string, string> = {
   // core money (0028)
   method_retired: "هذه الطريقة لم تعد مستخدمة. طرق القبض والرد: نقد، شبكة، تحويل بنكي، آجل عبر المنصة.",
   deposit_method: "التأمين يُقبض ويُرد في المنشأة نفسها (نقد أو شبكة أو تحويل)، ولا تحصّله المنصة.",
+  // rates (0030)
+  discount_exceeds_rent: "الخصم أكبر من إيجار الإقامة.",
+  discount_percent: "الخصم يتجاوز النسبة المسموحة للمشرف في هذا الفرع؛ يعتمده المالك أو المدير.",
+  discount_minimum: "الخصم ينزل بسعر الليلة تحت الحد الأدنى لهذا النوع؛ يعتمده المالك أو المدير.",
+  discount_reason: "اكتب سبب الخصم.",
+  discount_limit: "نسبة خصم المشرف بين 0 و100%.",
+  below_minimum: "السعر أقل من الحد الأدنى لليلة في هذا النوع.",
+  calendar_below_minimum: "في التقويم أسعار قادمة أقل من هذا الحد الأدنى؛ عدّلها أولًا.",
+  past_night: "لا يُعدَّل سعر ليلة مضت.",
+  too_many_cells: "التعديل يشمل خانات كثيرة؛ قسّمه على فترات أقصر.",
+  cells: "لا توجد خانات مطابقة لهذا التعديل.",
+  price: "حدد سعرًا، أو اختر الإرجاع للسعر الأساسي.",
+  range: "نطاق التواريخ غير صالح.",
+  categories: "اختر نوع وحدة واحدًا على الأقل.",
+  price_mode: "تصنيف السعر غير صالح.",
   account_required: "لا يوجد صندوق أو حساب بنكي افتراضي لهذا الفرع. اختر واحدًا، أو عرّفه من «الصناديق والحسابات».",
   account_kind: "النقد يُقيَّد في صندوق، والشبكة والتحويل في حساب بنكي.",
   account_archived: "هذا الصندوق أو الحساب مؤرشف ولا يُستخدم لسندات جديدة.",
@@ -119,9 +134,17 @@ const VALIDATION_AR: Record<string, string> = {
   confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
 };
 
+/** Refusals that say which rule refused, more useful than the generic «no permission». */
+const FORBIDDEN_AR: Array<[RegExp, string]> = [
+  [/post-arrival discount/, "الخصم بعد وصول الضيف للمالك أو المدير."],
+  [/rate below the quoted price/, "سعر ليلة أقل من السعر المحسوب خصمٌ يعتمده المالك أو المدير؛ استخدم خانة الخصم ضمن حدك."],
+  [/shortening a weekly or monthly stay/, "تقصير إقامة بالسعر الأسبوعي أو الشهري يقرر تسويته المالك أو المدير."],
+  [/tax settings are the owner/, "إعدادات الضريبة للمالك وحده."],
+];
 function arabicMessage(msg: string): string {
   const v = msg.match(/VALIDATION:\s*([a-z_0-9]+)/i);
   if (v) return VALIDATION_AR[v[1]] ?? "بيانات غير صالحة: " + v[1];
+  for (const [re, ar] of FORBIDDEN_AR) if (re.test(msg)) return ar;
   for (const k of Object.keys(ERROR_AR)) if (msg.includes(k)) return ERROR_AR[k];
   if (/permission denied|row-level security/i.test(msg)) return ERROR_AR.FORBIDDEN;
   return "تعذّر تنفيذ العملية: " + msg.slice(0, 120);
@@ -393,7 +416,37 @@ export interface Finance {
   received: number; refunded: number; deposit_applied: number; net_collected: number; balance_due: number; credit: number;
   deposit_received: number; deposit_refunded: number; deposit_balance: number; payment_status: string;
 }
-export interface Quote { nights: number; nightly_rate: number; rent: number; discount: number; tax: number; total: number; tax_rate_bp: number; prices_include_tax: boolean }
+/** A run of nights at one price: [from, to) — to is exclusive (0030). */
+export interface PriceRun { from: string; to: string; nights: number; price: number; basis: "base" | "calendar" | "platform" | "weekly" | "monthly" | "manual" | "kept" | "legacy" }
+export interface Quote {
+  nights: number; nightly_rate: number; rent: number; discount: number; tax: number; total: number; tax_rate_bp: number; prices_include_tax: boolean;
+  /** 0030: the nights grouped by price, how the stay is priced, and on which row of the calendar */
+  runs?: PriceRun[]; basis?: "daily" | "weekly" | "monthly" | "manual"; channel?: "system" | "platform";
+  rent_gross?: number; computed_rent?: number; min_nightly?: number | null;
+  /** how much discount the caller may give on this stay (decision 9) */
+  discount_max?: number; supervisor_discount_max?: number; supervisor_max_discount_bp?: number;
+}
+export interface RateDay { night: string; price: number | null; platform_price: number | null; available: number }
+export interface RateCategory { id: string; name: string; base_price: number; weekly_price: number | null; monthly_price: number | null; min_nightly: number | null; price_mode: "unified" | "by_channel"; units: number; days: RateDay[] }
+export interface RateCalendar { today: string; from: string; to: string; categories: RateCategory[] }
+export interface DiscountAllowance { rent: number; discounts: number; nights: number; after_arrival: boolean; max: number; percent_bp: number; min_nightly: number | null; unlimited: boolean }
+export interface StayNight { night: string; price: number; basis: PriceRun["basis"]; status: "active" | "removed"; removed_at: string | null; removed_reason: string | null }
+export interface DiscountReport {
+  period: { from: string; to: string }; total_halalas: number; count: number;
+  by_staff: Array<{ staff: string | null; role: string | null; count: number; total_halalas: number }>;
+  rows: Array<{ id: string; reservation_id: string; internal_ref: string; amount_halalas: number; reason: string | null; staff: string | null; role: string | null; created_at: string; after_arrival: boolean }> | null;
+}
+
+/** Rates (0030): the price calendar, the nights of a stay, discount allowance and report, the capacity impact of a type. */
+export const ratesApi = {
+  calendar: (branchId: string, from: string, to: string) => rpc<RateCalendar>("fn_rate_calendar", { p_branch: branchId, p_from: from, p_to: to }),
+  set: (p: { branch_id: string; price_halalas?: number | null; platform_price_halalas?: number | null; clear?: boolean | "price" | "platform"; cells?: Array<{ category_id: string; night: string }>; from?: string; to?: string; category_ids?: string[]; weekdays?: number[]; reason?: string }) =>
+    rpc<{ ok: boolean; changed: number; matched: number }>("fn_rate_calendar_set", { p }),
+  allowance: (reservationId: string) => rpc<DiscountAllowance>("fn_discount_allowance", { p_reservation: reservationId }),
+  nights: (reservationId: string) => rpc<StayNight[] | null>("fn_reservation_nights", { p_reservation: reservationId }),
+  discounts: (branchId: string, from: string, to: string) => rpc<DiscountReport>("fn_reports_discounts", { p_branch: branchId, p_from: from, p_to: to }),
+  capacityImpact: (categoryId: string, maxCapacity: number) => rpc<Array<{ id: string; internal_ref: string; check_in: string; check_out: string; guests: number; status: string }>>("fn_category_capacity_impact", { p_category: categoryId, p_max_capacity: maxCapacity }),
+};
 
 export const opsApi = {
   // definitions
@@ -410,8 +463,9 @@ export const opsApi = {
   dependencies: (entity: DefinitionEntity, id: string) => rpc<Record<string, number>>("fn_definition_dependencies", { p_entity: entity, p_id: id }),
 
   // reservations
-  quote: (branchId: string, categoryId: string, checkIn: string, checkOut: string, nightlyOverride?: number | null, discount?: number) =>
-    rpc<Quote>("fn_staff_quote", { p_branch: branchId, p_category: categoryId, p_check_in: checkIn, p_check_out: checkOut, p_nightly_override: nightlyOverride ?? null, p_discount_halalas: discount ?? 0 }),
+  /** the stay's quote night by night (0030): the source decides the calendar row (system or platform) */
+  quote: (branchId: string, categoryId: string, checkIn: string, checkOut: string, nightlyOverride?: number | null, discount?: number, sourceId?: string | null) =>
+    rpc<Quote>("fn_quote_stay", { p: { branch_id: branchId, category_id: categoryId, check_in: checkIn, check_out: checkOut, source_id: sourceId ?? null, nightly_rate_halalas: nightlyOverride ?? null, discount_halalas: discount ?? 0 } }),
   availableRooms: (branchId: string, from: string, to: string, categoryId?: string | null, excludeReservation?: string | null) =>
     rpc<Array<{ room_id: string; room_number: string; category_id: string; category_name: string; status: string; cleanliness: string; block_name: string | null; floor_name: string | null }>>("fn_available_rooms", { p_branch: branchId, p_from: from, p_to: to, p_category: categoryId ?? null, p_exclude_reservation: excludeReservation ?? null }),
   createReservation: (p: Record<string, unknown>) => rpc<{ ok: boolean; id: string; internal_ref: string; quote: Quote }>("fn_staff_create_reservation", { p }),
