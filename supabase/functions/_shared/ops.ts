@@ -34,8 +34,8 @@ const OPS_ACTION_ARG_PROPERTIES: Record<string, unknown> = {
   task_id: S("معرّف المهمة (uuid)"), task_type_id: S("معرّف نوع المهمة (uuid)"), assignee_id: S("معرّف الموظف المسند إليه (uuid)"),
   service_id: S("معرّف الخدمة (uuid)"), priority: S("أولوية المهمة"), description: S("وصف المهمة"), note: S("ملاحظة"),
   state: S("clean أو dirty"), reason: S("سبب الإجراء"), new_check_out: S("تاريخ المغادرة الجديد YYYY-MM-DD"),
-  pricing_mode: S("keep_rate أو reprice"), effective: S("تاريخ سريان التبديل YYYY-MM-DD"), method: S("طريقة الدفع"),
-  reference: S("مرجع العملية"), amount_halalas: { type: "integer", description: "المبلغ بالهللات (موجب)" },
+  pricing_mode: S("keep_rate أو reprice"), effective: S("تاريخ سريان التبديل YYYY-MM-DD"), method: S("طريقة الدفع: cash أو pos (شبكة) أو bank_transfer أو ota_deferred (آجل عبر المنصة)"),
+  reference: S("رقم العملية — إلزامي للشبكة والتحويل البنكي"), amount_halalas: { type: "integer", description: "المبلغ بالهللات (موجب)" },
   quantity: { type: "integer", description: "الكمية" },
 };
 
@@ -50,7 +50,7 @@ export const OPS_TOOL_DECLARATIONS: ToolDeclaration[] = [
     parameters: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, category_id: { type: "string" }, exclude_reservation_id: { type: "string" } }, required: ["from", "to"] } },
   { name: "list_units_board", description: "لوحة الوحدات: لكل وحدة الحالة والنظافة والإقامة الحالية والوصول القادم والمهام المفتوحة.",
     parameters: { type: "object", properties: {} } },
-  { name: "propose_action", description: "يقترح إجراءً تشغيليًا يتطلب تأكيد الموظف قبل التنفيذ. لا ينفذ شيئًا بنفسه. الإجراءات: create_task{room_id|facility_id,task_type_id,priority,assignee_id,description}, complete_task{task_id,note}, assign_task{task_id,assignee_id}, set_cleanliness{room_id,state:clean|dirty,reason}, amend_stay{reservation_id,new_check_out,pricing_mode:keep_rate|reprice,reason}, switch_room{reservation_id,room_id,effective,reason}, cancel_reservation{reservation_id,reason}, no_show{reservation_id,reason}, create_receipt{reservation_id,amount_halalas,method,reference}, create_deposit{reservation_id,amount_halalas,method,reference}, add_service{reservation_id,service_id,quantity}, create_invoice{reservation_id}.",
+  { name: "propose_action", description: "يقترح إجراءً تشغيليًا يتطلب تأكيد الموظف قبل التنفيذ. لا ينفذ شيئًا بنفسه. الإجراءات: create_task{room_id|facility_id,task_type_id,priority,assignee_id,description}, complete_task{task_id,note}, assign_task{task_id,assignee_id}, set_cleanliness{room_id,state:clean|dirty,reason}, amend_stay{reservation_id,new_check_out,pricing_mode:keep_rate|reprice,reason}, switch_room{reservation_id,room_id,effective,reason}, cancel_reservation{reservation_id,reason}, no_show{reservation_id,reason}, create_receipt{reservation_id,amount_halalas,method:cash|pos|bank_transfer|ota_deferred,reference}, create_deposit{reservation_id,amount_halalas,method:cash|pos|bank_transfer,reference} (رقم العملية إلزامي للشبكة والتحويل؛ يُقيَّد السند في الصندوق أو الحساب الافتراضي للفرع), add_service{reservation_id,service_id,quantity}, create_invoice{reservation_id}.",
     parameters: { type: "object", properties: { action: { type: "string", enum: [...OPS_ACTIONS] }, args: { type: "object", description: "وسائط الإجراء؛ اكتب منها ما يخص الإجراء المختار فقط", properties: OPS_ACTION_ARG_PROPERTIES }, summary: { type: "string", description: "وصف عربي قصير لما سيحدث وأثره" } }, required: ["action", "args", "summary"] } },
 ];
 

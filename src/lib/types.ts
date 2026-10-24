@@ -117,14 +117,21 @@ export const IDENTITY_TYPE_LABELS: Record<IdentityType, string> = {
 export type PaymentMethod = "booking_platform" | "payment_link" | "pos" | "cash" | "mada" | "card" | "bank_transfer" | "ota_deferred";
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "نقد",
-  mada: "مدى (جهاز الشبكة)",
-  card: "بطاقة ائتمان",
+  pos: "شبكة",
   bank_transfer: "تحويل بنكي",
-  pos: "جهاز نقاط البيع",
-  payment_link: "رابط دفع",
-  booking_platform: "منصة الحجز",
-  ota_deferred: "دفع مؤجل عبر المنصة",
+  ota_deferred: "آجل عبر المنصة",
+  // used before decision 24; they stay on the vouchers that used them
+  mada: "مدى (طريقة سابقة)",
+  card: "بطاقة ائتمان (طريقة سابقة)",
+  payment_link: "رابط دفع (طريقة سابقة)",
+  booking_platform: "منصة الحجز (طريقة سابقة)",
 };
+/** The only methods a new receipt or refund may use (decision 24). */
+export const ACTIVE_PAYMENT_METHODS: PaymentMethod[] = ["cash", "pos", "bank_transfer", "ota_deferred"];
+/** Which account kind a method is recorded in (decision 25); the platform takes none. */
+export const METHOD_ACCOUNT_KIND: Partial<Record<PaymentMethod, "cash_box" | "bank_account">> = { cash: "cash_box", pos: "bank_account", bank_transfer: "bank_account" };
+/** Methods that need their transaction number (decision 13). */
+export const METHOD_NEEDS_REFERENCE: PaymentMethod[] = ["pos", "bank_transfer"];
 
 export type VoucherKind = "receipt" | "refund" | "deposit" | "deposit_refund" | "deposit_apply";
 export const VOUCHER_KIND_LABELS: Record<VoucherKind, string> = {

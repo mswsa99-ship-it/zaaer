@@ -1,2 +1,4 @@
 # Expected changes for pending migrations, one per line: "<snapshot key>: <reason>".
 # Keys come from scripts/migration-snapshot.sql (rows:<table>, money:..., reservations:..., allocations:...).
+# When a migration listed here reaches production (supabase/production-applied.txt), remove its lines.
+rows:audit_events: 0028 records each branch's first cash box and bank account and the new tax and deposit defaults in the audit trail (decisions 25, 33, 68) — rows are added, none changed

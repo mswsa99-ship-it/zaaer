@@ -77,7 +77,7 @@ call_pay() { # $1 key, $2 amount, $3 sleep
   psql -d "$DB" -At <<EOF 2>&1 | grep -E "ERROR|^t$|^true$|^false$|^none$" | head -1
 $login
 begin;
-select coalesce((fn_staff_confirm_payment('$RES', 'mada', $2, 'REF-$1', '$1'))->>'ok', 'none');
+select coalesce((fn_staff_confirm_payment('$RES', 'pos', $2, 'REF-$1', '$1'))->>'ok', 'none');
 select pg_sleep($3);
 commit;
 EOF

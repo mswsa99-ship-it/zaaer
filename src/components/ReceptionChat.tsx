@@ -10,7 +10,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Hotel, Send, BookCheck, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Clock, Headset, RotateCcw, BedDouble, Users, ExternalLink } from "lucide-react";
 import { cn, formatCurrency, todayISO } from "../lib/utils";
 import { aiChat, guestApi, type AiReply } from "../lib/api";
-import { useBranch } from "../lib/branch";
+import { useBranch, priceTaxNote } from "../lib/branch";
 import { supabase } from "../lib/supabase";
 import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 
@@ -145,7 +145,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
           {messages.map((m) => (
             <div key={m.id} className={cn("flex flex-col gap-2", m.sender === "guest" ? "items-start" : "items-end")}>
               <div className={cn("max-w-[88%] whitespace-pre-line rounded-2xl px-4 py-2.5 leading-relaxed", kiosk ? "text-base" : "text-sm", m.sender === "guest" ? "bg-brand-600 text-white" : "bg-ink-50 text-ink-800")}>{m.content}</div>
-              {m.widget === "availability" && branchId && <AvailabilityCard branchId={branchId} onBook={() => navigate("/booking/new")} />}
+              {m.widget === "availability" && branchId && <AvailabilityCard branchId={branchId} taxNote={priceTaxNote(branch)} onBook={() => navigate("/booking/new")} />}
               {m.actions && m.actions.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {m.actions.map((a, i) => (
@@ -173,7 +173,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
 }
 
 /** Inline availability widget: public data only (category, base price, units shown under the release rules). */
-function AvailabilityCard({ branchId, onBook }: { branchId: string; onBook: () => void }) {
+function AvailabilityCard({ branchId, taxNote, onBook }: { branchId: string; taxNote: string | null; onBook: () => void }) {
   const [date, setDate] = useState(todayISO());
   const [guests, setGuests] = useState(2);
   const [rows, setRows] = useState<Availability | null>(null);
@@ -192,7 +192,7 @@ function AvailabilityCard({ branchId, onBook }: { branchId: string; onBook: () =
           {fit.map((r) => (
             <div key={r.category_id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-50 px-3 py-2">
               <div className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-brand-500" /><div><p className="font-medium text-ink-800">{r.category_name}</p><p className="text-[11px] text-ink-400">حتى {r.max_capacity} أشخاص · {r.available_to_show > 0 ? `متاح (${r.available_to_show})` : "غير متاح حاليًا"}</p></div></div>
-              <div className="text-left"><p className="font-semibold text-ink-800" dir="ltr">{formatCurrency(r.base_price_halalas / 100)}</p><p className="text-[10px] text-ink-400">لليلة · قبل الضريبة</p></div>
+              <div className="text-left"><p className="font-semibold text-ink-800" dir="ltr">{formatCurrency(r.base_price_halalas / 100)}</p><p className="text-[10px] text-ink-400">لليلة{taxNote ? ` · ${taxNote}` : ""}</p></div>
             </div>
           ))}
           <button onClick={onBook} className="btn-accent w-full text-xs"><ExternalLink className="h-3.5 w-3.5" /> إتمام الحجز عبر المنصة المعتمدة</button>

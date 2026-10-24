@@ -7,8 +7,9 @@ export function Card({ className, children }: { className?: string; children: Re
 
 export function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-4">
-      <div>
+    // on a phone the action (branch picker, buttons) moves under the title instead of squeezing it into a narrow column
+    <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0 flex-1 basis-64">
         <h2 className="text-xl font-semibold text-ink-800">{title}</h2>
         {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       </div>

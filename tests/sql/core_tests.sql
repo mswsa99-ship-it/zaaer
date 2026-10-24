@@ -241,7 +241,7 @@ do $$ declare r jsonb; begin
 end $$;
 -- R11 duplicate OTA cancellation event → one cancel, no refund
 do $$ declare r1 jsonb; r2 jsonb; res uuid := (select v from ids where k='resOTA'); begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10000, 'method','booking_platform','reference','OTA-PAY-1','idempotency_key','k-ota-1'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10000, 'method','ota_deferred','reference','OTA-PAY-1','idempotency_key','k-ota-1'));
   r1 := fn_staff_cancel_reservation(res, 'إلغاء من المنصة', 'booking_com', 'EVT-1');
   r2 := fn_staff_cancel_reservation(res, 'إلغاء من المنصة', 'booking_com', 'EVT-1');
   perform t_record('R11 duplicate OTA cancel event processed once; no implicit refund; refund flagged as separate action',
@@ -278,7 +278,7 @@ do $$ declare res uuid := (select v from ids where k='resF'); f jsonb; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10000, 'method','cash','idempotency_key','kF1'));
   f := t_fin(res);
   perform t_record('F01 receipt 100 of 300 → partially_paid, due 200', f->>'payment_status' = 'partially_paid' and (f->>'balance_due')::bigint = 20000, f::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 10000, 'method','mada','reference','MADA-1','idempotency_key','kF2'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 10000, 'method','pos','reference','MADA-1','idempotency_key','kF2'));
   f := t_fin(res);
   perform t_record('F02 deposit 100 does not settle the stay: due still 200, deposit balance 100', (f->>'balance_due')::bigint = 20000 and (f->>'deposit_balance')::bigint = 10000 and f->>'payment_status' = 'partially_paid', f::text);
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 20000, 'method','cash','idempotency_key','kF3'));
@@ -344,13 +344,68 @@ do $$ declare res uuid := (select v from ids where k='resF'); b uuid := (select 
   exception when others then perform t_record('F13 invoicing the same lines again rejected', sqlerrm like '%NOTHING_TO_INVOICE%', sqlerrm); end;
 end $$;
 
--- X07 money units & rounding with 15% tax (branch 10, exclusive prices)
-do $$ declare q jsonb; begin
+-- X07 money units & rounding (decision 47). Every expected value below is worked out by hand, not by the functions.
+-- X07a the rules' own case, tax zero: 3 × 100.05 − 0.10 = 300.05 SAR exactly; 100.01 + 200.04 leaves exactly zero;
+--      a 50 SAR deposit does not change the charges.
+do $$ declare q jsonb; r jsonb; res uuid; f jsonb; begin
   q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 30, current_date + 33, 10005, 10);
-  -- rent 30015, discount -10, tax = round(30015*.15)=4502 + round(-10*.15)=-2 (half-up away from zero: -1.5 → -2) → total 30015-10+4500 = 34505
-  perform t_record('X07 integer halalas with branch tax policy (15% exclusive): 3×100.05 −0.10 → net 30005, tax 4500, total 34505',
-    (q->>'rent')::bigint = 30015 and (q->>'discount')::bigint = -10 and (q->>'tax')::bigint = 4500 and (q->>'total')::bigint = 34505, q::text);
-end $$;
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
+        'check_in',(current_date + 30)::text,'check_out',(current_date + 33)::text,'guest_name','ضيف التقريب','source_id','00000000-0000-0000-0000-000000000021',
+        'nightly_rate_halalas', 10005, 'discount_halalas', 10, 'discount_reason', 'خصم ثابت للاختبار'));
+  res := (r->>'id')::uuid; insert into ids values ('resX07', res);
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10001, 'method','cash','idempotency_key','kX07-1'));
+  f := t_fin(res);
+  perform t_record('X07a1 tax zero: 3 × 100.05 − 0.10 = 30005 halalas exactly, no tax line; 100.01 received leaves 20004 and is partly paid',
+    (q->>'total')::bigint = 30005 and (q->>'tax')::bigint = 0 and (f->>'total')::bigint = 30005 and (f->>'tax')::bigint = 0
+    and (select count(*) from reservation_charges where reservation_id = res and kind = 'tax') = 0
+    and (f->>'balance_due')::bigint = 20004 and f->>'payment_status' = 'partially_paid', q::text || ' / ' || f::text);
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 20004, 'method','cash','idempotency_key','kX07-2'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 5000, 'method','cash','idempotency_key','kX07-3'));
+  f := t_fin(res);
+  perform t_record('X07a2 then 200.04 leaves exactly zero (paid); a 50.00 deposit is held apart and changes no charge',
+    (f->>'balance_due')::bigint = 0 and (f->>'credit')::bigint = 0 and f->>'payment_status' = 'paid' and (f->>'total')::bigint = 30005
+    and (f->>'deposit_balance')::bigint = 5000 and (f->>'net_collected')::bigint = 30005, f::text);
+exception when others then perform t_record('X07a1 tax zero: 3 × 100.05 − 0.10 = 30005 halalas exactly, no tax line; 100.01 received leaves 20004 and is partly paid', false, sqlerrm); end $$;
+
+-- X07b a synthetic tax policy set by the owner for this test only: 15% on top of the price (exclusive).
+--      rent 30015 → tax round(4502.25) = 4502; discount −10 → tax round(−1.5) = −2 (half away from zero);
+--      total = 30015 − 10 + 4502 − 2 = 34505. A reservation keeps the policy it was made under (decision 68).
+do $$ declare v int; q jsonb; r jsonb; res uuid; f jsonb; begin
+  v := (select version from branches where id = '00000000-0000-0000-0000-000000000010');
+  perform fn_admin_upsert_branch(jsonb_build_object('id','00000000-0000-0000-0000-000000000010','name_ar',(select name_ar from branches where id = '00000000-0000-0000-0000-000000000010'),
+          'version', v, 'tax_rate_bp', 1500, 'prices_include_tax', false));
+  q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 40, current_date + 43, 10005, 10);
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
+        'check_in',(current_date + 40)::text,'check_out',(current_date + 43)::text,'guest_name','ضيف الضريبة','source_id','00000000-0000-0000-0000-000000000021',
+        'nightly_rate_halalas', 10005, 'discount_halalas', 10, 'discount_reason', 'خصم ثابت للاختبار'));
+  res := (r->>'id')::uuid; insert into ids values ('resX07b', res);
+  f := t_fin(res);
+  perform t_record('X07b1 15% exclusive: rent 30015, discount −10, tax 4502 − 2 = 4500, total 34505 — quote and reservation agree',
+    (q->>'rent')::bigint = 30015 and (q->>'discount')::bigint = -10 and (q->>'tax')::bigint = 4500 and (q->>'total')::bigint = 34505
+    and (f->>'total')::bigint = 34505 and (f->>'tax')::bigint = 4500 and (t_res(res)).tax_rate_bp = 1500, q::text || ' / ' || f::text);
+  -- back to zero: the reservation made under 15% keeps 15% for what is added to it; a new one has no tax
+  v := (select version from branches where id = '00000000-0000-0000-0000-000000000010');
+  perform fn_admin_upsert_branch(jsonb_build_object('id','00000000-0000-0000-0000-000000000010','name_ar',(select name_ar from branches where id = '00000000-0000-0000-0000-000000000010'),
+          'version', v, 'tax_rate_bp', 0));
+  perform fn_staff_adjust_price(res, 'addon', 1000, 'إضافة بعد تغيير الضريبة', 'اختبار اللقطة', (t_res(res)).version);
+  q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 40, current_date + 43, 10005, 10);
+  perform t_record('X07b2 a change of the tax policy applies to new reservations only: the old one taxes its new line at 15% (150), a new quote has none',
+    (t_fin(res)->>'tax')::bigint = 4650 and (q->>'tax')::bigint = 0 and (q->>'total')::bigint = 30005
+    and (select count(*) from audit_events where entity_id = '00000000-0000-0000-0000-000000000010' and action = 'branch.tax_changed') >= 2, t_fin(res)::text || ' / ' || q::text);
+exception when others then perform t_record('X07b1 15% exclusive: rent 30015, discount −10, tax 4502 − 2 = 4500, total 34505 — quote and reservation agree', false, sqlerrm); end $$;
+
+-- X07c 15% included in the price: 115.00 gross → net round(11500 / 1.15) = 10000, tax 1500
+do $$ declare v int; q jsonb; begin
+  v := (select version from branches where id = '00000000-0000-0000-0000-000000000010');
+  perform fn_admin_upsert_branch(jsonb_build_object('id','00000000-0000-0000-0000-000000000010','name_ar',(select name_ar from branches where id = '00000000-0000-0000-0000-000000000010'),
+          'version', v, 'tax_rate_bp', 1500, 'prices_include_tax', true));
+  q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 50, current_date + 51, 11500, 0);
+  perform t_record('X07c 15% included: 115.00 → net 100.00 and tax 15.00, total unchanged at 115.00',
+    (q->>'rent')::bigint = 10000 and (q->>'tax')::bigint = 1500 and (q->>'total')::bigint = 11500, q::text);
+  v := (select version from branches where id = '00000000-0000-0000-0000-000000000010');
+  perform fn_admin_upsert_branch(jsonb_build_object('id','00000000-0000-0000-0000-000000000010','name_ar',(select name_ar from branches where id = '00000000-0000-0000-0000-000000000010'),
+          'version', v, 'tax_rate_bp', 0, 'prices_include_tax', false));
+exception when others then perform t_record('X07c 15% included: 115.00 → net 100.00 and tax 15.00, total unchanged at 115.00', false, sqlerrm); end $$;
 
 -- =====================================================================
 -- H. Housekeeping

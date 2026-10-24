@@ -35,16 +35,16 @@ end $$;
 
 -- ---------- A03 ----------
 do $$ declare res uuid := (select v from rf where k='res'); a jsonb; b jsonb; begin
-  a := fn_staff_confirm_payment(res, 'mada', 10000, 'MADA-1', 'rf-key-1');
-  b := fn_staff_confirm_payment(res, 'mada', 10000, 'MADA-1', 'rf-key-1');
+  a := fn_staff_confirm_payment(res, 'pos', 10000, 'MADA-1', 'rf-key-1');
+  b := fn_staff_confirm_payment(res, 'pos', 10000, 'MADA-1', 'rf-key-1');
   perform t_record('RF01 A03 replay with same key+content → duplicate built from the stored voucher; one voucher only',
     (b->>'duplicate')::boolean and (b->>'amount_halalas')::bigint = 10000 and t_vouchers(res, 'receipt') = 1, b::text);
   begin
-    perform fn_staff_confirm_payment(res, 'mada', 99999, 'MADA-1', 'rf-key-1');
+    perform fn_staff_confirm_payment(res, 'pos', 99999, 'MADA-1', 'rf-key-1');
     perform t_record('RF02 A03 same key with a different amount → IDEMPOTENCY_CONFLICT', false, 'accepted');
   exception when others then perform t_record('RF02 A03 same key with a different amount → IDEMPOTENCY_CONFLICT', sqlerrm like 'IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   begin
-    perform fn_staff_confirm_payment(res, 'card', 10000, 'MADA-1', 'rf-key-1');
+    perform fn_staff_confirm_payment(res, 'bank_transfer', 10000, 'MADA-1', 'rf-key-1');
     perform t_record('RF03 A03 same key with a different method → IDEMPOTENCY_CONFLICT', false, 'accepted');
   exception when others then perform t_record('RF03 A03 same key with a different method → IDEMPOTENCY_CONFLICT', sqlerrm like 'IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   begin

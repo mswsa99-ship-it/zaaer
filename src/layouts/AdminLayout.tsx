@@ -66,7 +66,7 @@ export default function AdminLayout() {
               <p className="text-sm font-medium text-ink-700">{profile?.full_name}</p>
               <p className="text-[11px] text-ink-400">مدير</p>
             </div>
-            <button onClick={handleSignOut} className="text-ink-400 hover:text-danger-500">
+            <button onClick={handleSignOut} className="text-ink-400 hover:text-danger-500" title="تسجيل الخروج" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>
           </div>

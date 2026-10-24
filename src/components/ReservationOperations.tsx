@@ -10,7 +10,9 @@ import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
-import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
+import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, ACTIVE_PAYMENT_METHODS, METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
+import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
+import type { CashAccount } from "../lib/api";
 import { formatCurrency, formatDateTime, todayISO } from "../lib/utils";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
@@ -30,6 +32,16 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
   const [tab, setTab] = useState<"ledger" | "stay" | "history">("ledger");
 
   const load = useCallback(async () => { try { setD(await opsApi.detail(reservationId)); setError(null); } catch (e) { setError(toArabicError(e)); } }, [reservationId]);
+  const accounts = useCashAccounts(canMoney ? d?.reservation.branch_id : null);
+  // the deposit the branch asks for (50 SAR per unit — decisions 33, 69), suggested in the deposit receipt
+  const [depositDefault, setDepositDefault] = useState(5000);
+  const branchOfRes = d?.reservation.branch_id;
+  useEffect(() => {
+    if (!branchOfRes) return;
+    let alive = true;
+    supabase.from("branches").select("default_deposit_halalas").eq("id", branchOfRes).maybeSingle().then(({ data }) => { if (alive && data) setDepositDefault(Number((data as { default_deposit_halalas: number }).default_deposit_halalas) || 0); });
+    return () => { alive = false; };
+  }, [branchOfRes]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const ch = supabase.channel(`ops-${reservationId}`).on("postgres_changes", { event: "*", schema: "public", table: "financial_vouchers", filter: `reservation_id=eq.${reservationId}` }, () => load()).subscribe();
@@ -81,7 +93,7 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
           </Card>
           <Card>
             <h3 className="mb-2 text-sm font-semibold text-ink-700">السندات</h3>
-            <Table rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="text-[10px] text-ink-400">{PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}{v.reference ? ` · ${v.reference}` : ""} · {formatDateTime(v.occurred_at)}</div></span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
+            <Table rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="text-[10px] text-ink-400">{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}{accounts.nameOf(v.account_id) ? ` · ${accounts.nameOf(v.account_id)}` : ""}{v.reference ? ` · ${v.reference}` : ""} · {formatDateTime(v.occurred_at)}</div></span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
               v.status === "cancelled" ? <Badge key="s" className="bg-danger-500/10 text-danger-600" >ملغى</Badge> : isMgr ? <CancelVoucherButton key="c" id={v.id} onDone={done} /> : ""])} empty="لا سندات" />
           </Card>
           {(d.invoices ?? []).length > 0 && (
@@ -118,8 +130,8 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
       )}
 
       {/* ---------- dialogs ---------- */}
-      <VoucherDialog open={dialog === "receipt" || dialog === "deposit"} kind={dialog === "deposit" ? "deposit" : "receipt"} reservationId={reservationId} suggested={dialog === "deposit" ? 0 : f.balance_due} onClose={() => setDialog(null)} onDone={done} />
-      <RefundDialog open={dialog === "refund" || dialog === "deposit_refund" || dialog === "deposit_apply"} kind={(dialog as "refund" | "deposit_refund" | "deposit_apply") ?? "refund"} reservationId={reservationId} available={dialog === "refund" ? f.received - f.refunded : dialog === "deposit_apply" ? Math.min(f.deposit_balance, f.balance_due) : f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
+      <VoucherDialog open={dialog === "receipt" || dialog === "deposit"} kind={dialog === "deposit" ? "deposit" : "receipt"} reservationId={reservationId} accounts={accounts.active} suggested={dialog === "deposit" ? depositDefault : f.balance_due} onClose={() => setDialog(null)} onDone={done} />
+      <RefundDialog open={dialog === "refund" || dialog === "deposit_refund" || dialog === "deposit_apply"} kind={(dialog as "refund" | "deposit_refund" | "deposit_apply") ?? "refund"} reservationId={reservationId} accounts={accounts.active} available={dialog === "refund" ? f.received - f.refunded : dialog === "deposit_apply" ? Math.min(f.deposit_balance, f.balance_due) : f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
       <AdjustDialog open={dialog === "adjust"} reservationId={reservationId} version={r.version} isMgr={isMgr} onClose={() => setDialog(null)} onDone={done} />
       <ServiceDialog open={dialog === "service"} reservationId={reservationId} branchId={r.branch_id} onClose={() => setDialog(null)} onDone={done} />
       <ExtendDialog open={dialog === "extend"} d={d} onClose={() => setDialog(null)} onDone={done} />
@@ -141,7 +153,7 @@ function FinanceGrid({ f }: { f: Finance }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
       {cell("الإجمالي", f.total)}{cell("المحصل", f.net_collected, "text-success-600")}{cell("المتبقي", f.balance_due, f.balance_due > 0 ? "text-warning-600" : "text-success-600")}{cell("رصيد للضيف", f.credit, "text-brand-700")}
-      {cell("تأمين مقبوض", f.deposit_received)}{cell("تأمين مسترد", f.deposit_refunded)}{cell("رصيد التأمين", f.deposit_balance, "text-brand-700")}{cell("الضريبة", f.tax, "text-ink-500")}
+      {cell("تأمين مقبوض", f.deposit_received)}{cell("تأمين مسترد", f.deposit_refunded)}{cell("رصيد التأمين", f.deposit_balance, "text-brand-700")}{f.tax !== 0 && cell("الضريبة", f.tax, "text-ink-500")}
     </div>
   );
 }
@@ -172,25 +184,67 @@ function ReasonDialog({ open, title, warning, onClose, onSubmit }: { open: boole
   );
 }
 
-const METHODS: PaymentMethod[] = ["cash", "mada", "card", "bank_transfer", "pos", "payment_link", "booking_platform", "ota_deferred"];
+/**
+ * The way money moves (decisions 13, 24, 25): one of four methods; cash in a cash box, the terminal and transfers in a
+ * bank account (the default is chosen, any other active one can be), nothing for the platform; the terminal and the
+ * transfer need their transaction number. The server applies the same rules.
+ */
+function PaymentFields({ method, setMethod, accountId, setAccountId, reference, setReference, accounts, verb, deposit = false }: {
+  method: PaymentMethod; setMethod: (m: PaymentMethod) => void; accountId: string; setAccountId: (id: string) => void;
+  reference: string; setReference: (r: string) => void; accounts: CashAccount[]; verb: "receive" | "return";
+  /** The deposit is held and returned by the property itself; a platform never collects it. */
+  deposit?: boolean;
+}) {
+  const methods = deposit ? ACTIVE_PAYMENT_METHODS.filter((m) => m !== "ota_deferred") : ACTIVE_PAYMENT_METHODS;
+  const kind = METHOD_ACCOUNT_KIND[method];
+  const options = kind ? accounts.filter((a) => a.kind === kind) : [];
+  const needsRef = METHOD_NEEDS_REFERENCE.includes(method);
+  useEffect(() => {
+    if (!kind) { if (accountId) setAccountId(""); return; }
+    if (!options.some((a) => a.id === accountId)) setAccountId(options.find((a) => a.is_default)?.id ?? options[0]?.id ?? "");
+  }, [kind, options, accountId, setAccountId]);
+  return (
+    <>
+      <Field label={verb === "receive" ? "طريقة الدفع" : "طريقة الرد"}>
+        <div className={`grid grid-cols-2 gap-2 ${methods.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`} role="radiogroup" aria-label={verb === "receive" ? "طريقة الدفع" : "طريقة الرد"}>
+          {methods.map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(m)}
+              className={`rounded-xl border px-2 py-2 text-sm ${method === m ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-600 hover:border-ink-200"}`}>{PAYMENT_METHOD_LABELS[m]}</button>
+          ))}
+        </div>
+      </Field>
+      {kind && (
+        <Field label={kind === "cash_box" ? "الصندوق" : "الحساب البنكي"}>
+          {options.length === 0
+            ? <p className="rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-600">لا يوجد {kind === "cash_box" ? "صندوق" : "حساب بنكي"} فعّال لهذا الفرع. يعرّفه المالك أو المدير من «الصناديق والحسابات».</p>
+            : <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label={kind === "cash_box" ? "الصندوق" : "الحساب البنكي"}>{options.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}{a.is_default ? " (الافتراضي)" : ""}</option>)}</select>}
+        </Field>
+      )}
+      {method === "ota_deferred"
+        ? <Field label="مرجع المنصة (اختياري)" hint="المنصة تحصّل ثم تودع شهريًا؛ يُطابق الإيداع من «مطابقة المنصات»."><input className="input" dir="ltr" value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
+        : needsRef
+          ? <Field label="رقم العملية (إلزامي)" hint={method === "pos" ? "كما في إيصال جهاز الشبكة." : "كما في إشعار التحويل."}><input className="input" dir="ltr" value={reference} onChange={(e) => setReference(e.target.value)} aria-label="رقم العملية" /></Field>
+          : null}
+    </>
+  );
+}
 
-function VoucherDialog({ open, kind, reservationId, suggested, onClose, onDone }: { open: boolean; kind: "receipt" | "deposit"; reservationId: string; suggested: number; onClose: () => void; onDone: () => Promise<void> }) {
-  const [amount, setAmount] = useState<number | null>(suggested || null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [ref, setRef] = useState(""); const [note, setNote] = useState("");
+function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose, onDone }: { open: boolean; kind: "receipt" | "deposit"; reservationId: string; accounts: CashAccount[]; suggested: number; onClose: () => void; onDone: () => Promise<void> }) {
+  const [amount, setAmount] = useState<number | null>(suggested || null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [accountId, setAccountId] = useState(""); const [ref, setRef] = useState(""); const [note, setNote] = useState("");
   const [key, setKey] = useState(newIdempotencyKey());
-  useEffect(() => { if (open) { setAmount(suggested || null); setKey(newIdempotencyKey()); setRef(""); setNote(""); } }, [open, suggested]);
+  useEffect(() => { if (open) { setAmount(suggested || null); setKey(newIdempotencyKey()); setMethod("cash"); setRef(""); setNote(""); } }, [open, suggested]);
   return (
     <Modal open={open} title={kind === "receipt" ? "سند قبض إقامة" : "سند قبض تأمين"} onClose={onClose}>
       <ActionForm onSubmit={async () => {
         if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
-        if (method !== "cash" && !ref.trim()) throw new Error("VALIDATION: reference_required");
-        await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key });
+        if (METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
+        await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key });
         await onDone();
       }}>
-        <p className="mb-3 text-xs text-ink-500">{kind === "receipt" ? "يُخصم من المتبقي على الإقامة." : "يُحتجز في دفتر التأمين المنفصل ولا يسدد الإقامة."}</p>
+        <p className="mb-3 text-xs text-ink-500">{kind === "receipt" ? "يُخصم من المتبقي على الإقامة." : "يُحتجز في دفتر التأمين المنفصل ولا يسدد الإقامة، ويُرد بعد فحص المغادرة. المقترح هو تأمين الفرع لكل وحدة."}</p>
         <div className="space-y-3">
           <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
-          <Field label="طريقة الدفع"><select className="input" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>{METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</select></Field>
-          <Field label={`رقم العملية / المرجع${method !== "cash" ? " (إلزامي)" : ""}`}><input className="input" dir="ltr" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
+          <PaymentFields method={method} setMethod={setMethod} accountId={accountId} setAccountId={setAccountId} reference={ref} setReference={setRef} accounts={accounts} verb="receive" deposit={kind === "deposit"} />
           <Field label="ملاحظة"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         </div>
         <Submit label="حفظ السند" onCancel={onClose} />
@@ -199,23 +253,25 @@ function VoucherDialog({ open, kind, reservationId, suggested, onClose, onDone }
   );
 }
 
-function RefundDialog({ open, kind, reservationId, available, onClose, onDone }: { open: boolean; kind: "refund" | "deposit_refund" | "deposit_apply"; reservationId: string; available: number; onClose: () => void; onDone: () => Promise<void> }) {
-  const [amount, setAmount] = useState<number | null>(null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [ref, setRef] = useState(""); const [reason, setReason] = useState("");
+function RefundDialog({ open, kind, reservationId, accounts, available, onClose, onDone }: { open: boolean; kind: "refund" | "deposit_refund" | "deposit_apply"; reservationId: string; accounts: CashAccount[]; available: number; onClose: () => void; onDone: () => Promise<void> }) {
+  const [amount, setAmount] = useState<number | null>(null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [accountId, setAccountId] = useState(""); const [ref, setRef] = useState(""); const [reason, setReason] = useState("");
   const [key, setKey] = useState(newIdempotencyKey());
-  useEffect(() => { if (open) { setAmount(available); setKey(newIdempotencyKey()); setReason(""); } }, [open, available]);
+  useEffect(() => { if (open) { setAmount(available); setKey(newIdempotencyKey()); setMethod("cash"); setRef(""); setReason(""); } }, [open, available]);
   const titles = { refund: "استرداد من مقبوض الإقامة", deposit_refund: "رد تأمين", deposit_apply: "استخدام التأمين لتغطية رسوم" };
   return (
     <Modal open={open} title={titles[kind]} onClose={onClose}>
       <ActionForm onSubmit={async () => {
         if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
-        await opsApi.refund({ reservation_id: reservationId, kind, amount_halalas: amount, method, reference: ref || undefined, reason: reason.trim(), idempotency_key: key });
+        if (kind !== "deposit_apply" && METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
+        await opsApi.refund(kind === "deposit_apply"
+          ? { reservation_id: reservationId, kind, amount_halalas: amount, reason: reason.trim(), idempotency_key: key }
+          : { reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, reason: reason.trim(), idempotency_key: key });
         await onDone();
       }}>
         <p className="mb-3 text-xs text-ink-500">المتاح: <span dir="ltr">{sar(available)}</span>. يمنع الخادم أي رد يتجاوزه حتى مع طلبين متزامنين.</p>
         <div className="space-y-3">
           <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
-          {kind !== "deposit_apply" && <Field label="طريقة الرد"><select className="input" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>{METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}</select></Field>}
-          {kind !== "deposit_apply" && <Field label="مرجع العملية"><input className="input" dir="ltr" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>}
+          {kind !== "deposit_apply" && <PaymentFields method={method} setMethod={setMethod} accountId={accountId} setAccountId={setAccountId} reference={ref} setReference={setRef} accounts={accounts} verb="return" deposit={kind === "deposit_refund"} />}
           <ReasonInput value={reason} onChange={setReason} />
         </div>
         <Submit label="تنفيذ" onCancel={onClose} />

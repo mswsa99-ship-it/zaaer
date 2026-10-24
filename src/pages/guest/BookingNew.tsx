@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarDays, Users, BedDouble, ExternalLink, Minus, Plus, Moon } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { guestApi, toArabicError } from "../../lib/api";
-import { useBranch } from "../../lib/branch";
+import { useBranch, priceTaxNote } from "../../lib/branch";
 import { Card, ErrorBanner, Spinner, EmptyState } from "../../components/ui";
 import { formatCurrency, todayISO, addDaysISO, formatHijri } from "../../lib/utils";
 
@@ -29,7 +29,8 @@ function Stepper({ icon: Icon, label, value, min, max, onChange, unit }: { icon:
 }
 
 export default function BookingNew() {
-  const { branchId, branches, setBranchId } = useBranch();
+  const { branchId, branch, branches, setBranchId } = useBranch();
+  const taxNote = priceTaxNote(branch);
   const [checkIn, setCheckIn] = useState(todayISO());
   const [nights, setNights] = useState(1);
   const [guests, setGuests] = useState(2);
@@ -105,7 +106,7 @@ export default function BookingNew() {
               </div>
               <div className="text-left">
                 <p className="text-lg font-bold text-ink-800" dir="ltr">{formatCurrency((r.base_price_halalas * nights) / 100)}</p>
-                <p className="text-[11px] text-ink-400">{nights} {nights === 1 ? "ليلة" : "ليالٍ"} · قبل الضريبة</p>
+                <p className="text-[11px] text-ink-400">{nights} {nights === 1 ? "ليلة" : "ليالٍ"}{taxNote ? ` · ${taxNote}` : ""}</p>
               </div>
             </div>
             {main ? (

@@ -98,7 +98,7 @@ export default function AdminReports() {
     { label: "صافي التحصيل", value: sar(L.net_collected), tone: "text-success-600", note: defs.revenue },
     { label: "قبض الإقامة", value: sar(L.receipts), tone: "text-ink-800", note: "سندات قبض الإقامة المعتمدة بتاريخ السند ضمن الفترة." },
     { label: "الاستردادات", value: sar(L.refunds), tone: "text-ink-800", note: "سندات الاسترداد المعتمدة ضمن الفترة؛ تُخصم من صافي التحصيل." },
-    { label: "إجمالي الرسوم", value: sar(Ch.total_charged), tone: "text-ink-800", note: `إيجار ${sar(Ch.rent)} · إضافات ${sar(Ch.addons)} · خصومات ${sar(Ch.discounts)} · ضريبة ${sar(Ch.tax)} للإقامات المتقاطعة مع الفترة.` },
+    { label: "إجمالي الرسوم", value: sar(Ch.total_charged), tone: "text-ink-800", note: `إيجار ${sar(Ch.rent)} · إضافات ${sar(Ch.addons)} · خصومات ${sar(Ch.discounts)}${Ch.tax ? ` · ضريبة ${sar(Ch.tax)}` : ""} للإقامات المتقاطعة مع الفترة.` },
     { label: "نسبة التحصيل (%)", value: report.collection_rate_pct == null ? "—" : `${report.collection_rate_pct}%`, tone: "text-brand-700", note: defs.collection_rate },
     { label: "رصيد التأمين المفتوح", value: sar(L.deposit_balance_open), tone: "text-ink-800", badge: "ليس إيرادًا", note: `رصيد حالي لا يتبع الفترة. ضمن الفترة: قبض تأمين ${sar(L.deposits_received)} · رد تأمين ${sar(L.deposits_refunded)} · تأمين مستخدم لتغطية رسوم ${sar(L.deposits_applied)}.` },
   ] : [];

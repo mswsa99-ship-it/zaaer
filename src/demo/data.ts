@@ -8,6 +8,9 @@ export type Store = Record<string, Row[]>;
 export const ORG = "00000000-0000-0000-0000-000000000001";
 export const BRANCH_A = "00000000-0000-0000-0000-000000000010";
 export const BRANCH_B = "00000000-0000-0000-0000-000000000012";
+/** Branch A's default cash box and bank account (0028). */
+export const CASH_A = "00000000-0000-0000-0000-000000000700";
+export const BANK_A = "00000000-0000-0000-0000-000000000701";
 
 let counter = 1000;
 export const uid = () => {
@@ -37,8 +40,8 @@ export function seed(): Store {
 
   put("organizations", [{ id: ORG, name_ar: "منازل الراحة", name_en: "Comfort Homes", license_number: "HSP-DEMO-001", license_status: "active", created_at: ts(-400) }]);
   put("branches", [
-    { id: BRANCH_A, organization_id: ORG, name_ar: "فرع الرياض — طريق الملك فهد", name_en: "Riyadh - King Fahd Rd", city: "الرياض", address: "طريق الملك فهد، حي العليا", map_url: null, phone: "+966500000000", email: "riyadh@demo.sa", check_in_time: "16:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 1500, prices_include_tax: false, default_deposit_halalas: 20000, tax_number: "300000000000003", commercial_register: "1010000000", archived_at: null, archived_by: null, archive_reason: null, version: 3, created_at: ts(-400), updated_at: ts(-30) },
-    { id: BRANCH_B, organization_id: ORG, name_ar: "فرع جدة — الكورنيش", name_en: "Jeddah - Corniche", city: "جدة", address: "طريق الكورنيش", map_url: null, phone: "+966500000001", email: "jeddah@demo.sa", check_in_time: "15:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 1500, prices_include_tax: false, default_deposit_halalas: 0, tax_number: null, commercial_register: null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-200) },
+    { id: BRANCH_A, organization_id: ORG, name_ar: "فرع الرياض — طريق الملك فهد", name_en: "Riyadh - King Fahd Rd", city: "الرياض", address: "طريق الملك فهد، حي العليا", map_url: null, phone: "+966500000000", email: "riyadh@demo.sa", check_in_time: "16:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, tax_number: null, commercial_register: "1010000000", archived_at: null, archived_by: null, archive_reason: null, version: 3, created_at: ts(-400), updated_at: ts(-30) },
+    { id: BRANCH_B, organization_id: ORG, name_ar: "فرع جدة — الكورنيش", name_en: "Jeddah - Corniche", city: "جدة", address: "طريق الكورنيش", map_url: null, phone: "+966500000001", email: "jeddah@demo.sa", check_in_time: "15:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, tax_number: null, commercial_register: null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-200) },
   ]);
   // WhatsApp per branch (0021, 0023): Riyadh answers from the reception computer (a demo number and key — nothing is
   // sent; the WhatsApp simulator plays the program), Jeddah is not set up yet
@@ -47,6 +50,16 @@ export function seed(): Store {
       auto_reply: true, human_pause_minutes: 60, has_bridge_key: true, bridge_key: "zb_" + "d3m0".repeat(16).replace(/m/g, "e"), bridge_key_last4: "d3e0", bridge_key_created_at: ts(-2), bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null, updated_at: ts(-1), created_at: ts(-30) },
   ]);
   put("whatsapp_outbox", []);
+  // cash boxes and bank accounts per branch, a default for each kind (0028, decision 25)
+  const acct = (id: string, branch: string, kind: string, name: string, bank: string | null, last4: string | null) => ({ id, organization_id: ORG, branch_id: branch, kind, name, bank_name: bank, account_last4: last4, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) });
+  put("cash_accounts", [
+    acct(CASH_A, BRANCH_A, "cash_box", "صندوق الاستقبال", null, null),
+    acct(BANK_A, BRANCH_A, "bank_account", "حساب الشبكة والتحويل", "البنك (للتجربة)", "4321"),
+    acct(fixed(702), BRANCH_B, "cash_box", "الصندوق الرئيسي", null, null),
+    acct(fixed(703), BRANCH_B, "bank_account", "الحساب البنكي الرئيسي", null, null),
+  ]);
+  put("pos_settlements", []);
+  put("platform_payouts", []);
   put("staff_profiles", Object.values(STAFF).map((x) => ({ id: x.id, auth_user_id: x.auth, organization_id: ORG, full_name: x.name, email: x.email, phone: null, role: x.role, is_active: true, created_at: ts(-300) })));
   put("branch_memberships", [
     { id: uid(), staff_id: STAFF.manager.id, branch_id: BRANCH_A }, { id: uid(), staff_id: STAFF.supervisor.id, branch_id: BRANCH_A },
@@ -138,32 +151,37 @@ export function seed(): Store {
   let vnum = 100; let rnum = 1;
   const nextNum = (prefix: string) => `${prefix}-2026-${String(++vnum).padStart(6, "0")}`;
   const money = (resId: string, kind: string, amount: number, method: string, dayOff: number, reference: string | null = null, status = "approved") => {
-    vouchers.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, number: nextNum(kind === "receipt" ? "RCP" : kind === "deposit" ? "DEP" : kind === "refund" ? "RFD" : "DRF"), kind, amount_halalas: amount, method, status, reference, note: null, reason: kind.includes("refund") ? "تسوية" : null, original_voucher_id: null, payment_transaction_id: null, idempotency_key: uid(), content_hash: "x", occurred_at: ts(dayOff, 14), created_by: STAFF.supervisor.id, created_at: ts(dayOff, 14), cancelled_by: null, cancelled_at: null, cancel_reason: null });
+    const account_id = method === "cash" ? CASH_A : method === "pos" || method === "bank_transfer" ? BANK_A : null;
+    vouchers.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, number: nextNum(kind === "receipt" ? "RCP" : kind === "deposit" ? "DEP" : kind === "refund" ? "RFD" : "DRF"), kind, amount_halalas: amount, method, account_id, payout_id: null, status, reference, note: null, reason: kind.includes("refund") ? "تسوية" : null, original_voucher_id: null, payment_transaction_id: null, idempotency_key: uid(), content_hash: "x", occurred_at: ts(dayOff, 14), created_by: STAFF.supervisor.id, created_at: ts(dayOff, 14), cancelled_by: null, cancelled_at: null, cancel_reason: null });
   };
-  interface MkRes { guest: string; phone: string; nat?: string; cat: string; room?: string; ci: number; co: number; status: string; source?: string; ext?: string | null; adults?: number; comp?: number; identity?: string; access?: string; gov?: boolean; receipts?: number[]; deposit?: number; depositRefund?: number; discount?: number; addon?: { d: string; a: number } | null; actualIn?: boolean; actualOut?: boolean; createdDays?: number; keyboxDelivered?: boolean }
+  interface MkRes { guest: string; phone: string; nat?: string; cat: string; room?: string; ci: number; co: number; status: string; source?: string; ext?: string | null; adults?: number; comp?: number; identity?: string; access?: string; gov?: boolean; receipts?: number[]; otaPaid?: boolean; deposit?: number; depositRefund?: number; discount?: number; addon?: { d: string; a: number } | null; actualIn?: boolean; actualOut?: boolean; createdDays?: number; keyboxDelivered?: boolean }
   const mkRes = (o: MkRes) => {
     const id = uid(); const ci = addDays(T, o.ci); const co = addDays(T, o.co); const nights = o.co - o.ci;
     const rate = s.room_categories.find((c) => c.id === o.cat)!.base_price_halalas as number;
     const rent = rate * nights; const disc = o.discount ?? 0; const addon = o.addon?.a ?? 0;
-    const taxable = rent - disc + addon; const tax = Math.round(taxable * 0.15);
+    // tax zero (decision 68); the receipt amounts below were written with 15% tax, so they are scaled to the stay
+    const taxable = rent - disc + addon; const tax = 0;
     const total = taxable + tax;
-    const received = (o.receipts ?? []).reduce((a, b) => a + b, 0);
-    const dep = o.deposit ?? 0; const depRef = o.depositRefund ?? 0;
+    const receipts = o.otaPaid ? [total] : (o.receipts ?? []).map((a) => Math.round(a / 1.15));   // a platform-paid stay: the platform owes the whole of it
+    const received = receipts.reduce((a, b) => a + b, 0);
+    // the deposit is 50 SAR per unit (decisions 33, 69); a partial return stays partial
+    const dep = o.deposit ? 5000 : 0; const depRef = o.depositRefund ? (o.depositRefund >= (o.deposit ?? 0) ? 5000 : 2500) : 0;
     const paid = received; const due = Math.max(total - paid, 0);
     const payment_status = paid === 0 ? "pending" : paid < total ? "partially_paid" : "paid";
     const roomId = o.room ? R[o.room] : null;
     const r = { id, organization_id: ORG, branch_id: BRANCH_A, internal_ref: `R-26A${String(rnum++).padStart(4, "0")}`, external_ref: o.ext ?? null, source_id: o.source ?? fixed(21), status: o.status, booking_type: "individual", company_name: null, visit_purpose: "سياحة", check_in: ci, check_out: co, adults: o.adults ?? 2, companions: o.comp ?? 0, room_category_id: o.cat, room_id: roomId,
       rent_amount_halalas: rent, discount_halalas: disc, addons_halalas: addon, taxes_halalas: tax, total_halalas: total, paid_halalas: paid, payment_status, identity_status: o.identity ?? "verified", government_registration: o.gov ?? (o.status === "checked_in" || o.status === "checked_out"), access_status: o.access ?? (o.status === "checked_in" ? "delivered" : o.status === "checked_out" ? "delivered" : "locked"), keybox_delivered: o.keyboxDelivered ?? (o.status === "checked_in"),
       checkin_approved_by: null, checkin_approved_at: null, actual_check_in: o.actualIn || o.status === "checked_in" || o.status === "checked_out" ? ts(o.ci, 17) : null, actual_check_out: o.actualOut || o.status === "checked_out" ? ts(o.co, 11) : null, notes: null, created_at: ts(o.createdDays ?? o.ci - 5), created_by: STAFF.supervisor.id, security_hold: false, security_hold_reason: null, gov_registration_ref: null, gov_registration_by: null, gov_registration_at: null, updated_at: ts(-1),
-      version: 1, rate_type: "daily", nightly_rate_halalas: rate, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: dep - depRef, refunded_halalas: 0, balance_due_halalas: due };
+      version: 1, rate_type: "daily", nightly_rate_halalas: rate, tax_rate_bp: 0, prices_include_tax: false, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: dep - depRef, refunded_halalas: 0, balance_due_halalas: due };
     res.push(r);
     guests.push({ id: uid(), reservation_id: id, guest_profile_id: null, is_primary: true, full_name: o.guest, identity_type: "national_id", identity_number_encrypted: null, identity_number_last4: String(1000 + Math.floor(Math.random() * 8999)), identity_issue_number: null, nationality: o.nat ?? "سعودي", birth_date: "1990-05-05", phone: o.phone, phone_verified: false, relationship: null, verification_status: o.identity ?? "verified", data_submitted: (o.identity ?? "verified") !== "not_started", created_at: r.created_at });
     if (roomId) allocs.push({ id: uid(), reservation_id: id, room_id: roomId, branch_id: BRANCH_A, from_date: ci, to_date: co, status: ["cancelled", "no_show", "rejected"].includes(o.status) ? "cancelled" : o.status === "checked_out" ? "closed" : "active", reason: "create", created_by: STAFF.supervisor.id, created_at: r.created_at, closed_at: null });
     charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "rent", description: `إيجار ${nights} ليلة × ${(rate / 100).toFixed(2)} ر.س`, quantity: nights, unit_price_halalas: rate, total_halalas: rent, taxable: true, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
     if (disc) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "discount", description: "خصم ضيف دائم", quantity: 1, unit_price_halalas: disc, total_halalas: -disc, taxable: true, service_definition_id: null, invoice_id: null, reason: "ضيف دائم", created_by: STAFF.manager.id, created_at: r.created_at });
     if (o.addon) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "addon", description: o.addon.d, quantity: 1, unit_price_halalas: o.addon.a, total_halalas: o.addon.a, taxable: true, service_definition_id: svc.breakfast, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
-    charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "tax", description: "ضريبة القيمة المضافة", quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
-    (o.receipts ?? []).forEach((amt, i) => money(id, "receipt", amt, i === 0 ? "mada" : "cash", o.ci - 1 + i, i === 0 ? "MADA-" + (7000 + rnum) : null));
+    if (tax) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "tax", description: "ضريبة القيمة المضافة", quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
+    // a platform collects when the guest books (never later than yesterday here); it pays the property later, monthly
+    receipts.forEach((amt, i) => (o.otaPaid ? money(id, "receipt", amt, "ota_deferred", Math.min(o.createdDays ?? o.ci - 5, -1), o.ext ?? null) : money(id, "receipt", amt, i === 0 ? "pos" : "cash", o.ci - 1 + i, i === 0 ? "TRX-" + (7000 + rnum) : null)));
     if (dep) money(id, "deposit", dep, "cash", o.ci);
     if (depRef) money(id, "deposit_refund", depRef, "cash", o.co);
     audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "reservation.created", entity_type: "reservation", entity_id: id, details: { after: { internal_ref: r.internal_ref, check_in: ci, check_out: co } }, created_at: r.created_at });
@@ -176,14 +194,14 @@ export function seed(): Store {
   const rIn4 = mkRes({ guest: "سارة علي الشهري", phone: "0501110004", cat: cat.one, room: "204", ci: -6, co: -1, status: "checked_in", receipts: [138000, 92000], deposit: 30000 }); // overstay
   const rIn5 = mkRes({ guest: "فيصل ناصر الدوسري", phone: "0501110005", cat: cat.studio, room: "U2", ci: -1, co: 0, status: "checked_in", receipts: [28750], deposit: 10000 });
   // arrivals today
-  const rArr1 = mkRes({ guest: "منيرة سعود الحربي", phone: "0501110006", cat: cat.studio, room: "105", ci: 0, co: 3, status: "confirmed", receipts: [], deposit: 0, identity: "data_submitted", access: "locked", gov: false, source: fixed(20), ext: "BK-4471029" });
-  const rArr2 = mkRes({ guest: "Ahmed Al Mansoori", phone: "0501110007", nat: "إماراتي", cat: cat.two, ci: 0, co: 2, status: "pending_verification", receipts: [], identity: "not_started", access: "locked", gov: false, source: fixed(22), ext: "HMABC123" });
+  const rArr1 = mkRes({ guest: "منيرة سعود الحربي", phone: "0501110006", cat: cat.studio, room: "105", ci: 0, co: 3, status: "confirmed", receipts: [], deposit: 0, identity: "data_submitted", access: "locked", gov: false, otaPaid: true, source: fixed(20), ext: "BK-4471029" });
+  const rArr2 = mkRes({ guest: "Ahmed Al Mansoori", phone: "0501110007", nat: "إماراتي", cat: cat.two, ci: 0, co: 2, status: "pending_verification", receipts: [], identity: "not_started", access: "locked", gov: false, otaPaid: true, source: fixed(22), ext: "HMABC123" });
   const rArr3 = mkRes({ guest: "تركي عبدالعزيز المطيري", phone: "0501110008", cat: cat.one, room: "203", ci: 0, co: 5, status: "confirmed", receipts: [230000], identity: "verified", access: "locked", gov: true });
   // overdue arrival
   mkRes({ guest: "بدر راشد العنزي", phone: "0501110009", cat: cat.studio, ci: -1, co: 2, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false });
   // future
   mkRes({ guest: "لطيفة حمد السبيعي", phone: "0501110010", cat: cat.two, room: "205", ci: 2, co: 6, status: "confirmed", receipts: [69000], identity: "not_started", access: "locked", gov: false, createdDays: -4 });
-  mkRes({ guest: "Yusuf Demir", phone: "0501110011", nat: "تركي", cat: cat.one, ci: 5, co: 9, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false, source: fixed(20), ext: "BK-4489931", createdDays: -2 });
+  mkRes({ guest: "Yusuf Demir", phone: "0501110011", nat: "تركي", cat: cat.one, ci: 5, co: 9, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false, otaPaid: true, source: fixed(20), ext: "BK-4489931", createdDays: -2 });
   mkRes({ guest: "ريم فهد الغامدي", phone: "0501110012", cat: cat.studio, room: "U1", ci: 1, co: 2, status: "confirmed", receipts: [28750], identity: "verified", access: "locked", gov: false, createdDays: -1 });
   // checked out with deposit to settle
   const rOut1 = mkRes({ guest: "ماجد سلمان الزهراني", phone: "0501110013", cat: cat.two, room: "206", ci: -4, co: 0, status: "checked_out", receipts: [276000], deposit: 40000, actualOut: true });

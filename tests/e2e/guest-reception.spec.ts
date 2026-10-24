@@ -38,7 +38,7 @@ test.describe("guest reception", () => {
     expect(parking).not.toMatch(/لم أفهم طلبك/);
 
     // a factual answer must not drag the availability widget into the conversation
-    await expect(page.getByText("لليلة · قبل الضريبة")).toHaveCount(0);
+    await expect(page.getByText("لليلة", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "إتمام الحجز عبر المنصة المعتمدة" })).toHaveCount(0);
   });
 
@@ -46,7 +46,9 @@ test.describe("guest reception", () => {
     await openAssistant();
     const reply = await ask("أبغى حجز جديد، كم الأسعار؟");
     expect(reply).toMatch(/التصنيفات المتاحة والأسعار/);
-    await expect(page.getByText("لليلة · قبل الضريبة").first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("لليلة", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    // the branch charges no tax (decision 68): the price says nothing about tax
+    await expect(page.getByText(/قبل الضريبة|شامل الضريبة/)).toHaveCount(0);
     // public card: category + base price only; no room numbers, no guest data
     await expect(page.getByText(/غرفة \d{3}/)).toHaveCount(0);
   });

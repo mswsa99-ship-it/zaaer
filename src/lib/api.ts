@@ -74,6 +74,22 @@ const ERROR_AR: Record<string, string> = {
 };
 
 const VALIDATION_AR: Record<string, string> = {
+  // core money (0028)
+  method_retired: "هذه الطريقة لم تعد مستخدمة. طرق القبض والرد: نقد، شبكة، تحويل بنكي، آجل عبر المنصة.",
+  deposit_method: "التأمين يُقبض ويُرد في المنشأة نفسها (نقد أو شبكة أو تحويل)، ولا تحصّله المنصة.",
+  account_required: "لا يوجد صندوق أو حساب بنكي افتراضي لهذا الفرع. اختر واحدًا، أو عرّفه من «الصناديق والحسابات».",
+  account_kind: "النقد يُقيَّد في صندوق، والشبكة والتحويل في حساب بنكي.",
+  account_archived: "هذا الصندوق أو الحساب مؤرشف ولا يُستخدم لسندات جديدة.",
+  account_not_allowed: "الآجل عبر المنصة لا يُقيَّد في صندوق ولا حساب.",
+  account_last4: "آخر أربعة أرقام من الحساب: أربعة أرقام فقط.",
+  reference: "رقم العملية بين 3 و60 حرفًا.",
+  note_required: "يوجد فرق: اكتب سببه.",
+  business_date: "لا تُسوّى إلا الأيام التي مضت أو اليوم.",
+  received_on: "تاريخ الاستلام لا يكون بعد اليوم.",
+  vouchers: "اختر دفعة واحدة على الأقل.",
+  payout_vouchers: "بعض الدفعات المختارة ليست دفعات آجلة غير مطابقة لهذه المنصة في هذا الفرع.",
+  payout_status: "هذه المطابقة ملغاة مسبقًا.",
+  tax_rate: "نسبة الضريبة بين 0 و100%.",
   full_name_three_parts: "الاسم الثلاثي مطلوب كما في الوثيقة.",
   identity_type: "نوع الوثيقة غير صحيح.",
   identity_number_format: "شكل رقم الوثيقة غير صحيح لهذا النوع.",
@@ -83,7 +99,7 @@ const VALIDATION_AR: Record<string, string> = {
   consent_required: "يجب الإقرار بصحة البيانات.",
   phone_required_primary: "رقم الجوال مطلوب للنزيل الرئيسي.",
   amount: "المبلغ غير صحيح.",
-  reference_required: "رقم المرجع مطلوب.",
+  reference_required: "رقم المرجع أو رقم العملية مطلوب.",
   idempotency_key: "مفتاح العملية مفقود.",
   code_must_be_4_to_8_digits: "الرمز يجب أن يكون من 4 إلى 8 أرقام.",
   title: "العنوان مطلوب.",
@@ -337,6 +353,27 @@ export const supportApi = {
   lookupTrace: (code: string) => rpc<TraceLookup>("fn_lookup_trace", { p_trace: normalizeTrace(code) }),
 };
 
+// ---------------------------------------------------------------------------
+// Core money (0028): cash boxes and bank accounts, the terminal settlement, platform payouts
+// ---------------------------------------------------------------------------
+export interface CashAccount { id: string; branch_id: string; kind: "cash_box" | "bank_account"; name: string; bank_name: string | null; account_last4: string | null; is_default: boolean; is_active: boolean; archived_at: string | null; archive_reason: string | null; version: number }
+export interface PosDay {
+  in_halalas: number; out_halalas: number; system_total_halalas: number; voucher_count: number;
+  vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; reference: string | null; occurred_at: string }>;
+  settlement: PosSettlement | null;
+}
+export interface PosSettlement { id: string; account_id: string; business_date: string; terminal_total_halalas: number; system_total_halalas: number; difference_halalas: number; voucher_count: number; status: "matched" | "difference"; note: string | null; version: number; updated_at: string }
+export interface PlatformPayment { id: string; number: string; kind: "receipt" | "refund"; amount_halalas: number; signed_halalas: number; occurred_at: string; reservation_id: string; internal_ref: string; external_ref: string | null; check_in: string; source_id: string; source_name: string | null }
+export const moneyApi = {
+  upsertAccount: (p: Partial<CashAccount> & { name: string }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_cash_account", { p }),
+  archiveAccount: (id: string, archive: boolean, reason: string) => rpc<{ ok: boolean; used_by_vouchers?: number; default_missing?: boolean; unchanged?: boolean }>("fn_admin_archive_cash_account", { p_id: id, p_archive: archive, p_reason: reason }),
+  posDay: (branchId: string, accountId: string, date: string) => rpc<PosDay>("fn_pos_settlement_preview", { p_branch: branchId, p_account: accountId, p_date: date }),
+  posSettle: (p: { branch_id: string; account_id: string; business_date: string; terminal_total_halalas: number; note?: string; version?: number }) => rpc<{ ok: boolean; settlement: PosSettlement }>("fn_pos_settle", { p }),
+  platformUnsettled: (branchId: string) => rpc<PlatformPayment[]>("fn_platform_unsettled", { p_branch: branchId }),
+  platformConfirm: (p: { branch_id: string; source_id: string; voucher_ids: string[]; received_halalas: number; received_on: string; account_id?: string; reference: string; note?: string }) => rpc<{ ok: boolean }>("fn_platform_payout_confirm", { p }),
+  platformCancel: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_platform_payout_cancel", { p_payout: id, p_reason: reason }),
+};
+
 function fingerprint(): string {
   try {
     let f = sessionStorage.getItem("fp");
@@ -392,9 +429,9 @@ export const opsApi = {
   list: (branchId: string, filters: Record<string, unknown>, limit = 50, offset = 0) => rpc<{ total: number; rows: ReservationRow[] }>("fn_reservation_list", { p_branch: branchId, p_filters: filters, p_limit: limit, p_offset: offset }),
 
   // money
-  createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; reference?: string; note?: string; reason?: string; idempotency_key: string }) =>
+  createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; account_id?: string; reference?: string; note?: string; reason?: string; idempotency_key: string }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; finance: Finance }>("fn_create_voucher", { p }),
-  refund: (p: { reservation_id: string; kind: "refund" | "deposit_refund" | "deposit_apply"; amount_halalas: number; method?: string; reference?: string; reason: string; idempotency_key: string; original_voucher_id?: string }) =>
+  refund: (p: { reservation_id: string; kind: "refund" | "deposit_refund" | "deposit_apply"; amount_halalas: number; method?: string; account_id?: string; reference?: string; reason: string; idempotency_key: string; original_voucher_id?: string }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; finance: Finance }>("fn_refund", { p }),
   cancelVoucher: (id: string, reason: string) => rpc<{ ok: boolean; finance: Finance; provider_refund_note?: string }>("fn_cancel_voucher", { p_voucher: id, p_reason: reason }),
   createInvoice: (reservationId: string, from?: string, to?: string) => rpc<{ ok: boolean; id: string; number: string; total_halalas: number }>("fn_create_invoice", { p_reservation: reservationId, p_from: from ?? null, p_to: to ?? null }),
@@ -436,7 +473,7 @@ export interface ReservationDetail {
   guests: Array<{ id: string; is_primary: boolean; full_name: string; identity_type: string | null; identity_number_last4: string | null; nationality: string | null; phone: string | null; verification_status: string; data_submitted: boolean }>;
   allocations: Array<{ id: string; room_number: string; from_date: string; to_date: string; status: string; reason: string | null; created_at: string }>;
   charges: Array<{ id: string; kind: string; description: string; quantity: number; unit_price_halalas: number; total_halalas: number; invoice_id: string | null; reason: string | null; created_at: string }> | null;
-  vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; method: string; status: string; reference: string | null; note: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null }> | null;
+  vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; method: string; account_id: string | null; payout_id: string | null; status: string; reference: string | null; note: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null }> | null;
   invoices: Array<{ id: string; number: string; status: string; total_halalas: number; issued_at: string; period_from: string; period_to: string }> | null;
   finance: Finance | null;
   history: Array<{ action: string; at: string; actor: string | null; details: Record<string, unknown> | null }>;

@@ -34,5 +34,7 @@ echo "== running key-box code tests («الرموز»)"
 psql -d "$DB" -f tests/sql/keybox_codes_tests.sql
 echo "== running audit trace and mid-operation failure tests (G22, X08)"
 psql -d "$DB" -f tests/sql/audit_trace_tests.sql
+echo "== running core money tests (methods, accounts, settlements, tax zero — Phase 1)"
+psql -d "$DB" -f tests/sql/money_core_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

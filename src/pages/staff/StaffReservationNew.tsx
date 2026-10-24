@@ -174,7 +174,7 @@ export default function StaffReservationNew() {
               <div className="mt-4 space-y-1.5 rounded-xl bg-ink-50 p-3 text-sm">
                 <Row l={`الإيجار (${quote.nights} × ${formatCurrency(quote.nightly_rate / 100)})`} v={formatCurrency(quote.rent / 100)} />
                 {quote.discount !== 0 && <Row l="الخصم" v={formatCurrency(quote.discount / 100)} />}
-                <Row l={`الضريبة ${(quote.tax_rate_bp / 100).toFixed(0)}% ${quote.prices_include_tax ? "(مضمنة)" : ""}`} v={formatCurrency(quote.tax / 100)} />
+                {quote.tax_rate_bp > 0 && <Row l={`الضريبة ${quote.tax_rate_bp / 100}% ${quote.prices_include_tax ? "(مضمنة)" : ""}`} v={formatCurrency(quote.tax / 100)} />}
                 <div className="border-t border-ink-200 pt-1.5"><Row l="الإجمالي" v={formatCurrency(quote.total / 100)} strong /></div>
               </div>
             )}

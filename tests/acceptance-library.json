@@ -625,6 +625,7 @@
     "KD": "رموز الصناديق في العرض التجريبي (tests/unit/keybox_codes_demo.test.ts)",
     "L": "الفحص الحي بعد النشر (tests/staging/live.spec.ts)",
     "LD": "التواريخ بتوقيت الفرع (tests/sql/local_date_tests.sql)",
+    "MC": "المال الأساسي — المرحلة 1: طرق الدفع والصناديق والحسابات والتسويات والضريبة والتأمين (tests/sql/money_core_tests.sql)",
     "OC": "مساعد العمليات للموظفين (tests/e2e/copilot.spec.ts)",
     "P": "تكافؤ إنشاء الحجز مع زائر (tests/sql/parity_tests.sql)",
     "PH": "«حجوزاتي» برقم الجوال (tests/sql/phone_lookup_tests.sql)",

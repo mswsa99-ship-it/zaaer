@@ -5,7 +5,7 @@
  *    organisation, others → memberships). No memberships or a failed query → EMPTY list, no active branch, and the
  *    guard / BranchPicker show "لا يوجد فرع مخوّل لحسابك — تواصل مع المدير" instead of data (GAP02, fail closed).
  *  - Guest screens (no session): VITE_DEFAULT_BRANCH_ID or the first active branch (branches are publicly readable:
- *    name/times only).
+ *    name, times and the tax setting that prices are quoted against).
  *  - The selection is persisted per user (localStorage key scoped by the signed-in user id) and changing it
  *    re-renders every consumer of `useBranch()`, so each page's branch-keyed effects refetch. Out-of-order
  *    responses are dropped with a request token.
@@ -14,12 +14,18 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
 
-export interface BranchLite { id: string; name_ar: string; check_in_time?: string; check_out_time?: string }
+export interface BranchLite { id: string; name_ar: string; check_in_time?: string; check_out_time?: string; tax_rate_bp?: number; prices_include_tax?: boolean }
+
+/** What a quoted price means for tax (decision 68): nothing to say at zero tax, otherwise before or including it. */
+export function priceTaxNote(b: BranchLite | null | undefined): string | null {
+  if (!b || !b.tax_rate_bp) return null;
+  return b.prices_include_tax ? "شامل الضريبة" : "قبل الضريبة";
+}
 
 export const NO_BRANCH_MESSAGE = "لا يوجد فرع مخوّل لحسابك — تواصل مع المدير";
 
 const DEFAULT_BRANCH = (import.meta.env.VITE_DEFAULT_BRANCH_ID as string | undefined) ?? null;
-const BRANCH_COLUMNS = "id, name_ar, check_in_time, check_out_time";
+const BRANCH_COLUMNS = "id, name_ar, check_in_time, check_out_time, tax_rate_bp, prices_include_tax";
 
 interface BranchContextValue {
   branches: BranchLite[];

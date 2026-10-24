@@ -59,6 +59,9 @@ import AdminServices from "./pages/admin/AdminServices";
 import AdminAssistant from "./pages/admin/AdminAssistant";
 import AdminDataPurge from "./pages/admin/AdminDataPurge";
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
+import PosSettlement from "./pages/staff/PosSettlement";
+import AdminCashAccounts from "./pages/admin/AdminCashAccounts";
+import AdminPlatformPayouts from "./pages/admin/AdminPlatformPayouts";
 /** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
 const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
 
@@ -101,6 +104,7 @@ export default function App() {
           <Route path="/staff/reservations/:id" element={<StaffReservationDetail />} />
           <Route path="/staff/identity-verification" element={<IdentityVerification />} />
           <Route path="/staff/payments" element={<StaffPayments />} />
+          <Route path="/staff/pos-settlement" element={<PosSettlement />} />
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
           <Route path="/staff/rooms" element={<StaffRooms />} />
           <Route path="/staff/housekeeping" element={<Housekeeping />} />
@@ -126,6 +130,8 @@ export default function App() {
           <Route path="/admin/reservations" element={<AdminReservations />} />
           <Route path="/admin/guests" element={<AdminGuests />} />
           <Route path="/admin/finance" element={<AdminFinance />} />
+          <Route path="/admin/platform-payouts" element={<AdminPlatformPayouts />} />
+          <Route path="/admin/cash-accounts" element={<AdminCashAccounts />} />
           {/* the key boxes moved to the one screen «الرموز» */}
           <Route path="/admin/keyboxes" element={<Navigate to="/staff/codes" replace />} />
           <Route path="/admin/staff" element={<AdminStaff />} />
@@ -137,7 +143,7 @@ export default function App() {
           <Route path="/admin/data-purge" element={<AdminDataPurge />} />
           <Route path="/admin/payment-providers" element={<AdminPaymentProviders />} />
           <Route path="/admin/policies" element={<AdminPolicies />} />
-        <Route path="/admin/knowledge" element={<AdminKnowledge />} />
+          <Route path="/admin/knowledge" element={<AdminKnowledge />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
           <Route path="/admin/integrations" element={<AdminIntegrations />} />
