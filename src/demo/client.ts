@@ -200,6 +200,8 @@ function project(table: string, row: Row, sel: string): Row {
 }
 type Filter = (r: Row) => boolean;
 const MONEY_ROLES = ["owner", "manager", "supervisor", "finance"];
+/** Who may change a table the UI writes directly (mirrors the write policies); other direct writes are not emulated. */
+const WRITE_ROLES: Record<string, string[]> = { booking_sources: ["owner", "manager"] };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
 /** Mirrors the row-level security of the real schema closely enough for the walkthrough. */
 function visible(table: string, r: Row): boolean {
@@ -257,6 +259,12 @@ class QB implements PromiseLike<any> {
   private run(): { data: any; error: any; count: number | null } {
     try {
       const rows = T(this.table);
+      // write-side RLS for the tables the UI changes directly (0029: the booking platforms are the owner's or a manager's)
+      const writers = WRITE_ROLES[this.table];
+      if (this.mode !== "select" && writers && !this.service && !hasRole(...writers)) {
+        if (this.mode === "insert" || this.mode === "upsert") return { data: null, error: { message: `new row violates row-level security policy for table "${this.table}"`, code: "42501" }, count: null };
+        return { data: [], error: null, count: null };   // as in Postgres: no row is visible to the change, nothing changes
+      }
       const match = (r: Row) => this.filters.every((f) => f(r));
       if (this.mode === "insert" || this.mode === "upsert") {
         const list: Row[] = (Array.isArray(this.payload) ? this.payload : [this.payload]).map((p: Row) => ({ id: uid(), created_at: nowISO(), ...p }));

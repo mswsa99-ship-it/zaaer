@@ -420,3 +420,20 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_pos_settle", { p: { branch_id: BRANCH, account_id: d.bank.id, business_date: today(), terminal_total_halalas: "1.5" } })).rejects.toThrow(/VALIDATION: amount/);
   });
 });
+
+describe("G01/G03 — who may change the booking platforms (0029, §16)", () => {
+  it("T30 every staff member reads the platforms; only the owner or a manager changes one", async () => {
+    const src = ((await client.from("booking_sources").select("id, booking_url").limit(1).maybeSingle()).data as any);
+    for (const email of ["housekeeping@demo.sa", "reception@demo.sa", "finance@demo.sa"]) {
+      await login(email);
+      expect(((await client.from("booking_sources").select("id")).data as any[]).length, email).toBeGreaterThan(0);
+      const upd = await client.from("booking_sources").update({ booking_url: "https://elsewhere.test" }).eq("id", src.id).select("id");
+      expect((upd.data as any[]).length, email).toBe(0);
+      const ins = await client.from("booking_sources").insert({ name: "منصة دخيلة" });
+      expect(ins.error?.code, email).toBe("42501");
+    }
+    await login("manager@demo.sa");
+    const ok = await client.from("booking_sources").update({ booking_url: "https://example.test/book" }).eq("id", src.id).select("id, booking_url");
+    expect((ok.data as any[])[0]).toMatchObject({ id: src.id, booking_url: "https://example.test/book" });
+  });
+});

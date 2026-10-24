@@ -374,6 +374,42 @@ do $$ declare r jsonb; tok text; s jsonb; begin
 end $$;
 reset role;
 
+-- =====================================================================
+-- T30: booking sources — every staff member reads them; only the owner or a manager changes them (0029, §16)
+-- =====================================================================
+reset role;
+insert into booking_sources(id, organization_id, name, booking_url, is_active, code)
+  values ('00000000-0000-0000-0000-000000000029', '00000000-0000-0000-0000-000000000001', 'منصة الاختبار', 'https://example.test/book', false, 't30')
+  on conflict (id) do nothing;
+set role authenticated;
+select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
+do $$ declare n int; m int; begin
+  -- a switched-off platform is still readable by staff (old reservations show it)
+  select count(*) into n from booking_sources where id = '00000000-0000-0000-0000-000000000029';
+  update booking_sources set booking_url = 'https://elsewhere.test' where id = '00000000-0000-0000-0000-000000000029';
+  get diagnostics m = row_count;
+  begin
+    insert into booking_sources(organization_id, name, code) values ('00000000-0000-0000-0000-000000000001', 'منصة دخيلة', 't30x');
+    perform t_record('T30a housekeeping reads the platforms but cannot change or add one', false, 'insert accepted');
+  exception when others then
+    perform t_record('T30a housekeeping reads the platforms but cannot change or add one', n = 1 and m = 0 and sqlerrm like '%row-level security%', 'read=' || n || ' updated=' || m || ' / ' || sqlerrm);
+  end;
+end $$;
+select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
+do $$ declare m int; begin
+  update booking_sources set is_active = true where id = '00000000-0000-0000-0000-000000000029';
+  get diagnostics m = row_count;
+  perform t_record('T30b a supervisor cannot switch a platform on or off', m = 0, 'updated=' || m);
+end $$;
+select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
+do $$ declare m int; u text; begin
+  update booking_sources set booking_url = 'https://example.test/book2' where id = '00000000-0000-0000-0000-000000000029';
+  get diagnostics m = row_count;
+  select booking_url into u from booking_sources where id = '00000000-0000-0000-0000-000000000029';
+  perform t_record('T30c the owner changes the booking link', m = 1 and u = 'https://example.test/book2', 'updated=' || m || ' url=' || coalesce(u, 'null'));
+end $$;
+reset role;
+
 -- T26: money arithmetic sanity (integers, halalas)
 do $$ declare r reservations%rowtype; begin
   select * into r from reservations where id='00000000-0000-0000-0000-000000000200';
