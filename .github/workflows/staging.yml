@@ -35,7 +35,7 @@ jobs:
 
   backend:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04, which Playwright 1.56 cannot install on
     timeout-minutes: 20
     steps:
       - name: Credentials present?
@@ -72,7 +72,7 @@ jobs:
   web:
     needs: [verify, backend]
     if: ${{ !cancelled() && needs.verify.result == 'success' && needs.backend.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04, which Playwright 1.56 cannot install on
     timeout-minutes: 15
     permissions:
       contents: read
@@ -151,7 +151,7 @@ jobs:
     needs: web
     # explicit: a skipped or no-op job further up the chain must not silently skip the release
     if: ${{ !cancelled() && needs.web.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04, which Playwright 1.56 cannot install on
     timeout-minutes: 10
     permissions:
       pages: write
@@ -168,7 +168,7 @@ jobs:
   live:
     needs: [web, pages]
     if: ${{ !cancelled() && needs.pages.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04, which Playwright 1.56 cannot install on
     timeout-minutes: 15
     env:
       STAGING_URL: ${{ needs.pages.outputs.url }}
