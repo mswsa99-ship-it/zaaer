@@ -1,11 +1,12 @@
 import { useReservations } from "../../lib/hooks";
 import { ReservationCardRow } from "../../components/ReservationCard";
-import { SectionTitle, EmptyState, LoadingScreen } from "../../components/ui";
+import { SectionTitle, EmptyState, LoadingScreen, LoadErrorCard } from "../../components/ui";
 import { KeyRound } from "lucide-react";
 
 export default function AccessApprovals() {
-  const { data, loading } = useReservations();
+  const { data, loading, error, reload } = useReservations();
   if (loading) return <LoadingScreen />;
+  if (error && data.length === 0) return <LoadErrorCard message={error} onRetry={reload} />;
   const ready = data.filter((r) =>
     r.identity_status === "verified" &&
     (r.payment_status === "paid" || r.payment_status === "partially_paid") &&

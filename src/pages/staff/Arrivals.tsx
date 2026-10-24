@@ -1,11 +1,12 @@
 import { useReservations } from "../../lib/hooks";
 import { ReservationCardRow } from "../../components/ReservationCard";
-import { SectionTitle, EmptyState, LoadingScreen } from "../../components/ui";
+import { SectionTitle, EmptyState, LoadingScreen, LoadErrorCard } from "../../components/ui";
 import { CalendarClock } from "lucide-react";
 
 export default function Arrivals() {
-  const { data, loading } = useReservations({ todayOnly: true });
+  const { data, loading, error, reload } = useReservations({ todayOnly: true });
   if (loading) return <LoadingScreen />;
+  if (error && data.length === 0) return <LoadErrorCard message={error} onRetry={reload} />;
   return (
     <div>
       <SectionTitle title="وصول اليوم" subtitle={`${data.length} حجز`} />

@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { toArabicError, whatsappApi } from "../../lib/api";
-import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge } from "../../components/ui";
+import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Inbox as InboxIcon, MessageCircle, Send, Bot, UserCheck, ShieldCheck, PauseCircle } from "lucide-react";
 import { formatDateTime } from "../../lib/utils";
 
@@ -26,6 +26,8 @@ interface MessageRow {
   meta: { mode?: string; [k: string]: unknown } | null;
 }
 
+const NO_CONVERSATIONS: ConversationRow[] = [];
+
 const STATUS_LABELS: Record<string, string> = { active: "نشطة", handed_off: "محوّلة", closed: "مغلقة" };
 const STATUS_COLORS: Record<string, string> = { active: "bg-success-500/10 text-success-600", handed_off: "bg-warning-500/10 text-warning-600", closed: "bg-ink-100 text-ink-400" };
 
@@ -33,10 +35,7 @@ function channelLabel(c: string) { return c === "whatsapp" ? "واتساب" : "�
 const DELIVERY: Record<string, string> = { queued: "بانتظار كمبيوتر الاستقبال", sent: "أُرسلت", failed: "لم تُرسل" };
 
 export default function Inbox() {
-  const { branchId, loading: branchLoading } = useBranch();
-  const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reply, setReply] = useState("");
@@ -44,31 +43,32 @@ export default function Inbox() {
   const [notice, setNotice] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const loadConversations = useCallback(async () => {
-    let q = supabase
+  // G24 (decision 40): the active branch's conversations (and unassigned ones) only — never an unscoped list
+  const q = useBranchQuery<ConversationRow[]>(async (branchId) => must(await supabase
       .from("conversations")
       .select("id, channel, status, created_at, last_message_at, branch_id, handoff_reason, guest_token, human_active_until")
+      .or(`branch_id.eq.${branchId},branch_id.is.null`)
       .order("last_message_at", { ascending: false, nullsFirst: false })
-      .limit(50);
-    if (branchId) q = q.or(`branch_id.eq.${branchId},branch_id.is.null`);
-    const { data, error: e } = await q;
-    if (e) setError(toArabicError(e));
-    else setConversations((data as ConversationRow[]) ?? []);
-    setLoading(false);
-  }, [branchId]);
+      .limit(50)) as ConversationRow[], [], NO_CONVERSATIONS);
+  const conversations = q.data; const loadConversations = q.reload;
+  // a conversation of the previous branch is never left open after a branch switch
+  useEffect(() => { setSelected(null); }, [q.branchId]);
 
+  // the messages of the selected conversation; an answer for a conversation that is no longer selected is dropped
+  const msgReq = useRef(0);
   const loadMessages = useCallback(async (conversationId: string) => {
+    const token = ++msgReq.current;
     const { data, error: e } = await supabase
       .from("conversation_messages")
       .select("id, sender, content, created_at, meta")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true });
+    if (token !== msgReq.current) return;
     if (e) setError(toArabicError(e));
     else setMessages((data as MessageRow[]) ?? []);
   }, []);
 
-  useEffect(() => { if (!branchLoading) loadConversations(); }, [loadConversations, branchLoading]);
-  useEffect(() => { if (selected) loadMessages(selected); else setMessages([]); }, [selected, loadMessages]);
+  useEffect(() => { if (selected) { setMessages([]); loadMessages(selected); } else { msgReq.current++; setMessages([]); } }, [selected, loadMessages]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
 
   // Realtime on messages and conversations
@@ -98,7 +98,7 @@ export default function Inbox() {
         const r = await whatsappApi.reply(selected, reply.trim());
         if (r.queued) setNotice(r.bridge_online ? "أُرسلت إلى كمبيوتر الاستقبال وتصل للنزيل خلال ثوانٍ. المساعد صامت في هذه المحادثة الآن." : "حُفظت وستُرسل عند تشغيل برنامج كمبيوتر الاستقبال (غير متصل الآن).");
         else if (!r.delivered) setError(r.error === "window_closed" ? "حُفظت الرسالة لكن لم تُرسل: مرّ أكثر من 24 ساعة على آخر رسالة من النزيل." : r.error === "channel_unavailable" ? "حُفظت الرسالة لكن واتساب هذا الفرع غير مفعّل." : "حُفظت الرسالة لكن تعذّر إرسالها عبر واتساب.");
-        await loadConversations();
+        loadConversations();
       } else {
         const { error: err } = await supabase.from("conversation_messages").insert({ conversation_id: selected, sender: "supervisor", content: reply.trim() });
         if (err) throw err;
@@ -118,7 +118,7 @@ export default function Inbox() {
     try {
       // audited; on WhatsApp taking the chat also silences the assistant there (the branch's pause), returning ends it
       await whatsappApi.take(selected, status === "handed_off");
-      await loadConversations();
+      loadConversations();
     } catch (err) {
       setError(toArabicError(err));
     } finally {
@@ -126,7 +126,7 @@ export default function Inbox() {
     }
   }
 
-  if (loading || branchLoading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
 
   const current = conversations.find((c) => c.id === selected);
   const pausedUntil = current?.human_active_until && Date.parse(current.human_active_until) > Date.now() ? current.human_active_until : null;
@@ -134,9 +134,9 @@ export default function Inbox() {
   return (
     <div>
       <SectionTitle title="الوارد الموحّد" subtitle={`${conversations.length} محادثة`} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {(error || (q.error && conversations.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
       {notice && <p className="mb-4 rounded-xl bg-success-500/10 px-3 py-2 text-sm text-success-600">{notice}</p>}
-      {conversations.length === 0 ? (
+      {q.error && conversations.length === 0 ? <LoadErrorCard message={q.error} onRetry={loadConversations} /> : conversations.length === 0 ? (
         <EmptyState icon={<InboxIcon className="h-10 w-10" />} title="لا توجد محادثات" description="تظهر محادثات النزلاء من الويب وواتساب هنا." />
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">

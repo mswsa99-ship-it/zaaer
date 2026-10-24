@@ -4,6 +4,7 @@ dist
 *.local
 dist-demo
 test-results
+verify-results
 playwright-report
 test-results-staging
 playwright-report-staging

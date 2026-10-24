@@ -1,5 +1,5 @@
 /**
- * Single source of truth for which staff role may open which page (A08).
+ * Single source of truth for which staff role may open which page (GAP08).
  *
  * The same table drives three things so they can never disagree:
  *   1. the route guard (`RequireRole`): `roles` = who may open the page;

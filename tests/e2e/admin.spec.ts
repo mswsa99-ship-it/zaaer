@@ -1,13 +1,14 @@
 /**
- * Admin definitions — acceptance ids U02–U05.
- * Controls: G07 (facility ≠ room; task type ≠ task), G09 (definitions in use are archived, never deleted;
- * deletion shows dependency counts), G10 (reason required), G25 (no native confirm(): the confirmation is
- * an in-page step that works inside embedded viewers too).
+ * Admin definitions — test ids AD01–AD04 (decision 57: renamed from U02–U05, which the testing rules reserve for
+ * other interface scenarios).
+ * Controls: G16 (a definition in use is archived, never deleted; deletion shows its dependencies — AD01, AD02),
+ * G22 (archiving records a reason — AD01). AD03: confirmations are an in-page step (no native confirm(), which
+ * embedded viewers block); AD04: tax policy and AI settings are settings, not code.
  */
 import { test, expect } from "./fixtures";
 
 test.describe("admin definitions", () => {
-  test("U02 a facility is created, archived with a reason, hidden from new choices, and restorable", async ({ page, loginAs }) => {
+  test("AD01 a facility is created, archived with a reason, hidden from new choices, and restorable", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/admin/facilities", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "مرفق جديد" }).click();
@@ -36,7 +37,7 @@ test.describe("admin definitions", () => {
     await expect(page.getByText("مؤرشف").first()).toBeVisible();
   });
 
-  test("U03 a definition in use cannot be hard-deleted: the dialog shows its dependencies", async ({ page, loginAs }) => {
+  test("AD02 a definition in use cannot be hard-deleted: the dialog shows its dependencies", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/admin/task-types", { waitUntil: "networkidle" });
     await page.locator("button:has(svg.lucide-pencil)").first().click();
@@ -49,7 +50,7 @@ test.describe("admin definitions", () => {
     await expect(edit.getByRole("button", { name: "تأكيد الحذف" })).toHaveCount(0);
   });
 
-  test("U04 policies use an in-page two-step delete (no native confirm)", async ({ page, loginAs }) => {
+  test("AD03 policies use an in-page two-step delete (no native confirm)", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/admin/policies", { waitUntil: "networkidle" });
     page.on("dialog", (d) => { throw new Error(`native dialog opened: ${d.message()}`); });
@@ -59,7 +60,7 @@ test.describe("admin definitions", () => {
     await expect(page.getByText("تأكيد حذف السياسة؛ لن يتمكن المساعد الذكي من ذكرها بعد الحذف.")).toBeVisible();
   });
 
-  test("U05 tax policy and AI settings are settings pages, not code", async ({ page, loginAs }) => {
+  test("AD04 tax policy and AI settings are settings pages, not code", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/admin/ai-settings", { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { name: "إعدادات الذكاء الاصطناعي" })).toBeVisible();

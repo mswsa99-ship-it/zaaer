@@ -1,44 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { BedDouble, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { opsApi } from "../../lib/api";
+import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency } from "../../lib/utils";
 
 interface Cat { id: string; name_ar: string; name_en: string | null; description: string | null; base_capacity: number; max_capacity: number; base_price_halalas: number; amenities: string[] | null; is_active: boolean; is_public: boolean; sort_order: number; archived_at: string | null; version: number; rooms?: number }
 
+const NO_CATS: Cat[] = [];
+
 export default function AdminRoomCategories() {
-  const { branchId } = useBranch();
-  const [cats, setCats] = useState<Cat[]>([]);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Partial<Cat> | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
+  // G24 (decision 40): the definitions of the active branch only
+  const q = useBranchQuery<Cat[]>(async (branchId) => {
     const [c, r] = await Promise.all([
       supabase.from("room_categories").select("id, name_ar, name_en, description, base_capacity, max_capacity, base_price_halalas, amenities, is_active, is_public, sort_order, archived_at, version").eq("branch_id", branchId).order("sort_order"),
       supabase.from("rooms").select("category_id").eq("branch_id", branchId).is("archived_at", null),
     ]);
-    if (c.error) setError(toArabicError(c.error));
     const count = new Map<string, number>(); for (const x of (r.data ?? []) as { category_id: string }[]) count.set(x.category_id, (count.get(x.category_id) ?? 0) + 1);
-    setCats(((c.data ?? []) as Cat[]).map((x) => ({ ...x, rooms: count.get(x.id) ?? 0 })));
-    setLoading(false);
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+    return (must(c) as Cat[]).map((x) => ({ ...x, rooms: count.get(x.id) ?? 0 }));
+  }, [], NO_CATS);
+  const cats = q.data; const load = q.reload; const branchId = q.branchId;
 
-  if (loading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
   const visible = cats.filter((c) => showArchived || !c.archived_at);
   return (
     <div>
       <SectionTitle title="أنواع الوحدات" subtitle="السعة والسعر الأساسي — تغيير السعر لا يعيد تسعير الحجوزات القائمة" action={
         <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", base_capacity: 2, max_capacity: 4, base_price_halalas: 0, is_public: true, sort_order: cats.length + 1, amenities: [] })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> نوع جديد</button></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {q.error && cats.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
-      {visible.length === 0 ? <EmptyState icon={<BedDouble className="h-10 w-10" />} title="لا توجد أنواع" /> : (
+      {q.error && cats.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<BedDouble className="h-10 w-10" />} title="لا توجد أنواع" /> : (
         <div className="grid gap-3 md:grid-cols-2">
           {visible.map((c) => (
             <Card key={c.id} className={c.archived_at ? "opacity-60" : ""}>

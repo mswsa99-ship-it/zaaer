@@ -1,9 +1,9 @@
 /**
- * Active-branch scope, shared by every screen through one React context (A01).
+ * Active-branch scope, shared by every screen through one React context (GAP01).
  *
  *  - Staff: the list is exactly what `fn_user_branch_ids` returns (SECURITY DEFINER; owner → all branches of the
  *    organisation, others → memberships). No memberships or a failed query → EMPTY list, no active branch, and the
- *    guard / BranchPicker show "لا يوجد فرع مخوّل لحسابك — تواصل مع المدير" instead of data (A02, fail closed).
+ *    guard / BranchPicker show "لا يوجد فرع مخوّل لحسابك — تواصل مع المدير" instead of data (GAP02, fail closed).
  *  - Guest screens (no session): VITE_DEFAULT_BRANCH_ID or the first active branch (branches are publicly readable:
  *    name/times only).
  *  - The selection is persisted per user (localStorage key scoped by the signed-in user id) and changing it

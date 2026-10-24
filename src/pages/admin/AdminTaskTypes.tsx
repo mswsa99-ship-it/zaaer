@@ -1,43 +1,40 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ListChecks, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { opsApi } from "../../lib/api";
+import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 
 interface TaskType { id: string; code: string | null; name: string; description: string | null; is_active: boolean; archived_at: string | null; version: number; used?: number }
 
+const NO_ROWS: TaskType[] = [];
+
 export default function AdminTaskTypes() {
-  const { branchId } = useBranch();
-  const [rows, setRows] = useState<TaskType[]>([]);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Partial<TaskType> | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
+  // G24 (decision 40): the definitions of the active branch only
+  const q = useBranchQuery<TaskType[]>(async (branchId) => {
     const [t, u] = await Promise.all([
       supabase.from("task_types").select("id, code, name, description, is_active, archived_at, version").eq("branch_id", branchId).order("name"),
       supabase.from("housekeeping_tasks").select("task_type_id").eq("branch_id", branchId),
     ]);
-    if (t.error) setError(toArabicError(t.error));
     const used = new Map<string, number>(); for (const x of (u.data ?? []) as { task_type_id: string }[]) used.set(x.task_type_id, (used.get(x.task_type_id) ?? 0) + 1);
-    setRows(((t.data ?? []) as TaskType[]).map((x) => ({ ...x, used: used.get(x.id) ?? 0 })));
-    setLoading(false);
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+    return (must(t) as TaskType[]).map((x) => ({ ...x, used: used.get(x.id) ?? 0 }));
+  }, [], NO_ROWS);
+  const rows = q.data; const load = q.reload; const branchId = q.branchId;
 
-  if (loading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
   const visible = rows.filter((r) => showArchived || !r.archived_at);
   return (
     <div>
       <SectionTitle title="أنواع المهام" subtitle="تعريف قابل لإعادة الاستخدام؛ المهمة الفعلية تُنشأ من شاشة خدمة الغرف" action={
         <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name: "", description: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> نوع جديد</button></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
-      {visible.length === 0 ? <EmptyState icon={<ListChecks className="h-10 w-10" />} title="لا توجد أنواع مهام" /> : (
+      {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<ListChecks className="h-10 w-10" />} title="لا توجد أنواع مهام" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((r) => (
             <Card key={r.id} className={r.archived_at ? "opacity-60" : ""}>

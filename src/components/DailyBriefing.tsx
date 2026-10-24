@@ -1,17 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Sunrise, RefreshCw, Sparkles } from "lucide-react";
-import { useBranch } from "../lib/branch";
-import { aiOpsBriefing, toArabicError, type Briefing } from "../lib/api";
+import { useBranchQuery } from "../lib/useBranchQuery";
+import { aiOpsBriefing, type Briefing } from "../lib/api";
 import { Card, Spinner, ErrorBanner } from "./ui";
 import { formatDateTime } from "../lib/utils";
 
 /** Morning briefing: deterministic prioritized items from the ops context + optional AI recommendations. */
 export function DailyBriefing() {
-  const { branchId } = useBranch();
-  const [b, setB] = useState<Briefing | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => { if (!branchId) return; setLoading(true); try { setB(await aiOpsBriefing(branchId)); setError(null); } catch (e) { setError(toArabicError(e)); } finally { setLoading(false); } }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+  // G24 (decision 40): the active branch's briefing only — switching branch clears it, a late answer is dropped
+  const q = useBranchQuery<Briefing | null>((branchId) => aiOpsBriefing(branchId), [], null);
+  const b = q.data, error = q.error, loading = q.loading || q.refreshing, load = q.reload;
   const dot = { critical: "bg-danger-500", warning: "bg-warning-500", info: "bg-brand-400" } as const;
   return (
     <Card>

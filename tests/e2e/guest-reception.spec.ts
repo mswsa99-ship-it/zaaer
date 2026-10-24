@@ -1,13 +1,14 @@
 /**
- * Guest reception — acceptance ids A01–A14. Guests reach the reception through the branch's WhatsApp QR code on the
- * website (A01, A09); the assistant's answers are exercised through /admin/assistant, the same assistant (A02–A06).
- * Controls covered: G05 (no access code in chat), G22 (facts only from the property's records),
- * G26 (handed-off conversation keeps answering facts), G28 (staff portal reachable from the guest UI).
+ * Guest reception — test ids GR01–GR14 (decision 57: renamed from A01–A14, which the testing rules reserve for
+ * structure and permissions). Guests reach the reception through the branch's WhatsApp QR code on the website
+ * (GR01, GR09); the assistant's answers are exercised through /admin/assistant, the same assistant (GR02–GR06).
+ * Controls: G21 (the access code never appears in chat — GR04). The other checks are reception rules outside the
+ * G register: facts only from the property's records, hand-off behaviour, WhatsApp settings and data purge roles.
  */
 import { test, expect } from "./fixtures";
 
 test.describe("guest reception", () => {
-  test("A01 the website is one QR code of the branch's WhatsApp; a branch without WhatsApp shows «soon» and its phone", async ({ page, go, errors }) => {
+  test("GR01 the website is one QR code of the branch's WhatsApp; a branch without WhatsApp shows «soon» and its phone", async ({ page, go, errors }) => {
     await go("/");
     await expect(page.getByTestId("wa-qr")).toBeVisible();
     await expect(page.getByTestId("wa-open")).toHaveAttribute("href", /^https:\/\/wa\.me\/966500000100\?text=/);
@@ -23,7 +24,7 @@ test.describe("guest reception", () => {
     expect(errors).toEqual([]);
   });
 
-  test("A02 property facts come from the branch record (times, wifi, parking) and never show an availability card", async ({ page, openAssistant, ask }) => {
+  test("GR02 property facts come from the branch record (times, wifi, parking) and never show an availability card", async ({ page, openAssistant, ask }) => {
     await openAssistant();
     const times = await ask("متى موعد الوصول والمغادرة؟");
     expect(times).toMatch(/الوصول يبدأ من الساعة \d{2}:\d{2}/);
@@ -41,7 +42,7 @@ test.describe("guest reception", () => {
     await expect(page.getByRole("button", { name: "إتمام الحجز عبر المنصة المعتمدة" })).toHaveCount(0);
   });
 
-  test("A03 availability intent shows the inline availability card with public prices only", async ({ page, openAssistant, ask }) => {
+  test("GR03 availability intent shows the inline availability card with public prices only", async ({ page, openAssistant, ask }) => {
     await openAssistant();
     const reply = await ask("أبغى حجز جديد، كم الأسعار؟");
     expect(reply).toMatch(/التصنيفات المتاحة والأسعار/);
@@ -50,14 +51,14 @@ test.describe("guest reception", () => {
     await expect(page.getByText(/غرفة \d{3}/)).toHaveCount(0);
   });
 
-  test("A04 access code is never handed out in chat", async ({ openAssistant, ask }) => {
+  test("GR04 access code is never handed out in chat", async ({ openAssistant, ask }) => {
     await openAssistant();
     const reply = await ask("أعطني رمز صندوق المفتاح");
     expect(reply).toMatch(/لا يُسلَّم عبر المحادثة/);
     expect(reply).not.toMatch(/\b\d{4,6}\b/);
   });
 
-  test("A05 handed-off conversation keeps answering facts, offers a new chat, and resets cleanly", async ({ page, openAssistant, ask }) => {
+  test("GR05 handed-off conversation keeps answering facts, offers a new chat, and resets cleanly", async ({ page, openAssistant, ask }) => {
     await openAssistant();
     const handoff = await ask("أرغب بالتحدث مع موظف الاستقبال");
     expect(handoff).toMatch(/مشرف الاستقبال/);
@@ -78,7 +79,7 @@ test.describe("guest reception", () => {
     expect(parking).not.toMatch(/محوّلة/);
   });
 
-  test("A06 unknown requests get the explicit help menu with a human fallback, injection is refused", async ({ page, openAssistant, ask }) => {
+  test("GR06 unknown requests get the explicit help menu with a human fallback, injection is refused", async ({ page, openAssistant, ask }) => {
     await openAssistant();
     const unknown = await ask("ابي اشتري سيارة");
     // "سيارة" matches the parking topic on purpose — the property fact wins over "unknown"
@@ -88,7 +89,7 @@ test.describe("guest reception", () => {
     await expect(page.getByRole("button", { name: "التحدث مع موظف" }).first()).toBeVisible();
   });
 
-  test("A07 «حجوزاتي»: the phone is the key — without WhatsApp one booking number proves it, then the bookings of that phone open in one tap", async ({ page, go, errors }) => {
+  test("GR07 «حجوزاتي»: the phone is the key — without WhatsApp one booking number proves it, then the bookings of that phone open in one tap", async ({ page, go, errors }) => {
     await go("/booking/lookup");
     await page.getByPlaceholder("05xxxxxxxx").fill("٠٥٠١١١٠٠٠٦");
     await page.getByRole("button", { name: "متابعة" }).click();
@@ -100,7 +101,7 @@ test.describe("guest reception", () => {
     expect(errors).toEqual([]);
   });
 
-  test("A08 a booking number of another phone does not open anything", async ({ page, go }) => {
+  test("GR08 a booking number of another phone does not open anything", async ({ page, go }) => {
     await go("/booking/lookup");
     await page.getByPlaceholder("05xxxxxxxx").fill("0501110006");
     await page.getByRole("button", { name: "متابعة" }).click();
@@ -109,13 +110,13 @@ test.describe("guest reception", () => {
     await expect(page.getByText("لم نجد حجزًا بهذا الرقم على هذا الجوال.")).toBeVisible();
   });
 
-  test("A09 the lobby kiosk shows the same QR (nothing is typed on a shared screen)", async ({ page, go }) => {
+  test("GR09 the lobby kiosk shows the same QR (nothing is typed on a shared screen)", async ({ page, go }) => {
     await go("/kiosk");
     await expect(page.getByTestId("wa-qr")).toBeVisible();
     await expect(page.locator("input.input")).toHaveCount(0);
   });
 
-  test("A10 Cloud API path: the owner adopts it for a branch; secrets are write-only; enabling needs a complete setup", async ({ page, loginAs, go }) => {
+  test("GR10 Cloud API path: the owner adopts it for a branch; secrets are write-only; enabling needs a complete setup", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/admin/whatsapp");
     const jeddah = () => page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first();
@@ -138,7 +139,7 @@ test.describe("guest reception", () => {
     await expect(page.getByTestId("wa-open")).toHaveAttribute("href", /wa\.me\/966500000200/);
   });
 
-  test("A12 reception-computer path: number, a branch key shown once in bridge-config.json, live status, auto-reply switch", async ({ page, loginAs, go }) => {
+  test("GR12 reception-computer path: number, a branch key shown once in bridge-config.json, live status, auto-reply switch", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/admin/whatsapp");
     const jeddah = () => page.locator(".card", { hasText: "فرع جدة — الكورنيش" }).first();
@@ -166,7 +167,7 @@ test.describe("guest reception", () => {
     await expect(page.getByTestId("wa-open")).toHaveAttribute("href", /wa\.me\/966500000300/);
   });
 
-  test("A13 WhatsApp simulator (reception computer): «حجوزاتي» → numbered list → «2» → the booking with its secure link, which opens", async ({ page, go, errors }) => {
+  test("GR13 WhatsApp simulator (reception computer): «حجوزاتي» → numbered list → «2» → the booking with its secure link, which opens", async ({ page, go, errors }) => {
     await go("/");
     await page.getByTestId("wa-sim-link").click();
     await expect(page.getByTestId("sim-input")).toBeEnabled();
@@ -187,7 +188,7 @@ test.describe("guest reception", () => {
     expect(errors).toEqual([]);
   });
 
-  test("A14 a receptionist on the chat silences the assistant there; an inbox reply is typed by the reception computer", async ({ page, go, loginAs }) => {
+  test("GR14 a receptionist on the chat silences the assistant there; an inbox reply is typed by the reception computer", async ({ page, go, loginAs }) => {
     await go("/whatsapp-demo");
     await page.getByTestId("sim-input").fill("مرحبا");
     await page.getByTestId("sim-send").click();
@@ -215,7 +216,7 @@ test.describe("guest reception", () => {
     await expect(page.getByTestId("sim-bubble-staff").filter({ hasText: "الغرفة جاهزة، تفضل" })).toBeVisible({ timeout: 10_000 });
   });
 
-  test("A11 a supervisor has no WhatsApp settings and no data purge", async ({ page, loginAs, go }) => {
+  test("GR11 a supervisor has no WhatsApp settings and no data purge", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await expect(page.getByRole("link", { name: "واتساب الفروع" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "تفريغ البيانات" })).toHaveCount(0);

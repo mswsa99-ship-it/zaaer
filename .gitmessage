@@ -1,0 +1,16 @@
+# <سطر واحد: ما الذي تغيّر>  — summary line (≤ 72 characters)
+
+# لماذا، وما الذي يلاحظه المستخدم — why, and what changes for the user
+
+# --- سجل التغيير (القرار 58) — كل حقل مطلوب؛ none مع السبب إن لم ينطبق ---
+Decision: 
+Area: 
+Controls: 
+Tests: 
+Migration: 
+# Decision:  أرقام القرارات من مستند المقارنة (1–71)، مثل: 40, 60
+# Area:      المجال المالك للبيانات أو جزء النظام، مثل: التدقيق / تحميل الفرع
+# Controls:  ضوابط G المتأثرة من سجل الضوابط، مثل: G22, G24 — أو none
+# Tests:     معرّفات الاختبارات المضافة أو المحدّثة (TESTING.md §7)، مثل: U02a, AT01–AT08
+# Migration: none — أو رقم الترحيل وخطته (القرار 41): فحص الترحيل، النسخة الاحتياطية، الاستعادة
+# تفعيل القالب والفحص المحلي: git config commit.template .gitmessage && git config core.hooksPath .githooks

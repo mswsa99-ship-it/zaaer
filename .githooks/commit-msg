@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Decision 58: warns (never blocks) when the commit message lacks Decision / Area / Controls / Tests / Migration.
+# Enable once: git config core.hooksPath .githooks
+node "$(git rev-parse --show-toplevel)/scripts/check-change.mjs" --message "$1" || true
+exit 0

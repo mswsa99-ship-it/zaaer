@@ -1,22 +1,40 @@
 /**
- * Reports (A05): every money figure comes from the voucher ledger through fn_reports_finance (role-gated on the
+ * Reports (GAP05): every money figure comes from the voucher ledger through fn_reports_finance (role-gated on the
  * server) — never from reservation totals or a count of "paid" reservations. Deposits are shown as a separate
  * open balance and are explicitly not revenue. Operational stats (status mix, hand-offs, AI usage) are kept.
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, Spinner } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, Spinner, LoadErrorCard } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { BarChart3, Download, Info } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from "recharts";
 import { formatCurrency, todayISO } from "../../lib/utils";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError, type ReportsFinance } from "../../lib/api";
+import { useBranchQuery } from "../../lib/useBranchQuery";
+import { opsApi, type ReportsFinance } from "../../lib/api";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/types";
 
-// Operational columns only — money is never read from the reservations table (A05).
+// Operational columns only — money is never read from the reservations table (GAP05).
 interface ResRow { status: string; check_in: string }
 interface OpsStats { handoffs: number; unmatched: number; aiRequests14: number; aiFallbacks14: number }
+interface OpsData { reservations: ResRow[]; ops: OpsStats }
+
+/** Operational stats (no money): status mix of the branch, open hand-offs, AI usage over 14 days. A failed read is an error, never a zero. */
+async function loadOps(branchId: string): Promise<OpsData> {
+  const since = new Date(); since.setDate(since.getDate() - 13);
+  const [res, handoffs, unmatched, ai] = await Promise.all([
+    supabase.from("reservations").select("status, check_in").eq("branch_id", branchId),
+    supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").or(`branch_id.eq.${branchId},branch_id.is.null`),
+    supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").eq("kind", "unmatched_reservation"),
+    supabase.from("ai_usage_daily").select("requests, fallbacks").gte("day", since.toISOString().slice(0, 10)),
+  ]);
+  for (const r of [res, handoffs, unmatched, ai]) if (r.error) throw new Error(r.error.message);
+  const aiRows = (ai.data as { requests: number; fallbacks: number }[]) ?? [];
+  return {
+    reservations: (res.data as unknown as ResRow[]) ?? [],
+    ops: { handoffs: handoffs.count ?? 0, unmatched: unmatched.count ?? 0, aiRequests14: aiRows.reduce((s, r) => s + r.requests, 0), aiFallbacks14: aiRows.reduce((s, r) => s + r.fallbacks, 0) },
+  };
+}
 
 const sar = (h: number) => formatCurrency(h / 100);
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -31,48 +49,15 @@ const AXIS = { fontSize: 11, fill: "#6f83a3" };
 const TOOLTIP = { borderRadius: 12, border: "1px solid #e9edf3", fontSize: 12 };
 
 export default function AdminReports() {
-  const { branchId } = useBranch();
   const [period, setPeriod] = useState(last30);
-  const [report, setReport] = useState<ReportsFinance | null>(null);
-  const [reportError, setReportError] = useState<string | null>(null);
-  const [reportLoading, setReportLoading] = useState(true);
-  const [reservations, setReservations] = useState<ResRow[]>([]);
-  const [ops, setOps] = useState<OpsStats>({ handoffs: 0, unmatched: 0, aiRequests14: 0, aiFallbacks14: 0 });
-  const [opsLoading, setOpsLoading] = useState(true);
-  const financeReq = useRef(0);
-  const opsReq = useRef(0);
-
-  // Ledger-based KPIs for the selected branch + period. A response for a branch/period that is no longer selected is dropped.
-  useEffect(() => {
-    if (!branchId) return;
-    const token = ++financeReq.current;
-    setReportLoading(true);
-    opsApi.reportsFinance(branchId, period.from, period.to)
-      .then((r) => { if (token !== financeReq.current) return; setReport(r); setReportError(null); })
-      .catch((e) => { if (token !== financeReq.current) return; setReport(null); setReportError(toArabicError(e)); })
-      .finally(() => { if (token === financeReq.current) setReportLoading(false); });
-  }, [branchId, period.from, period.to]);
-
-  // Operational stats (no money): status mix of the branch, open hand-offs, AI usage over 14 days.
-  useEffect(() => {
-    if (!branchId) return;
-    const token = ++opsReq.current;
-    setOpsLoading(true);
-    (async () => {
-      const since = new Date(); since.setDate(since.getDate() - 13);
-      const [res, handoffs, unmatched, ai] = await Promise.all([
-        supabase.from("reservations").select("status, check_in").eq("branch_id", branchId),
-        supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").or(`branch_id.eq.${branchId},branch_id.is.null`),
-        supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").eq("kind", "unmatched_reservation"),
-        supabase.from("ai_usage_daily").select("requests, fallbacks").gte("day", since.toISOString().slice(0, 10)),
-      ]);
-      if (token !== opsReq.current) return;
-      const aiRows = (ai.data as { requests: number; fallbacks: number }[]) ?? [];
-      setOps({ handoffs: handoffs.count ?? 0, unmatched: unmatched.count ?? 0, aiRequests14: aiRows.reduce((s, r) => s + r.requests, 0), aiFallbacks14: aiRows.reduce((s, r) => s + r.fallbacks, 0) });
-      setReservations((res.data as unknown as ResRow[]) ?? []);
-      setOpsLoading(false);
-    })();
-  }, [branchId]);
+  // G24 (decision 40): both loads belong to the active branch; switching branch clears them, a stale answer is dropped.
+  // Ledger KPIs for the branch + period (a period change refreshes in place; a failed refresh keeps the shown figures).
+  const fin = useBranchQuery<ReportsFinance | null>((branchId) => opsApi.reportsFinance(branchId, period.from, period.to), [period.from, period.to], null);
+  const opsQ = useBranchQuery<OpsData | null>(loadOps, [], null);
+  const branchId = fin.branchId;
+  const report = fin.data, reportError = fin.error;
+  const reservations = opsQ.data?.reservations ?? [];
+  const ops = opsQ.data?.ops;
 
   const periodPicker = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -80,7 +65,7 @@ export default function AdminReports() {
       <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={period.to} min={period.from} onChange={(e) => e.target.value && setPeriod({ ...period, to: e.target.value })} /></label>
       <button type="button" onClick={() => setPeriod(last30())} className="btn-ghost py-1 text-xs">آخر 30 يومًا</button>
       <button type="button" onClick={() => setPeriod(thisMonth())} className="btn-ghost py-1 text-xs">هذا الشهر</button>
-      {reportLoading && report && <Spinner className="h-4 w-4" />}
+      {fin.refreshing && <Spinner className="h-4 w-4" />}
     </div>
   );
 
@@ -92,7 +77,7 @@ export default function AdminReports() {
       </div>
     );
   }
-  if ((reportLoading && !report && !reportError) || opsLoading) return <LoadingScreen />;
+  if (fin.loading || opsQ.loading) return <LoadingScreen />;
 
   // ---- operational stats (kept from the previous report; counts only) ----
   const total = reservations.length;
@@ -158,7 +143,7 @@ export default function AdminReports() {
       )}
 
       <h3 className="mb-2 text-sm font-semibold text-ink-700">إحصاءات تشغيلية</h3>
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {!ops ? <div className="mb-6"><LoadErrorCard message={opsQ.error ?? "تعذّر تحميل الإحصاءات التشغيلية."} onRetry={opsQ.reload} /></div> : <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><p className="text-xs text-ink-400">إجمالي الحجوزات</p><p className="mt-1 text-xl font-bold text-ink-800">{total}</p></Card>
         <Card><p className="text-xs text-ink-400">معدل الدخول</p><p className="mt-1 text-xl font-bold text-accent-600">{pct(checkedIn, total)}%</p></Card>
         {report && <Card><p className="text-xs text-ink-400">حجوزات الفترة</p><p className="mt-1 text-xl font-bold text-ink-800">{report.reservations.count}</p><p className="text-[11px] text-ink-400">{report.reservations.nights} ليلة إقامة</p></Card>}
@@ -167,7 +152,7 @@ export default function AdminReports() {
         <Card><p className="text-xs text-ink-400">حجوزات غير مطابقة</p><p className="mt-1 text-xl font-bold text-warning-600">{ops.unmatched}</p></Card>
         <Card><p className="text-xs text-ink-400">طلبات المساعد الذكي (14 يومًا)</p><p className="mt-1 text-xl font-bold text-brand-700">{ops.aiRequests14}</p></Card>
         <Card><p className="text-xs text-ink-400">تحويل لمسار تقليدي (14 يومًا)</p><p className="mt-1 text-xl font-bold text-ink-800">{ops.aiFallbacks14}</p></Card>
-      </div>
+      </div>}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {report && (
@@ -206,17 +191,19 @@ export default function AdminReports() {
             )}
           </Card>
         )}
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-ink-700">الحجوزات حسب الحالة</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={byStatus}>
-              <XAxis dataKey="name" tick={AXIS} />
-              <YAxis tick={AXIS} allowDecimals={false} />
-              <Tooltip contentStyle={TOOLTIP} />
-              <Bar dataKey="value" fill={C1} radius={[4, 4, 0, 0]} name="عدد" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+        {ops && (
+          <Card>
+            <h3 className="mb-4 text-sm font-semibold text-ink-700">الحجوزات حسب الحالة</h3>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={byStatus}>
+                <XAxis dataKey="name" tick={AXIS} />
+                <YAxis tick={AXIS} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP} />
+                <Bar dataKey="value" fill={C1} radius={[4, 4, 0, 0]} name="عدد" />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
         {report && (
           <Card>
             <h3 className="mb-4 text-sm font-semibold text-ink-700">حجوزات الفترة حسب المصدر</h3>

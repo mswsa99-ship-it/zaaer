@@ -1,0 +1,2 @@
+# Expected changes for pending migrations, one per line: "<snapshot key>: <reason>".
+# Keys come from scripts/migration-snapshot.sql (rows:<table>, money:..., reservations:..., allocations:...).

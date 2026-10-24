@@ -24,9 +24,11 @@ export function useKeyboxAlerts(): KeyboxAlerts | null {
   const [alerts, setAlerts] = useState<KeyboxAlerts | null>(null);
 
   useEffect(() => {
-    if (!allowed || !branchId) { setAlerts(null); return; }
+    setAlerts(null);   // nothing of the previous branch stays on screen after a switch (G24)
+    if (!allowed || !branchId) return;
     let alive = true;
-    const load = () => { codesApi.alerts(branchId).then((a) => { if (alive) setAlerts(a); }).catch(() => { /* the next refresh tries again */ }); };
+    let seq = 0;       // an older refresh that answers after a newer one is dropped
+    const load = () => { const n = ++seq; codesApi.alerts(branchId).then((a) => { if (alive && n === seq) setAlerts(a); }).catch(() => { /* the next refresh tries again */ }); };
     load();
     const timer = window.setInterval(load, 30_000);
     window.addEventListener("focus", load);

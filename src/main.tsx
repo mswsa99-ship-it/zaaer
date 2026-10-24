@@ -25,7 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <Router basename={basename}>
         <AuthProvider>
-          {/* One branch scope for the whole app: BranchPicker, data hooks and the route guard share it (A01/A02). */}
+          {/* One branch scope for the whole app: BranchPicker, data hooks and the route guard share it (GAP01/GAP02). */}
           <BranchProvider>
             <App />
           </BranchProvider>

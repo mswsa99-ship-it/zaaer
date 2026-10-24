@@ -51,7 +51,7 @@ beforeEach(async () => {
   SOURCE = ((s.data as any[]).find((x) => !x.external_reference_required) ?? (s.data as any[])[0]).id;
 });
 
-describe("G01 — no overlapping allocation", () => {
+describe("G05 — no overlapping allocation", () => {
   it("the second reservation for the same room and nights is rejected", async () => {
     const rooms = await rpc<Array<{ room_id: string }>>("fn_available_rooms", { p_branch: BRANCH, p_from: fut(30), p_to: fut(33), p_category: CATEGORY, p_exclude_reservation: null });
     expect(rooms.length).toBeGreaterThan(0);
@@ -65,7 +65,7 @@ describe("G01 — no overlapping allocation", () => {
   });
 });
 
-describe("G02/G03 — money", () => {
+describe("G10–G13 — money", () => {
   it("a partial receipt is 'partially_paid', never 'paid'; the deposit lives in its own ledger", async () => {
     const r = await createRes({ ci: 40, co: 42 });
     const f0 = await rpc<any>("fn_reservation_finance", { p_reservation: r.id });
@@ -125,7 +125,7 @@ describe("G02/G03 — money", () => {
   });
 });
 
-describe("G09 — definitions are archived, not deleted, while in use", () => {
+describe("G16 — definitions are archived, not deleted, while in use", () => {
   it("a task type with history cannot be hard-deleted; archiving needs a reason and no open commitments; restore works", async () => {
     const types = (await client.from("task_types").select("id, code").eq("branch_id", BRANCH).is("archived_at", null)).data as any[];
     const tasks = (await client.from("housekeeping_tasks").select("task_type_id, status").eq("branch_id", BRANCH)).data as any[];
@@ -157,7 +157,7 @@ describe("G09 — definitions are archived, not deleted, while in use", () => {
   });
 });
 
-describe("G06 — cleanliness, occupancy and readiness are separate", () => {
+describe("G09 — cleanliness, occupancy and readiness are separate", () => {
   it("completing a cleaning task makes the room clean but does not change occupancy", async () => {
     const task = await client.from("housekeeping_tasks").select("id, room_id, version").eq("status", "pending").not("room_id", "is", null).limit(1).maybeSingle();
     const t = task.data as any;

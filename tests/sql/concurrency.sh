@@ -71,7 +71,7 @@ if [[ "$REFUNDED" == "3000" && "$BAL" == "1000" && "$RB" == *"REFUND_EXCEEDS_AVA
 else
   echo "FAIL X02 refunded=$REFUNDED balance=$BAL B=$RB replay=$REPLAY after=$REFUNDED2"; fail=1
 fi
-# ---------- X03: two payments with the SAME idempotency key at the same time → one voucher;
+# ---------- F07c (was X03 — decision 57): two payments with the SAME idempotency key at the same time → one voucher;
 #            two with DIFFERENT keys → two vouchers and the cached paid equals their sum ----------
 call_pay() { # $1 key, $2 amount, $3 sleep
   psql -d "$DB" -At <<EOF 2>&1 | grep -E "ERROR|^t$|^true$|^false$|^none$" | head -1
@@ -94,10 +94,10 @@ PD=$(call_pay "race-pay-b" 3000 0)
 wait
 after=$(psql -d "$DB" -At -c "select count(*) from financial_vouchers where reservation_id='$RES' and kind='receipt' and status='approved'")
 paid1=$(psql -d "$DB" -At -c "select paid_halalas from reservations where id='$RES'")
-echo "X03 same key: A=$PA B=$PB vouchers $before→$same | different keys: B=$PD vouchers $same→$after paid $paid0→$paid1"
+echo "F07c same key: A=$PA B=$PB vouchers $before→$same | different keys: B=$PD vouchers $same→$after paid $paid0→$paid1"
 if [[ "$PA" == "true" && "$PB" == "true" && $((same - before)) -eq 1 && $((after - same)) -eq 2 && $((paid1 - paid0)) -eq 10000 ]]; then
-  echo "PASS X03 concurrent payments → same key recorded once (replay answered from storage); different keys both recorded, paid += 100 SAR"
+  echo "PASS F07c concurrent payments → same key recorded once (replay answered from storage); different keys both recorded, paid += 100 SAR"
 else
-  echo "FAIL X03"; fail=1
+  echo "FAIL F07c"; fail=1
 fi
 exit $fail

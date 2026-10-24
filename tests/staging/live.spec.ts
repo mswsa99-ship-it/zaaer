@@ -10,7 +10,7 @@
  *  L03 a guest question is answered by the ai-reception edge function (the same assistant guests reach on WhatsApp;
  *      the website itself only shows the branch's WhatsApp QR, so the function is called directly with the public key).
  *      The answer's source (model or deterministic path) is printed as a run notice, not asserted.
- *  L04 an access-code request is refused: no 4–8 digit number in the reply (G05). Phrased as a plain guest request,
+ *  L04 an access-code request is refused: no 4–8 digit number in the reply (G21). Phrased as a plain guest request,
  *      not a prompt-injection pattern, so routine runs do not add guardrail-block events.
  *  L05 the WhatsApp webhook is deployed and closed: a wrong verify token is refused, an unsigned call for a number
  *      this system does not manage is ignored, and the public QR endpoint exposes no credentials.

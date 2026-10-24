@@ -113,6 +113,41 @@ insert into supabase_migrations.schema_migrations (version, name) values ('<ال
 
 > متغيرات اختيارية (Variables): `STAGING_SUPABASE_URL` و`STAGING_SUPABASE_ANON_KEY` تتجاوز ما في `.env.staging`، و`STAGING_DEFAULT_BRANCH_ID` يثبّت فرع شاشات النزلاء، و`STAGING_APP_BASE_URL` عند ربط نطاق خاص.
 
+## 3-ج. ترحيل حساس: الفحص والنسخة الاحتياطية وتجربة الاستعادة (القرار 41)
+
+**قبل الدمج — آليًا في كل تشغيل للبوابة:** `scripts/migration-check.sh` يبني قاعدة كما هي في الإنتاج (الترحيلات المسجلة في `supabase/production-applied.txt`)، يكتب عليها سجلًا اصطناعيًا (`tests/sql/history_fixture.sql`)، يلتقط قبل/بعد تطبيق الترحيلات المعلقة (عدد الصفوف، مجاميع المال حسب النوع والحالة، الحجوزات ومراجعها، التخصيصات)، ثم يجرّب التفريغ والاستعادة في قاعدة جديدة. أي فرق يوقف البوابة ما لم يُشرح في `supabase/migration-exceptions.txt` («المفتاح: السبب»)، والسجلات المتعارضة لا تُحذف لإنجاح قيد. التقرير ضمن سجل الاختبار (`verify-results/migration-report.txt`).
+
+**قبل التطبيق على الإنتاج — نسخة احتياطية:** المشروع على الخطة المجانية، وهذه الخطة **لا تتيح نسخ اللوحة اليومية** (Database ← Backups متاحة في Pro فأعلى، 7 أيام). البديل الذي توصي به Supabase للخطة المجانية تفريغ منطقي بالـCLI، على جهاز المالك (يحتاج Docker وكلمة مرور قاعدة البيانات، ولا تُكتب كلمة المرور في محادثة ولا ملف في المستودع):
+
+```bash
+# رابط الاتصال من لوحة المشروع ← Connect ← Session pooler
+supabase db dump --db-url "$DB_URL" -f roles.sql --role-only
+supabase db dump --db-url "$DB_URL" -f schema.sql
+supabase db dump --db-url "$DB_URL" -f data.sql --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
+```
+
+الملفات الثلاثة تحوي بيانات النزلاء: تُحفظ على جهاز المالك أو تخزين مشفّر، لا في المستودع ولا في المحادثة.
+
+**تجربة الاستعادة — مرة واحدة على مشروع اختبار منفصل** (النسخة بلا تجربة استعادة لا تثبت شيئًا):
+
+1. أنشئ مشروع Supabase جديدًا مؤقتًا، وفعّل فيه الامتدادات نفسها (`btree_gist`، `pgcrypto`، `uuid-ossp` في schema `extensions`).
+2. استعد إليه:
+   ```bash
+   psql --single-transaction --variable ON_ERROR_STOP=1 \
+     --file roles.sql --file schema.sql \
+     --command 'SET session_replication_role = replica' \
+     --file data.sql --dbname "$TEST_DB_URL"
+   ```
+3. قارن أعداد الجداول الأساسية بين الأصل والمستعاد (`reservations`، `financial_vouchers`، `reservation_allocations`، `rooms`، `audit_events`) ومجموع السندات حسب النوع.
+4. رموز الصناديق وأرقام الهويات مشفّرة بمفاتيح في Vault المشروع الأصلي (0013–0014)؛ تُقرأ في المشروع المستعاد فقط إذا نُقل مفتاحه الجذري (دليل Supabase: Backup and Restore using the CLI ← Column encryption). يكفي للتجربة أن تُستعاد الأعمدة كما هي.
+5. احذف المشروع المؤقت بعد التجربة، وسجّل تاريخها ونتيجتها هنا.
+
+**التطبيق:** الترحيل كله في معاملة واحدة، فإن فشل لا يبقى منه شيء. بعد نجاحه أضف طابعه إلى `supabase/production-applied.txt` حتى يقيس فحص الترحيل التالي على الإنتاج الفعلي. والرجوع عن ترحيل يكون بترحيل جديد يصححه، لا بتعديل الملف المطبَّق؛ والاستعادة من النسخة فقط إن تلفت بيانات.
+
+| التاريخ | الترحيلات | النسخة الاحتياطية | تجربة الاستعادة |
+| --- | --- | --- | --- |
+| — | 0026، 0027 (معلّقة) | بانتظار المالك | لم تُجرَّب بعد |
+
 ## 4. الذكاء الاصطناعي (Gemini)
 
 1. **ألغِ المفتاح الذي أُرسل في المحادثة وأنشئ مفتاحًا جديدًا** (Google AI Studio ← API keys). أي مفتاح كُتب في محادثة أو ملف يُعامل كمكشوف.

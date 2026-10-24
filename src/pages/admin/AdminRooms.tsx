@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DoorClosed, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { opsApi } from "../../lib/api";
+import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, type RoomStatus } from "../../lib/types";
@@ -11,41 +11,38 @@ import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS
 interface RoomRow { id: string; room_number: string; status: RoomStatus; cleanliness: string; is_active: boolean; archived_at: string | null; version: number; notes: string | null; category_id: string; block_id: string | null; floor_id: string | null; category?: { name_ar: string } | null; block?: { name: string } | null; floor?: { name: string } | null }
 interface Opt { id: string; name: string; block_id?: string }
 
+const NO_DATA: { rooms: RoomRow[]; cats: Opt[]; blocks: Opt[]; floors: Opt[] } = { rooms: [], cats: [], blocks: [], floors: [] };
+
 export default function AdminRooms() {
-  const { branchId } = useBranch();
-  const [rooms, setRooms] = useState<RoomRow[]>([]);
-  const [cats, setCats] = useState<Opt[]>([]); const [blocks, setBlocks] = useState<Opt[]>([]); const [floors, setFloors] = useState<Opt[]>([]);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState({ status: "all", block: "all", category: "all", archived: false, q: "" });
   const [draft, setDraft] = useState<Partial<RoomRow> | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    setLoading(true);
+  // G24 (decision 40): the units of the active branch only
+  const q = useBranchQuery(async (branchId) => {
     const [r, c, b, f] = await Promise.all([
       supabase.from("rooms").select("id, room_number, status, cleanliness, is_active, archived_at, version, notes, category_id, block_id, floor_id, category:room_categories(name_ar), block:blocks(name), floor:floors(name)").eq("branch_id", branchId).order("room_number"),
       supabase.from("room_categories").select("id, name_ar").eq("branch_id", branchId).is("archived_at", null).order("sort_order"),
       supabase.from("blocks").select("id, name").eq("branch_id", branchId).is("archived_at", null).order("sort_order"),
       supabase.from("floors").select("id, name, block_id").eq("branch_id", branchId).is("archived_at", null).order("sort_order"),
     ]);
-    if (r.error) setError(toArabicError(r.error));
-    setRooms((r.data as unknown as RoomRow[]) ?? []);
-    setCats(((c.data ?? []) as { id: string; name_ar: string }[]).map((x) => ({ id: x.id, name: x.name_ar })));
-    setBlocks((b.data as Opt[]) ?? []); setFloors((f.data as Opt[]) ?? []);
-    setLoading(false);
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+    return {
+      rooms: must(r) as unknown as RoomRow[],
+      cats: ((c.data ?? []) as { id: string; name_ar: string }[]).map((x) => ({ id: x.id, name: x.name_ar })),
+      blocks: (b.data as Opt[]) ?? [], floors: (f.data as Opt[]) ?? [],
+    };
+  }, [], NO_DATA);
+  const { rooms, cats, blocks, floors } = q.data; const load = q.reload; const branchId = q.branchId;
 
   const visible = useMemo(() => rooms.filter((r) => (filter.archived || !r.archived_at) && (filter.status === "all" || r.status === filter.status) && (filter.block === "all" || r.block_id === filter.block) && (filter.category === "all" || r.category_id === filter.category) && (!filter.q || r.room_number.includes(filter.q))), [rooms, filter]);
   const counts = useMemo(() => ({ active: rooms.filter((r) => r.is_active && !r.archived_at).length, total: rooms.filter((r) => !r.archived_at).length }), [rooms]);
   const draftFloors = floors.filter((f) => !draft?.block_id || f.block_id === draft.block_id);
 
-  if (loading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
   return (
     <div>
       <SectionTitle title="الوحدات" subtitle={`${counts.active} فعالة من ${counts.total} — النشاط الإداري مستقل عن النظافة والإشغال`} action={
         <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {q.error && rooms.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input w-36" placeholder="بحث برقم الوحدة" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
         <select className="input w-auto" value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })}><option value="all">كل الأنواع</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
@@ -53,7 +50,7 @@ export default function AdminRooms() {
         <select className="input w-auto" value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })}><option value="all">كل الحالات</option>{Object.entries(ROOM_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <Toggle checked={filter.archived} onChange={(v) => setFilter({ ...filter, archived: v })} label="إظهار المؤرشف" />
       </div>
-      {visible.length === 0 ? <EmptyState icon={<DoorClosed className="h-10 w-10" />} title="لا توجد وحدات مطابقة" /> : (
+      {q.error && rooms.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<DoorClosed className="h-10 w-10" />} title="لا توجد وحدات مطابقة" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {visible.map((r) => (
             <Card key={r.id} className={r.archived_at ? "opacity-60" : ""}>

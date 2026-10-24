@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ConciergeBell, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { opsApi } from "../../lib/api";
+import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { BILLING_UNIT_LABELS } from "../../lib/types";
@@ -11,34 +11,31 @@ import { formatCurrency } from "../../lib/utils";
 
 interface Service { id: string; name_ar: string; name_en: string | null; description: string | null; billing_unit: string; price_halalas: number; is_free: boolean; taxable: boolean; task_type_id: string | null; is_active: boolean; archived_at: string | null; version: number }
 
+const NO_DATA: { rows: Service[]; taskTypes: { id: string; name: string }[] } = { rows: [], taskTypes: [] };
+
 export default function AdminServices() {
-  const { branchId } = useBranch();
-  const [rows, setRows] = useState<Service[]>([]); const [taskTypes, setTaskTypes] = useState<{ id: string; name: string }[]>([]);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Partial<Service> | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
+  // G24 (decision 40): the definitions of the active branch only
+  const q = useBranchQuery(async (branchId) => {
     const [s, t] = await Promise.all([
       supabase.from("service_definitions").select("id, name_ar, name_en, description, billing_unit, price_halalas, is_free, taxable, task_type_id, is_active, archived_at, version").eq("branch_id", branchId).order("name_ar"),
       supabase.from("task_types").select("id, name").eq("branch_id", branchId).is("archived_at", null).order("name"),
     ]);
-    if (s.error) setError(toArabicError(s.error));
-    setRows((s.data as Service[]) ?? []); setTaskTypes((t.data as { id: string; name: string }[]) ?? []);
-    setLoading(false);
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+    return { rows: must(s) as Service[], taskTypes: (t.data as { id: string; name: string }[]) ?? [] };
+  }, [], NO_DATA);
+  const { rows, taskTypes } = q.data; const load = q.reload; const branchId = q.branchId;
 
-  if (loading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
   const visible = rows.filter((r) => showArchived || !r.archived_at);
   return (
     <div>
       <SectionTitle title="الخدمات" subtitle="كتالوج الخدمات الاختيارية على الحجز — يُحفظ الاسم والسعر لحظة الإضافة ولا تتغير الحجوزات السابقة بتعديله" action={
         <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", billing_unit: "once", price_halalas: 0, is_free: false, taxable: true })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> خدمة جديدة</button></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
-      {visible.length === 0 ? <EmptyState icon={<ConciergeBell className="h-10 w-10" />} title="لا توجد خدمات" description="أضف خدمات مثل الإفطار أو التنظيف الإضافي أو الدخول المبكر." /> : (
+      {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<ConciergeBell className="h-10 w-10" />} title="لا توجد خدمات" description="أضف خدمات مثل الإفطار أو التنظيف الإضافي أو الدخول المبكر." /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((r) => (
             <Card key={r.id} className={r.archived_at ? "opacity-60" : ""}>

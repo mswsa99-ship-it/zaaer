@@ -1,36 +1,31 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BookCheck, Plus, Download, Search } from "lucide-react";
-import { useBranch } from "../../lib/branch";
 import { opsApi, toArabicError, type ReservationRow } from "../../lib/api";
-import { SectionTitle, EmptyState, LoadingScreen, ErrorBanner, Badge } from "../../components/ui";
+import { SectionTitle, ErrorBanner, Badge, DataState } from "../../components/ui";
+import { useBranchQuery } from "../../lib/useBranchQuery";
 import { BranchPicker } from "../../components/BranchPicker";
 import { RESERVATION_STATUS_LABELS, RESERVATION_STATUS_COLORS, PAYMENT_STATUS_LABELS, type ReservationStatus } from "../../lib/types";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 
 const PAGE = 25;
+const NO_ROWS: { total: number; rows: ReservationRow[] } = { total: 0, rows: [] };
 const sar = (h: number) => formatCurrency(h / 100);
 
 export default function StaffReservations() {
-  const { branchId } = useBranch();
   const [filters, setFilters] = useState<Record<string, string | boolean>>({ open_only: true });
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
-  const [data, setData] = useState<{ total: number; rows: ReservationRow[] }>({ total: 0, rows: [] });
-  const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    setLoading(true);
-    try { setData(await opsApi.list(branchId, { ...filters, q }, PAGE, page * PAGE)); setError(null); } catch (e) { setError(toArabicError(e)); } finally { setLoading(false); }
-  }, [branchId, filters, q, page]);
-  useEffect(() => { load(); }, [load]);
+  const list = useBranchQuery((b) => opsApi.list(b, { ...filters, q }, PAGE, page * PAGE), [filters, q, page], NO_ROWS);
+  const { data, branchId, reload } = list;
   useEffect(() => {
-    const ch = supabase.channel("res-list").on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => load()).subscribe();
+    const ch = supabase.channel("res-list").on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => reload()).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [load]);
+  }, [reload]);
 
   // Export respects the same filters and branch scope and fetches ALL matching rows (not just the page) — D01/G25
   async function exportCsv() {
@@ -61,7 +56,7 @@ export default function StaffReservations() {
         <label className="flex items-center gap-1.5 text-sm text-ink-600">وصول من <input type="date" className="input w-auto py-1" dir="ltr" value={String(filters.check_in_from ?? "")} onChange={(e) => set("check_in_from", e.target.value)} /></label>
         <label className="flex items-center gap-1.5 text-sm text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={String(filters.check_in_to ?? "")} onChange={(e) => set("check_in_to", e.target.value)} /></label>
       </div>
-      {loading ? <LoadingScreen /> : data.rows.length === 0 ? <EmptyState icon={<BookCheck className="h-10 w-10" />} title="لا توجد حجوزات مطابقة" /> : (
+      <DataState loading={list.loading} error={list.error} empty={data.rows.length === 0} onRetry={reload} emptyIcon={<BookCheck className="h-10 w-10" />} emptyTitle="لا توجد حجوزات مطابقة">
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-ink-50 text-xs text-ink-500"><tr>{["المرجع", "الضيف", "الوحدة", "الحالة", "الوصول", "المغادرة", "الإجمالي", "المتبقي", "التأمين", ""].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 text-right font-medium">{h}</th>)}</tr></thead>
@@ -87,7 +82,7 @@ export default function StaffReservations() {
             <div className="flex gap-2"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn-ghost px-2 py-1 text-xs">السابق</button><button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} className="btn-ghost px-2 py-1 text-xs">التالي</button></div>
           </div>
         </div>
-      )}
+      </DataState>
     </div>
   );
 }

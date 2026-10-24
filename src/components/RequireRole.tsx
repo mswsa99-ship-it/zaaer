@@ -1,5 +1,5 @@
 /**
- * Route guard by role (A08) and by authorised branch (A02), rendered INSIDE the layout so the navigation stays
+ * Route guard by role (GAP08) and by authorised branch (GAP02), rendered INSIDE the layout so the navigation stays
  * usable: a page the role may not open becomes an in-page card — never a redirect loop, never a blank page.
  *
  * Used as a pathless layout route: <Route element={<RequireRole />}> … pages … </Route>, or around a single element.

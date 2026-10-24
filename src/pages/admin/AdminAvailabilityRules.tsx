@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { staffApi, toArabicError } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
-import { SectionTitle, LoadingScreen, Card, Spinner, Badge, ErrorBanner } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { SectionTitle, LoadingScreen, Card, Spinner, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { CalendarRange, Unlock } from "lucide-react";
 import { addDaysISO, todayISO } from "../../lib/utils";
 
@@ -12,37 +13,32 @@ interface RuleRow {
 }
 interface SlotRow { date: string; released_count: number; category_id: string }
 
+interface RulesData { rules: RuleRow[]; slots: SlotRow[] }
+const NO_RULES: RulesData = { rules: [], slots: [] };
+
 function catName(r: RuleRow) { const c = Array.isArray(r.category) ? r.category[0] : r.category; return c?.name_ar ?? "—"; }
 
 export default function AdminAvailabilityRules() {
-  const { branchId, branches, setBranchId } = useBranch();
-  const [rules, setRules] = useState<RuleRow[]>([]);
-  const [slots, setSlots] = useState<SlotRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { branches, setBranchId } = useBranch();
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [releaseFor, setReleaseFor] = useState<RuleRow | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    setError(null);
+  // G24 (decision 40): the active branch's rules only
+  const q = useBranchQuery<RulesData>(async (branchId) => {
     const [r, s] = await Promise.all([
       supabase.from("release_rules").select("id, category_id, enabled, initial_public_release, release_increment, release_trigger, category:room_categories(name_ar)").eq("branch_id", branchId),
       supabase.from("released_slots").select("date, released_count, category_id").eq("branch_id", branchId).gte("date", todayISO()).lte("date", addDaysISO(todayISO(), 14)).order("date"),
     ]);
-    if (r.error) setError(toArabicError(r.error));
-    setRules((r.data as unknown as RuleRow[]) ?? []);
-    setSlots((s.data as SlotRow[]) ?? []);
-    setLoading(false);
-  }, [branchId]);
-
-  useEffect(() => { load(); }, [load]);
+    return { rules: must(r) as unknown as RuleRow[], slots: must(s) as SlotRow[] };
+  }, [], NO_RULES);
+  const { rules, slots } = q.data; const branchId = q.branchId; const load = q.reload;
 
   async function toggle(r: RuleRow) {
     setActing(r.id); setError(null);
     const { error: e } = await supabase.from("release_rules").update({ enabled: !r.enabled }).eq("id", r.id);
     if (e) setError(toArabicError(e));
-    await load();
+    load();
     setActing(null);
   }
 
@@ -50,11 +46,11 @@ export default function AdminAvailabilityRules() {
     setActing(id + field); setError(null);
     const { error: e } = await supabase.from("release_rules").update({ [field]: value }).eq("id", id);
     if (e) setError(toArabicError(e));
-    await load();
+    load();
     setActing(null);
   }
 
-  if (loading && branchId) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
 
   const catOf = (id: string) => { const r = rules.find((x) => x.category_id === id); return r ? catName(r) : id.slice(0, 8); };
 
@@ -65,7 +61,8 @@ export default function AdminAvailabilityRules() {
           {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
         </select>
       } />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {(error || (q.error && rules.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
+      {q.error && rules.length === 0 && <div className="mb-4"><LoadErrorCard message={q.error} onRetry={load} /></div>}
       <div className="mb-4 rounded-xl bg-brand-50 p-4 text-sm text-brand-700">
         <p className="font-medium">كيف تعمل القاعدة؟</p>
         <p className="mt-1 text-xs text-brand-600">عند تفعيل القاعدة، يعرض النظام <strong>العدد الابتدائي</strong> فقط من الغرف للعامة. بعد كل تسليم رمز صندوق معتمد، يُفتح <strong>الزيادة</strong> المحددة من الرصيد المتبقي. يمنع ذلك عرض كل الرصيد دفعة واحدة ويساعد على إدارة الطلب. يمكن للإدارة أيضًا الإفراج يدويًا عن غرفة إضافية لتاريخ محدد مع تسجيل السبب في سجل التدقيق.</p>
@@ -101,7 +98,7 @@ export default function AdminAvailabilityRules() {
               </div>
             </Card>
           ))}
-          {rules.length === 0 && <p className="text-sm text-ink-400">لا توجد قواعد لهذا الفرع.</p>}
+          {rules.length === 0 && !q.error && <p className="text-sm text-ink-400">لا توجد قواعد لهذا الفرع.</p>}
         </div>
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-ink-700">الغرف المُفرج عنها — 14 يومًا القادمة</h3>
@@ -120,7 +117,7 @@ export default function AdminAvailabilityRules() {
   );
 }
 
-function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; branchId: string; onClose: () => void; onDone: () => Promise<void> }) {
+function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; branchId: string; onClose: () => void; onDone: () => void }) {
   const [date, setDate] = useState(todayISO());
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -134,7 +131,7 @@ function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; bran
     try {
       const n = await staffApi.releaseNextSlot(branchId, rule.category_id, date, reason.trim());
       setResult(Number(n));
-      await onDone();
+      onDone();
     } catch (e) { setError(toArabicError(e)); }
     setBusy(false);
   }

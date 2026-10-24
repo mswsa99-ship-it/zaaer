@@ -7,13 +7,13 @@
  * server. Housekeeping never sees or changes the code of a unit with a guest in house. The rules are in
  * fn_keybox_board / fn_keybox_reveal / fn_staff_rotate_keybox_code (0025); this page only shows them.
  */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { KeyRound, Eye, EyeOff, CheckCircle2, Info } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
+import { useBranchQuery } from "../../lib/useBranchQuery";
 import { codesApi, toArabicError, type KeyboxState, type KeyboxUnit } from "../../lib/api";
 import { notifyKeyboxChanged } from "../../lib/keyboxAlerts";
-import { SectionTitle, LoadingScreen, EmptyState, Card, Badge, ErrorBanner, Spinner } from "../../components/ui";
+import { SectionTitle, LoadingScreen, EmptyState, Card, Badge, ErrorBanner, Spinner, LoadErrorCard } from "../../components/ui";
 import { Field } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { CodeLight } from "../../components/KeyboxAlert";
@@ -38,10 +38,9 @@ const EMPTY: Record<"all" | KeyboxState, string> = {
   none: "كل الوحدات لها صناديق مسجّلة",
 };
 
+const NO_UNITS: KeyboxUnit[] = [];
+
 export default function Codes() {
-  const { branchId, loading: branchLoading } = useBranch();
-  const [units, setUnits] = useState<KeyboxUnit[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | KeyboxState>("all");
@@ -50,19 +49,18 @@ export default function Codes() {
   const [busy, setBusy] = useState<string | null>(null);
   const [, setClock] = useState(0);
 
-  const load = useCallback(async () => {
-    if (!branchId) { setLoading(false); return; }
-    try { setUnits(await codesApi.board(branchId)); setError(null); } catch (e) { setError(toArabicError(e)); }
-    setLoading(false);
-  }, [branchId]);
-
-  useEffect(() => { setLoading(true); setEditing(null); setShown(null); load(); }, [load]);
+  // G24: the codes of the active branch only; a late answer for another branch is dropped
+  const board = useBranchQuery((b) => codesApi.board(b), [], NO_UNITS);
+  const units = board.data;
+  const { reload, branchId } = board;
+  // a code shown or being edited never survives a change of branch
+  useEffect(() => { setEditing(null); setShown(null); }, [branchId]);
   useEffect(() => {
     // a check-out or a finished cleaning changes the unit: the list follows at once; the clock keeps «منذ …» current
-    const ch = supabase.channel("codes-board").on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => load()).subscribe();
-    const timer = window.setInterval(() => { setClock((n) => n + 1); load(); }, 30_000);
+    const ch = supabase.channel("codes-board").on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => reload()).subscribe();
+    const timer = window.setInterval(() => { setClock((n) => n + 1); reload(); }, 30_000);
     return () => { supabase.removeChannel(ch); window.clearInterval(timer); };
-  }, [load]);
+  }, [reload]);
   // a shown code disappears by itself after 30 seconds
   useEffect(() => {
     if (!shown) return;
@@ -91,21 +89,21 @@ export default function Codes() {
     try {
       const r = await codesApi.markTested(u.room_id);
       setNotice(`تم تأكيد تجربة رمز وحدة ${u.room_number}. ${roomStatusText(r.room_status)}`);
-      notifyKeyboxChanged(); await load();
+      notifyKeyboxChanged(); reload();
     } catch (e) { setError(toArabicError(e)); }
     setBusy(null);
   }
   async function saved(u: KeyboxUnit, roomStatus: string) {
     setEditing(null); setShown(null); setError(null);
     setNotice(`تم حفظ الرمز الجديد لوحدة ${u.room_number}. ${roomStatusText(roomStatus)}`);
-    notifyKeyboxChanged(); await load();
+    notifyKeyboxChanged(); reload();
   }
 
-  if (loading || branchLoading) return <LoadingScreen />;
+  if (board.loading) return <LoadingScreen />;
   return (
     <div>
       <SectionTitle title="الرموز" subtitle="رموز صناديق المفاتيح — يتغيّر رمز الوحدة بعد خروج كل نزيل" action={<BranchPicker />} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {(error || (board.error && units.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? board.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" role="status">{notice}</div>}
 
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="تصفية الوحدات">
@@ -120,7 +118,7 @@ export default function Codes() {
         ))}
       </div>
 
-      {list.length === 0 ? <EmptyState icon={<KeyRound className="h-10 w-10" />} title={EMPTY[filter]} /> : (
+      {board.error && units.length === 0 ? <LoadErrorCard message={board.error} onRetry={reload} /> : list.length === 0 ? <EmptyState icon={<KeyRound className="h-10 w-10" />} title={EMPTY[filter]} /> : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {list.map((u) => (
             <UnitCard key={u.room_id} u={u} shownCode={shown?.room === u.room_id ? shown.code : null} editing={editing === u.room_id} busy={busy}

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { toArabicError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
-import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
 import { FileText, Plus, Pencil, Trash2, Bot } from "lucide-react";
 
 const TOPICS: Record<string, string> = {
@@ -15,37 +16,31 @@ interface PolicyRow { id: string; topic: string; title: string; content_ar: stri
 type Draft = Omit<PolicyRow, "id"> & { id?: string };
 
 const EMPTY: Draft = { topic: "checkin", title: "", content_ar: "", is_public: true, sort_order: 0 };
+const NO_POLICIES: PolicyRow[] = [];
 
 export default function AdminPolicies() {
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "manager";
-  const { branchId, branches, setBranchId } = useBranch();
-  const [rows, setRows] = useState<PolicyRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { branches, setBranchId } = useBranch();
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    const { data, error: e } = await supabase.from("property_policies").select("id, topic, title, content_ar, is_public, sort_order").eq("branch_id", branchId).order("sort_order").order("created_at");
-    if (e) setError(toArabicError(e));
-    setRows((data as PolicyRow[]) ?? []);
-    setLoading(false);
-  }, [branchId]);
-
-  useEffect(() => { load(); }, [load]);
+  // G24 (decision 40): the active branch's policies only
+  const q = useBranchQuery<PolicyRow[]>(async (branchId) => must(await supabase.from("property_policies")
+    .select("id, topic, title, content_ar, is_public, sort_order").eq("branch_id", branchId).order("sort_order").order("created_at")) as PolicyRow[], [], NO_POLICIES);
+  const rows = q.data; const branchId = q.branchId; const load = q.reload;
 
   async function save() {
     if (!draft || !branchId || !profile) return;
     if (!draft.title.trim() || !draft.content_ar.trim()) { setError("العنوان والمحتوى مطلوبان."); return; }
     setBusy(true); setError(null);
     const payload = { topic: draft.topic, title: draft.title.trim(), content_ar: draft.content_ar.trim(), is_public: draft.is_public, sort_order: draft.sort_order ?? 0, updated_by: profile.id, updated_at: new Date().toISOString() };
-    const q = draft.id
+    const op = draft.id
       ? supabase.from("property_policies").update(payload).eq("id", draft.id)
       : supabase.from("property_policies").insert({ ...payload, branch_id: branchId, organization_id: profile.organization_id });
-    const { error: e } = await q;
-    if (e) setError(toArabicError(e)); else { setDraft(null); await load(); }
+    const { error: e } = await op;
+    if (e) setError(toArabicError(e)); else { setDraft(null); load(); }
     setBusy(false);
   }
 
@@ -56,11 +51,11 @@ export default function AdminPolicies() {
     setPendingDelete(null);
     setBusy(true); setError(null);
     const { error: e } = await supabase.from("property_policies").delete().eq("id", id);
-    if (e) setError(toArabicError(e)); else await load();
+    if (e) setError(toArabicError(e)); else load();
     setBusy(false);
   }
 
-  if (loading && branchId) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
 
   return (
     <div>
@@ -72,13 +67,13 @@ export default function AdminPolicies() {
           {canEdit && <button onClick={() => setDraft({ ...EMPTY, sort_order: rows.length + 1 })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> سياسة جديدة</button>}
         </div>
       } />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {(error || (q.error && rows.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
       <div className="mb-4 flex items-start gap-2 rounded-xl bg-brand-50 p-4 text-sm text-brand-700">
         <Bot className="mt-0.5 h-4 w-4 shrink-0" />
         <p>هذه السياسات (المعلّمة "عامة") هي <strong>المصدر الوحيد</strong> للحقائق التي يُسمح للمساعد الذكي بذكرها عن المنشأة. لا يستنتج المساعد أي سياسة من خارجها، وأي سؤال لا تغطيه يُحوَّل إلى مشرف.</p>
       </div>
 
-      {rows.length === 0 ? (
+      {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : rows.length === 0 ? (
         <EmptyState icon={<FileText className="h-10 w-10" />} title="لا توجد سياسات لهذا الفرع" description="أضف سياسات الوصول والإلغاء والإنترنت وغيرها ليتمكن المساعد من الإجابة عنها." />
       ) : (
         <div className="space-y-3">

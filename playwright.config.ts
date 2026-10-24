@@ -22,7 +22,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   forbidOnly: !!process.env.CI,
   // "github": a failing test becomes an annotation on the run page (file, line, error) — readable without the job log
-  reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]] : [["list"]],
+  // json: the run's results for the test log (decision 56, scripts/test-log.mjs)
+  reporter: [
+    ...(process.env.CI ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]] as const : [["list"]] as const),
+    ["json", { outputFile: `${process.env.VERIFY_OUT || "verify-results"}/e2e.json` }],
+  ],
   outputDir: "test-results",
   use: {
     baseURL: `http://localhost:${PORT}`,

@@ -26,17 +26,23 @@ export function OpsCopilot() {
   const [props, setProps] = useState<Record<string, ProposalState>>({});
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, open]);
-  useEffect(() => { setConv(null); setMsgs([]); }, [branchId]);   // branch change = new context (G24)
+  useEffect(() => { setConv(null); setMsgs([]); setProps({}); }, [branchId]);   // branch change = new context (G24)
+  const branchRef = useRef(branchId);
+  branchRef.current = branchId;
 
   async function send(text: string) {
     if (!branchId || !text.trim() || busy) return;
+    const sentFor = branchId;
     setMsgs((m) => [...m, { role: "staff", text }]); setInput(""); setBusy(true);
     try {
       const r = await aiOpsChat(text, branchId, conv);
+      if (branchRef.current !== sentFor) return;   // the branch changed meanwhile: this answer belongs to the old context (G24)
       setConv(r.conversation_id);
       setMsgs((m) => [...m, { role: "assistant", text: r.reply, mode: r.mode, proposals: r.proposals, aiStatus: r.ai_status }]);
       for (const p of r.proposals ?? []) setProps((s) => ({ ...s, [p.id]: { status: "proposed" } }));
-    } catch (e) { setMsgs((m) => [...m, { role: "assistant", text: "تعذّر الوصول إلى مساعد العمليات: " + toArabicError(e) }]); } finally { setBusy(false); }
+    } catch (e) {
+      if (branchRef.current === sentFor) setMsgs((m) => [...m, { role: "assistant", text: "تعذّر الوصول إلى مساعد العمليات: " + toArabicError(e) }]);
+    } finally { setBusy(false); }
   }
   async function decide(p: OpsProposal, ok: boolean) {
     setProps((s) => ({ ...s, [p.id]: { status: "executing" } }));

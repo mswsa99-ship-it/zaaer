@@ -66,10 +66,66 @@ function requireBranch(b: string | null | undefined) { if (!b || !myBranches().i
 function staffId() { return me()?.id ?? null; }
 function branchToday(_b?: string) { return todayISO(); }
 function audit(branch: string | null, action: string, entity: string, entityId: string, details: Row) {
-  T("audit_events").unshift({ id: uid(), organization_id: ORG, branch_id: branch, actor_id: staffId(), action, entity_type: entity, entity_id: entityId, details, created_at: nowISO() });
+  // like the server trigger (0026): the request's trace code and source, or a per-call code when none was sent
+  const trace = requestHeaders?.["x-correlation-id"], source = requestHeaders?.["x-client-source"];
+  T("audit_events").unshift({ id: uid(), organization_id: ORG, branch_id: branch, actor_id: staffId(), action, entity_type: entity, entity_id: entityId, details, created_at: nowISO(),
+    correlation_id: trace && /^[A-Za-z0-9_-]{6,64}$/.test(trace) ? trace : "tx-" + uid().slice(0, 8),
+    source: source && /^[a-z][a-z_-]{1,31}$/.test(source) ? source : staffId() ? "screen" : "system",
+    actor_type: staffId() ? "staff" : "system", result: "success",
+    category: /^(staff|membership|security|data_purge)/.test(action) ? "security" : "business" });
   emit("audit_events");
 }
-// 0009 (A06): updates of definitions, stays, prices and task completion must carry the version the user saw
+
+// ---------------------------------------------------------------------------
+// request context and test latency
+// ---------------------------------------------------------------------------
+/** The headers of the RPC being run (x-correlation-id / x-client-source, as the app sends them to the server). */
+let requestHeaders: Record<string, string> | null = null;
+
+/**
+ * Test hook (end-to-end tests only): `window.__demoLatency(target, detail)` returns a delay in ms for a read
+ * (target = table name, detail = its filters such as "branch_id=…") or an RPC (target = "rpc:<name>", detail = its
+ * arguments as JSON), so a test can replay a slow or out-of-order answer. Unset → no delay.
+ */
+function demoLatency(target: string, detail: string[]): number {
+  const f = (globalThis as { __demoLatency?: (t: string, d: string[]) => unknown }).__demoLatency;
+  if (typeof f !== "function") return 0;
+  try { const n = Number(f(target, detail)); return Number.isFinite(n) && n > 0 ? Math.min(n, 10_000) : 0; } catch { return 0; }
+}
+/** Test hook (end-to-end tests only): `window.__demoFail(target, detail)` returns an error message to make that read
+ *  (target = table) or RPC (target = "rpc:<name>") fail, so a test can show a failed load next to an empty one (U04)
+ *  or a failed save (U01). Unset → nothing fails. */
+function demoFailure(target: string, detail: string[]): string | null {
+  const f = (globalThis as { __demoFail?: (t: string, d: string[]) => unknown }).__demoFail;
+  if (typeof f !== "function") return null;
+  try { const m = f(target, detail); return typeof m === "string" && m ? m : null; } catch { return null; }
+}
+const later = <V>(ms: number, v: V) => (ms > 0 ? new Promise<V>((r) => window.setTimeout(() => r(v), ms)) : Promise.resolve(v));
+
+/** An RPC call like the real client's: awaitable, with setHeader(); runs once, when first awaited. */
+function rpcCall(lookup: (fn: string) => ((a: any) => any) | undefined, fn: string, args: any) {
+  const headers: Record<string, string> = {};
+  let run: Promise<{ data: any; error: any }> | null = null;
+  const exec = async () => {
+    await later(demoLatency("rpc:" + fn, [JSON.stringify(args ?? {})]), null);
+    const failure = demoFailure("rpc:" + fn, [JSON.stringify(args ?? {})]);
+    if (failure) return { data: null, error: { message: failure, code: "P0001" } };
+    const impl = lookup(fn);
+    if (!impl) return { data: null, error: { message: `FN_NOT_IMPLEMENTED_IN_DEMO: ${fn}` } };
+    requestHeaders = headers;
+    try { return { data: impl(args) ?? null, error: null }; }
+    catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" } }; }
+    finally { requestHeaders = null; }
+  };
+  const call = {
+    setHeader(name: string, value: string) { headers[name.toLowerCase()] = value; return call; },
+    then<R1 = any, R2 = never>(onf?: ((v: any) => R1 | PromiseLike<R1>) | null, onr?: ((e: any) => R2 | PromiseLike<R2>) | null): Promise<R1 | R2> {
+      return (run ??= exec()).then(onf ?? undefined, onr ?? undefined);
+    },
+  };
+  return call;
+}
+// 0009 (GAP06): updates of definitions, stays, prices and task completion must carry the version the user saw
 const checkVersion = (cur: number, exp?: number | null) => { if (exp == null) throw new Error("VERSION_REQUIRED: expected version must be supplied"); if (cur !== exp) throw new Error("VERSION_CONFLICT: record changed by another user"); };
 const checkVersionLenient = (cur: number, exp?: number | null) => { if (exp != null && cur !== exp) throw new Error("VERSION_CONFLICT: record changed by another user"); };
 const nonEmpty = (v: unknown, code: string) => { if (!v || !String(v).trim()) throw new Error(`VALIDATION: ${code}`); };
@@ -132,7 +188,7 @@ function visible(table: string, r: Row): boolean {
   return true;
 }
 class QB implements PromiseLike<any> {
-  private filters: Filter[] = []; private mode: "select" | "insert" | "update" | "delete" | "upsert" = "select"; private sel = "*"; private payload: any = null;
+  private filters: Filter[] = []; private trace: string[] = []; private mode: "select" | "insert" | "update" | "delete" | "upsert" = "select"; private sel = "*"; private payload: any = null;
   private orders: Array<{ col: string; asc: boolean; nullsFirst?: boolean }> = []; private lim: number | null = null; private off = 0; private countMode = false; private head = false; private one: "maybe" | "one" | null = null;
   /** service = the server's view (edge functions with the service role): no row-level filtering */
   constructor(private table: string, private service = false) {}
@@ -141,7 +197,7 @@ class QB implements PromiseLike<any> {
   upsert(p: any) { this.mode = "upsert"; this.payload = p; return this; }
   update(p: any) { this.mode = "update"; this.payload = p; return this; }
   delete() { this.mode = "delete"; return this; }
-  eq(c: string, v: any) { this.filters.push((r) => r[c] === v || (v != null && String(r[c]) === String(v))); return this; }
+  eq(c: string, v: any) { this.trace.push(`${c}=${v}`); this.filters.push((r) => r[c] === v || (v != null && String(r[c]) === String(v))); return this; }
   neq(c: string, v: any) { this.filters.push((r) => r[c] !== v); return this; }
   in(c: string, vs: any[]) { this.filters.push((r) => vs.includes(r[c])); return this; }
   is(c: string, v: any) { this.filters.push((r) => (v === null ? r[c] == null : r[c] === v)); return this; }
@@ -153,6 +209,7 @@ class QB implements PromiseLike<any> {
   like(c: string, v: string) { const re = new RegExp("^" + v.replace(/%/g, ".*") + "$"); this.filters.push((r) => re.test(String(r[c] ?? ""))); return this; }
   ilike(c: string, v: string) { const re = new RegExp("^" + v.replace(/%/g, ".*") + "$", "i"); this.filters.push((r) => re.test(String(r[c] ?? ""))); return this; }
   or(expr: string) {
+    this.trace.push(`or=${expr}`);
     const parts = expr.split(",").map((p) => { const [col, op, ...rest] = p.split("."); const val = rest.join("."); return { col, op, val }; });
     this.filters.push((r) => parts.some(({ col, op, val }) => (op === "is" ? (val === "null" ? r[col] == null : r[col] === (val === "true")) : op === "eq" ? String(r[col]) === val : false)));
     return this;
@@ -191,7 +248,11 @@ class QB implements PromiseLike<any> {
       return { data, error: null, count: this.countMode ? count : null };
     } catch (e) { return { data: null, error: { message: (e as Error).message }, count: null }; }
   }
-  then<R1 = any, R2 = never>(onf?: ((v: any) => R1 | PromiseLike<R1>) | null, onr?: ((e: any) => R2 | PromiseLike<R2>) | null): Promise<R1 | R2> { return Promise.resolve(this.run()).then(onf ?? undefined, onr ?? undefined); }
+  then<R1 = any, R2 = never>(onf?: ((v: any) => R1 | PromiseLike<R1>) | null, onr?: ((e: any) => R2 | PromiseLike<R2>) | null): Promise<R1 | R2> {
+    const failure = this.mode === "select" ? demoFailure(this.table, this.trace) : null;
+    const v = failure ? { data: null, error: { message: failure }, count: null } : this.run();
+    return later(this.mode === "select" ? demoLatency(this.table, this.trace) : 0, v).then(onf ?? undefined, onr ?? undefined);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -400,6 +461,16 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_staff_confirm_payment: ({ p_reservation, p_method, p_amount_halalas, p_reference, p_idempotency_key }) => { requireRole("owner", "manager", "supervisor", "finance"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (p_amount_halalas <= 0) throw new Error("VALIDATION: amount"); nonEmpty(p_reference, "reference_required"); const res = rpcs.fn_create_voucher({ p: { reservation_id: r.id, kind: "receipt", amount_halalas: p_amount_halalas, method: p_method, reference: p_reference, idempotency_key: p_idempotency_key } }); audit(r.branch_id, "confirm_payment", "reservation", r.id, { method: p_method, amount_halalas: p_amount_halalas, reference: p_reference }); return { ok: true, duplicate: res.duplicate, payment_status: r.payment_status, paid_halalas: r.paid_halalas, voucher: res.number }; },
   fn_create_invoice: ({ p_reservation, p_from, p_to }) => { requireRole("owner", "manager", "supervisor", "finance"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); const lines = T("reservation_charges").filter((c) => c.reservation_id === r.id && !c.invoice_id); if (!lines.length) throw new Error("NOTHING_TO_INVOICE"); const b = byId("branches", r.branch_id)!; const id = uid(); const sub = lines.filter((c) => c.kind !== "tax").reduce((a, c) => a + c.total_halalas, 0), tax = lines.filter((c) => c.kind === "tax").reduce((a, c) => a + c.total_halalas, 0);
     const inv = { id, organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber("INV"), period_from: p_from ?? r.check_in, period_to: p_to ?? r.check_out, status: "issued", snapshot: { property: { name: b.name_ar, tax_number: b.tax_number }, guest: { name: guestName(r.id) }, lines: lines.map((c) => ({ ...c })) }, subtotal_halalas: sub, tax_halalas: tax, total_halalas: sub + tax, issued_by: staffId(), issued_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null }; T("invoices").push(inv); for (const c of lines) c.invoice_id = id; emit("invoices"); emit("reservation_charges"); audit(r.branch_id, "invoice.issued", "invoice", id, { after: { number: inv.number, total_halalas: inv.total_halalas } }); return { ok: true, id, number: inv.number, total_halalas: inv.total_halalas }; },
+  // decision 60: failed operations are recorded by their trace code only (the demo keeps them in memory)
+  fn_log_client_error: ({ p_trace, p_code, p_context }) => { if (!staffId() || !/^[A-Z0-9]{6,16}$/.test(String(p_trace ?? ""))) return { ok: false }; T("client_errors").push({ id: uid(), trace_id: p_trace, error_code: /^[A-Z][A-Z0-9_]{1,48}(: [a-z_0-9]{1,48})?$/.test(String(p_code ?? "")) ? p_code : "UNKNOWN", context: p_context ?? null, staff_id: staffId(), created_at: nowISO() }); return { ok: true }; },
+  fn_lookup_trace: ({ p_trace }) => {
+    requireRole("owner", "manager"); if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(p_trace ?? ""))) throw new Error("VALIDATION: trace");
+    const name = (id: string | null) => (id ? byId("staff_profiles", id)?.full_name ?? null : null);
+    const f = T("client_errors").find((e) => e.trace_id === p_trace);
+    return { failure: f ? { id: f.id, staff_id: f.staff_id, staff_name: name(f.staff_id), trace_id: f.trace_id, error_code: f.error_code, context: f.context, created_at: f.created_at } : null,
+      events: T("audit_events").filter((e) => e.correlation_id === p_trace && (e.category !== "security" || hasRole("owner"))).reverse()
+        .map((e) => ({ action: e.action, entity_type: e.entity_type, entity_id: e.entity_id, actor_id: e.actor_id, actor_name: name(e.actor_id), source: e.source, result: e.result, created_at: e.created_at })) };
+  },
   fn_cancel_invoice: ({ p_invoice, p_reason }) => { requireRole("owner", "manager"); nonEmpty(p_reason, "reason"); const inv = byId("invoices", p_invoice); if (!inv) throw new Error("NOT_FOUND"); if (inv.status !== "issued") throw new Error("INVOICE_STATUS_INVALID"); Object.assign(inv, { status: "cancelled", cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: p_reason }); for (const c of T("reservation_charges")) if (c.invoice_id === inv.id) c.invoice_id = null; emit("invoices"); emit("reservation_charges"); return { ok: true }; },
 
   // ---- housekeeping ----
@@ -482,7 +553,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_ops_units_board: ({ p_branch }) => { if (!myBranches().includes(p_branch)) return []; const today = branchToday(); return T("rooms").filter((r) => r.branch_id === p_branch && !r.archived_at).map((r) => { const cur = T("reservation_allocations").filter((a) => a.room_id === r.id && a.status === "active" && a.from_date <= today).map((a) => ({ a, r: byId("reservations", a.reservation_id)! })).filter((x) => x.r && ["confirmed", "checked_in", "pending_verification"].includes(x.r.status) && (today < x.a.to_date || x.r.status === "checked_in")).map((x) => x.r).sort((a) => (a.status === "checked_in" ? -1 : 1))[0]; const next = T("reservation_allocations").filter((a) => a.room_id === r.id && a.status === "active" && a.from_date > today && ["confirmed", "pending_verification"].includes(byId("reservations", a.reservation_id)?.status)).sort((a, b) => (a.from_date < b.from_date ? -1 : 1))[0]; const kb = T("keyboxes").find((k) => k.room_id === r.id);
     return { room_id: r.id, room_number: r.room_number, category: byId("room_categories", r.category_id)?.name_ar, block: byId("blocks", r.block_id)?.name ?? null, floor: byId("floors", r.floor_id)?.name ?? null, is_active: r.is_active, status: r.status, cleanliness: r.cleanliness, open_tasks: T("housekeeping_tasks").filter((h) => h.room_id === r.id && ["pending", "in_progress"].includes(h.status)).length, open_maintenance: T("maintenance_tickets").filter((m) => m.room_id === r.id && m.status !== "resolved").length, keybox_ready: !!kb && kb.code_status === "active" && kb.field_tested, current: cur ? { reservation_id: cur.id, internal_ref: cur.internal_ref, status: cur.status, check_in: cur.check_in, check_out: cur.check_out, guest: guestName(cur.id) ?? "—", balance_due: cur.balance_due_halalas } : null, next: next ? { internal_ref: byId("reservations", next.reservation_id)!.internal_ref, check_in: next.from_date } : null }; }).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })); },
   fn_ops_daily_summary: ({ p_branch, p_date }) => summary(p_branch, p_date ?? branchToday()),
-  // Ledger-based finance KPIs for reports (A05): revenue = vouchers, never reservation totals; deposits never count as revenue.
+  // Ledger-based finance KPIs for reports (GAP05): revenue = vouchers, never reservation totals; deposits never count as revenue.
   fn_reports_finance: ({ p_branch, p_from, p_to }) => {
     requireRole("owner", "manager", "finance"); requireBranch(p_branch);
     const from = p_from ?? addDays(branchToday(), -29), to = p_to ?? branchToday();
@@ -839,7 +910,7 @@ function invoke(name: string, opts: any) {
 export function createDemoClient() {
   return {
     from: (table: string) => new QB(table),
-    rpc: async (fn: string, args: any = {}) => { const impl = rpcs[fn]; if (!impl) return { data: null, error: { message: `FN_NOT_IMPLEMENTED_IN_DEMO: ${fn}` } }; try { return { data: impl(args) ?? null, error: null }; } catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" } }; } },
+    rpc: (fn: string, args: any = {}) => rpcCall((f) => rpcs[f], fn, args),
     auth: {
       getSession: async () => ({ data: { session }, error: null }),
       onAuthStateChange: (cb: (e: string, s: Session) => void) => { authListeners.add(cb); return { data: { subscription: { unsubscribe: () => authListeners.delete(cb) } } }; },
@@ -859,7 +930,7 @@ export const DEMO_LOGINS = DEMO_ACCOUNTS.map((a) => ({ email: a.email, name: a.n
 export function createDemoServiceClient() {
   return {
     from: (table: string) => new QB(table, true),
-    rpc: async (fn: string, args: any = {}) => { const impl = serviceRpcs[fn] ?? rpcs[fn]; if (!impl) return { data: null, error: { message: `FN_NOT_IMPLEMENTED_IN_DEMO: ${fn}` } }; try { return { data: impl(args) ?? null, error: null }; } catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" } }; } },
+    rpc: (fn: string, args: any = {}) => rpcCall((f) => serviceRpcs[f] ?? rpcs[f], fn, args),
   };
 }
 /** fetch for the demo's edge functions (the WhatsApp flow asks ai-reception over HTTP on the server) */

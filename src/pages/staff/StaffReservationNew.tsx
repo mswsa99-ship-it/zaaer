@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarPlus, Calculator, Plus, X, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
-import { useBranch } from "../../lib/branch";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi, toArabicError, type Quote } from "../../lib/api";
-import { Card, SectionTitle, ErrorBanner, Spinner } from "../../components/ui";
+import { Card, SectionTitle, ErrorBanner, Spinner, LoadErrorCard } from "../../components/ui";
 import { Field, MoneyInput, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO } from "../../lib/utils";
@@ -14,14 +14,24 @@ import { CLEANLINESS_LABELS } from "../../lib/types";
 interface Cat { id: string; name_ar: string; base_capacity: number; max_capacity: number; base_price_halalas: number }
 interface Src { id: string; name: string; kind: string; external_reference_required: boolean }
 
+interface Options { cats: Cat[]; sources: Src[] }
+const NO_OPTIONS: Options = { cats: [], sources: [] };
+
 const addDays = (d: string, n: number) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 
 export default function StaffReservationNew() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { branchId } = useBranch();
   const canDiscount = profile?.role === "owner" || profile?.role === "manager";
-  const [cats, setCats] = useState<Cat[]>([]); const [sources, setSources] = useState<Src[]>([]);
+  // G24 (decision 40): the unit types of the ACTIVE branch; booking sources are organisation-wide
+  const opts = useBranchQuery<Options>(async (branchId) => {
+    const [c, s] = await Promise.all([
+      supabase.from("room_categories").select("id, name_ar, base_capacity, max_capacity, base_price_halalas").eq("branch_id", branchId).is("archived_at", null).eq("is_active", true).order("sort_order"),
+      supabase.from("booking_sources").select("id, name, kind, external_reference_required").eq("is_active", true).is("archived_at", null).order("name"),
+    ]);
+    return { cats: must(c) as Cat[], sources: must(s) as Src[] };
+  }, [], NO_OPTIONS);
+  const { cats, sources } = opts.data; const branchId = opts.branchId;
   const [f, setF] = useState({ check_in: todayISO(), check_out: addDays(todayISO(), 1), category_id: "", room_id: "", source_id: "", external_ref: "", guest_name: "", guest_phone: "", nationality: "", adults: 1, companions: 0, booking_type: "individual", company_name: "", visit_purpose: "", notes: "", confirm: true, override: false, nightly_rate: null as number | null, discount: 0, discount_reason: "" });
   // Zaaer parity (0011): companions by name, extra units in the same booking (one reservation per unit, created atomically)
   const [companionRows, setCompanionRows] = useState<Array<{ full_name: string; relationship: string }>>([]);
@@ -31,17 +41,13 @@ export default function StaffReservationNew() {
   const [rooms, setRooms] = useState<Array<{ room_id: string; room_number: string; status: string; cleanliness: string; block_name: string | null }>>([]);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
+  // Branch-scoped choices never carry over to another branch: the unit type, the unit and the extra units are reset
+  // whenever the branch's options change (a branch switch clears them first); the source stays if it still exists.
   useEffect(() => {
-    if (!branchId) return;
-    (async () => {
-      const [c, s] = await Promise.all([
-        supabase.from("room_categories").select("id, name_ar, base_capacity, max_capacity, base_price_halalas").eq("branch_id", branchId).is("archived_at", null).eq("is_active", true).order("sort_order"),
-        supabase.from("booking_sources").select("id, name, kind, external_reference_required").eq("is_active", true).is("archived_at", null).order("name"),
-      ]);
-      setCats((c.data as Cat[]) ?? []); setSources((s.data as Src[]) ?? []);
-      setF((p) => ({ ...p, category_id: p.category_id || (c.data?.[0] as Cat | undefined)?.id || "", source_id: p.source_id || ((s.data ?? []) as Src[]).find((x) => x.kind === "direct")?.id || (s.data?.[0] as Src | undefined)?.id || "" }));
-    })();
-  }, [branchId]);
+    setF((p) => ({ ...p, category_id: cats[0]?.id ?? "", room_id: "",
+      source_id: sources.some((x) => x.id === p.source_id) ? p.source_id : (sources.find((x) => x.kind === "direct")?.id ?? sources[0]?.id ?? "") }));
+    setExtraUnits([]);
+  }, [cats, sources]);
 
   const nights = useMemo(() => Math.max(0, Math.round((new Date(f.check_out).getTime() - new Date(f.check_in).getTime()) / 86400000)), [f.check_in, f.check_out]);
   const source = sources.find((s) => s.id === f.source_id);
@@ -49,7 +55,8 @@ export default function StaffReservationNew() {
 
   // live quote + availability from the server (the browser never computes prices)
   useEffect(() => {
-    if (!branchId || !f.category_id || nights <= 0) { setQuote(null); setRooms([]); return; }
+    // a unit type that is not one of the active branch's (a branch switch in progress) is never quoted
+    if (!branchId || !cats.some((c) => c.id === f.category_id) || nights <= 0) { setQuote(null); setRooms([]); return; }
     let alive = true;
     (async () => {
       try {
@@ -62,7 +69,7 @@ export default function StaffReservationNew() {
       } catch (e) { if (alive) { setQuote(null); setError(toArabicError(e)); } }
     })();
     return () => { alive = false; };
-  }, [branchId, f.category_id, f.check_in, f.check_out, f.override, f.nightly_rate, f.discount, nights, canDiscount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branchId, cats, f.category_id, f.check_in, f.check_out, f.override, f.nightly_rate, f.discount, nights, canDiscount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit() {
     setBusy(true); setError(null);
@@ -85,6 +92,7 @@ export default function StaffReservationNew() {
     <div>
       <button onClick={() => navigate("/staff/reservations")} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> الحجوزات</button>
       <SectionTitle title="حجز جديد" subtitle="يتحقق الخادم من التوفر والسعة والسعر لحظة التأكيد" action={<BranchPicker />} />
+      {opts.error && <div className="mb-4"><LoadErrorCard message={opts.error} onRetry={opts.reload} /></div>}
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

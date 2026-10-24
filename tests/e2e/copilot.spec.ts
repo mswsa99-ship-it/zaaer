@@ -1,8 +1,9 @@
 /**
- * Staff AI ops copilot — acceptance ids D01–D04.
- * Controls: G20 (copilot reads only through the staff user's permissions), G21 (writes only via a
- * human-confirmed proposal executed through the same RPCs), G22 (no invented facts — deterministic briefing),
- * G12 (money hidden for non-money roles).
+ * Staff AI ops copilot — test ids OC01–OC03 (decision 57: renamed from D01–D03, which the testing rules reserve for
+ * reports and audit data).
+ * Controls: G21 (housekeeping gets no balances through the copilot — OC03), G22 (a write is a proposal first, and
+ * confirming runs the regular audited RPC under the user's own role — OC02). The briefing answers from live data
+ * with no model (OC01).
  */
 import { test, expect } from "./fixtures";
 
@@ -28,7 +29,7 @@ async function send(page: Page, text: string) {
 }
 
 test.describe("ops copilot", () => {
-  test("D01 briefing answers from live context, no provider needed", async ({ page, loginAs }) => {
+  test("OC01 briefing answers from live context, no provider needed", async ({ page, loginAs }) => {
     await loginAs("owner");
     await openCopilot(page);
     await page.getByRole("button", { name: "ما وضع اليوم؟" }).click();
@@ -38,7 +39,7 @@ test.describe("ops copilot", () => {
     await expect(reply).not.toBeEmpty();
   });
 
-  test("D02 a write is a proposal first; confirming executes it through the real RPC and it shows up in housekeeping", async ({ page, loginAs }) => {
+  test("OC02 a write is a proposal first; confirming executes it through the real RPC and it shows up in housekeeping", async ({ page, loginAs }) => {
     await loginAs("owner");
     await openCopilot(page);
     await send(page, "أنشئ مهمة تنظيف للوحدة 102");
@@ -56,7 +57,7 @@ test.describe("ops copilot", () => {
     expect(await page.getByText("وحدة 102").count()).toBeGreaterThan(before);
   });
 
-  test("D03 housekeeping cannot get balances from the copilot", async ({ page, loginAs }) => {
+  test("OC03 housekeeping cannot get balances from the copilot", async ({ page, loginAs }) => {
     await loginAs("housekeeping");
     await openCopilot(page);
     const reply = await send(page, "كم المتبقي على الحجوزات اليوم؟");

@@ -5,7 +5,7 @@ import { Building2, AlertTriangle } from "lucide-react";
 /**
  * Branch scope selector shared by operational and admin screens. The selection lives in BranchProvider, so changing
  * it here refreshes every branch-scoped list/request/form on the open page (U02/G24). A signed-in user with no
- * authorised branch sees the fail-closed message instead of a picker (A02).
+ * authorised branch sees the fail-closed message instead of a picker (GAP02).
  */
 export function BranchPicker({ className }: { className?: string }) {
   const { branchId, branches, setBranchId, loading } = useBranch();

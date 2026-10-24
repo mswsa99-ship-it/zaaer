@@ -110,7 +110,7 @@ do $$ declare r jsonb; res uuid; begin
         'room_id',(select v from ids where k='room2'),'check_in',(current_date + 10)::text,'check_out',(current_date + 12)::text,'guest_name','ضيف اختبار','guest_phone','0500000001',
         'source_id','00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid; insert into ids values ('res_future', res);
-  perform t_record('R15 future allocation does not flag the room reserved today; readiness is computed (no stale available)',
+  perform t_record('RS01 future allocation does not flag the room reserved today; readiness is computed (no stale available)',
     (t_room((select v from ids where k='room2'))).status not in ('reserved','available'), (t_room((select v from ids where k='room2'))).status::text);
   begin
     perform fn_admin_upsert_room(jsonb_build_object('id', (select v from ids where k='room2'), 'is_active', false, 'version', t_ver('rooms', (select v from ids where k='room2'))));
@@ -150,7 +150,7 @@ do $$ declare before_res reservations; after_res reservations; n_before int; n_a
   select count(*) into n_before from reservation_charges where reservation_id = before_res.id;
   begin
     perform fn_staff_amend_stay(before_res.id, current_date + 4, 'keep_rate', 'طلب الضيف', t_ver('reservations', before_res.id));
-    perform t_record('R04 extension into booked period rejected', false, 'accepted');
+    perform t_record('R04 extension into booked period rejected; no partial update', false, 'accepted');
   exception when others then
     after_res := t_res(before_res.id);
     select count(*) into n_after from reservation_charges where reservation_id = before_res.id;
@@ -271,8 +271,8 @@ do $$ declare r jsonb; b uuid; cat uuid; res uuid; begin
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar','قياسي','base_price_halalas', 10000)); cat := (r->>'id')::uuid;
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', current_date::text, 'check_out', (current_date + 3)::text, 'guest_name','ضيف مالي','guest_phone','0500000007','source_id','00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid; insert into ids values ('resF', res);
-  perform t_record('F00 total = 3 nights × 100 = 300.00 SAR (30000 halalas), status pending', (t_fin(res)->>'total')::bigint = 30000 and t_fin(res)->>'payment_status' = 'pending', t_fin(res)::text);
-exception when others then perform t_record('F00 total = 3 nights × 100 = 300.00 SAR (30000 halalas), status pending', false, sqlerrm); end $$;
+  perform t_record('F01a total = 3 nights × 100 = 300.00 SAR (30000 halalas), status pending', (t_fin(res)->>'total')::bigint = 30000 and t_fin(res)->>'payment_status' = 'pending', t_fin(res)::text);
+exception when others then perform t_record('F01a total = 3 nights × 100 = 300.00 SAR (30000 halalas), status pending', false, sqlerrm); end $$;
 
 do $$ declare res uuid := (select v from ids where k='resF'); f jsonb; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10000, 'method','cash','idempotency_key','kF1'));
@@ -398,8 +398,8 @@ do $$ declare room uuid := (select v from ids where k='room1'); r jsonb; begin
   r := fn_hk_create_task(jsonb_build_object('task_type_id','00000000-0000-0000-0000-000000000420','room_id', room));
   begin
     perform fn_hk_set_cleanliness(room, 'clean');
-    perform t_record('H07 manual mark-clean blocked while cleaning task open', false, 'accepted');
-  exception when others then perform t_record('H07 manual mark-clean blocked while cleaning task open', sqlerrm like '%OPEN_CLEANING_TASK%', sqlerrm); end;
+    perform t_record('HC01 manual mark-clean blocked while cleaning task open', false, 'accepted');
+  exception when others then perform t_record('HC01 manual mark-clean blocked while cleaning task open', sqlerrm like '%OPEN_CLEANING_TASK%', sqlerrm); end;
 end $$;
 
 -- =====================================================================
@@ -464,7 +464,8 @@ do $$ declare e audit_events; begin
   select * into e from audit_events where action = 'voucher.deposit_refund_created' order by created_at desc limit 1;
   perform t_record('D03 financial audit: actor, time, amount, reason present; no document numbers or codes',
     e.actor_id is not null and e.created_at is not null and (e.details->'after'->>'amount_halalas') is not null and e.details->>'reason' is not null
-    and e.details::text !~ '\d{10}' and not (e.details ? 'code_encrypted'), e.details::text);
+    and regexp_replace(e.details::text, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '', 'g') !~ '\d{10}'   -- ids are random: a uuid may hold 10 digits
+    and not (e.details ? 'code_encrypted'), e.details::text);
 end $$;
 
 -- D02 report: deposits outside revenue
@@ -581,7 +582,7 @@ do $$ declare r jsonb; res uuid; rm uuid; rm2 uuid; cat uuid; b uuid := (select 
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
   begin
     perform fn_staff_switch_room(res, rm2, current_date + 2, 'مستقبلي', t_ver('reservations', res));
-    perform t_record('RV06 future-dated switch for a checked-in guest rejected', false, 'accepted');
+    perform t_record('RV06 future-dated switch for a checked-in guest rejected; rooms untouched', false, 'accepted');
   exception when others then
     perform t_record('RV06 future-dated switch for a checked-in guest rejected; rooms untouched', sqlerrm like '%effective_date%' and (t_room(rm)).status = 'occupied' and (t_room(rm2)).status <> 'occupied', sqlerrm);
   end;

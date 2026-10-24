@@ -46,6 +46,36 @@ export function LoadingScreen({ label = "جارٍ التحميل…" }: { label?
   );
 }
 
+/** A failed load: says so and offers a retry — never looks like an empty list (decision 42, G23/U04). */
+export function LoadErrorCard({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-danger-500/30 bg-danger-500/5 px-6 py-12 text-center">
+      <h3 className="text-base font-medium text-danger-600">تعذّر تحميل البيانات</h3>
+      <p className="max-w-md text-sm text-ink-500">{message}</p>
+      {onRetry && <button type="button" onClick={onRetry} className="btn-outline text-sm">إعادة المحاولة</button>}
+    </div>
+  );
+}
+
+/**
+ * The four states of a list, in one place (decision 42): loading, failed (with retry), empty, or the content.
+ * A failed reload while data is already shown keeps the data and puts the error above it.
+ */
+export function DataState({ loading, error, empty, onRetry, emptyIcon, emptyTitle, emptyDescription, children }: {
+  loading: boolean; error: string | null; empty: boolean; onRetry?: () => void;
+  emptyIcon?: ReactNode; emptyTitle: string; emptyDescription?: string; children: ReactNode;
+}) {
+  if (loading) return <LoadingScreen />;
+  if (error && empty) return <LoadErrorCard message={error} onRetry={onRetry} />;
+  if (empty) return <EmptyState icon={emptyIcon} title={emptyTitle} description={emptyDescription} />;
+  return (
+    <>
+      {error && <div className="mb-4 flex flex-wrap items-center gap-3"><ErrorBanner message={error} />{onRetry && <button type="button" onClick={onRetry} className="btn-outline text-xs">إعادة المحاولة</button>}</div>}
+      {children}
+    </>
+  );
+}
+
 export function ErrorBanner({ message }: { message: string }) {
   return (
     <div className="rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">

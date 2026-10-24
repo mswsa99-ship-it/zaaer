@@ -4,9 +4,11 @@
  * the database rejects direct writes for operational roles.
  */
 import { supabase } from "./supabase";
+import { clientSource, errorCode, newTraceId, normalizeTrace } from "./trace";
 
 export class ApiError extends Error {
-  constructor(message: string, public readonly code?: string) { super(message); }
+  /** traceId: the code sent with the request (x-correlation-id) and shown to the employee with the message. */
+  constructor(message: string, public readonly code?: string, public readonly traceId?: string) { super(message); }
 }
 
 const ERROR_AR: Record<string, string> = {
@@ -101,8 +103,7 @@ const VALIDATION_AR: Record<string, string> = {
   confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
 };
 
-export function toArabicError(e: unknown): string {
-  const msg = (e as { message?: string })?.message ?? String(e);
+function arabicMessage(msg: string): string {
   const v = msg.match(/VALIDATION:\s*([a-z_0-9]+)/i);
   if (v) return VALIDATION_AR[v[1]] ?? "بيانات غير صالحة: " + v[1];
   for (const k of Object.keys(ERROR_AR)) if (msg.includes(k)) return ERROR_AR[k];
@@ -110,9 +111,29 @@ export function toArabicError(e: unknown): string {
   return "تعذّر تنفيذ العملية: " + msg.slice(0, 120);
 }
 
+/** The Arabic message for an error; a failed server operation also shows its trace code (decision 60). */
+export function toArabicError(e: unknown): string {
+  const msg = (e as { message?: string })?.message ?? String(e);
+  const trace = (e as { traceId?: string })?.traceId;
+  return trace ? `${arabicMessage(msg)} (رمز التتبع: ${trace})` : arabicMessage(msg);
+}
+
+/** Records a failed operation by its trace code only (no message text, no personal data). Best effort. */
+function logClientError(traceId: string, message: string, fn: string) {
+  void Promise.resolve(supabase.rpc("fn_log_client_error", { p_trace: traceId, p_code: errorCode(message), p_context: fn })).catch(() => undefined);
+}
+
 async function rpc<T = unknown>(fn: string, args: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.rpc(fn, args);
-  if (error) throw new ApiError(error.message, error.code);
+  const traceId = newTraceId();
+  const call = supabase.rpc(fn, args) as unknown as { setHeader?: (n: string, v: string) => unknown };
+  const request = (typeof call.setHeader === "function"
+    ? (call.setHeader("x-correlation-id", traceId) as { setHeader: (n: string, v: string) => unknown }).setHeader("x-client-source", clientSource())
+    : call) as PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
+  const { data, error } = await request;
+  if (error) {
+    logClientError(traceId, error.message, fn);
+    throw new ApiError(error.message, error.code, traceId);
+  }
   return data as T;
 }
 
@@ -306,6 +327,16 @@ export const purgeApi = {
   history: () => rpc<PurgeHistoryRow[]>("fn_admin_purge_history", {}),
 };
 
+/** What happened to a trace code (decision 60; owner and manager). */
+export interface TraceLookup {
+  failure: { trace_id: string; error_code: string; context: string | null; staff_name: string | null; created_at: string } | null;
+  events: Array<{ action: string; entity_type: string | null; entity_id: string | null; actor_name: string | null; source: string | null; result: string | null; created_at: string }>;
+}
+export const supportApi = {
+  /** The code as the employee read it: spaces, the "رمز التتبع:" label and lower case are tolerated. */
+  lookupTrace: (code: string) => rpc<TraceLookup>("fn_lookup_trace", { p_trace: normalizeTrace(code) }),
+};
+
 function fingerprint(): string {
   try {
     let f = sessionStorage.getItem("fp");
@@ -382,7 +413,7 @@ export const opsApi = {
   unitsBoard: (branchId: string) => rpc<UnitCard[]>("fn_ops_units_board", { p_branch: branchId }),
   dailySummary: (branchId: string, date?: string) => rpc<DailySummary | null>("fn_ops_daily_summary", { p_branch: branchId, p_date: date ?? null }),
 
-  // reports (A05): money KPIs come from the voucher ledger, never from reservation totals. Role-gated on the server.
+  // reports (GAP05): money KPIs come from the voucher ledger, never from reservation totals. Role-gated on the server.
   reportsFinance: (branchId: string, from: string, to: string) => rpc<ReportsFinance>("fn_reports_finance", { p_branch: branchId, p_from: from, p_to: to }),
 
   // AI ops proposals (human-in-the-loop)

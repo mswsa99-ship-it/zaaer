@@ -38,6 +38,8 @@ jobs:
       TEST_DB: airec_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the change-record check reads the commits of this push / pull request
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -47,8 +49,30 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+      - name: Change record (decision 58) — warns, never blocks
+        if: always()
+        env:
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-change.mjs
       - name: Verify (all gates)
         run: npm run verify
+      - name: Test log on the run page (decision 56)
+        if: always()
+        run: test -f verify-results/test-log-summary.md && cat verify-results/test-log-summary.md >> "$GITHUB_STEP_SUMMARY" || echo "no test log was written" >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the test log with this run (decision 56)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            verify-results/test-log.md
+            verify-results/test-log.json
+            verify-results/gates.tsv
+            verify-results/migration-report.txt
+          if-no-files-found: warn
+          retention-days: 90
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

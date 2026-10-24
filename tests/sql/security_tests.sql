@@ -77,15 +77,15 @@ do $$ declare r jsonb; s jsonb; tok text; begin
   r := fn_guest_lookup('BK-DEMO-1001', '0111', null, 'fp1');
   tok := r->>'token';
   s := fn_guest_session(tok);
-  perform t_record('T29 valid token resolves session (limited summary)', r->>'status'='ok' and s->'reservation'->>'internal_ref' is not null and s->'guests' is not null, s::text);
+  perform t_record('T29a valid token resolves session (limited summary)', r->>'status'='ok' and s->'reservation'->>'internal_ref' is not null and s->'guests' is not null, s::text);
   reset role;
   update registration_sessions set expires_at = now() - interval '1 minute' where token = tok;
   set role anon;
   begin
     s := fn_guest_session(tok);
-    perform t_record('T29 expired token rejected', false, 'returned data');
+    perform t_record('T29b expired token rejected', false, 'returned data');
   exception when others then
-    perform t_record('T29 expired token rejected', true, sqlerrm);
+    perform t_record('T29b expired token rejected', true, sqlerrm);
   end;
 end $$;
 -- brute force throttle
@@ -104,8 +104,8 @@ set role anon;
 do $$ begin
   begin
     perform code_encrypted from keyboxes limit 1;
-    perform t_record('T18 anon cannot read keybox ciphertext column', false);
-  exception when insufficient_privilege then perform t_record('T18 anon cannot read keybox ciphertext column', true); end;
+    perform t_record('T18a anon cannot read keybox ciphertext column', false);
+  exception when insufficient_privilege then perform t_record('T18a anon cannot read keybox ciphertext column', true); end;
 end $$;
 do $$ declare r jsonb; tok text; begin
   r := fn_guest_lookup('BK-DEMO-1002', '0222', null, 'fp3'); tok := r->>'token';
@@ -118,8 +118,8 @@ select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ begin
   begin
     perform code_encrypted from keyboxes limit 1;
-    perform t_record('T18 supervisor cannot read keybox ciphertext column', false);
-  exception when insufficient_privilege then perform t_record('T18 supervisor cannot read keybox ciphertext column', true); end;
+    perform t_record('T18b supervisor cannot read keybox ciphertext column', false);
+  exception when insufficient_privilege then perform t_record('T18b supervisor cannot read keybox ciphertext column', true); end;
 end $$;
 do $$ begin
   begin
@@ -189,12 +189,12 @@ end $$;
 -- =====================================================================
 select t_login('a0000000-0000-0000-0000-000000000005','owner2@test.local');
 do $$ declare n int; begin
-  select count(*) into n from reservations; perform t_record('T22 other org sees 0 reservations', n = 0, 'rows='||n);
-  select count(*) into n from rooms; perform t_record('T22 other org sees 0 rooms', n = 0, 'rows='||n);
+  select count(*) into n from reservations; perform t_record('T22a other org sees 0 reservations', n = 0, 'rows='||n);
+  select count(*) into n from rooms; perform t_record('T22b other org sees 0 rooms', n = 0, 'rows='||n);
   begin
     perform fn_staff_approve_checkin('00000000-0000-0000-0000-000000000200');
-    perform t_record('T22 other org cannot approve check-in via RPC', false);
-  exception when insufficient_privilege then perform t_record('T22 other org cannot approve check-in via RPC', true); end;
+    perform t_record('T22c other org cannot approve check-in via RPC', false);
+  exception when insufficient_privilege then perform t_record('T22c other org cannot approve check-in via RPC', true); end;
 end $$;
 
 -- =====================================================================
@@ -261,10 +261,10 @@ end $$;
 do $$ declare r jsonb; begin
   begin
     perform fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','1234',true);
-    perform t_record('T20 rotation to the same code rejected', false);
-  exception when others then perform t_record('T20 rotation to the same code rejected', sqlerrm like '%CODE_MUST_DIFFER%', sqlerrm); end;
+    perform t_record('T20a rotation to the same code rejected', false);
+  exception when others then perform t_record('T20a rotation to the same code rejected', sqlerrm like '%CODE_MUST_DIFFER%', sqlerrm); end;
   r := fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','4321',true);
-  perform t_record('T20 rotation succeeds with new code + version bump', (r->>'ok')::boolean and (r->>'code_version')::int = 2, r::text);
+  perform t_record('T20b rotation succeeds with new code + version bump', (r->>'ok')::boolean and (r->>'code_version')::int = 2, r::text);
 end $$;
 -- Approve + deliver
 do $$ declare r jsonb; begin
@@ -302,10 +302,10 @@ set role anon;
 do $$ declare r jsonb; tok text; begin
   r := fn_guest_lookup('BK-DEMO-1002','0222',null,'fp9'); tok := r->>'token';
   r := fn_guest_access_code(tok);
-  perform t_record('T16 guest receives code for own reservation after delivery', (r->>'allowed')::boolean and r->>'code' = '4321', r::text);
+  perform t_record('T16a guest receives code for own reservation after delivery', (r->>'allowed')::boolean and r->>'code' = '4321', r::text);
   r := fn_guest_lookup('BK-DEMO-1003','0333',null,'fp9'); tok := r->>'token';
   r := fn_guest_access_code(tok);
-  perform t_record('T16 other guest cannot get that code', (r->>'allowed')::boolean = false and r->>'code' is null, r::text);
+  perform t_record('T16b other guest cannot get that code', (r->>'allowed')::boolean = false and r->>'code' is null, r::text);
 end $$;
 reset role;
 -- T20/T16: checkout → cleaning + code needs change; room not available until rotated
@@ -346,12 +346,12 @@ do $$ declare r jsonb; tok text; s jsonb; begin
   r := fn_guest_lookup('BK-DEMO-1003','0333',null,'fpA'); tok := r->>'token';
   begin
     r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
-    perform t_record('T10 two-part name rejected', false);
-  exception when others then perform t_record('T10 two-part name rejected', sqlerrm like '%full_name%', sqlerrm); end;
+    perform t_record('T10a two-part name rejected', false);
+  exception when others then perform t_record('T10a two-part name rejected', sqlerrm like '%full_name%', sqlerrm); end;
   begin
     r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"12345","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
-    perform t_record('T10 malformed national id rejected', false);
-  exception when others then perform t_record('T10 malformed national id rejected', sqlerrm like '%identity_number_format%', sqlerrm); end;
+    perform t_record('T10b malformed national id rejected', false);
+  exception when others then perform t_record('T10b malformed national id rejected', sqlerrm like '%identity_number_format%', sqlerrm); end;
   r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
   s := fn_guest_session(tok);
   perform t_record('T9 primary guest data accepted, only last4 exposed, status data_submitted (1 of 2)',

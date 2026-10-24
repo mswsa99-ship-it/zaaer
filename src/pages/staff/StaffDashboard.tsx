@@ -1,23 +1,31 @@
 import { useReservations } from "../../lib/hooks";
 import { ReservationCardRow } from "../../components/ReservationCard";
-import { SectionTitle, LoadingScreen, EmptyState } from "../../components/ui";
+import { SectionTitle, LoadingScreen, EmptyState, LoadErrorCard, ErrorBanner } from "../../components/ui";
 import { CalendarClock, UserCheck, CreditCard, KeyRound, BookCheck } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { DailyBriefing } from "../../components/DailyBriefing";
 import { BranchPicker } from "../../components/BranchPicker";
-import { useBranch } from "../../lib/branch";
+import { useBranchQuery } from "../../lib/useBranchQuery";
 import { opsApi, type DailySummary } from "../../lib/api";
 import { formatCurrency } from "../../lib/utils";
 
 export default function StaffDashboard() {
-  const { data: arrivals, loading: l1 } = useReservations({ todayOnly: true });
-  const { data: all, loading: l2 } = useReservations();
-  const { branchId } = useBranch();
-  const [sum, setSum] = useState<DailySummary | null>(null);
-  useEffect(() => { if (branchId) opsApi.dailySummary(branchId).then(setSum).catch(() => setSum(null)); }, [branchId, all.length]);
+  const { data: arrivals, loading: l1, error: e1, reload: r1 } = useReservations({ todayOnly: true });
+  const { data: all, loading: l2, error: e2, reload: r2 } = useReservations();
+  // G24 (decision 40): the active branch's summary only; it refreshes when the reservation count changes
+  const sumQ = useBranchQuery<DailySummary | null>((branchId) => opsApi.dailySummary(branchId), [all.length], null);
+  const sum = sumQ.data;
 
   if (l1 || l2) return <LoadingScreen />;
+  const listError = e1 ?? e2;
+  if (listError && all.length === 0 && arrivals.length === 0) {
+    return (
+      <div>
+        <SectionTitle title="مركز عمليات الاستقبال" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+        <LoadErrorCard message={listError} onRetry={() => { r1(); r2(); sumQ.reload(); }} />
+      </div>
+    );
+  }
 
   const pendingIdentity = all.filter((r) => r.identity_status === "data_submitted" || r.identity_status === "pending_supervisor");
   const pendingPayment = all.filter((r) => r.payment_status === "pending");
@@ -36,10 +44,12 @@ export default function StaffDashboard() {
   return (
     <div>
       <SectionTitle title="مركز عمليات الاستقبال" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+      {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2"><DailyBriefing /></div>
         <div className="grid grid-cols-2 gap-3 content-start">
+          {!sum && sumQ.error && <div className="col-span-2"><LoadErrorCard message={sumQ.error} onRetry={sumQ.reload} /></div>}
           {sum && [
             { l: "الإشغال", v: `${sum.occupancy_pct}%`, to: "/staff/rooms" },
             { l: "جاهزة للدخول", v: sum.units.ready, to: "/staff/rooms" },

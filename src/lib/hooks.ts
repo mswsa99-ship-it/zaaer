@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect } from "react";
 import { supabase } from "./supabase";
-import { useBranch } from "./branch";
+import { useBranchQuery, must } from "./useBranchQuery";
 import { todayISO } from "./utils";
 
 export interface ReservationCard {
@@ -24,8 +24,10 @@ export interface ReservationCard {
   branch?: { name_ar: string };
 }
 
+const NO_CARDS: ReservationCard[] = [];
+
 // Operational columns only: money (total/paid/rent) is never read from the table — use fn_reservation_list /
-// fn_reservation_finance, which the server gates by role (A05).
+// fn_reservation_finance, which the server gates by role (GAP05).
 const SELECT = `
   id, internal_ref, external_ref, status, check_in, check_out, adults, companions,
   payment_status, identity_status, government_registration, access_status, keybox_delivered,
@@ -36,65 +38,41 @@ const SELECT = `
 `;
 
 /**
- * Reservation cards of the ACTIVE branch (from BranchProvider). Switching the branch re-runs the query; a response
- * that arrives for a branch that is no longer active (or for an older reload) is ignored. No active branch → empty
- * list (fail closed), never an unscoped query.
+ * Reservation cards of the ACTIVE branch (from BranchProvider), on the shared branch loader (decision 40, G24):
+ * switching the branch clears the list and re-runs the query; a response for a branch that is no longer active (or
+ * for an older reload) is dropped; no active branch → empty list (fail closed), never an unscoped query; a failed
+ * load is reported as `error` (in Arabic), never as an empty list.
  */
 export function useReservations(filter?: { status?: string[]; todayOnly?: boolean }) {
-  const { branchId, loading: branchLoading } = useBranch();
-  const [data, setData] = useState<ReservationCard[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const reqRef = useRef(0);
-
   const statusKey = filter?.status?.join(",") ?? "";
   const todayOnly = !!filter?.todayOnly;
 
-  const load = useCallback(async () => {
-    const token = ++reqRef.current;
-    if (branchLoading) return;
-    if (!branchId) { setData([]); setError(null); setLoading(false); return; }
-    setLoading(true);
-    let q = supabase.from("reservations").select(SELECT).eq("branch_id", branchId);
-    if (statusKey) q = q.in("status", statusKey.split(","));
-    if (todayOnly) q = q.eq("check_in", todayISO());
-    q = q.order("created_at", { ascending: false });
-    const { data: rows, error: e } = await q;
-    if (token !== reqRef.current) return; // branch changed or a newer load started meanwhile
-    if (e) { setError(e.message); setLoading(false); return; }
+  const q = useBranchQuery<ReservationCard[]>(async (branchId) => {
+    let qq = supabase.from("reservations").select(SELECT).eq("branch_id", branchId);
+    if (statusKey) qq = qq.in("status", statusKey.split(","));
+    if (todayOnly) qq = qq.eq("check_in", todayISO());
+    const list = must(await qq.order("created_at", { ascending: false })) as unknown as ReservationCard[];
+    if (list.length === 0) return list;
+    // Primary guests are loaded separately (reservation_guests is role-gated on the server: a role that may not
+    // read them simply gets no rows, and the card shows "—").
+    const guests = must(await supabase
+      .from("reservation_guests")
+      .select("reservation_id, full_name, is_primary")
+      .in("reservation_id", list.map((r) => r.id))
+      .eq("is_primary", true)) as { reservation_id: string; full_name: string }[];
+    const guestMap = new Map(guests.map((g) => [g.reservation_id, g.full_name]));
+    return list.map((r) => ({ ...r, primary_guest: { full_name: guestMap.get(r.id) ?? "—" } }));
+  }, [statusKey, todayOnly], NO_CARDS);
+  const reload = q.reload;
 
-    let list = (rows as unknown as ReservationCard[]) ?? [];
-    if (list.length > 0) {
-      // Primary guests are loaded separately (reservation_guests is role-gated on the server).
-      const { data: guests } = await supabase
-        .from("reservation_guests")
-        .select("reservation_id, full_name, is_primary")
-        .in("reservation_id", list.map((r) => r.id))
-        .eq("is_primary", true);
-      if (token !== reqRef.current) return;
-      const guestMap = new Map((guests ?? []).map((g: { reservation_id: string; full_name: string }) => [g.reservation_id, g.full_name]));
-      list = list.map((r) => ({ ...r, primary_guest: { full_name: guestMap.get(r.id) ?? "—" } }));
-    }
-    setError(null);
-    setData(list);
-    setLoading(false);
-  }, [branchId, branchLoading, statusKey, todayOnly]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Realtime
+  // Realtime: any reservation change reloads the active branch's list.
   useEffect(() => {
     const channel = supabase
       .channel("reservations-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => reload())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  }, [reload]);
 
-  // Drop whatever is still in flight when the consumer unmounts.
-  useEffect(() => () => { reqRef.current++; }, []);
-
-  return { data, loading, error, reload: load };
+  return { data: q.data, loading: q.loading, error: q.error, reload };
 }

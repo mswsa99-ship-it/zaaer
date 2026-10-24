@@ -1,48 +1,42 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { SectionTitle, LoadingScreen, Card, ErrorBanner } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { todayISO } from "../../lib/utils";
 import { useBranch } from "../../lib/branch";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { toArabicError } from "../../lib/api";
 
 interface InventoryRow {
   id: string; date: string; total_units: number; publicly_visible_units: number; blocked_units: number;
   category?: { name_ar: string };
 }
+const NO_ROWS: InventoryRow[] = [];
 
 export default function AdminAvailability() {
-  const { branchId, branches, setBranchId } = useBranch();
+  const { branches, setBranchId } = useBranch();
   const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<InventoryRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(todayISO());
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    const { data, error: e } = await supabase
+  // G24 (decision 40): the active branch's rows only; a failed load shows an error, never an empty table
+  const q = useBranchQuery<InventoryRow[]>(async (branchId) => must(await supabase
       .from("inventory_periods")
       .select("id, date, total_units, publicly_visible_units, blocked_units, category:room_categories(name_ar)")
       .eq("branch_id", branchId)
       .gte("date", startDate)
       .order("date", { ascending: true })
-      .limit(60);
-    if (e) setError(toArabicError(e));
-    setRows((data as unknown as InventoryRow[]) ?? []);
-    setLoading(false);
-  }, [startDate, branchId]);
-
-  useEffect(() => { load(); }, [load]);
+      .limit(60)) as unknown as InventoryRow[], [startDate], NO_ROWS);
+  const rows = q.data; const branchId = q.branchId; const load = q.reload;
 
   async function updateField(id: string, field: "total_units" | "publicly_visible_units" | "blocked_units", value: number) {
     setActing(id + field); setError(null);
     const { error: e } = await supabase.from("inventory_periods").update({ [field]: value }).eq("id", id);
     if (e) setError(toArabicError(e));
-    await load();
+    load();
     setActing(null);
   }
 
-  if (loading && branchId) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
 
   return (
     <div>
@@ -54,8 +48,8 @@ export default function AdminAvailability() {
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input w-auto" />
         </div>
       } />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      <Card className="overflow-x-auto">
+      {(error || (q.error && rows.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
+      {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-ink-100 text-xs text-ink-400">
@@ -85,7 +79,7 @@ export default function AdminAvailability() {
           </tbody>
         </table>
         {rows.length === 0 && <div className="py-8 text-center text-sm text-ink-400">لا توجد سجلات توفر لهذه الفترة.</div>}
-      </Card>
+      </Card>}
       <p className="mt-3 text-xs text-ink-400">عدّل القيم مباشرة — تُحفظ تلقائيًا عند الخروج من الحقل. لتعديل قاعدة الكشف التدريجي انتقل إلى صفحة "قواعد الكشف".</p>
     </div>
   );

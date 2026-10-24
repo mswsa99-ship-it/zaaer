@@ -1,13 +1,14 @@
 /**
- * Reservation lifecycle through the staff UI — acceptance ids R01–R06 / F01–F04.
- * Controls: G01 (no double allocation), G02 (partial payment ≠ paid), G03 (deposit ledger separate from
- * revenue, refunds capped), G04 (reservation / voucher / invoice are distinct events; cancel ≠ refund),
- * G10 (every operation needs a reason and is audited).
+ * Reservation lifecycle through the staff UI — test ids SR01–SR05 (decision 57: renamed from R01–R03 / F01–F02;
+ * the testing rules' R and F scenarios themselves run against the server in tests/sql/core_tests.sql).
+ * Controls: G05 (no double allocation — SR02), G10 (a partial payment is never "paid" — SR01, SR04), G11 (the
+ * deposit is a separate balance — SR01), G12 (refunds capped at what was received; cancel never refunds — SR03),
+ * G22 (operations are audited — SR01).
  */
 import { test, expect, createReservation, financeCell, parseSar } from "./fixtures";
 
 test.describe("staff reservation lifecycle", () => {
-  test("R01 create → deposit → partial payment stays 'دفع جزئي' → extension is audited", async ({ page, loginAs }) => {
+  test("SR01 create → deposit → partial payment stays 'دفع جزئي' → extension is audited", async ({ page, loginAs }) => {
     await loginAs("owner");
     await createReservation(page, "عبدالعزيز سالم المالكي", "0509998877");
 
@@ -54,7 +55,7 @@ test.describe("staff reservation lifecycle", () => {
     await expect(page.getByText("السبب: طلب الضيف تمديد يومين")).toBeVisible();
   });
 
-  test("R02 the same room cannot be booked twice for overlapping nights", async ({ page, loginAs }) => {
+  test("SR02 the same room cannot be booked twice for overlapping nights", async ({ page, loginAs }) => {
     await loginAs("owner");
     await createReservation(page, "ضيف الأول", "0501110001");
     const roomLine = page.getByText(/غرفة \d+/).first();
@@ -71,7 +72,7 @@ test.describe("staff reservation lifecycle", () => {
     expect(options.some((o) => o.includes(roomNumber))).toBe(false);
   });
 
-  test("F01 refund is capped at what was actually received, and cancel never refunds by itself", async ({ page, loginAs }) => {
+  test("SR03 refund is capped at what was actually received, and cancel never refunds by itself", async ({ page, loginAs }) => {
     await loginAs("owner");
     await createReservation(page, "ضيف الاسترداد", "0501110003");
     await page.getByRole("button", { name: "سند قبض إقامة" }).click();
@@ -103,7 +104,7 @@ test.describe("staff reservation lifecycle", () => {
     expect(await financeCell(page, "المحصل")).toBe(100);
   });
 
-  test("F02 the reservations list shows money as SAR with partial state, never a rounded 'paid'", async ({ page, loginAs }) => {
+  test("SR04 the reservations list shows money as SAR with partial state, never a rounded 'paid'", async ({ page, loginAs }) => {
     await loginAs("finance");
     await page.goto("/#/staff/reservations", { waitUntil: "networkidle" });
     await expect(page.locator("table tbody tr").first()).toBeVisible();
@@ -124,7 +125,7 @@ test.describe("staff reservation lifecycle", () => {
     expect(paidInFull).toBeGreaterThan(0);
   });
 
-  test("R03 Zaaer parity: arrival time, named companions and two units in one booking (atomic group)", async ({ page, loginAs }) => {
+  test("SR05 Zaaer parity: arrival time, named companions and two units in one booking (atomic group)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
     await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("عائلة المجموعة");

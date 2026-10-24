@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sparkles, CheckCircle2, Wrench, Play, Plus, UserPlus, XCircle, Landmark, DoorClosed } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
-import { useBranch } from "../../lib/branch";
 import { staffApi, opsApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge } from "../../components/ui";
+import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { Modal, Field, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
@@ -13,16 +13,15 @@ import { formatDateTime } from "../../lib/utils";
 interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
 interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string }
 interface Opt { id: string; name: string }
+interface HkData { tasks: Task[]; rooms: RoomLite[]; facilities: Opt[]; types: Opt[]; staff: Opt[] }
+const NO_HK: HkData = { tasks: [], rooms: [], facilities: [], types: [], staff: [] };
 
 export default function Housekeeping() {
   const { profile } = useAuth();
-  const { branchId, loading: branchLoading } = useBranch();
   const role = profile?.role;
   const canManage = role === "owner" || role === "manager" || role === "supervisor";
 
-  const [tasks, setTasks] = useState<Task[]>([]); const [rooms, setRooms] = useState<RoomLite[]>([]);
-  const [facilities, setFacilities] = useState<Opt[]>([]); const [types, setTypes] = useState<Opt[]>([]); const [staff, setStaff] = useState<Opt[]>([]);
-  const [loading, setLoading] = useState(true); const [acting, setActing] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<"open" | "done" | "board">("open");
   const [create, setCreate] = useState<null | { target: "room" | "facility"; room_id?: string; facility_id?: string; task_type_id?: string; priority: string; assignee_id?: string; description?: string }>(null);
@@ -30,8 +29,8 @@ export default function Housekeeping() {
   const [assignTask, setAssignTask] = useState<Task | null>(null); const [assignee, setAssignee] = useState("");
   const [maintTarget, setMaintTarget] = useState<RoomLite | null>(null); const [maintTitle, setMaintTitle] = useState(""); const [maintDesc, setMaintDesc] = useState("");
 
-  const load = useCallback(async () => {
-    if (!branchId) { setLoading(false); return; }
+  // G24: everything on this screen belongs to the active branch; a late answer for another branch is dropped
+  const hk = useBranchQuery<HkData>(async (branchId) => {
     const [t, r, f, tt, s] = await Promise.all([
       supabase.from("housekeeping_tasks").select("id, status, priority, room_id, facility_id, task_type_name_snapshot, assignee_id, scheduled_start, description, created_at, version, room:rooms(room_number, status, cleanliness), facility:facilities(name), assignee:staff_profiles!housekeeping_tasks_assignee_id_fkey(full_name)").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(300),
       supabase.from("rooms").select("id, room_number, status, cleanliness").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("room_number"),
@@ -39,28 +38,30 @@ export default function Housekeeping() {
       supabase.from("task_types").select("id, name, code").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("staff_profiles").select("id, full_name, role").eq("is_active", true),
     ]);
-    if (t.error) setError(toArabicError(t.error));
-    setTasks((t.data as unknown as Task[]) ?? []); setRooms((r.data as RoomLite[]) ?? []);
-    setFacilities((f.data as Opt[]) ?? []); setTypes(((tt.data ?? []) as Opt[])); setStaff(((s.data ?? []) as { id: string; full_name: string }[]).map((x) => ({ id: x.id, name: x.full_name })));
-    setLoading(false);
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+    return {
+      tasks: must(t) as unknown as Task[], rooms: must(r) as RoomLite[], facilities: must(f) as Opt[], types: must(tt) as Opt[],
+      staff: (must(s) as { id: string; full_name: string }[]).map((x) => ({ id: x.id, name: x.full_name })),
+    };
+  }, [], NO_HK);
+  const { tasks, rooms, facilities, types, staff } = hk.data;
+  const { reload } = hk;
   useEffect(() => {
-    const ch = supabase.channel("hk-rt").on("postgres_changes", { event: "*", schema: "public", table: "housekeeping_tasks" }, () => load()).on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => load()).subscribe();
+    const ch = supabase.channel("hk-rt").on("postgres_changes", { event: "*", schema: "public", table: "housekeeping_tasks" }, () => reload()).on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => reload()).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [load]);
+  }, [reload]);
 
-  const act = async (key: string, fn: () => Promise<string | void>) => { setActing(key); setError(null); setNotice(null); try { const n = await fn(); if (n) setNotice(n); await load(); } catch (e) { setError(toArabicError(e)); } finally { setActing(null); } };
+  const act = async (key: string, fn: () => Promise<string | void>) => { setActing(key); setError(null); setNotice(null); try { const n = await fn(); if (n) setNotice(n); reload(); } catch (e) { setError(toArabicError(e)); } finally { setActing(null); } };
   const openTasks = useMemo(() => tasks.filter((t) => t.status === "pending" || t.status === "in_progress"), [tasks]);
   const doneTasks = useMemo(() => tasks.filter((t) => t.status === "completed" || t.status === "cancelled").slice(0, 60), [tasks]);
   const mine = (t: Task) => role !== "housekeeping" || !t.assignee_id || t.assignee_id === profile?.id;
 
-  if (loading || branchLoading) return <LoadingScreen />;
+  if (hk.loading) return <LoadingScreen />;
+  if (hk.error && tasks.length === 0 && rooms.length === 0) return <div><SectionTitle title="خدمة الغرف والمرافق" action={<BranchPicker />} /><LoadErrorCard message={hk.error} onRetry={reload} /></div>;
   return (
     <div>
       <SectionTitle title="خدمة الغرف والمرافق" subtitle={`${openTasks.length} مهمة مفتوحة · ${rooms.filter((r) => r.cleanliness !== "clean").length} وحدة تحتاج تنظيفًا`} action={
         <div className="flex flex-wrap items-center gap-2"><BranchPicker /><button onClick={() => setCreate({ target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {(error || hk.error) && <div className="mb-4"><ErrorBanner message={(error ?? hk.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
       <div className="mb-4 flex gap-1 rounded-xl bg-ink-100 p-1 text-sm w-fit">
         {(["open", "board", "done"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-lg px-4 py-1.5 ${view === v ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{v === "open" ? "المهام المفتوحة" : v === "board" ? "حالة الوحدات" : "المنجزة"}</button>)}
@@ -117,7 +118,7 @@ export default function Housekeeping() {
       {/* create task */}
       <Modal open={!!create} title="مهمة جديدة" onClose={() => setCreate(null)}>
         {create && (
-          <ActionForm onSubmit={async () => { await opsApi.createTask({ room_id: create.target === "room" ? create.room_id : null, facility_id: create.target === "facility" ? create.facility_id : null, task_type_id: create.task_type_id, priority: create.priority, assignee_id: create.assignee_id || null, description: create.description || null }); setCreate(null); await load(); }}>
+          <ActionForm onSubmit={async () => { await opsApi.createTask({ room_id: create.target === "room" ? create.room_id : null, facility_id: create.target === "facility" ? create.facility_id : null, task_type_id: create.task_type_id, priority: create.priority, assignee_id: create.assignee_id || null, description: create.description || null }); setCreate(null); reload(); }}>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setCreate({ ...create, target: "room", room_id: rooms[0]?.id })} className={`rounded-xl border px-3 py-2 text-sm ${create.target === "room" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>وحدة</button>
@@ -137,19 +138,19 @@ export default function Housekeeping() {
         )}
       </Modal>
       <Modal open={!!assignTask} title="إسناد المهمة" onClose={() => setAssignTask(null)}>
-        <ActionForm onSubmit={async () => { if (assignTask) await opsApi.assignTask(assignTask.id, assignee || null); setAssignTask(null); await load(); }}>
+        <ActionForm onSubmit={async () => { if (assignTask) await opsApi.assignTask(assignTask.id, assignee || null); setAssignTask(null); reload(); }}>
           <Field label="الموظف (عضو فعال في الفرع)"><select className="input" value={assignee} onChange={(e) => setAssignee(e.target.value)}><option value="">غير مسندة</option>{staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
           <Submit label="حفظ" onCancel={() => setAssignTask(null)} />
         </ActionForm>
       </Modal>
       <Modal open={!!cancelTask} title="إلغاء المهمة" onClose={() => setCancelTask(null)}>
-        <ActionForm onSubmit={async () => { if (!cancelReason.trim()) throw new Error("VALIDATION: reason"); if (cancelTask) await opsApi.cancelTask(cancelTask.id, cancelReason.trim()); setCancelTask(null); await load(); }}>
+        <ActionForm onSubmit={async () => { if (!cancelReason.trim()) throw new Error("VALIDATION: reason"); if (cancelTask) await opsApi.cancelTask(cancelTask.id, cancelReason.trim()); setCancelTask(null); reload(); }}>
           <ReasonInput value={cancelReason} onChange={setCancelReason} />
           <Submit label="إلغاء المهمة" onCancel={() => setCancelTask(null)} danger />
         </ActionForm>
       </Modal>
       <Modal open={!!maintTarget} title={`بلاغ صيانة · وحدة ${maintTarget?.room_number ?? ""}`} onClose={() => setMaintTarget(null)}>
-        <ActionForm onSubmit={async () => { if (!maintTitle.trim()) throw new Error("VALIDATION: title"); if (maintTarget) await staffApi.createMaintenance(maintTarget.id, maintTitle.trim(), maintDesc.trim() || null); setMaintTarget(null); setNotice("تم فتح بلاغ الصيانة؛ الوحدة الآن خارج التسكين حتى الإغلاق."); await load(); }}>
+        <ActionForm onSubmit={async () => { if (!maintTitle.trim()) throw new Error("VALIDATION: title"); if (maintTarget) await staffApi.createMaintenance(maintTarget.id, maintTitle.trim(), maintDesc.trim() || null); setMaintTarget(null); setNotice("تم فتح بلاغ الصيانة؛ الوحدة الآن خارج التسكين حتى الإغلاق."); reload(); }}>
           <div className="space-y-3"><Field label="العنوان"><input className="input" value={maintTitle} onChange={(e) => setMaintTitle(e.target.value)} placeholder="مثال: تسريب في الحمام" /></Field><Field label="الوصف"><textarea className="input" rows={2} value={maintDesc} onChange={(e) => setMaintDesc(e.target.value)} /></Field></div>
           <Submit label="إنشاء البلاغ" onCancel={() => setMaintTarget(null)} />
         </ActionForm>

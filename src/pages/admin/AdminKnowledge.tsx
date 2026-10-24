@@ -4,19 +4,21 @@
  * (3) branch settings (times/address/phone — /admin/branches). Questions the assistant could not
  * answer land in the "بلا إجابة" tab; answering one from there creates the entry and closes it.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toArabicError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { useBranch } from "../../lib/branch";
+import { useBranchQuery } from "../../lib/useBranchQuery";
 import { knowledgeApi, suggestKeywords, KNOWLEDGE_CATEGORY_LABELS, type KnowledgeRow, type UnansweredRow, type KnowledgeDraft, type KnowledgeCategory } from "../../lib/knowledgeApi";
-import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState } from "../../components/ui";
+import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatDateTime } from "../../lib/utils";
 import { BookOpen, Plus, Pencil, Search, MessageCircleQuestion, Archive, RotateCcw, FileText, Building2, Globe, Lock, Sparkles } from "lucide-react";
 
 type Tab = "entries" | "unanswered";
+interface KbData { rows: KnowledgeRow[]; open: UnansweredRow[] }
+const NO_KB: KbData = { rows: [], open: [] };
 
 const EMPTY = (branchId: string | null): KnowledgeDraft => ({ branch_id: branchId, category: "general", question: "", keywords: [], answer: "", is_public: true, is_active: true, priority: 0 });
 
@@ -25,12 +27,8 @@ export default function AdminKnowledge() {
   const role = profile?.role ?? "";
   const canEdit = ["owner", "manager", "supervisor"].includes(role);
   const canOrgWide = ["owner", "manager"].includes(role);
-  const { branchId } = useBranch();
 
   const [tab, setTab] = useState<Tab>("entries");
-  const [rows, setRows] = useState<KnowledgeRow[]>([]);
-  const [open, setOpen] = useState<UnansweredRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -39,15 +37,12 @@ export default function AdminKnowledge() {
   const [lifecycle, setLifecycle] = useState<{ row: KnowledgeRow; reason: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    try {
-      const [r, u] = await Promise.all([knowledgeApi.list(branchId, showArchived), knowledgeApi.unanswered(branchId, "open")]);
-      setRows(r); setOpen(u); setError(null);
-    } catch (e) { setError(toArabicError(e)); }
-    setLoading(false);
-  }, [branchId, showArchived]);
-  useEffect(() => { load(); }, [load]);
+  // G24 (decision 40): the active branch's answers (and the organisation-wide ones) only
+  const q = useBranchQuery<KbData>(async (branchId) => {
+    const [rows, open] = await Promise.all([knowledgeApi.list(branchId, showArchived), knowledgeApi.unanswered(branchId, "open")]);
+    return { rows, open };
+  }, [showArchived], NO_KB);
+  const { rows, open } = q.data; const branchId = q.branchId; const load = q.reload;
 
   const filtered = useMemo(() => {
     const q = search.trim();
@@ -67,9 +62,9 @@ export default function AdminKnowledge() {
     setKwInput("");
   };
 
-  const act = async (id: string, fn: () => Promise<unknown>) => { setBusyId(id); setError(null); try { await fn(); await load(); } catch (e) { setError(toArabicError(e)); } finally { setBusyId(null); } };
+  const act = async (id: string, fn: () => Promise<unknown>) => { setBusyId(id); setError(null); try { await fn(); load(); } catch (e) { setError(toArabicError(e)); } finally { setBusyId(null); } };
 
-  if (loading && branchId) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
 
   return (
     <div>
@@ -83,7 +78,7 @@ export default function AdminKnowledge() {
         <Link to="/admin/branches" className="card flex items-center gap-3 p-3 hover:bg-ink-50"><Building2 className="h-5 w-5 text-brand-600" /><div><p className="text-sm font-semibold text-ink-800">بيانات الفرع</p><p className="text-[11px] text-ink-400">مواعيد الوصول والمغادرة، العنوان، الهاتف ↗</p></div></Link>
       </div>
 
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {(error || (q.error && rows.length + open.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-sm">
@@ -96,7 +91,7 @@ export default function AdminKnowledge() {
         </>}
       </div>
 
-      {tab === "entries" && (filtered.length === 0 ? <EmptyState icon={<BookOpen className="h-10 w-10" />} title="لا توجد إجابات" description="أضف أول سؤال وجواب، أو راجع تبويب «بلا إجابة»." /> : (
+      {tab === "entries" && (q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : filtered.length === 0 ? <EmptyState icon={<BookOpen className="h-10 w-10" />} title="لا توجد إجابات" description="أضف أول سؤال وجواب، أو راجع تبويب «بلا إجابة»." /> : (
         <div className="grid gap-3 lg:grid-cols-2">
           {filtered.map((r) => (
             <Card key={r.id} className={r.archived_at ? "opacity-60" : ""}>
@@ -129,7 +124,7 @@ export default function AdminKnowledge() {
         </div>
       ))}
 
-      {tab === "unanswered" && (open.length === 0 ? <EmptyState icon={<MessageCircleQuestion className="h-10 w-10" />} title="لا توجد أسئلة معلّقة" description="كل سؤال لا يجد إجابة في القاعدة يظهر هنا تلقائيًا." /> : (
+      {tab === "unanswered" && (q.error && open.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : open.length === 0 ? <EmptyState icon={<MessageCircleQuestion className="h-10 w-10" />} title="لا توجد أسئلة معلّقة" description="كل سؤال لا يجد إجابة في القاعدة يظهر هنا تلقائيًا." /> : (
         <div className="space-y-2">
           <p className="text-xs text-ink-500"><Sparkles className="ml-1 inline h-3.5 w-3.5 text-brand-600" />أسئلة سألها النزلاء ولم يجد المساعد لها إجابة معتمدة. الأرقام الطويلة تُخفى تلقائيًا.</p>
           {open.map((u) => (
@@ -159,7 +154,7 @@ export default function AdminKnowledge() {
             if (!draft.question.trim() || draft.question.trim().length < 3) throw new Error("VALIDATION: question");
             if (!draft.answer.trim()) throw new Error("VALIDATION: answer");
             await knowledgeApi.upsert({ ...draft, keywords: pending, question: draft.question.trim(), answer: draft.answer.trim() });
-            setDraft(null); await load();
+            setDraft(null); load();
           }}>
             <div className="space-y-3">
               <Field label="السؤال كما يطرحه النزيل (مطلوب)"><input className="input" value={draft.question} onChange={(e) => setDraft({ ...draft, question: e.target.value })} placeholder="مثال: هل يوجد مسبح؟" /></Field>
@@ -190,7 +185,7 @@ export default function AdminKnowledge() {
       {/* ---------- archive (two-step, in-page) ---------- */}
       <Modal open={!!lifecycle} title="أرشفة الإجابة" onClose={() => setLifecycle(null)}>
         {lifecycle && (
-          <ActionForm onSubmit={async () => { if (!lifecycle.reason.trim()) throw new Error("VALIDATION: reason"); await knowledgeApi.archive(lifecycle.row.id, lifecycle.reason.trim(), true); setLifecycle(null); await load(); }}>
+          <ActionForm onSubmit={async () => { if (!lifecycle.reason.trim()) throw new Error("VALIDATION: reason"); await knowledgeApi.archive(lifecycle.row.id, lifecycle.reason.trim(), true); setLifecycle(null); load(); }}>
             <p className="mb-3 text-sm text-ink-600">«{lifecycle.row.question}» — الأرشفة تخفي الإجابة عن النزلاء فورًا وتبقي سجلها وإحصاءاتها. يمكن استعادتها لاحقًا.</p>
             <ReasonInput value={lifecycle.reason} onChange={(v) => setLifecycle({ ...lifecycle, reason: v })} label="سبب الأرشفة (إلزامي)" />
             <Submit label="تأكيد الأرشفة" onCancel={() => setLifecycle(null)} danger />

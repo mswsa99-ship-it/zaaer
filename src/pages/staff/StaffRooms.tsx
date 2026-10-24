@@ -1,31 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { DoorClosed, KeyRound, Wrench, Sparkles, CalendarClock } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError, type UnitCard, type DailySummary } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
+import { opsApi, type UnitCard, type DailySummary } from "../../lib/api";
+import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, LoadErrorCard, ErrorBanner } from "../../components/ui";
+import { useBranchQuery } from "../../lib/useBranchQuery";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, RESERVATION_STATUS_LABELS, type RoomStatus, type ReservationStatus } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 
+const NO_BOARD: { units: UnitCard[]; summary: DailySummary | null } = { units: [], summary: null };
+
 /** Units board — one card per unit with the three independent dimensions: occupancy/ops status, cleanliness, entry readiness. */
 export default function StaffRooms() {
-  const { branchId } = useBranch();
-  const [units, setUnits] = useState<UnitCard[]>([]); const [summary, setSummary] = useState<DailySummary | null>(null);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "free" | "occupied" | "dirty" | "arriving" | "departing" | "attention">("all");
   const [q, setQ] = useState("");
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    try { const [u, s] = await Promise.all([opsApi.unitsBoard(branchId), opsApi.dailySummary(branchId)]); setUnits(u); setSummary(s); setError(null); } catch (e) { setError(toArabicError(e)); } finally { setLoading(false); }
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+  // G24: the board and its summary belong to the active branch only; a late answer for another branch is dropped
+  const board = useBranchQuery(async (b) => { const [units, summary] = await Promise.all([opsApi.unitsBoard(b), opsApi.dailySummary(b)]); return { units, summary }; }, [], NO_BOARD);
+  const { units, summary } = board.data;
+  const { reload } = board;
   useEffect(() => {
-    const ch = supabase.channel("units-board").on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => load()).on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => load()).on("postgres_changes", { event: "*", schema: "public", table: "housekeeping_tasks" }, () => load()).subscribe();
+    const ch = supabase.channel("units-board").on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => reload()).on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => reload()).on("postgres_changes", { event: "*", schema: "public", table: "housekeeping_tasks" }, () => reload()).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [load]);
+  }, [reload]);
 
   const today = todayISO();
   const visible = useMemo(() => units.filter((u) => {
@@ -41,12 +39,13 @@ export default function StaffRooms() {
     }
   }), [units, filter, q, today]);
 
-  if (loading) return <LoadingScreen />;
+  if (board.loading) return <LoadingScreen />;
+  if (board.error && units.length === 0) return <div><SectionTitle title="لوحة الوحدات" action={<BranchPicker />} /><LoadErrorCard message={board.error} onRetry={reload} /></div>;
   const u = summary?.units;
   return (
     <div>
       <SectionTitle title="لوحة الوحدات" subtitle={summary ? `الإشغال ${summary.occupancy_pct}% — ${u?.occupied} مؤجرة من ${u?.active} فعالة · ${u?.ready} جاهزة · ${u?.dirty} تحتاج تنظيفًا · ${u?.maintenance} صيانة · آخر تحديث ${formatDateTime(summary.generated_at)}` : ""} action={<BranchPicker />} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {board.error && <div className="mb-4"><ErrorBanner message={board.error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input w-32" placeholder="رقم الوحدة" value={q} onChange={(e) => setQ(e.target.value)} />
         {([["all", "الكل"], ["free", "خالية"], ["occupied", "مؤجرة"], ["arriving", "وصول اليوم"], ["departing", "مغادرة اليوم"], ["dirty", "تحتاج تنظيفًا"], ["attention", "تحتاج انتباهًا"]] as const).map(([k, v]) => (

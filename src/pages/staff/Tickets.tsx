@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
-import { useBranch } from "../../lib/branch";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { staffApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge } from "../../components/ui";
+import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Wrench, Plus, LifeBuoy, CheckCircle2 } from "lucide-react";
 import { formatDateTime } from "../../lib/utils";
 
@@ -58,38 +58,36 @@ function detailsText(d: Record<string, unknown> | null): string {
   return parts.join(" · ").slice(0, 300);
 }
 
+const NO_TICKETS: { tickets: Ticket[]; rooms: { id: string; room_number: string }[]; handoffs: HandoffTicket[] } = { tickets: [], rooms: [], handoffs: [] };
+
 export default function Tickets() {
   const { profile } = useAuth();
-  const { branchId, loading: branchLoading } = useBranch();
   const canSeeHandoff = profile?.role === "owner" || profile?.role === "manager" || profile?.role === "supervisor";
 
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [handoffs, setHandoffs] = useState<HandoffTicket[]>([]);
-  const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [rooms, setRooms] = useState<{ id: string; room_number: string }[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newRoom, setNewRoom] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!branchId) { setTickets([]); setHandoffs([]); setRooms([]); setLoading(false); return; }
+  // G24: the reports of the active branch only; a late answer for another branch is dropped
+  const q = useBranchQuery(async (branchId) => {
     const [t, r, h] = await Promise.all([
       supabase.from("maintenance_tickets").select("id, title, description, status, room_id, room:rooms(room_number), created_at").eq("branch_id", branchId).order("created_at", { ascending: false }),
       supabase.from("rooms").select("id, room_number").eq("branch_id", branchId).order("room_number"),
       supabase.from("human_handoff_tickets").select("id, kind, external_ref, source_name, details, status, created_at, reservation_id, conversation_id").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(100),
     ]);
-    if (t.error) setError(toArabicError(t.error));
-    setTickets((t.data as unknown as Ticket[]) ?? []);
-    setRooms((r.data as { id: string; room_number: string }[]) ?? []);
-    setHandoffs(h.error ? [] : ((h.data as HandoffTicket[]) ?? []));
-    setLoading(false);
-  }, [branchId]);
-
-  useEffect(() => { load(); }, [load]);
+    return {
+      tickets: must(t) as unknown as Ticket[],
+      rooms: must(r) as { id: string; room_number: string }[],
+      handoffs: h.error ? [] : ((h.data as HandoffTicket[]) ?? []),   // not readable by every role
+    };
+  }, [], NO_TICKETS);
+  const { tickets, rooms, handoffs } = q.data;
+  const branchId = q.branchId;
+  const load = q.reload;
 
   useEffect(() => {
     const ch = supabase
@@ -102,14 +100,14 @@ export default function Tickets() {
 
   async function resolveMaintenance(id: string) {
     setActing(id); setError(null);
-    try { await staffApi.resolveMaintenance(id); await load(); }
+    try { await staffApi.resolveMaintenance(id); load(); }
     catch (e) { setError(toArabicError(e)); }
     finally { setActing(null); }
   }
 
   async function resolveHandoff(id: string) {
     setActing(id); setError(null);
-    try { await staffApi.resolveTicket(id); await load(); }
+    try { await staffApi.resolveTicket(id); load(); }
     catch (e) { setError(toArabicError(e)); }
     finally { setActing(null); }
   }
@@ -122,7 +120,7 @@ export default function Tickets() {
     try {
       await staffApi.createMaintenance(newRoom, newTitle.trim(), newDesc.trim() || null);
       setNewTitle(""); setNewDesc(""); setNewRoom(""); setShowForm(false);
-      await load();
+      load();
     } catch (err) {
       setFormError(toArabicError(err));
     } finally {
@@ -130,14 +128,15 @@ export default function Tickets() {
     }
   }
 
-  if (loading || branchLoading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
+  if (q.error && tickets.length === 0) return <LoadErrorCard message={q.error} onRetry={load} />;
 
   const openMaint = tickets.filter((t) => t.status !== "resolved").length;
   const openHandoff = handoffs.filter((h) => h.status !== "resolved").length;
 
   return (
     <div className="space-y-8">
-      {error && <ErrorBanner message={error} />}
+      {(error || q.error) && <ErrorBanner message={(error ?? q.error) as string} />}
       {!branchId && <ErrorBanner message="لا يوجد فرع مرتبط بحسابك." />}
 
       {canSeeHandoff && (

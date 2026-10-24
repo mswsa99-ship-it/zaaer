@@ -1,45 +1,40 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Layers, Plus, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { opsApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { opsApi } from "../../lib/api";
+import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 
 interface Floor { id: string; block_id: string; name: string; sort_order: number; is_active: boolean; archived_at: string | null; version: number; rooms: number; facilities: number }
 interface Block { id: string; name: string; description: string | null; sort_order: number; is_active: boolean; archived_at: string | null; version: number; floors: Floor[] }
 
+const NO_BLOCKS: Block[] = [];
+
 export default function AdminStructure() {
-  const { branchId } = useBranch();
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [blockDraft, setBlockDraft] = useState<Partial<Block> | null>(null);
   const [floorDraft, setFloorDraft] = useState<(Partial<Floor> & { block_id: string }) | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    setLoading(true); setError(null);
+  // G24 (decision 40): the structure of the active branch only
+  const q = useBranchQuery<Block[]>(async (branchId) => {
     const [b, f, r, fa] = await Promise.all([
       supabase.from("blocks").select("id, name, description, sort_order, is_active, archived_at, version").eq("branch_id", branchId).order("sort_order").order("name"),
       supabase.from("floors").select("id, block_id, name, sort_order, is_active, archived_at, version").eq("branch_id", branchId).order("sort_order").order("name"),
       supabase.from("rooms").select("floor_id").eq("branch_id", branchId).is("archived_at", null),
       supabase.from("facilities").select("floor_id").eq("branch_id", branchId).is("archived_at", null),
     ]);
-    if (b.error) { setError(toArabicError(b.error)); setLoading(false); return; }
     const roomCount = new Map<string, number>(); for (const x of (r.data ?? []) as { floor_id: string | null }[]) if (x.floor_id) roomCount.set(x.floor_id, (roomCount.get(x.floor_id) ?? 0) + 1);
     const facCount = new Map<string, number>(); for (const x of (fa.data ?? []) as { floor_id: string | null }[]) if (x.floor_id) facCount.set(x.floor_id, (facCount.get(x.floor_id) ?? 0) + 1);
     const floors = ((f.data ?? []) as Omit<Floor, "rooms" | "facilities">[]).map((x) => ({ ...x, rooms: roomCount.get(x.id) ?? 0, facilities: facCount.get(x.id) ?? 0 }));
-    setBlocks(((b.data ?? []) as Omit<Block, "floors">[]).map((x) => ({ ...x, floors: floors.filter((y) => y.block_id === x.id) })));
-    setLoading(false);
-  }, [branchId]);
-  useEffect(() => { load(); }, [load]);
+    return (must(b) as Omit<Block, "floors">[]).map((x) => ({ ...x, floors: floors.filter((y) => y.block_id === x.id) }));
+  }, [], NO_BLOCKS);
+  const blocks = q.data; const load = q.reload; const branchId = q.branchId;
 
   const visible = blocks.filter((b) => showArchived || !b.archived_at);
-  if (loading) return <LoadingScreen />;
+  if (q.loading) return <LoadingScreen />;
 
   return (
     <div>
@@ -49,9 +44,9 @@ export default function AdminStructure() {
           <button onClick={() => setBlockDraft({ name: "", description: "", sort_order: blocks.length + 1 })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلوك جديد</button>
         </div>
       } />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {q.error && blocks.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
-      {visible.length === 0 ? <EmptyState icon={<Layers className="h-10 w-10" />} title="لا توجد بلوكات" description="أضف بلوكًا ثم طوابقه، وبعدها اربط الوحدات والمرافق به." /> : (
+      {q.error && blocks.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<Layers className="h-10 w-10" />} title="لا توجد بلوكات" description="أضف بلوكًا ثم طوابقه، وبعدها اربط الوحدات والمرافق به." /> : (
         <div className="space-y-3">
           {visible.map((b) => (
             <Card key={b.id} className={b.archived_at ? "opacity-70" : ""}>

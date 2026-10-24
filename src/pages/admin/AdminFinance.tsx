@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Wallet, Download } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useBranch } from "../../lib/branch";
-import { toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge } from "../../components/ui";
+import { SectionTitle, Card, Badge, DataState } from "../../components/ui";
+import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { BranchPicker } from "../../components/BranchPicker";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, type PaymentMethod, type VoucherKind } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
@@ -12,28 +11,26 @@ import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 interface V { id: string; number: string; kind: VoucherKind; amount_halalas: number; method: PaymentMethod; status: string; reference: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null; created_by: string | null; reservation?: { id: string; internal_ref: string } | null; creator?: { full_name: string } | null }
 const sar = (h: number) => formatCurrency(h / 100);
 const monthStart = () => todayISO().slice(0, 8) + "01";
+const NO_ROWS: V[] = [];
+const COLS = "id, number, kind, amount_halalas, method, status, reference, reason, occurred_at, cancel_reason, created_by, reservation:reservations(id, internal_ref)";
 
 export default function AdminFinance() {
-  const { branchId } = useBranch();
-  const [rows, setRows] = useState<V[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const [f, setF] = useState({ from: monthStart(), to: todayISO(), kind: "all", method: "all", includeCancelled: false });
 
-  const load = useCallback(async () => {
-    if (!branchId) return;
-    setLoading(true);
-    let q = supabase.from("financial_vouchers").select("id, number, kind, amount_halalas, method, status, reference, reason, occurred_at, cancel_reason, created_by, reservation:reservations(id, internal_ref), creator:staff_profiles!financial_vouchers_created_by_fkey(full_name)").eq("branch_id", branchId).gte("occurred_at", f.from).lte("occurred_at", f.to + "T23:59:59").order("occurred_at", { ascending: false }).limit(2000);
-    if (f.kind !== "all") q = q.eq("kind", f.kind);
-    if (f.method !== "all") q = q.eq("method", f.method);
-    if (!f.includeCancelled) q = q.eq("status", "approved");
-    const { data, error: e } = await q;
-    if (e) {
-      // creator join may be unavailable if the FK name differs; fall back without it
-      const r2 = await supabase.from("financial_vouchers").select("id, number, kind, amount_halalas, method, status, reference, reason, occurred_at, cancel_reason, created_by, reservation:reservations(id, internal_ref)").eq("branch_id", branchId).gte("occurred_at", f.from).lte("occurred_at", f.to + "T23:59:59").order("occurred_at", { ascending: false }).limit(2000);
-      if (r2.error) setError(toArabicError(r2.error)); else setRows((r2.data as unknown as V[]) ?? []);
-    } else { setRows((data as unknown as V[]) ?? []); setError(null); }
-    setLoading(false);
-  }, [branchId, f]);
-  useEffect(() => { load(); }, [load]);
+  // G24: the ledger of the active branch only; a late answer for another branch is dropped
+  const ledger = useBranchQuery<V[]>(async (branchId) => {
+    const run = (cols: string) => {
+      let q = supabase.from("financial_vouchers").select(cols).eq("branch_id", branchId).gte("occurred_at", f.from).lte("occurred_at", f.to + "T23:59:59").order("occurred_at", { ascending: false }).limit(2000);
+      if (f.kind !== "all") q = q.eq("kind", f.kind);
+      if (f.method !== "all") q = q.eq("method", f.method);
+      if (!f.includeCancelled) q = q.eq("status", "approved");
+      return q;
+    };
+    const withCreator = await run(COLS + ", creator:staff_profiles!financial_vouchers_created_by_fkey(full_name)");
+    // the creator join may be unavailable if the FK name differs; fall back without it
+    return (withCreator.error ? must(await run(COLS)) : must(withCreator)) as unknown as V[];
+  }, [f], NO_ROWS);
+  const rows = ledger.data;
 
   const totals = useMemo(() => {
     const ok = rows.filter((r) => r.status === "approved");
@@ -52,7 +49,6 @@ export default function AdminFinance() {
   return (
     <div>
       <SectionTitle title="المالية — دفتر السندات" subtitle="التأمين دفتر مستقل ولا يُحسب ضمن إيراد الإقامة" action={<div className="flex items-center gap-2"><BranchPicker /><button onClick={exportCsv} disabled={rows.length === 0} className="btn-outline text-sm"><Download className="h-4 w-4" /> تصدير ({rows.length})</button></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
         <label className="flex items-center gap-1.5 text-ink-600">من <input type="date" className="input w-auto py-1" dir="ltr" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
         <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
@@ -66,7 +62,7 @@ export default function AdminFinance() {
         ))}
       </div>
       {totals.byMethod.size > 0 && <p className="mb-4 text-xs text-ink-500">قبض الإقامة حسب الطريقة: {[...totals.byMethod.entries()].map(([m, v]) => `${PAYMENT_METHOD_LABELS[m as PaymentMethod] ?? m}: ${sar(v)}`).join(" · ")}</p>}
-      {loading ? <LoadingScreen /> : rows.length === 0 ? <EmptyState icon={<Wallet className="h-10 w-10" />} title="لا سندات في هذه الفترة" /> : (
+      <DataState loading={ledger.loading} error={ledger.error} empty={rows.length === 0} onRetry={ledger.reload} emptyIcon={<Wallet className="h-10 w-10" />} emptyTitle="لا سندات في هذه الفترة">
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead className="bg-ink-50 text-xs text-ink-500"><tr>{["السند", "النوع", "الحجز", "المبلغ", "الطريقة", "المرجع", "الوقت", "المنشئ", "الحالة"].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 text-right font-medium">{h}</th>)}</tr></thead>
@@ -87,7 +83,7 @@ export default function AdminFinance() {
             </tbody>
           </table>
         </Card>
-      )}
+      </DataState>
     </div>
   );
 }
