@@ -350,22 +350,27 @@ do $$ declare res uuid; r jsonb; begin
 exception when others then perform t_record('SC12b damage 20.00 from a 50.00 deposit, the departure, the inspection with its suggested deduction, then 30.00 back on a separate voucher', false, sqlerrm); end $$;
 
 -- ---------------------------------------------------------------- SC13: «مغلق» by itself, and back when something reopens
-do $$ declare res uuid := t_id('resDmg'); f jsonb; inv jsonb; s1 text; s2 text; v uuid; begin
+do $$ declare res uuid := t_id('resDmg'); f jsonb; inv jsonb; s1 text; s2 text; s3 text; ai uuid; ref text; v uuid; begin
+  -- Phase 4 (decision 27): the check-out invoiced the stay (its damage too); the deposit refund then closed it by itself
   s1 := (t_res(res)).status;
+  ref := (t_res(res)).internal_ref;
+  select id into ai from invoices where reservation_id = res and origin = 'checkout' and status = 'issued';
+  perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+  perform fn_cancel_invoice(ai, 'تجربة الإغلاق بلا فاتورة');
+  s2 := (t_res(res)).status;
   f := fn_stay_followups('00000000-0000-0000-0000-000000000010');
   inv := fn_create_invoice(res);
-  s2 := (t_res(res)).status;
-  perform t_record('SC13a settled but not invoiced stays «غادر» (listed with what is missing); the invoice closes it by itself',
-    s1 = 'checked_out' and f->>'departed_open' like '%' || (t_res(res)).internal_ref || '%' and f->>'departed_open' like '%بلا فاتورة%'
-    and s2 = 'closed' and (t_res(res)).closed_at is not null, s1 || ' → ' || s2);
+  s3 := (t_res(res)).status;
+  perform t_record('SC13a the departure invoices the stay and the deposit refund closes it by itself; without its invoice it is «غادر» (listed with what is missing), and a new invoice closes it again',
+    s1 = 'closed' and ai is not null and s2 = 'checked_out' and f->>'departed_open' like '%' || ref || '%' and f->>'departed_open' like '%لم تُفوتر%'
+    and s3 = 'closed' and (t_res(res)).closed_at is not null, format('%s → %s → %s (invoice %s)', s1, s2, s3, ai));
   select id into v from financial_vouchers where reservation_id = res and kind = 'deposit_refund' and status = 'approved';
-  perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   perform fn_cancel_voucher(v, 'رُد بالخطأ');
   perform t_record('SC13b a later change that breaks a condition takes it back to «غادر» (here the deposit refund is cancelled), in the audit',
     (t_res(res)).status = 'checked_out' and (t_res(res)).closed_at is null
-    and t_count(format('select count(*) from audit_events where entity_id = %L and action = %L', res, 'reservation.unclosed')) = 1, (t_res(res)).status::text);
+    and t_count(format('select count(*) from audit_events where entity_id = %L and action = %L', res, 'reservation.unclosed')) = 2, (t_res(res)).status::text);
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-exception when others then perform t_record('SC13a settled but not invoiced stays «غادر» (listed with what is missing); the invoice closes it by itself', false, sqlerrm); end $$;
+exception when others then perform t_record('SC13a the departure invoices the stay and the deposit refund closes it by itself; without its invoice it is «غادر» (listed with what is missing), and a new invoice closes it again', false, sqlerrm); end $$;
 
 -- ---------------------------------------------------------------- SC14: corrections and their windows (decisions 10, 46)
 do $$ declare res uuid; r jsonb; m text := ''; begin
@@ -553,12 +558,13 @@ do $$ declare res uuid; done0 int; done1 int; r jsonb; st text; begin
   perform fn_staff_check_out(jsonb_build_object('reservation_id', res));
   perform fn_staff_record_inspection(jsonb_build_object('reservation_id', res, 'result', 'ok'));
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'deposit_refund', 'amount_halalas', 5000, 'method', 'cash', 'reason', 'إرجاع التأمين', 'idempotency_key', 'sc21-drf'));
-  perform fn_create_invoice(res, null, null);
   st := (t_res(res)).status::text;
   done1 := (fn_ops_daily_summary('00000000-0000-0000-0000-000000000010', t_today())->'departures'->>'done')::int;
-  perform t_record('SC21 a departure settled and invoiced at once is «مغلق» and still counts among the day''s departures',
-    (r->>'ok')::boolean and st = 'closed' and done1 = done0 + 1, format('ok=%s status=%s done %s→%s', r->>'ok', st, done0, done1));
-exception when others then perform t_record('SC21 a departure settled and invoiced at once is «مغلق» and still counts among the day''s departures', false, sqlerrm); end $$;
+  perform t_record('SC21 a departure settled at once (the check-out invoices it itself) is «مغلق» and still counts among the day''s departures',
+    (r->>'ok')::boolean and st = 'closed' and done1 = done0 + 1
+    and t_count(format('select count(*) from invoices where reservation_id = %L and origin = %L and status = %L', res, 'checkout', 'issued')) = 1,
+    format('ok=%s status=%s done %s→%s', r->>'ok', st, done0, done1));
+exception when others then perform t_record('SC21 a departure settled at once (the check-out invoices it itself) is «مغلق» and still counts among the day''s departures', false, sqlerrm); end $$;
 
 -- =====================================================================
 -- RESULTS

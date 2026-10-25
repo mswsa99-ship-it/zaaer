@@ -40,5 +40,9 @@ echo "== running rates tests (0030: price calendar, weekly/monthly, nights, disc
 psql -d "$DB" -f tests/sql/rates_tests.sql
 echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
 psql -d "$DB" -f tests/sql/stay_cycle_tests.sql
+echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"
+psql -d "$DB" -f tests/sql/invoices_review_tests.sql
+echo "== running monitoring tests (0037: the seven checks, once each, the owner's throttle)"
+psql -d "$DB" -f tests/sql/monitors_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
