@@ -2,8 +2,8 @@
 -- Synthetic history for the migration check (decision 41, X10). Applied on the schema as it is in production
 -- (supabase/production-applied.txt), before the pending migrations run. Everything is invented: no real guest,
 -- unit or price. It covers the records a migration must never lose or change: reservations in several states,
--- vouchers of every kind and method (one cancelled), refunds, an invoice, a discount line, a completed
--- cleaning task, an archived service, and a stay that already ended.
+-- vouchers of every kind and method (one cancelled; the methods retired by 0028 as old history), refunds, an
+-- invoice, a discount line, a completed cleaning task, an archived service, and a stay that already ended.
 -- =====================================================================
 \set ON_ERROR_STOP on
 insert into staff_profiles(id, auth_user_id, organization_id, full_name, email, role) values
@@ -34,11 +34,11 @@ begin
          'check_out', (current_date + 7)::text, 'guest_name', 'ضيف سجل ثان', 'source_id', src));
   rid := (r->>'id')::uuid; insert into _hist_ids values ('r2', rid);
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'hist-r2-rcp'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'deposit', 'amount_halalas', 5000, 'method', 'mada', 'reference', 'POS-1', 'idempotency_key', 'hist-r2-dep'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'deposit', 'amount_halalas', 5000, 'method', 'pos', 'reference', 'POS-1', 'idempotency_key', 'hist-r2-dep'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 1500, 'method', 'bank_transfer', 'reference', 'TR-1', 'idempotency_key', 'hist-r2-rcp2'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 1200, 'method', 'ota_deferred', 'reference', 'OTA-1', 'idempotency_key', 'hist-r2-rcp4'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 900, 'method', 'pos', 'reference', 'POS-2', 'idempotency_key', 'hist-r2-rcp5'));
-  v := fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 700, 'method', 'card', 'reference', 'CARD-1', 'idempotency_key', 'hist-r2-rcp3'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 700, 'method', 'bank_transfer', 'reference', 'TR-2', 'idempotency_key', 'hist-r2-rcp3'));
   perform fn_cancel_voucher((v->>'voucher_id')::uuid, 'خطأ إدخال');
   perform fn_refund(jsonb_build_object('reservation_id', rid, 'kind', 'refund', 'amount_halalas', 1000, 'method', 'cash', 'reason', 'رد جزئي', 'idempotency_key', 'hist-r2-ref'));
   perform fn_refund(jsonb_build_object('reservation_id', rid, 'kind', 'deposit_refund', 'amount_halalas', 2000, 'method', 'cash', 'reason', 'رد تأمين جزئي', 'idempotency_key', 'hist-r2-depref'));
@@ -70,3 +70,12 @@ reset role;
 update reservations set status = 'checked_out', check_in = current_date - 5, check_out = current_date - 2,
        actual_check_in = now() - interval '5 days', actual_check_out = now() - interval '2 days'
  where id = (select v from _hist_ids where k = 'r4');
+-- It was paid in methods that 0028 retired (mada, card): no new voucher takes them, the old ones stay as they were.
+insert into financial_vouchers(organization_id, branch_id, reservation_id, number, kind, amount_halalas, method, status, reference,
+                               idempotency_key, content_hash, occurred_at, created_by)
+select r.organization_id, r.branch_id, r.id, x.number, 'receipt', x.amount, x.method::payment_method, 'approved', x.reference,
+       x.idem, md5(x.idem), now() - interval '4 days', '20000000-0000-0000-0000-000000000001'
+from reservations r
+cross join (values ('HIST-MADA-1', 800, 'mada', 'POS-0', 'hist-r4-mada'), ('HIST-CARD-1', 600, 'card', 'CARD-0', 'hist-r4-card')) x(number, amount, method, reference, idem)
+where r.id = (select v from _hist_ids where k = 'r4');
+select fn_recompute_reservation_finance((select v from _hist_ids where k = 'r4')) is not null as recomputed;

@@ -78,6 +78,39 @@ describe("non-negotiable source rules", () => {
     expect(sqlSource).not.toMatch(/amount_halalas\s+(numeric|double|real|float)/i);
   });
 
+  it("catalog lookups in migrations name the schema (a same-named table elsewhere must not answer for public)", () => {
+    // The hosted project keeps a leftover schema with tables named like ours: 0033 looked up its grant condition in
+    // information_schema by table name alone, found the leftover «reservations», and skipped the grant (fixed by 0035).
+    // These four ran in production before the rule: 0035 re-decides the grants of 0011 and 0033 on public itself, and
+    // the policy lookups of 0027 and 0028 found their own policies (the production schema fingerprint matches).
+    const grandfathered = new Set([
+      "20261022130000_0011_reservation_parity.sql", "20261024234000_0027_client_errors.sql",
+      "20261025010000_0028_money_core.sql", "20261025051000_0033_stay_cycle.sql",
+    ]);
+    const offenders: string[] = [];
+    for (const f of readdirSync(join(ROOT, "supabase/migrations")).filter((x) => x.endsWith(".sql") && !grandfathered.has(x)).sort()) {
+      const sql = read(join("supabase/migrations", f)).replace(/--.*$/gm, "");
+      for (const s of sql.split(";")) {
+        if (/\binformation_schema\.\w+/i.test(s) && /\btable_name\s*=/i.test(s) && !/\btable_schema\s*=/i.test(s)) offenders.push(`${f}: information_schema by table_name without table_schema`);
+        if (/\bpg_(?:policies|tables|views|indexes)\b/i.test(s) && /\btablename\s*=/i.test(s) && !/\bschemaname\s*=/i.test(s)) offenders.push(`${f}: pg_policies/pg_tables by tablename without schemaname`);
+        if (/\bpg_class\b/i.test(s) && /\brelname\s*=/i.test(s) && !/\brelnamespace\b/i.test(s)) offenders.push(`${f}: pg_class by relname without relnamespace`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("the owner's paste file carries 0022, 0031 and 0034 verbatim, each recorded in the history, in one transaction", () => {
+    // These three hold DELETE inside the purge functions, so the owner runs them from the SQL Editor (STAGING.md §0-ب)
+    const paste = read("supabase/paste/owner-paste-0022-0031-0034.sql");
+    for (const f of ["20261023091000_0022_data_purge.sql", "20261025040000_0031_purge_cascades.sql", "20261025052000_0034_stay_cascades.sql"]) {
+      expect(paste.includes(read(join("supabase/migrations", f))), `${f} is not in the paste file as it is in supabase/migrations`).toBe(true);
+      const [version, ...rest] = f.replace(/\.sql$/, "").split("_");
+      expect(paste).toContain(`values ('${version}', '${rest.join("_")}') on conflict (version) do nothing;`);
+    }
+    expect(paste.match(/^begin;$/gm)?.length).toBe(1);
+    expect(paste.match(/^commit;$/gm)?.length).toBe(1);
+  });
+
   it("no native confirm()/alert()/prompt() dialogs in the UI (embedded viewers swallow them)", () => {
     const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
     const offenders = uiFiles.filter((p) => /(^|[^.\w])(window\.)?(confirm|alert|prompt)\(/.test(stripComments(read(p))));

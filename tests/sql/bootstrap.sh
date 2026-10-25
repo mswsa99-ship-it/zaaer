@@ -28,6 +28,21 @@ grant execute on all functions in schema public to anon, authenticated, service_
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+-- The hosted project also keeps a leftover schema from a first attempt, zz_first_attempt: 24 empty tables named like
+-- ours, with table privileges for the API roles (no USAGE on the schema, so the API cannot reach them). A catalog
+-- lookup by table name alone finds those too and answers wrongly for public — 0033 skipped a grant that way (0035).
+-- The test database keeps the same names, so such a lookup fails here as it does there.
+create schema if not exists zz_first_attempt;
+do $$ declare t text; begin
+  foreach t in array array['access_delivery_events', 'access_release_requests', 'audit_events', 'booking_sources', 'branch_memberships',
+                           'branches', 'cleaning_tasks', 'conversation_messages', 'conversations', 'guest_profiles', 'inventory_periods',
+                           'keyboxes', 'maintenance_tickets', 'notifications', 'organizations', 'payment_transactions',
+                           'registration_sessions', 'release_rules', 'released_slots', 'reservation_guests', 'reservations',
+                           'room_categories', 'rooms', 'staff_profiles'] loop
+    execute format('create table if not exists zz_first_attempt.%I (id uuid primary key)', t);
+    execute format('grant all on zz_first_attempt.%I to anon, authenticated, service_role', t);
+  end loop;
+end $$;
 EOF
 # Fixtures write "today" as current_date and mean the property's day, so suite sessions run in the property's zone
 # (set here, not taken from the machine: CI runners are UTC). The product itself must not depend on the session zone

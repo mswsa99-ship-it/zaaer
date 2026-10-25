@@ -129,6 +129,23 @@ do $$ declare n int; begin
   perform t_record('RF15b gate: non-money columns stay readable (status)', n >= 0);
 end $$;
 reset role;
+-- every column of public.reservations is readable by staff except the money ones: a column a migration adds is granted
+-- in every environment (0035 — a lookup by table name alone made 0033 skip its grant on the hosted project)
+do $$ declare unreadable text; begin
+  select string_agg(a.attname, ', ' order by a.attname) into unreadable
+  from pg_attribute a
+  where a.attrelid = 'public.reservations'::regclass and a.attnum > 0 and not a.attisdropped
+    and not has_column_privilege('authenticated', 'public.reservations', a.attname, 'SELECT')
+    and a.attname not in ('addons_halalas', 'balance_due_halalas', 'deposit_balance_halalas', 'discount_halalas', 'nightly_rate_halalas',
+                          'paid_halalas', 'price_basis', 'prices_include_tax', 'refunded_halalas', 'rent_amount_halalas', 'tax_rate_bp',
+                          'taxes_halalas', 'total_halalas');
+  perform t_record('RF15c gate: every non-money reservations column is readable by staff (0011, 0033, 0035)', unreadable is null, unreadable);
+  select string_agg(a.attname, ', ' order by a.attname) into unreadable
+  from pg_attribute a
+  where a.attrelid = 'public.reservations'::regclass and a.attname in ('total_halalas', 'paid_halalas', 'balance_due_halalas', 'deposit_balance_halalas')
+    and has_column_privilege('authenticated', 'public.reservations', a.attname, 'SELECT');
+  perform t_record('RF15d gate: the money columns stay unreadable through the table', unreadable is null, unreadable);
+end $$;
 
 -- ---------- A09: two organizations ----------
 select t_login('a0000000-0000-0000-0000-000000000005','owner2@test.local');
