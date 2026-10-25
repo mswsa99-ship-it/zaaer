@@ -14,7 +14,7 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
 
-export interface BranchLite { id: string; name_ar: string; check_in_time?: string; check_out_time?: string; tax_rate_bp?: number; prices_include_tax?: boolean }
+export interface BranchLite { id: string; name_ar: string; name_en?: string | null; check_in_time?: string; check_out_time?: string; tax_rate_bp?: number; prices_include_tax?: boolean; map_url?: string | null; booking_platform_url?: string | null; default_language?: "ar" | "en" }
 
 /** What a quoted price means for tax (decision 68): nothing to say at zero tax, otherwise before or including it. */
 export function priceTaxNote(b: BranchLite | null | undefined): string | null {
@@ -25,7 +25,7 @@ export function priceTaxNote(b: BranchLite | null | undefined): string | null {
 export const NO_BRANCH_MESSAGE = "لا يوجد فرع مخوّل لحسابك — تواصل مع المدير";
 
 const DEFAULT_BRANCH = (import.meta.env.VITE_DEFAULT_BRANCH_ID as string | undefined) ?? null;
-const BRANCH_COLUMNS = "id, name_ar, check_in_time, check_out_time, tax_rate_bp, prices_include_tax";
+const BRANCH_COLUMNS = "id, name_ar, name_en, check_in_time, check_out_time, tax_rate_bp, prices_include_tax, map_url, booking_platform_url, default_language";
 
 interface BranchContextValue {
   branches: BranchLite[];

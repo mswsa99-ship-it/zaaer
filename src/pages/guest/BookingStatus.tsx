@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn } from "lucide-react";
-import { guestApi, toArabicError, type GuestSession } from "../../lib/api";
+import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText } from "lucide-react";
+import { guestApi, toArabicError, type GuestSession, type PublicBranch } from "../../lib/api";
 import { Card, Spinner, EmptyState, ErrorBanner } from "../../components/ui";
 import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
 import { formatCurrency, formatHijri } from "../../lib/utils";
@@ -13,6 +13,7 @@ export default function BookingStatus() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [branch, setBranch] = useState<PublicBranch | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -22,6 +23,9 @@ export default function BookingStatus() {
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
+  // decision 31: the branch's map link; decision 19: the stay summary page
+  const branchId = data?.reservation.branch_id;
+  useEffect(() => { if (!branchId) return; guestApi.branch(branchId).then(setBranch).catch(() => setBranch(null)); }, [branchId]);
   // Poll every 15s so supervisor approvals show up without a reload (guest has no realtime access to tables)
   useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
@@ -107,6 +111,8 @@ export default function BookingStatus() {
           <div className="rounded-xl bg-brand-50 p-3 text-center text-sm text-brand-700">أُبلغ الاستقبال بوصولك؛ يُسجَّل وصولك هناك.</div>
         )}
         <button onClick={() => navigate(`/reception?token=${token}`)} className="btn-outline"><MessageCircle className="h-4 w-4" /> محادثة المساعد (متحقق)</button>
+        <Link to={`/booking/summary/${token}`} className="btn-outline" data-testid="summary-link"><FileText className="h-4 w-4" /> ملخص الإقامة{r.summary_accepted ? " (مُقرّ)" : ""}</Link>
+        {branch?.map_url && <a href={branch.map_url} target="_blank" rel="noopener noreferrer" className="btn-outline" data-testid="map-link"><MapPin className="h-4 w-4" /> الموقع على الخريطة</a>}
       </div>
 
       {delivered && (

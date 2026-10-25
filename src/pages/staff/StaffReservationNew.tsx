@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarPlus, Calculator, Plus, X, Users } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Calculator, Plus, X, Users, Search, ShieldBan, UserCheck } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
-import { opsApi, toArabicError, type Quote, type PriceRun } from "../../lib/api";
+import { opsApi, guestProfileApi, toArabicError, type Quote, type PriceRun, type GuestProfileRow } from "../../lib/api";
+import { Stars } from "../../components/Guests";
 import { Card, SectionTitle, ErrorBanner, Spinner, LoadErrorCard } from "../../components/ui";
 import { Field, MoneyInput, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
@@ -34,7 +35,19 @@ export default function StaffReservationNew() {
     return { cats: must(c) as Cat[], sources: must(s) as Src[] };
   }, [], NO_OPTIONS);
   const { cats, sources } = opts.data; const branchId = opts.branchId;
-  const [f, setF] = useState({ check_in: todayISO(), check_out: addDays(todayISO(), 1), category_id: "", room_id: "", source_id: "", external_ref: "", guest_name: "", guest_phone: "", nationality: "", adults: 1, companions: 0, booking_type: "individual", company_name: "", visit_purpose: "", notes: "", confirm: true, override: false, nightly_rate: null as number | null, discount: 0, discount_reason: "" });
+  const [f, setF] = useState({ check_in: todayISO(), check_out: addDays(todayISO(), 1), category_id: "", room_id: "", source_id: "", external_ref: "", guest_name: "", guest_phone: "", nationality: "", adults: 1, companions: 0, booking_type: "individual", company_name: "", visit_purpose: "", notes: "", confirm: true, override: false, nightly_rate: null as number | null, discount: 0, discount_reason: "",
+    // decision 4: a platform's booking says who collects and the day it was booked there
+    platform_collects: null as boolean | null, platform_booked_on: todayISO() });
+  // decision 2: the guest profile — chosen from the search, matched by phone on the server, or a new one
+  const [guest, setGuest] = useState<GuestProfileRow | null>(null);
+  const [newProfile, setNewProfile] = useState(false);
+  const [profileQ, setProfileQ] = useState("");
+  const [profileHits, setProfileHits] = useState<GuestProfileRow[]>([]);
+  useEffect(() => {
+    const q = profileQ.trim(); if (q.length < 2) { setProfileHits([]); return; }
+    let alive = true; const t = setTimeout(() => guestProfileApi.list({ q, limit: 8 }).then((r) => { if (alive) setProfileHits(r.rows); }).catch(() => { if (alive) setProfileHits([]); }), 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [profileQ]);
   // Zaaer parity (0011): companions by name, extra units in the same booking (one reservation per unit, created atomically)
   const [companionRows, setCompanionRows] = useState<Array<{ full_name: string; relationship: string }>>([]);
   const [extraUnits, setExtraUnits] = useState<Array<{ category_id: string; adults: number; companions: number }>>([]);
@@ -80,6 +93,8 @@ export default function StaffReservationNew() {
       const main = { category_id: f.category_id, room_id: f.room_id || null, adults: f.adults, companions: Math.max(f.companions, named.length), companions_details: named, nightly_rate_halalas: f.override ? f.nightly_rate : null };
       const r = await opsApi.createReservation({ branch_id: branchId, ...main, check_in: f.check_in, check_out: f.check_out, source_id: f.source_id, external_ref: f.external_ref || null,
         arrival_time: times.arrival || null, departure_time: times.departure || null,
+        ...(source?.kind === "external" ? { platform_collects: f.platform_collects, platform_booked_on: f.platform_booked_on } : {}),
+        guest_profile_id: guest?.id ?? null, new_profile: newProfile,
         guest_name: f.guest_name, guest_phone: f.guest_phone || null, nationality: f.nationality || null, booking_type: f.booking_type, company_name: f.company_name || null, visit_purpose: f.visit_purpose || null,
         notes: f.notes || null, confirm: f.confirm, discount_halalas: canDiscount ? f.discount : 0, discount_reason: f.discount_reason || null,
         ...(extraUnits.length > 0 ? { units: [main, ...extraUnits.map((u) => ({ category_id: u.category_id, room_id: null, adults: u.adults, companions: u.companions, companions_details: [], nightly_rate_halalas: null, discount_halalas: 0 }))] } : {}) });
@@ -130,9 +145,28 @@ export default function StaffReservationNew() {
           </Card>
           <Card>
             <h3 className="mb-3 font-semibold text-ink-800">الضيف الرئيسي</h3>
+            {/* decision 2: a returning guest is picked from the profiles (by name, phone or document); a new one gets a new profile */}
+            <div className="mb-3 rounded-xl border border-ink-100 p-3" data-testid="profile-picker">
+              {guest ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <div className="flex items-center gap-2"><UserCheck className="h-4 w-4 text-success-600" /><span className="font-medium text-ink-800">{guest.full_name}</span><span className="text-xs text-ink-400" dir="ltr">{guest.phone_masked ?? ""}</span>{guest.stays > 0 && <span className="text-xs text-ink-400">· {guest.stays} إقامة سابقة</span>}{guest.rating != null && <Stars n={guest.rating} />}{guest.banned && <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600"><ShieldBan className="h-3.5 w-3.5" /> محظور: {guest.ban_reason}</span>}</div>
+                  <button type="button" onClick={() => { setGuest(null); setF({ ...f, guest_name: "", guest_phone: "", nationality: "" }); }} className="btn-ghost text-xs">تغيير</button>
+                </div>
+              ) : (
+                <div>
+                  <div className="relative"><Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" /><input className="input pr-9" value={profileQ} onChange={(e) => setProfileQ(e.target.value)} placeholder="ضيف سابق؟ ابحث بالاسم أو الجوال أو رقم الوثيقة" aria-label="بحث عن ضيف سابق" /></div>
+                  {profileHits.length > 0 && (
+                    <ul className="mt-2 divide-y divide-ink-50 rounded-lg border border-ink-100 bg-white text-sm">
+                      {profileHits.map((g) => <li key={g.id}><button type="button" onClick={() => { setGuest(g); setNewProfile(false); setProfileQ(""); setProfileHits([]); setF({ ...f, guest_name: g.full_name, nationality: g.nationality ?? f.nationality }); }} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-right hover:bg-ink-50" data-testid="profile-hit"><span>{g.full_name}{g.banned && <span className="mr-2 text-xs text-danger-600">محظور</span>}</span><span className="text-xs text-ink-400" dir="ltr">{g.phone_masked ?? ""} · {g.stays}</span></button></li>)}
+                    </ul>
+                  )}
+                  <label className="mt-2 flex items-center gap-2 text-xs text-ink-500"><input type="checkbox" checked={newProfile} onChange={(e) => setNewProfile(e.target.checked)} /> ضيف جديد (لا تربطه بملف على الجوال نفسه)</label>
+                </div>
+              )}
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم (مطلوب)"><input className="input" value={f.guest_name} onChange={(e) => setF({ ...f, guest_name: e.target.value })} /></Field>
-              <Field label="الجوال" hint="يُستخدم لإعادة استخدام ملف الضيف دون دمج تلقائي بالاسم"><input className="input" dir="ltr" value={f.guest_phone} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
+              <Field label="الجوال" hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف الضيف بالجوال نفسه ما لم تُعلّم «ضيف جديد»"}><input className="input" dir="ltr" value={f.guest_phone} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
               <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="بالغون"><input type="number" min={1} className="input" dir="ltr" value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></Field>
@@ -156,7 +190,15 @@ export default function StaffReservationNew() {
             <h3 className="mb-3 font-semibold text-ink-800">المصدر والتفاصيل</h3>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="مصدر الحجز"><select className="input" value={f.source_id} onChange={(e) => setF({ ...f, source_id: e.target.value })}>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
-              <Field label={`المرجع الخارجي${source?.external_reference_required ? " (مطلوب)" : ""}`}><input className="input" dir="ltr" value={f.external_ref} onChange={(e) => setF({ ...f, external_ref: e.target.value })} /></Field>
+              <Field label={`رقم الحجز في المنصة${source?.external_reference_required ? " (مطلوب)" : ""}`} hint={extraUnits.length > 0 && f.external_ref ? "رقم واحد للمجموعة كلها؛ لا يُقبل في حجز أو مجموعة أخرى" : undefined}><input className="input" dir="ltr" value={f.external_ref} onChange={(e) => setF({ ...f, external_ref: e.target.value })} aria-label="رقم الحجز في المنصة" /></Field>
+              {source?.kind === "external" && <>
+                <Field label="من يقبض المبلغ (مطلوب)" hint="إن قبضت المنصة يُسجَّل سند «آجل عبر المنصات» تلقائيًا ويُطابَق لاحقًا مع إيداعها">
+                  <select className="input" value={f.platform_collects == null ? "" : f.platform_collects ? "platform" : "property"} onChange={(e) => setF({ ...f, platform_collects: e.target.value === "" ? null : e.target.value === "platform" })} aria-label="من يقبض المبلغ" data-testid="platform-collects">
+                    <option value="">— اختر —</option><option value="platform">المنصة قبضت المبلغ</option><option value="property">المنشأة تقبض عند الوصول</option>
+                  </select>
+                </Field>
+                <Field label="تاريخ الحجز في المنصة" hint="يُحسب منه تقرير الحجوزات المتأخرة الإدخال"><input type="date" className="input" dir="ltr" max={todayISO()} value={f.platform_booked_on} onChange={(e) => setF({ ...f, platform_booked_on: e.target.value })} aria-label="تاريخ الحجز في المنصة" /></Field>
+              </>}
               <Field label="نوع الحجز"><select className="input" value={f.booking_type} onChange={(e) => setF({ ...f, booking_type: e.target.value })}><option value="individual">فرد</option><option value="company">شركة</option></select></Field>
               {f.booking_type === "company" && <Field label="اسم الشركة"><input className="input" value={f.company_name} onChange={(e) => setF({ ...f, company_name: e.target.value })} /></Field>}
               <Field label="الغرض"><select className="input" value={f.visit_purpose} onChange={(e) => setF({ ...f, visit_purpose: e.target.value })}><option value="">—</option>{["سياحة", "زيارة أقارب", "عمل", "ديني", "رياضة وترفيه", "أخرى"].map((x) => <option key={x} value={x}>{x}</option>)}</select></Field>
@@ -190,7 +232,7 @@ export default function StaffReservationNew() {
           <Card>
             <Toggle checked={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} label="تأكيد الحجز مباشرة" />
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
-            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !capacityOk || nights <= 0} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
+            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !capacityOk || nights <= 0 || (source?.kind === "external" && f.platform_collects == null)} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
           </Card>
         </div>
       </form>

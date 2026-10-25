@@ -13,6 +13,7 @@ import BookingLookup from "./pages/guest/BookingLookup";
 import BookingNew from "./pages/guest/BookingNew";
 import Registration from "./pages/guest/Registration";
 import BookingStatus from "./pages/guest/BookingStatus";
+import StaySummaryPage from "./pages/guest/StaySummary";
 import CheckIn from "./pages/guest/CheckIn";
 import Kiosk from "./pages/guest/Kiosk";
 import Privacy from "./pages/guest/Privacy";
@@ -27,6 +28,7 @@ import IdentityVerification from "./pages/staff/IdentityVerification";
 import StaffPayments from "./pages/staff/StaffPayments";
 import AccessApprovals from "./pages/staff/AccessApprovals";
 import StayFollowups from "./pages/staff/StayFollowups";
+import PlatformCheck from "./pages/staff/PlatformCheck";
 import DaySummary from "./pages/staff/DaySummary";
 import StaffRooms from "./pages/staff/StaffRooms";
 import Housekeeping from "./pages/staff/Housekeeping";
@@ -88,6 +90,7 @@ export default function App() {
         <Route path="/booking/registration/:token" element={<Registration />} />
         <Route path="/booking/status/:token" element={<BookingStatus />} />
         <Route path="/booking/payment/:token" element={<BookingStatus />} />
+        <Route path="/booking/summary/:token" element={<StaySummaryPage />} />
         <Route path="/checkin/:token" element={<CheckIn />} />
         <Route path="/kiosk" element={<Kiosk />} />
         {WhatsAppDemo && <Route path="/whatsapp-demo" element={<Suspense fallback={<LoadingScreen />}><WhatsAppDemo /></Suspense>} />}
@@ -111,6 +114,7 @@ export default function App() {
           <Route path="/staff/pos-settlement" element={<PosSettlement />} />
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
           <Route path="/staff/followups" element={<StayFollowups />} />
+          <Route path="/staff/platforms" element={<PlatformCheck />} />
           <Route path="/staff/day-summary" element={<DaySummary />} />
           <Route path="/staff/rooms" element={<StaffRooms />} />
           <Route path="/staff/housekeeping" element={<Housekeeping />} />
@@ -136,6 +140,7 @@ export default function App() {
           <Route path="/admin/availability-rules" element={<AdminAvailabilityRules />} />
           <Route path="/admin/reservations" element={<AdminReservations />} />
           <Route path="/admin/guests" element={<AdminGuests />} />
+          <Route path="/admin/guests/:id" element={<AdminGuests />} />
           <Route path="/admin/finance" element={<AdminFinance />} />
           <Route path="/admin/platform-payouts" element={<AdminPlatformPayouts />} />
           <Route path="/admin/cash-accounts" element={<AdminCashAccounts />} />

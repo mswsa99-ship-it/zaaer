@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, UserPlus, CheckCircle2, AlertCircle, IdCard } from "lucide-react";
-import { guestApi, toArabicError, type GuestSession } from "../../lib/api";
+import { guestApi, toArabicError, type GuestSession, type GuestStaySummary } from "../../lib/api";
 import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { IDENTITY_TYPE_LABELS, GUEST_VERIFICATION_LABELS, type IdentityType, type GuestVerificationStatus } from "../../lib/types";
 import { gregorianToHijri, hijriToGregorian, maskId, todayISO } from "../../lib/utils";
@@ -109,6 +109,12 @@ export default function Registration() {
 }
 
 function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: GuestRow | null; onClose: () => void; onSaved: () => void }) {
+  // decision 19: the main guest reads «ملخص الإقامة» and accepts it with the data (once; a later change is accepted on its own page)
+  const [summary, setSummary] = useState<GuestStaySummary | null>(null);
+  const [ackOpen, setAckOpen] = useState(false);
+  const [ack, setAck] = useState(false);
+  useEffect(() => { if (guest?.is_primary) guestApi.staySummary(token).then(setSummary).catch(() => setSummary(null)); }, [token, guest?.is_primary]);
+  const needsAck = !!guest?.is_primary && !!summary && !summary.accepted_at;
   const [fullName, setFullName] = useState(guest?.full_name ?? "");
   const [identityType, setIdentityType] = useState<IdentityType>((guest?.identity_type as IdentityType) ?? "national_id");
   const [identityNumber, setIdentityNumber] = useState("");
@@ -131,6 +137,7 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
     if (!identityNumber.trim()) { setFormError("رقم الوثيقة مطلوب."); return; }
     if (!birthDate) { setFormError("تاريخ الميلاد مطلوب."); return; }
     if (!consent) { setFormError("يجب الإقرار بصحة البيانات."); return; }
+    if (needsAck && !ack) { setFormError("يجب الإقرار بملخص الإقامة."); return; }
 
     let finalBirthDate = birthDate;
     if (birthCalendar === "hijri") {
@@ -143,6 +150,7 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
       await guestApi.submit(token, guest?.id ?? null, {
         full_name: fullName.trim(), identity_type: identityType, identity_number: identityNumber.trim(), identity_issue_number: issueNumber.trim() || null,
         nationality: nationality.trim(), birth_date: finalBirthDate, phone: phone.trim() || null, relationship: isPrimary ? "self" : relationship, consent: "true",
+        ...(needsAck && ack ? { ack_hash: summary!.hash } : {}),
       });
       onSaved();
     } catch (err) {
@@ -210,6 +218,16 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5" />
             <span>أُقر بصحة البيانات المُدخلة، واطلعت على <Link to="/privacy" target="_blank" className="text-brand-600 underline">سياسة الخصوصية</Link> و<Link to="/terms" target="_blank" className="text-brand-600 underline">شروط الإقامة</Link>.</span>
           </label>
+          {needsAck && (
+            <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-3" data-testid="summary-ack">
+              <button type="button" onClick={() => setAckOpen((v) => !v)} className="text-xs font-medium text-brand-700 underline-offset-2 hover:underline">{ackOpen ? "إخفاء ملخص الإقامة" : "عرض ملخص الإقامة (الحجز، الوحدة، المدة، السعر، المدفوع، التأمين، سياسات الفرع)"}</button>
+              {ackOpen && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-ink-600" dir={summary!.language === "en" ? "ltr" : "rtl"}>{summary!.text}</pre>}
+              <label className="mt-2 flex items-start gap-2 text-xs text-ink-600">
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" aria-label="أقرّ بملخص الإقامة" />
+                <span>قرأت ملخص الإقامة وأقرّ به (يُحفظ نص الملخص ووقت الإقرار).</span>
+              </label>
+            </div>
+          )}
 
           <button type="submit" className="btn-primary w-full" disabled={saving}>{saving ? <Spinner /> : "حفظ البيانات"}</button>
         </form>

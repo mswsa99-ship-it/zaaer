@@ -39,7 +39,7 @@ test.describe("staff reservation lifecycle", () => {
     await expect(page.locator("span", { hasText: /^مدفوع$/ })).toHaveCount(0);
 
     // extension: reason required, dates change, history records before/after
-    await page.getByRole("button", { name: "الإقامة" }).click();
+    await page.getByRole("button", { name: "الإقامة", exact: true }).click();
     await page.getByRole("button", { name: "تغيير المغادرة / تمديد" }).click();
     const ext = page.getByRole("dialog");
     const dateInput = ext.locator("input[type=date]");
@@ -93,12 +93,16 @@ test.describe("staff reservation lifecycle", () => {
     expect(await financeCell(page, "المحصل")).toBe(100);
 
     // cancel the reservation: money stays, the warning says a refund is a separate decision
-    await page.getByRole("button", { name: "الإقامة" }).click();
+    await page.getByRole("button", { name: "الإقامة", exact: true }).click();
     await page.getByRole("button", { name: "إلغاء الحجز" }).click();
     dlg = page.getByRole("dialog");
     await expect(dlg.getByText(/لا يسترد أي مبلغ تلقائيًا/)).toBeVisible();
     await dlg.locator("textarea").fill("طلب الضيف الإلغاء");
-    await dlg.getByRole("button", { name: "تأكيد" }).click();
+    await dlg.getByRole("button", { name: "تأكيد الإلغاء" }).click();
+    // 0038: the dialog says what was cancelled and that the money needs its own refund decision
+    await expect(dlg).toContainText("أُلغي الحجز");
+    await expect(dlg).toContainText("الإلغاء لا يرد شيئًا");
+    await dlg.getByRole("button", { name: "تم" }).click();
     await expect(dlg).toBeHidden();
     await expect(page.getByText("ملغى", { exact: true }).first()).toBeVisible();
     expect(await financeCell(page, "المحصل")).toBe(100);

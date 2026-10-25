@@ -11,7 +11,8 @@ import { BarChart3, Download, Info } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from "recharts";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { useBranchQuery } from "../../lib/useBranchQuery";
-import { opsApi, ratesApi, type ReportsFinance, type DiscountReport } from "../../lib/api";
+import { opsApi, ratesApi, guestReportsApi, type ReportsFinance, type DiscountReport } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
 import { Link } from "react-router-dom";
 import { ROLE_LABELS } from "../../lib/types";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/types";
@@ -225,7 +226,89 @@ export default function AdminReports() {
         )}
       </div>
       <DiscountsCard from={period.from} to={period.to} />
+      <LateEntriesCard from={period.from} to={period.to} />
+      <IdentitiesCard from={period.from} to={period.to} />
     </div>
+  );
+}
+
+/** «الحجوزات المتأخرة الإدخال» (decision 4): platform bookings entered a day or more after the platform took them (owner, manager). */
+function LateEntriesCard({ from, to }: { from: string; to: string }) {
+  const { profile } = useAuth();
+  const allowed = profile?.role === "owner" || profile?.role === "manager";
+  const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.lateEntries>> | null>((branchId) => (allowed ? guestReportsApi.lateEntries(branchId, from, to, 1) : Promise.resolve(null)), [from, to, allowed], null);
+  const d = q.data;
+  if (!allowed) return null;
+  return (
+    <Card className="mt-4" data-testid="late-entries-report">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink-700">حجوزات المنصات المتأخرة الإدخال ({from} → {to})</h3>
+        {d && <p className="text-sm text-ink-600">{d.late} من {d.platform_bookings} حجز منصة أُدخل بعد يوم أو أكثر{d.after_arrival ? ` · ${d.after_arrival} بعد موعد الوصول` : ""}</p>}
+      </div>
+      {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.late === 0 ? <p className="text-sm text-ink-400">لا حجوزات متأخرة الإدخال في هذه الفترة.</p> : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-ink-500">حسب الموظف</p>
+            <div className="divide-y divide-ink-50 text-sm">{d.by_staff.map((s) => <div key={s.staff} className="flex justify-between gap-2 py-1.5"><span>{s.staff}</span><span className="text-xs text-ink-500">{s.count} · أقصى تأخير {s.max_lag} يوم</span></div>)}</div>
+          </div>
+          <div className="overflow-x-auto lg:col-span-2">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الحجز</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">حُجز في المنصة</th><th className="text-right font-medium">أُدخل</th><th className="text-right font-medium">التأخير</th><th className="text-right font-medium">الموظف</th></tr></thead>
+              <tbody>{d.rows.map((r) => (
+                <tr key={r.id} className="border-b border-ink-50">
+                  <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.id}`}>{r.external_ref ?? r.internal_ref}</Link></td>
+                  <td className="text-xs">{r.source_name}</td><td className="text-xs" dir="ltr">{r.booked_on}</td><td className="text-xs" dir="ltr">{r.entered_on}</td>
+                  <td className="text-xs">{r.lag_days} يوم{r.after_arrival && <Badge className="mr-1 bg-danger-500/10 text-danger-600">بعد الوصول</Badge>}</td>
+                  <td className="text-xs text-ink-500">{r.created_by ?? "—"}</td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** «الهويات المعتمدة من المكتب» (decision 2): identities the office entered from the document, with who and when (the owner). */
+function IdentitiesCard({ from, to }: { from: string; to: string }) {
+  const { profile } = useAuth();
+  const allowed = profile?.role === "owner";
+  const [path, setPath] = useState<"office" | "guest" | "all">("office");
+  const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.identities>> | null>((branchId) => (allowed ? guestReportsApi.identities(branchId, from, to, path) : Promise.resolve(null)), [from, to, path, allowed], null);
+  const d = q.data;
+  if (!allowed) return null;
+  return (
+    <Card className="mt-4" data-testid="identities-report">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink-700">الهويات المعتمدة ({from} → {to})</h3>
+        <div className="flex items-center gap-2">
+          <select className="input py-1 text-xs" value={path} onChange={(e) => setPath(e.target.value as typeof path)} aria-label="المسار"><option value="office">من المكتب (من الوثيقة)</option><option value="guest">أدخلها الضيف وطابقها المشرف</option><option value="all">الكل</option></select>
+          {d && <p className="text-sm text-ink-600">{d.count}</p>}
+        </div>
+      </div>
+      {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.count === 0 ? <p className="text-sm text-ink-400">لا هويات معتمدة بهذا المسار في الفترة.</p> : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-ink-500">حسب من اعتمد</p>
+            <div className="divide-y divide-ink-50 text-sm">{d.by_staff.map((s) => <div key={s.staff} className="flex justify-between gap-2 py-1.5"><span>{s.staff}</span><span className="text-xs text-ink-500">من المكتب {s.office} · مطابقة {s.guest}</span></div>)}</div>
+          </div>
+          <div className="overflow-x-auto lg:col-span-2">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الحجز</th><th className="text-right font-medium">النزيل</th><th className="text-right font-medium">الوثيقة</th><th className="text-right font-medium">المسار</th><th className="text-right font-medium">اعتمدها</th><th className="text-right font-medium">متى</th></tr></thead>
+              <tbody>{d.rows.map((r) => (
+                <tr key={r.guest_id} className="border-b border-ink-50">
+                  <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
+                  <td className="text-xs">{r.full_name}{!r.is_primary && <span className="mr-1 text-[10px] text-ink-400">(مرافق)</span>}</td>
+                  <td className="text-xs">{r.identity_type ?? "—"} ••••{r.identity_last4 ?? ""}</td>
+                  <td className="text-xs">{r.entry_path === "office" ? "من الوثيقة" : "أدخلها الضيف"}</td>
+                  <td className="text-xs text-ink-500">{r.verified_by ?? "—"}</td>
+                  <td className="text-xs text-ink-500" dir="ltr">{r.verified_at.slice(0, 16).replace("T", " ")}</td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

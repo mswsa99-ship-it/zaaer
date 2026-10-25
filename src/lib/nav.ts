@@ -62,6 +62,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: MONEY_ROLES },
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)
   { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, area: "staff", roles: MONEY_ROLES },
+  // decision 4: today's and tomorrow's platform arrivals, matched against the platform (the supervisor's daily list)
+  { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, area: "staff", roles: ["owner", "manager", "supervisor"] },
   { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, area: "staff", roles: MONEY_ROLES },
   { path: "/staff/rooms", label: "لوحة الوحدات", icon: DoorClosed, area: "staff", roles: ALL_STAFF },
   { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
@@ -85,7 +87,10 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/availability-rules", label: "قواعد الكشف", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, hidden: true },
 
   { path: "/admin/reservations", label: "الحجوزات", icon: BookCheck, area: "admin", group: "العمليات", roles: ADMIN_OPS },
-  { path: "/admin/guests", label: "النزلاء", icon: Users, area: "admin", group: "العمليات", roles: ADMIN_OPS },
+  // decisions 2 and 21: guest profiles with search, ratings and bans (owner, manager, supervisor)
+  { path: "/admin/guests", label: "النزلاء", icon: Users, area: "admin", group: "العمليات", roles: ["owner", "manager", "supervisor"] },
+  { path: "/admin/guests/:id", label: "ملف الضيف", icon: Users, area: "admin", roles: ["owner", "manager", "supervisor"], hidden: true },
+
   { path: "/admin/finance", label: "المالية", icon: Wallet, area: "admin", group: "العمليات", roles: ADMIN_FINANCE },
   // decision 24: platform-collected payments matched to the platform's bank deposit (§16: owner, manager, finance)
   { path: "/admin/platform-payouts", label: "مطابقة المنصات", icon: HandCoins, area: "admin", group: "العمليات", roles: ADMIN_FINANCE },

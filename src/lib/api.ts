@@ -43,7 +43,9 @@ const ERROR_AR: Record<string, string> = {
   BRANCH_MISMATCH: "العنصر المختار لا ينتمي إلى نفس الفرع.",
   DUPLICATE_NAME: "الاسم مستخدم مسبقًا ضمن هذا النطاق.",
   DUPLICATE_ROOM_NUMBER: "رقم الوحدة مستخدم مسبقًا في هذا الفرع.",
-  DUPLICATE_EXTERNAL_REF: "يوجد حجز بنفس المصدر والمرجع الخارجي.",
+  DUPLICATE_EXTERNAL_REF: "رقم الحجز في المنصة مستخدم في حجز آخر أو مجموعة أخرى.",
+  GROUP_NUMBER_PENDING_MIGRATION: "مشاركة رقم المنصة بين وحدات المجموعة تنتظر لصقة المالك (الترحيل 0039)؛ حتى ذلك الحين أدخل كل وحدة حجزًا مستقلًا برقمها.",
+  SUMMARY_CHANGED: "تغيّر ملخص الإقامة منذ طباعته؛ اطبعه من جديد ووقّعه الضيف.",
   HAS_DEPENDENCIES: "لا يمكن الحذف لوجود سجلات مرتبطة؛ يمكن أرشفته.",
   HAS_OPEN_COMMITMENTS: "لا يمكن الأرشفة لوجود التزامات مفتوحة (حجوزات أو مهام).",
   HAS_FUTURE_COMMITMENTS: "لا يمكن تعطيل الوحدة لوجود حجوزات مستقبلية عليها؛ انقلها أولًا.",
@@ -85,6 +87,16 @@ const ERROR_AR: Record<string, string> = {
 };
 
 const VALIDATION_AR: Record<string, string> = {
+  // guests, platforms and the branch (0038)
+  document_matched: "أكّد «طابقتُ الوثيقة الأصلية» قبل الحفظ.",
+  acknowledgement_required: "يجب الإقرار بملخص الإقامة أولًا.",
+  platform_collects: "حدّد من يقبض المبلغ: المنصة أم المنشأة.", platform_booked_on: "تاريخ الحجز في المنصة مطلوب ولا يكون بعد اليوم.",
+  cancel_number: "رقم الإلغاء من المنصة مطلوب (حتى 60 حرفًا).", not_platform: "هذا الحجز ليس من منصة.", rating: "التقييم من 1 إلى 5.", note: "الملاحظة حتى 500 حرف.",
+  ban: "حدّد الحظر أو رفعه.", hold: "حدّد وضع الحظر أو رفعه.", guest_profile: "ملف الضيف غير موجود.",
+  name_en: "الاسم الإنجليزي للفرع مطلوب.", country: "رمز الدولة حرفان كبيران (مثل SA).", language: "اللغة الافتراضية: عربي أو إنجليزي.",
+  map_url: "رابط الموقع يجب أن يكون رابط خرائط Google يبدأ بـ https.", booking_url: "رابط منصة الحجز يجب أن يبدأ بـ https.",
+  image: "الملف ليس صورة صالحة.", image_type: "الشعار والصورة بصيغة PNG أو JPG أو WebP فقط (لا SVG).", image_too_large: "حجم الملف أكبر من المسموح (الشعار 200 كيلوبايت، الصورة 1 ميجابايت).",
+  path: "مسار غير صحيح.", is_active: "حدّد التفعيل أو التعطيل.",
   // invoices, voucher correction and the review list (0036)
   nothing_changed: "لم يتغير شيء في السند: عدّل المبلغ أو الطريقة أو رقم العملية أو الحساب أو الملاحظة.",
   bill_to_name: "اسم العميل على الفاتورة مطلوب.",
@@ -228,6 +240,9 @@ export interface GuestSession {
     has_keybox?: boolean;
     /** 0033: the first night, paid in full before the arrival */
     first_night_paid?: boolean;
+    /** 0038: the branch (for its map and platform links) and whether «ملخص الإقامة» was accepted */
+    branch_id?: string;
+    summary_accepted?: boolean;
   };
   guests: Array<{ id: string; is_primary: boolean; full_name: string; identity_type: string | null; identity_number_last4: string | null; nationality: string | null; birth_date: string | null; relationship: string | null; verification_status: string; data_submitted: boolean }>;
   access: { allowed: boolean; reasons: string[] };
@@ -253,8 +268,23 @@ export const guestApi = {
   submit: (token: string, guestId: string | null, payload: Record<string, unknown>) => rpc<{ ok: boolean; guest_id: string }>("fn_guest_submit", { p_token: token, p_guest_id: guestId, p_payload: payload }),
   submitCheckin: (token: string) => rpc<{ ok: boolean; access_status: string }>("fn_guest_submit_checkin", { p_token: token }),
   accessCode: (token: string) => rpc<{ allowed: boolean; code?: string; room_number?: string; reasons?: string[] }>("fn_guest_access_code", { p_token: token }),
-  availability: (branchId: string, date: string) => rpc<Array<{ category_id: string; category_name: string; base_price_halalas: number; base_capacity: number; max_capacity: number; available_to_show: number; total_available: number }>>("fn_get_public_availability", { p_branch: branchId, p_date: date }),
+  /** «ملخص الإقامة» (decision 19): the text the guest accepts, with its hash */
+  staySummary: (token: string) => rpc<GuestStaySummary>("fn_guest_stay_summary", { p_token: token }),
+  acknowledge: (token: string, hash: string) => rpc<{ ok: boolean; duplicate: boolean; accepted_at: string }>("fn_guest_acknowledge", { p_token: token, p_hash: hash }),
+  /** the branch as a guest page may show it (decisions 23, 31): the platform link, the map, the language, its logo and image */
+  branch: (branchId: string) => rpc<PublicBranch | null>("fn_public_branch", { p_branch: branchId }),
+  branchMedia: (branchId: string, kind: "logo" | "image") => rpc<string | null>("fn_branch_media", { p_branch: branchId, p_kind: kind }),
 };
+export interface PublicBranch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; map_url: string | null; booking_platform_url: string | null; default_language: "ar" | "en"; country_code: string; check_in_time: string; check_out_time: string; logo_version: string | null; image_version: string | null }
+export interface StaySummary {
+  language: "ar" | "en"; text: string; hash: string;
+  branch: { id: string; name: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; country_code: string; commercial_register: string | null; logo_version: string | null };
+  reservation: { id: string; internal_ref: string; external_ref: string | null; source: string | null; guest_name: string | null; category: string | null; room_number: string | null; check_in: string; check_out: string; check_in_time: string; check_out_time: string; nights: number };
+  money: { rent: number; discounts: number; extras: number; tax: number; total: number; paid: number; balance: number; deposit_required: number; deposit_held: number };
+  policies: Array<{ title: string; content: string }>;
+}
+export interface Acknowledgement { id: string; method: "electronic" | "paper"; language: string; accepted_at: string; text_hash: string; recorded_by: string | null }
+export type GuestStaySummary = StaySummary & { accepted_at: string | null; method: "electronic" | "paper" | null; current: boolean };
 
 // ---------------------------------------------------------------------------
 // Staff
@@ -570,8 +600,24 @@ export const opsApi = {
   adjustPrice: (id: string, kind: "discount" | "adjustment" | "penalty" | "addon", amountHalalas: number, description: string, reason: string, version?: number) =>
     rpc<{ ok: boolean; finance: Finance }>("fn_staff_adjust_price", { p_reservation: id, p_kind: kind, p_amount_halalas: amountHalalas, p_description: description, p_reason: reason, p_expected_version: version ?? null }),
   addService: (id: string, serviceId: string, quantity = 1, note?: string) => rpc<{ ok: boolean; finance: Finance; late_checkout_until?: string | null }>("fn_staff_add_service", { p_reservation: id, p_service: serviceId, p_quantity: quantity, p_note: note ?? null }),
-  cancelReservation: (id: string, reason: string, source: "staff" | "ota" | "guest" = "staff", externalEventId?: string) =>
-    rpc<{ ok: boolean; duplicate: boolean; refund_required_separately?: boolean }>("fn_staff_cancel_reservation", { p_reservation: id, p_reason: reason, p_source: source, p_external_event_id: externalEventId ?? null }),
+  /** cancelling (decision 4): a platform's booking with the platform's cancellation number (once), the whole group at once; never a refund by itself */
+  cancel: (p: { reservation_id: string; reason: string; cancel_number?: string | null; by_platform?: boolean; whole_group?: boolean }) =>
+    rpc<{ ok: boolean; duplicate: boolean; cancelled: number; status: string; refund_required_separately?: boolean; platform_collected?: boolean }>("fn_staff_cancel", { p }),
+  /** the office path of guest data (decision 2): from the original document, verified at once; a correction with a reason */
+  enterGuest: (p: { reservation_id: string; guest_id?: string | null; full_name: string; identity_type: string; identity_number: string; identity_issue_number?: string | null; nationality: string; birth_date: string; phone?: string | null; relationship?: string | null; document_matched: boolean; reason?: string | null }) =>
+    rpc<{ ok: boolean; guest_id: string; identity_status: string }>("fn_staff_enter_guest", { p }),
+  /** a hold on one booking (decision 21): placed by the supervisor and up, lifted by the owner or a manager */
+  setHold: (reservationId: string, hold: boolean, reason: string) => rpc<{ ok: boolean; duplicate: boolean }>("fn_staff_set_hold", { p: { reservation_id: reservationId, hold, reason } }),
+  /** «ملخص الإقامة» to print, with the acknowledgements on file; the paper signature recorded against the printed text */
+  staySummary: (reservationId: string) => rpc<StaySummary & { acknowledgements: Acknowledgement[] }>("fn_stay_summary", { p_reservation: reservationId }),
+  recordPaperAck: (reservationId: string, textHash: string) => rpc<{ ok: boolean; duplicate: boolean; accepted_at: string }>("fn_staff_record_paper_ack", { p: { reservation_id: reservationId, text_hash: textHash } }),
+  /** the platforms' daily list (decision 4): today's and tomorrow's arrivals, matched against the platform */
+  platformCheckList: (branchId: string, date?: string | null) => rpc<{ date: string; rows: PlatformCheckRow[] }>("fn_platform_check_list", { p_branch: branchId, p_date: date ?? null }),
+  platformMarkChecked: (reservationId: string, checked = true) => rpc<{ ok: boolean; units: number }>("fn_platform_mark_checked", { p: { reservation_id: reservationId, checked } }),
+  /** the group's page (decision 69): every unit with its money, and the totals */
+  groupSummary: (reservationId: string) => rpc<GroupSummary | null>("fn_reservation_group_summary", { p_reservation: reservationId }),
+  /** the red alerts, holds and ratings of a branch's current bookings */
+  flags: (branchId: string) => rpc<Record<string, { ban: boolean; hold: boolean; rating: number | null }>>("fn_reservation_flags", { p_branch: branchId }),
   noShow: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_staff_no_show", { p_reservation: id, p_reason: reason }),
   detail: (id: string) => rpc<ReservationDetail | null>("fn_reservation_detail", { p_reservation: id }),
   list: (branchId: string, filters: Record<string, unknown>, limit = 50, offset = 0) => rpc<{ total: number; rows: ReservationRow[] }>("fn_reservation_list", { p_branch: branchId, p_filters: filters, p_limit: limit, p_offset: offset }),
@@ -611,6 +657,8 @@ export interface ReservationRow {
   guest_name: string | null; room_number: string | null; source_name: string | null; category_name: string | null;
   total_halalas: number; paid_halalas: number; balance_due_halalas: number; deposit_balance_halalas: number;
   payment_status: string; identity_status: string; access_status: string; created_at: string;
+  /** 0038: the group, the hold, the ban (money roles) and the main guest's rating (owner, manager, supervisor) */
+  group_ref?: string | null; hold?: boolean; ban?: boolean | null; rating?: number | null;
 }
 export interface ReservationDetail {
   reservation: Record<string, unknown> & { id: string; internal_ref: string; status: string; check_in: string; check_out: string; version: number; branch_id: string; room_id: string | null; room_category_id: string | null; adults: number; companions: number; nightly_rate_halalas: number; external_ref: string | null; actual_check_in: string | null; actual_check_out: string | null; cancel_reason: string | null };
@@ -618,7 +666,14 @@ export interface ReservationDetail {
   source: { name: string; code: string; kind: string } | null;
   category: string | null;
   room: { id: string; room_number: string; status: string; cleanliness: string } | null;
-  guests: Array<{ id: string; is_primary: boolean; full_name: string; identity_type: string | null; identity_number_last4: string | null; nationality: string | null; phone: string | null; verification_status: string; data_submitted: boolean }>;
+  guests: Array<{ id: string; is_primary: boolean; full_name: string; identity_type: string | null; identity_number_last4: string | null; nationality: string | null; phone: string | null; relationship?: string | null; birth_date?: string | null; verification_status: string; data_submitted: boolean;
+    entry_path?: "guest" | "office" | null; verified_at?: string | null; verified_by?: string | null; profile_id?: string | null; profile_mismatch?: boolean }>;
+  /** phase 5 (0038): the active bans matching the guests, the main guest's rating, the hold, the platform's fields, the stay summary's acknowledgements */
+  bans?: Array<{ ban_id: string; name: string; reason: string; since: string; matched_by: string[] }> | null;
+  guest_profile?: { id: string; rating: number | null; rating_note: string | null; rated_at: string | null; rated_by: string | null; stays: number } | null;
+  hold?: { reason: string | null; at: string | null; by: string | null } | null;
+  platform?: { booked_on: string | null; collects: boolean | null; verified_at: string | null; verified_by: string | null; cancel_reference: string | null } | null;
+  acknowledgements?: Acknowledgement[] | null;
   allocations: Array<{ id: string; room_number: string; from_date: string; to_date: string; status: string; reason: string | null; created_at: string }>;
   charges: Array<{ id: string; kind: string; description: string; quantity: number; unit_price_halalas: number; total_halalas: number; invoice_id: string | null; reason: string | null; created_at: string; invoiced_halalas?: number; service_from?: string; service_to?: string }> | null;
   vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; method: string; account_id: string | null; payout_id: string | null; status: string; reference: string | null; note: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null;
@@ -668,6 +723,40 @@ export const reviewApi = {
   monitorsIfDue: (branchId: string) => rpc<{ ran: boolean; last_run_at: string | null; found?: Record<string, number>; summary: ReviewSummary | null }>("fn_monitors_if_due", { p_branch: branchId }),
 };
 
+export interface PlatformCheckRow { id: string; internal_ref: string; external_ref: string | null; source_name: string; source_code: string; status: string; check_in: string; check_out: string; nights: number; guests: number; guest_name: string | null; group_ref: string | null; platform_collects: boolean | null; platform_booked_on: string | null; total_halalas: number; paid_halalas: number; cancel_reference: string | null; verified_at: string | null; verified_by: string | null }
+export interface GroupSummary {
+  group_ref: string; external_ref: string | null; source_name: string | null;
+  units: Array<{ id: string; internal_ref: string; status: string; check_in: string; check_out: string; adults: number; companions: number; room_number: string | null; category_name: string | null; total_halalas: number | null; paid_halalas: number | null; balance_due_halalas: number | null; deposit_balance_halalas: number | null }>;
+  totals: { units: number; active_units?: number; total_halalas?: number; paid_halalas?: number; balance_due_halalas?: number; deposit_balance_halalas?: number };
+}
+export interface GuestProfileRow { id: string; full_name: string; phone_masked: string | null; nationality: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; stays: number; last_check_in: string | null; banned: boolean; ban_reason: string | null; duplicates: number; created_at: string }
+export interface GuestProfileDetail {
+  profile: { id: string; full_name: string; phone: string | null; nationality: string | null; email: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; rated_at: string | null; rated_by: string | null; created_at: string };
+  ban: { id: string; reason: string; since: string; own: boolean; by: string | null } | null;
+  ban_history: Array<{ id: string; reason: string; since: string; by: string | null; lifted_at: string | null; lifted_by: string | null; lift_reason: string | null }>;
+  stays: Array<{ reservation_id: string; internal_ref: string; external_ref: string | null; status: string; check_in: string; check_out: string; branch_name: string | null; is_primary: boolean; room_number: string | null; category_name: string | null; source_name: string | null }>;
+  duplicates: Array<{ id: string; full_name: string; match: "identity" | "phone"; stays: number }>;
+  can_ban: boolean;
+}
+/** Guest profiles (decisions 2, 21): search, one profile with its stays, the rating, the ban. */
+export const guestProfileApi = {
+  list: (p: { q?: string; filter?: "all" | "banned" | "duplicates" | "rated" | "low"; limit?: number; offset?: number }) => rpc<{ total: number; rows: GuestProfileRow[] }>("fn_guest_profiles", { p }),
+  get: (id: string) => rpc<GuestProfileDetail>("fn_guest_profile", { p_id: id }),
+  rate: (profileId: string, rating: number | null, note: string | null) => rpc<{ ok: boolean; rating: number | null }>("fn_guest_rate", { p: { profile_id: profileId, rating, note } }),
+  ban: (profileId: string, reason: string) => rpc<{ ok: boolean; duplicate: boolean; ban_id?: string }>("fn_guest_ban", { p: { profile_id: profileId, ban: true, reason } }),
+  unban: (profileId: string, reason: string) => rpc<{ ok: boolean; duplicate: boolean; ban_id?: string }>("fn_guest_ban", { p: { profile_id: profileId, ban: false, reason } }),
+};
+/** The owner's and the manager's reports of phase 5 (decisions 2, 4). */
+export const guestReportsApi = {
+  lateEntries: (branchId: string, from: string, to: string, minDays = 1) => rpc<{ platform_bookings: number; late: number; after_arrival: number; by_staff: Array<{ staff: string; count: number; max_lag: number }>; rows: Array<{ id: string; internal_ref: string; external_ref: string | null; source_name: string | null; booked_on: string; entered_on: string; entered_at: string; lag_days: number; check_in: string; after_arrival: boolean; status: string; created_by: string | null }> }>("fn_reports_late_entries", { p_branch: branchId, p_from: from, p_to: to, p_min_days: minDays }),
+  identities: (branchId: string, from: string, to: string, path: "office" | "guest" | "all" = "office") => rpc<{ count: number; by_staff: Array<{ staff: string; office: number; guest: number }>; rows: Array<{ guest_id: string; reservation_id: string; internal_ref: string; full_name: string; is_primary: boolean; identity_type: string | null; identity_last4: string | null; entry_path: string | null; entered_by: string | null; entered_at: string | null; verified_by: string | null; verified_at: string }> }>("fn_reports_identities", { p_branch: branchId, p_from: from, p_to: to, p_path: path }),
+};
+/** The branch's media (decision 31): the logo (≤200 KB) and the image (≤1 MB), kept with the branch's settings. */
+export const branchMediaApi = {
+  set: (branchId: string, kind: "logo" | "image", dataBase64: string | null) => rpc<{ ok: boolean; changed: boolean; media: { mime: string; size_bytes: number; sha256: string } | null }>("fn_admin_set_branch_media", { p: { branch_id: branchId, kind, data_base64: dataBase64 ?? "" } }),
+  info: (branchId: string) => rpc<Record<"logo" | "image", { mime: string; size_bytes: number; updated_at: string; updated_by: string | null } | undefined>>("fn_admin_branch_media_info", { p_branch: branchId }),
+  setSourceActive: (id: string, isActive: boolean, reason?: string | null) => rpc<{ ok: boolean; changed: boolean }>("fn_admin_set_source_active", { p: { id, is_active: isActive, reason: reason ?? null } }),
+};
 export interface UnitCard {
   room_id: string; room_number: string; category: string; block: string | null; floor: string | null; is_active: boolean; status: string; cleanliness: string;
   open_tasks: number; open_maintenance: number; keybox_ready: boolean;

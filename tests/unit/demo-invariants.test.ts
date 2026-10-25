@@ -191,7 +191,7 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
       const a = await accountsOf(b.id);
       for (const kind of ["cash_box", "bank_account"]) expect(a.filter((x) => x.kind === kind && x.is_default && !x.archived_at), `${b.id} ${kind}`).toHaveLength(1);
     }
-    const nb = await rpc<any>("fn_admin_upsert_branch", { p: { name_ar: "فرع اختبار المال" } });
+    const nb = await rpc<any>("fn_admin_upsert_branch", { p: { name_ar: "فرع اختبار المال", name_en: "Money test branch" } });
     const a = await accountsOf(nb.id);
     expect(a.map((x) => x.kind).sort()).toEqual(["bank_account", "cash_box"]);
     expect(a.every((x) => x.is_default)).toBe(true);
@@ -377,7 +377,7 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
   });
 
   it("MC13b a new branch starts at zero tax, a 50.00 deposit, a cash box and a bank account", async () => {
-    const nb = await rpc<any>("fn_admin_upsert_branch", { p: { name_ar: "فرع جديد للضريبة" } });
+    const nb = await rpc<any>("fn_admin_upsert_branch", { p: { name_ar: "فرع جديد للضريبة", name_en: "Tax test branch" } });
     const row = (await client.from("branches").select("tax_rate_bp, prices_include_tax, default_deposit_halalas").eq("id", nb.id).maybeSingle()).data as any;
     expect(row).toMatchObject({ tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000 });
     expect((await accountsOf(nb.id)).length).toBe(2);
@@ -421,20 +421,31 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
   });
 });
 
-describe("G01/G03 — who may change the booking platforms (0029, §16)", () => {
-  it("T30 every staff member reads the platforms; only the owner or a manager changes one", async () => {
-    const src = ((await client.from("booking_sources").select("id, booking_url").limit(1).maybeSingle()).data as any);
-    for (const email of ["housekeeping@demo.sa", "reception@demo.sa", "finance@demo.sa"]) {
+describe("G01/G03 — who may change the booking platforms (0029 §16, 0038: decision 22)", () => {
+  it("T30 every staff member reads the platforms; nobody writes the table; only the owner or a manager switches one on or off, with an audit row", async () => {
+    const src = ((await client.from("booking_sources").select("id, code, is_active").eq("code", "agoda").maybeSingle()).data as any);
+    for (const email of ["housekeeping@demo.sa", "reception@demo.sa", "finance@demo.sa", "manager@demo.sa", "owner@demo.sa"]) {
       await login(email);
-      expect(((await client.from("booking_sources").select("id")).data as any[]).length, email).toBeGreaterThan(0);
-      const upd = await client.from("booking_sources").update({ booking_url: "https://elsewhere.test" }).eq("id", src.id).select("id");
-      expect((upd.data as any[]).length, email).toBe(0);
+      expect(((await client.from("booking_sources").select("id")).data as any[]).length, email).toBe(12);
+      const upd = await client.from("booking_sources").update({ is_active: false }).eq("id", src.id).select("id");
+      expect((upd.data as any[]).length, email).toBe(0);                       // 0038 revoked the table's writes for everyone
       const ins = await client.from("booking_sources").insert({ name: "منصة دخيلة" });
       expect(ins.error?.code, email).toBe("42501");
     }
+    for (const email of ["housekeeping@demo.sa", "reception@demo.sa", "finance@demo.sa"]) {
+      await login(email);
+      const { error } = await client.rpc("fn_admin_set_source_active", { p: { id: src.id, is_active: false, reason: "اختبار" } });
+      expect(error?.message, email).toMatch(/^FORBIDDEN/);
+    }
     await login("manager@demo.sa");
-    const ok = await client.from("booking_sources").update({ booking_url: "https://example.test/book" }).eq("id", src.id).select("id, booking_url");
-    expect((ok.data as any[])[0]).toMatchObject({ id: src.id, booking_url: "https://example.test/book" });
+    expect(await rpc<any>("fn_admin_set_source_active", { p: { id: src.id, is_active: false, reason: "لا نعمل مع هذه المنصة" } })).toMatchObject({ ok: true, changed: true });
+    expect(((await client.from("booking_sources").select("is_active").eq("id", src.id).maybeSingle()).data as any).is_active).toBe(false);
+    expect(await rpc<any>("fn_admin_set_source_active", { p: { id: src.id, is_active: false } })).toMatchObject({ ok: true, changed: false });   // already off: nothing to record
+    const trail = (await client.from("audit_events").select("action, details").eq("entity_id", src.id)).data as any[];
+    expect(trail.filter((a) => a.action === "source.disabled")).toHaveLength(1);
+    expect(trail[0].details).toMatchObject({ before: { code: "agoda", is_active: true }, after: { code: "agoda", is_active: false }, reason: "لا نعمل مع هذه المنصة" });
+    await login("owner@demo.sa");
+    expect(await rpc<any>("fn_admin_set_source_active", { p: { id: src.id, is_active: true } })).toMatchObject({ ok: true, changed: true });
   });
 });
 
@@ -600,7 +611,8 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
   const prepare = async (id: string, ref: string, shomoos = true) => {
     const { token } = await rpc<any>("fn_guest_lookup", { p_external_ref: ref, p_phone_last4: "0000" });
     const g = (await rpc<any>("fn_guest_session", { p_token: token })).guests[0];
-    await rpc("fn_guest_submit", { p_token: token, p_guest_id: g.id, p_payload: { full_name: "ضيف اختبار الإقامة", identity_type: "national_id", identity_number: "1012345678", nationality: "سعودي", birth_date: "1990-01-01", consent: "true" } });
+    const ack = (await rpc<any>("fn_guest_stay_summary", { p_token: token })).hash;
+    await rpc("fn_guest_submit", { p_token: token, p_guest_id: g.id, p_payload: { full_name: "ضيف اختبار الإقامة", identity_type: "national_id", identity_number: "1012345678", nationality: "سعودي", birth_date: "1990-01-01", consent: "true", ack_hash: ack } });
     await rpc("fn_staff_approve_identity", { p_guest_id: g.id, p_approve: true });
     if (shomoos) {
       await rpc("fn_staff_shomoos", { p: { reservation_id: id, action: "register", reference: "SHM-" + ref.slice(-6), all_guests: true } });
@@ -922,7 +934,8 @@ describe("G10/G13/G14/G15/G22 — invoices, voucher correction and the review li
     const r = await book(room, 0, nights, "ضيف المغادرة");
     const { token } = await rpc<any>("fn_guest_lookup", { p_external_ref: r.internal_ref, p_phone_last4: "0000" });
     const g = (await rpc<any>("fn_guest_session", { p_token: token })).guests[0];
-    await rpc("fn_guest_submit", { p_token: token, p_guest_id: g.id, p_payload: { full_name: "ضيف اختبار الفواتير", identity_type: "national_id", identity_number: "1012345678", nationality: "سعودي", birth_date: "1990-01-01", consent: "true" } });
+    const ack = (await rpc<any>("fn_guest_stay_summary", { p_token: token })).hash;
+    await rpc("fn_guest_submit", { p_token: token, p_guest_id: g.id, p_payload: { full_name: "ضيف اختبار الفواتير", identity_type: "national_id", identity_number: "1012345678", nationality: "سعودي", birth_date: "1990-01-01", consent: "true", ack_hash: ack } });
     await rpc("fn_staff_approve_identity", { p_guest_id: g.id, p_approve: true });
     await rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "register", reference: "SHM-" + r.internal_ref.slice(-6), all_guests: true } });
     await rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "accept" } });
@@ -1193,5 +1206,375 @@ describe("G10/G13/G14/G15/G22 — invoices, voucher correction and the review li
     expect((await rpc<any>("fn_monitors_if_due", { p_branch: A })).found).toEqual({});   // not again while it is open
     await login("manager@demo.sa");
     expect(await fails(rpc("fn_monitors_if_due", { p_branch: A }))).toMatch(/^FORBIDDEN/);
+  });
+});
+
+// The demo facet of tests/sql/guests_platforms_tests.sql (0038): the same rules, the same refusals.
+describe("G01/G02/G03/G19/G22 — guests, platforms and the website in the demo (0038: decisions 2, 4, 19, 21, 22, 23, 31, 69)", () => {
+  const A = "00000000-0000-0000-0000-000000000010";   // the seeded Riyadh branch (its supervisor works there)
+  const riyadh = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  const day = (n: number) => { const d = new Date(riyadh() + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  let CAT: string; let OTA: string; let DIRECT: string;
+  const fails = async (p: Promise<unknown>) => { try { await p; return ""; } catch (e) { return (e as Error).message; } };
+  const get = async (table: string, id: string) => (await client.from(table).select("*").eq("id", id).maybeSingle()).data as any;
+  const fin = (id: string) => rpc<any>("fn_reservation_finance", { p_reservation: id });
+  const detail = (id: string) => rpc<any>("fn_reservation_detail", { p_reservation: id });
+  const guestsOf = async (id: string) => ((await client.from("reservation_guests").select("*").eq("reservation_id", id)).data as any[]).sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
+  const trail = async (entityId: string, action: string) => ((await client.from("audit_events").select("action, details").eq("entity_id", entityId)).data as any[]).filter((a) => a.action === action);
+  const review = async (kind: string) => ((await rpc<any>("fn_review_list", { p: { kind, status: "all", limit: 50 } })).items ?? []) as any[];
+  /** a booking at the reception (no platform number) */
+  const book = (from: number, to: number, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: CAT, source_id: DIRECT, check_in: day(from), check_out: day(to), guest_name: "ضيف الاختبار الخامس", guest_phone: "0500000000", adults: 1, companions: 0, ...extra } });
+  /** a platform's booking: its number, who collects and when it was booked there (decision 4) */
+  const ota = (from: number, to: number, ref: string, collects: boolean, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: CAT, source_id: OTA, check_in: day(from), check_out: day(to), guest_name: "ضيف المنصة", guest_phone: "0500000000", adults: 1, companions: 0, external_ref: ref, platform_collects: collects, platform_booked_on: day(0), ...extra } });
+  const doc = (res: string, over: Record<string, unknown> = {}) => ({ reservation_id: res, document_matched: true, full_name: "سعد محمد العتيبي", identity_type: "national_id", identity_number: "1098765432", nationality: "سعودي", birth_date: "1988-05-04", ...over });
+  const token = async (ref: string, last4 = "0000") => (await rpc<any>("fn_guest_lookup", { p_external_ref: ref, p_phone_last4: last4 })).token as string;
+  const cancel = (id: string, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_cancel", { p: { reservation_id: id, reason: "ألغاه الضيف على المنصة", ...extra } });
+
+  beforeEach(async () => {
+    CAT = (await rpc<any>("fn_admin_upsert_room_category", { p: { branch_id: A, name_ar: "نوع الضيوف", base_capacity: 2, max_capacity: 3, base_price_halalas: 10000 } })).id;
+    for (const n of ["GU-1", "GU-2", "GU-3", "GU-4", "GU-5"]) await rpc("fn_admin_upsert_room", { p: { branch_id: A, category_id: CAT, room_number: n } });
+    const srcs = (await client.from("booking_sources").select("id, code")).data as any[];
+    OTA = srcs.find((s) => s.code === "booking_com").id; DIRECT = srcs.find((s) => s.code === "reception").id;
+  });
+
+  it("GU01 the twelve sources of decision 22, each with its kind and whether the platform's number is needed; Booking Engine off", async () => {
+    const srcs = (await client.from("booking_sources").select("code, kind, external_reference_required, is_active")).data as any[];
+    expect(srcs.map((s) => s.code).sort()).toEqual(["agoda", "airbnb", "airport", "almosafer", "booking_com", "booking_engine", "expedia", "gathern", "hotels_com", "jathr_inn", "reception", "trip_com"]);
+    expect(srcs.filter((s) => s.kind === "external")).toHaveLength(10);
+    expect(srcs.find((s) => s.code === "airport")).toMatchObject({ kind: "external", external_reference_required: false, is_active: true });
+    expect(srcs.find((s) => s.code === "reception")).toMatchObject({ kind: "direct", external_reference_required: false });
+    expect(srcs.find((s) => s.code === "booking_engine")).toMatchObject({ kind: "direct", is_active: false });
+    expect(srcs.filter((s) => s.kind === "external" && s.code !== "airport").every((s) => s.external_reference_required)).toBe(true);
+  });
+
+  it("GU02 the office path (decision 2): «طابقتُ الوثيقة الأصلية» is required; the guest is verified at once with who and when, a profile is linked and the trail is masked", async () => {
+    await login("reception@demo.sa");
+    const r = await book(10, 12);
+    const [pg] = await guestsOf(r.id);
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id, document_matched: false }) }))).toBe("VALIDATION: document_matched");
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id, full_name: "سعد العتيبي" }) }))).toBe("VALIDATION: full_name_three_parts");
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id, identity_number: "3098765432" }) }))).toBe("VALIDATION: identity_number_format");
+    const out = await rpc<any>("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id }) });
+    expect(out).toMatchObject({ ok: true, guest_id: pg.id, identity_status: "verified" });
+    const g = await get("reservation_guests", pg.id);
+    expect(g).toMatchObject({ verification_status: "verified", entry_path: "office", identity_number_last4: "5432", full_name: "سعد محمد العتيبي" });
+    expect(g.entered_by).toBeTruthy(); expect(g.entered_at).toBeTruthy(); expect(g.verified_by).toBe(g.entered_by); expect(g.verified_at).toBeTruthy();
+    expect(g.identity_fingerprint).toMatch(/^fp_sa_/); expect(JSON.stringify(g)).not.toContain("1098765432");   // the number itself is never stored
+    expect((await get("guest_profiles", g.guest_profile_id))).toMatchObject({ identity_last4: "5432", identity_type: "national_id" });
+    const [a] = await trail(r.id, "guest.entered_from_document");
+    expect(a.details.after).toMatchObject({ identity_number: "••••5432", birth_year: 1988, entry_path: "office" });
+    expect(JSON.stringify(a.details)).not.toContain("1098765432"); expect(JSON.stringify(a.details)).not.toContain("1988-05-04");
+    // the same document twice in one stay is refused; a companion beyond the booking's count too
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { full_name: "مرافق سعد العتيبي" }) }))).toBe("DUPLICATE_GUEST");
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { full_name: "مرافق سعد العتيبي", identity_number: "1011111111" }) }))).toBe("GUEST_LIMIT_REACHED");
+    for (const email of ["housekeeping@demo.sa", "finance@demo.sa"]) { await login(email); expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id }) })), email).toMatch(/^FORBIDDEN/); }
+  });
+
+  it("GU03 a correction needs a reason; before and after are masked; it goes to the owner's review list; an empty number keeps the one on file", async () => {
+    await login("reception@demo.sa");
+    const r = await book(10, 12); const [pg] = await guestsOf(r.id);
+    await rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id }) });
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id, birth_date: "1989-05-04" }) }))).toBe("VALIDATION: reason");
+    await rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id, birth_date: "1989-05-04", identity_number: "", reason: "خطأ في سنة الميلاد" }) });
+    const g = await get("reservation_guests", pg.id);
+    expect(g).toMatchObject({ birth_date: "1989-05-04", identity_number_last4: "5432", verification_status: "verified" });
+    const [a] = await trail(r.id, "guest.corrected");
+    expect(a.details).toMatchObject({ before: { birth_year: 1988, identity_number: "••••5432" }, after: { birth_year: 1989, identity_number: "••••5432" }, reason: "خطأ في سنة الميلاد" });
+    expect(await fails(rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id, identity_type: "passport", identity_number: "", reason: "جواز" }) }))).toBe("VALIDATION: identity_number_format");
+    await login("owner@demo.sa");
+    const items = (await review("guest_corrected")).filter((i) => i.entity_id === pg.id);
+    expect(items).toHaveLength(1); expect(items[0].reason).toBe("خطأ في سنة الميلاد"); expect(JSON.stringify(items[0])).not.toContain("1098765432");
+  });
+
+  it("GU04 the guest's own entry is the guest path and waits for the supervisor; a second profile with the same document is flagged, never merged; search by name, phone, document and last four", async () => {
+    await login("reception@demo.sa");
+    const r = await book(10, 12); const [pg] = await guestsOf(r.id);
+    const tok = await token(r.internal_ref);
+    const ack = (await rpc<any>("fn_guest_stay_summary", { p_token: tok })).hash;
+    await rpc("fn_guest_submit", { p_token: tok, p_guest_id: pg.id, p_payload: { full_name: "سعد محمد العتيبي", identity_type: "national_id", identity_number: "1098765432", nationality: "سعودي", birth_date: "1988-05-04", consent: "true", ack_hash: ack } });
+    let g = await get("reservation_guests", pg.id);
+    expect(g).toMatchObject({ entry_path: "guest", verification_status: "data_submitted", data_submitted: true, identity_number_last4: "5432" });
+    expect((await get("reservations", r.id)).identity_status).toBe("pending_supervisor");
+    expect(g.identity_fingerprint).toMatch(/^fp_sa_/); expect(JSON.stringify(g)).not.toContain("1098765432");
+    await rpc("fn_staff_approve_identity", { p_guest_id: pg.id, p_approve: true });
+    g = await get("reservation_guests", pg.id); expect(g.verification_status).toBe("verified"); expect(g.verified_by).toBeTruthy();
+    // another booking with another phone and the same document: its own profile, flagged as a duplicate, never merged
+    const r2 = await book(20, 22, { guest_phone: "0509999999", guest_name: "سعد م العتيبي" }); const [pg2] = await guestsOf(r2.id);
+    await rpc("fn_staff_enter_guest", { p: doc(r2.id, { guest_id: pg2.id }) });
+    const g2 = await get("reservation_guests", pg2.id);
+    expect(g2.guest_profile_id).not.toBe(g.guest_profile_id);
+    const prof = await rpc<any>("fn_guest_profile", { p_id: g2.guest_profile_id });
+    expect(prof.duplicates.map((d: any) => d.id)).toContain(g.guest_profile_id); expect(prof.duplicates[0].match).toBe("identity");
+    for (const q of ["سعد", "0509999999", "1098765432", "5432"]) expect((await rpc<any>("fn_guest_profiles", { p: { q } })).rows.map((x: any) => x.id), q).toContain(g2.guest_profile_id);
+    expect((await rpc<any>("fn_guest_profiles", { p: { filter: "duplicates" } })).rows.map((x: any) => x.id)).toContain(g2.guest_profile_id);
+    expect(JSON.stringify(await rpc<any>("fn_guest_profiles", { p: { q: "سعد" } }))).not.toContain("0509999999");   // phones are masked in the list
+    // the owner's report of identities approved at the office
+    await login("owner@demo.sa");
+    const rep = await rpc<any>("fn_reports_identities", { p_branch: A, p_from: day(-1), p_to: day(1), p_path: "office" });
+    expect(rep.rows.map((x: any) => x.guest_id)).toContain(pg2.id); expect(rep.rows.map((x: any) => x.guest_id)).not.toContain(pg.id);
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_reports_identities", { p_branch: A, p_from: day(-1), p_to: day(1) }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("GU05 a ban (decision 21): a manager with a reason; the guest's other booking shows the alert and cannot arrive; a new profile with the phone and a companion with the document match; the guest's page says only «يرجى مراجعة الاستقبال»; the owner lifts it with a reason", async () => {
+    await login("reception@demo.sa");
+    const r = await book(0, 2, { guest_phone: "0507777777" }); const [pg] = await guestsOf(r.id);
+    await rpc("fn_staff_enter_guest", { p: doc(r.id, { guest_id: pg.id }) });
+    const profile = (await get("reservation_guests", pg.id)).guest_profile_id as string;
+    expect(await fails(rpc("fn_guest_ban", { p: { profile_id: profile, ban: true, reason: "إتلاف" } }))).toMatch(/^FORBIDDEN/);
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_guest_ban", { p: { profile_id: profile, ban: true } }))).toBe("VALIDATION: reason");
+    const b = await rpc<any>("fn_guest_ban", { p: { profile_id: profile, ban: true, reason: "إتلاف الوحدة في إقامة سابقة" } });
+    expect(b).toMatchObject({ ok: true, duplicate: false });
+    expect(await rpc<any>("fn_guest_ban", { p: { profile_id: profile, ban: true, reason: "مرة أخرى" } })).toMatchObject({ duplicate: true });
+    const d = await detail(r.id);
+    expect(d.bans).toHaveLength(1); expect(d.bans[0].matched_by).toEqual(["identity", "phone", "profile"]);
+    expect((await rpc<any>("fn_reservation_flags", { p_branch: A }))[r.id]).toMatchObject({ ban: true });
+    const arrive = await rpc<any>("fn_staff_check_in", { p: { reservation_id: r.id } });
+    expect(arrive.ok).toBe(false); expect(arrive.reasons).toContain("الضيف محظور من الإدارة");
+    // the guest's own page masks the reason
+    const tok = await token(r.internal_ref, "7777");
+    const s = await rpc<any>("fn_guest_session", { p_token: tok });
+    expect(s.access.reasons).toContain("يرجى مراجعة الاستقبال"); expect(JSON.stringify(s)).not.toContain("محظور");
+    // a new profile with the same phone, and a companion entered with the banned document
+    await login("reception@demo.sa");
+    const r2 = await book(30, 32, { guest_phone: "0507777777", new_profile: true, companions: 1 });
+    expect((await detail(r2.id)).bans[0].matched_by).toEqual(["phone"]);   // a fresh profile: nothing else to match
+    const r3 = await book(40, 42, { guest_phone: "0501234567", new_profile: true, companions: 1 });
+    expect((await detail(r3.id)).bans).toEqual([]);
+    await rpc("fn_staff_enter_guest", { p: doc(r3.id, { full_name: "مرافق سعد العتيبي", relationship: "brother" }) });
+    expect((await detail(r3.id)).bans[0].matched_by).toContain("identity");
+    // lifting: the owner with a reason; the alert and the block go, the history stays
+    await login("owner@demo.sa");
+    expect(await fails(rpc("fn_guest_ban", { p: { profile_id: profile, ban: false } }))).toBe("VALIDATION: reason");
+    await rpc("fn_guest_ban", { p: { profile_id: profile, ban: false, reason: "سدّد قيمة الأضرار" } });
+    expect((await detail(r.id)).bans).toEqual([]); expect((await detail(r3.id)).bans).toEqual([]);
+    const p = await rpc<any>("fn_guest_profile", { p_id: profile });
+    expect(p.ban).toBeNull(); expect(p.ban_history).toHaveLength(1); expect(p.ban_history[0]).toMatchObject({ lift_reason: "سدّد قيمة الأضرار", reason: "إتلاف الوحدة في إقامة سابقة" });
+    expect((await review("guest_banned")).some((i) => i.entity_id === profile)).toBe(true); expect((await review("guest_unbanned")).some((i) => i.entity_id === profile)).toBe(true);
+  });
+
+  it("GU06 a rating 1–5 with an internal note by a supervisor, seen on the next booking; housekeeping cannot rate; a hold on one booking blocks the arrival and only a manager lifts it", async () => {
+    await login("reception@demo.sa");
+    const r = await book(0, 2, { guest_phone: "0506666666" }); const [pg] = await guestsOf(r.id);
+    const profile = pg.guest_profile_id as string;
+    expect(await fails(rpc("fn_guest_rate", { p: { profile_id: profile, rating: 6 } }))).toBe("VALIDATION: rating");
+    expect(await fails(rpc("fn_guest_rate", { p: { profile_id: profile, rating: 0 } }))).toBe("VALIDATION: rating");
+    await rpc("fn_guest_rate", { p: { profile_id: profile, rating: 2, note: "يترك الوحدة غير مرتبة" } });
+    const r2 = await book(10, 12, { guest_phone: "0506666666" });
+    expect((await detail(r2.id)).guest_profile).toMatchObject({ id: profile, rating: 2, rating_note: "يترك الوحدة غير مرتبة" });
+    expect((await rpc<any>("fn_reservation_flags", { p_branch: A }))[r2.id]).toMatchObject({ rating: 2 });
+    await login("housekeeping@demo.sa");
+    expect(await fails(rpc("fn_guest_rate", { p: { profile_id: profile, rating: 5 } }))).toMatch(/^FORBIDDEN/);
+    // the hold
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_staff_set_hold", { p: { reservation_id: r.id, hold: true } }))).toBe("VALIDATION: reason");
+    await rpc("fn_staff_set_hold", { p: { reservation_id: r.id, hold: true, reason: "بلاغ من الأمن" } });
+    expect((await rpc<any>("fn_staff_check_in", { p: { reservation_id: r.id } })).reasons).toContain("يوجد حظر أمني على الحجز");
+    expect((await detail(r.id)).hold).toMatchObject({ reason: "بلاغ من الأمن" });
+    expect(await fails(rpc("fn_staff_set_hold", { p: { reservation_id: r.id, hold: false, reason: "انتهى" } }))).toMatch(/^FORBIDDEN/);
+    await login("manager@demo.sa");
+    await rpc("fn_staff_set_hold", { p: { reservation_id: r.id, hold: false, reason: "اتضح أنه بلاغ خاطئ" } });
+    expect((await detail(r.id)).hold).toBeNull();
+    expect((await trail(r.id, "reservation.hold_lifted"))[0].details.reason).toBe("اتضح أنه بلاغ خاطئ");
+    await login("owner@demo.sa");
+    expect((await review("security_hold")).some((i) => i.reservation_id === r.id)).toBe(true);
+  });
+
+  it("GU07 a platform's booking (decision 4) says who collects and when it was booked there; the platform collecting makes its receipt «آجل عبر المنصات» once; the property collecting makes none", async () => {
+    await login("reception@demo.sa");
+    expect(await fails(ota(80, 82, "PF-0", true, { platform_collects: undefined }))).toBe("VALIDATION: platform_collects");
+    expect(await fails(ota(80, 82, "PF-0", false, { platform_booked_on: undefined }))).toBe("VALIDATION: platform_booked_on");
+    expect(await fails(ota(80, 82, "PF-0", false, { platform_booked_on: day(1) }))).toBe("VALIDATION: platform_booked_on");
+    expect(await fails(rpc("fn_staff_create_reservation", { p: { branch_id: A, category_id: CAT, source_id: OTA, check_in: day(80), check_out: day(82), guest_name: "بلا رقم", guest_phone: "0500000000", adults: 1, companions: 0, platform_collects: true, platform_booked_on: day(0) } }))).toBe("VALIDATION: external_ref_required");
+    const r = await ota(80, 82, "PF-1", true);
+    expect(r.platform_voucher).toBeTruthy();
+    const f = await fin(r.id); expect(f.total).toBeGreaterThan(0); expect(f.net_collected).toBe(f.total);
+    const vs = (await client.from("financial_vouchers").select("*").eq("reservation_id", r.id)).data as any[];
+    expect(vs).toHaveLength(1); expect(vs[0]).toMatchObject({ kind: "receipt", method: "ota_deferred", reference: "PF-1", status: "approved" });
+    expect(await get("reservations", r.id)).toMatchObject({ payment_status: "paid", platform_collects: true, platform_booked_on: day(0) });
+    expect((await detail(r.id)).platform).toMatchObject({ collects: true, booked_on: day(0), verified_at: null });
+    const r2 = await ota(83, 85, "PF-2", false);
+    expect(r2.platform_voucher ?? null).toBeNull(); expect((await fin(r2.id)).net_collected).toBe(0);
+    // a reception booking carries none of it
+    const r3 = await book(86, 87);
+    expect((await detail(r3.id)).platform).toBeNull();
+    expect(await get("reservations", r3.id)).toMatchObject({ platform_collects: null, platform_booked_on: null });
+  });
+
+  it("GU08 cancelling by the platform's number, once; nothing is refunded; found by that number; an internal mistake needs only a reason; undoing frees the number for the right booking", async () => {
+    await login("reception@demo.sa");
+    const r = await ota(80, 82, "PF-1", true);
+    expect(await fails(cancel(r.id))).toBe("VALIDATION: cancel_number");
+    const c1 = await cancel(r.id, { cancel_number: "CXL-1" });
+    expect(c1).toMatchObject({ ok: true, cancelled: 1, platform_collected: true, refund_required_separately: true });
+    expect(await cancel(r.id, { cancel_number: "CXL-1" })).toMatchObject({ duplicate: true, cancelled: 0 });
+    expect(await get("reservations", r.id)).toMatchObject({ status: "cancelled", cancel_reference: "CXL-1", cancel_source: "platform" });
+    expect(((await client.from("financial_vouchers").select("kind").eq("reservation_id", r.id)).data as any[]).filter((v) => v.kind === "refund")).toHaveLength(0);
+    expect(await trail(r.id, "reservation.cancelled")).toHaveLength(1);
+    expect((await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: { q: "CXL-1" } })).total).toBe(1);
+    expect((await client.from("integration_events").select("*").eq("external_event_id", "CXL-1")).data).toEqual([]);   // the platform's events are the owner's and the manager's
+    await login("manager@demo.sa");
+    const ev = (await client.from("integration_events").select("*").eq("external_event_id", "CXL-1")).data as any[];
+    expect(ev).toHaveLength(1); expect(ev[0]).toMatchObject({ source: "platform:booking_com", state: "processed", kind: "reservation.cancelled" });
+    await login("reception@demo.sa");
+    // entered here by mistake: no platform number, a reason only
+    const r2 = await ota(83, 85, "PF-2", false);
+    await rpc("fn_staff_cancel", { p: { reservation_id: r2.id, reason: "أُدخل بالخطأ", by_platform: false } });
+    expect(await get("reservations", r2.id)).toMatchObject({ status: "cancelled", cancel_source: "staff", cancel_reference: null });
+    // undo within the hour frees the number
+    const r3 = await ota(86, 87, "PF-3", false);
+    await cancel(r3.id, { cancel_number: "CXL-2" });
+    await login("manager@demo.sa");
+    await rpc("fn_staff_undo_cancel", { p: { reservation_id: r3.id, reason: "ألغيت الحجز الخطأ" } });
+    expect(await get("reservations", r3.id)).toMatchObject({ status: "confirmed", cancel_reference: null });
+    expect(((await client.from("integration_events").select("state").eq("external_event_id", "CXL-2")).data as any[]).map((e) => e.state)).toEqual(["reverted"]);
+    await login("reception@demo.sa");
+    const r4 = await ota(88, 89, "PF-4", false);
+    expect(await cancel(r4.id, { cancel_number: "CXL-2" })).toMatchObject({ cancelled: 1 });
+    expect((await get("reservations", r4.id)).status).toBe("cancelled");
+  });
+
+  it("GU09 the daily matching list holds the platforms' arrivals of today and tomorrow; «طابقتُ» keeps who and when; the late-entry report counts the days between the platform's booking and the entry", async () => {
+    await login("reception@demo.sa");
+    const t0 = await ota(0, 2, "PF-T0", false), t1 = await ota(1, 3, "PF-T1", true), t2 = await ota(2, 4, "PF-T2", false);
+    const d0 = await book(0, 2);
+    const lst = await rpc<any>("fn_platform_check_list", { p_branch: A, p_date: day(0) });
+    const ids = lst.rows.map((x: any) => x.id);
+    expect(ids).toContain(t0.id); expect(ids).toContain(t1.id); expect(ids).not.toContain(t2.id); expect(ids).not.toContain(d0.id);
+    await rpc("fn_platform_mark_checked", { p: { reservation_id: t0.id } });
+    const row = (await rpc<any>("fn_platform_check_list", { p_branch: A, p_date: day(0) })).rows.find((x: any) => x.id === t0.id);
+    expect(row.verified_at).toBeTruthy(); expect(row.verified_by).toBe("فهد الاستقبال");
+    expect(await fails(rpc("fn_platform_mark_checked", { p: { reservation_id: d0.id } }))).toBe("VALIDATION: not_platform");
+    await login("housekeeping@demo.sa");
+    expect(await fails(rpc("fn_platform_check_list", { p_branch: A }))).toMatch(/^FORBIDDEN/);
+    // late entries: booked on the platform three days ago, entered today
+    await login("reception@demo.sa");
+    const late = await ota(5, 6, "PF-LATE", false, { platform_booked_on: day(-3) });
+    await login("manager@demo.sa");
+    const rep = await rpc<any>("fn_reports_late_entries", { p_branch: A, p_from: day(-1), p_to: day(1), p_min_days: 1 });
+    expect(rep.rows.find((x: any) => x.id === late.id)).toMatchObject({ lag_days: 3, external_ref: "PF-LATE" });
+    expect(rep.rows.every((x: any) => x.lag_days >= 1)).toBe(true);
+    expect(rep.platform_bookings).toBeGreaterThanOrEqual(4);
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_reports_late_entries", { p_branch: A, p_from: day(-1), p_to: day(1) }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("GU10 one platform number for a group (decision 69): created whole, every unit carries it; the number on another booking or group is refused; one unit failing creates none; the group's page adds up", async () => {
+    await login("reception@demo.sa");
+    const g = await ota(100, 102, "GR-1", false, { units: [{ category_id: CAT }, { category_id: CAT }, { category_id: CAT }] });
+    expect(g.units).toBe(3); expect(g.group_ref).toBeTruthy();
+    const units = (await client.from("reservations").select("id, group_ref, external_ref").eq("external_ref", "GR-1")).data as any[];
+    expect(units).toHaveLength(3); expect(new Set(units.map((u) => u.group_ref)).size).toBe(1);
+    expect(await fails(ota(110, 111, "GR-1", false))).toBe("DUPLICATE_EXTERNAL_REF");
+    expect(await fails(ota(110, 111, "GR-1", false, { units: [{ category_id: CAT }, { category_id: CAT }] }))).toBe("DUPLICATE_EXTERNAL_REF");
+    expect(await fails(ota(120, 121, "GR-2", false, { units: [{ category_id: CAT }, { category_id: CAT }, { category_id: CAT, adults: 9 }] }))).toBe("CAPACITY_EXCEEDED");
+    expect(((await client.from("reservations").select("id").eq("external_ref", "GR-2")).data as any[])).toHaveLength(0);
+    const s = await rpc<any>("fn_reservation_group_summary", { p_reservation: g.id });
+    expect(s.units).toHaveLength(3); expect(s.external_ref).toBe("GR-1");
+    expect(s.totals.total_halalas).toBe(s.units.reduce((a: number, u: any) => a + u.total_halalas, 0)); expect(s.totals.units).toBe(3);
+    // the whole group is cancelled with one platform cancellation number
+    const c = await cancel(g.id, { cancel_number: "CXL-GR", whole_group: true });
+    expect(c.cancelled).toBe(3);
+    expect(((await client.from("reservations").select("status, cancel_reference").eq("external_ref", "GR-1")).data as any[]).every((u) => u.status === "cancelled" && u.cancel_reference === "CXL-GR")).toBe(true);
+    expect(await rpc<any>("fn_reservation_group_summary", { p_reservation: (await book(5, 6)).id })).toBeNull();
+  });
+
+  it("GU11 «ملخص الإقامة» (decision 19): the stay, its money, the deposit and the public policies in the branch's language; a paper signature with the exact text, once; a printed copy no longer current is refused", async () => {
+    await login("owner@demo.sa");
+    const org = (await get("branches", A)).organization_id;
+    await client.from("property_policies").insert([{ organization_id: org, branch_id: A, topic: "stay", title: "الهدوء", content_ar: "يمنع الإزعاج بعد منتصف الليل", content_en: "No noise after midnight", is_public: true, sort_order: 0 },
+      { organization_id: org, branch_id: A, topic: "other", title: "سياسة داخلية للموظفين", content_ar: "لا تُعرض على الضيف", content_en: null, is_public: false, sort_order: 9 }]);
+    await login("reception@demo.sa");
+    const r = await book(10, 12);
+    const s = await rpc<any>("fn_stay_summary", { p_reservation: r.id });
+    expect(s.language).toBe("ar"); expect(s.text).toContain(r.internal_ref); expect(s.text).toContain("عدد الليالي: 2"); expect(s.text).toContain("الإجمالي"); expect(s.text).toContain("التأمين: 50.00 ر.س");
+    expect(s.text).toContain("الهدوء: يمنع الإزعاج بعد منتصف الليل"); expect(s.text).not.toContain("سياسة داخلية");
+    expect(await fails(rpc("fn_staff_record_paper_ack", { p: { reservation_id: r.id, text_hash: "old" } }))).toMatch(/^SUMMARY_CHANGED/);
+    expect(await rpc<any>("fn_staff_record_paper_ack", { p: { reservation_id: r.id, text_hash: s.hash } })).toMatchObject({ duplicate: false });
+    expect(await rpc<any>("fn_staff_record_paper_ack", { p: { reservation_id: r.id, text_hash: s.hash } })).toMatchObject({ duplicate: true });
+    const acks = (await client.from("stay_acknowledgements").select("*").eq("reservation_id", r.id)).data as any[];
+    expect(acks).toHaveLength(1); expect(acks[0]).toMatchObject({ method: "paper", text_hash: s.hash }); expect(acks[0].text_snapshot).toContain("الهدوء");
+    expect((await rpc<any>("fn_stay_summary", { p_reservation: r.id })).acknowledgements).toHaveLength(1);
+    // the branch in English
+    await login("owner@demo.sa");
+    const b = await get("branches", A);
+    await rpc("fn_admin_upsert_branch", { p: { id: A, version: b.version, name_ar: b.name_ar, default_language: "en" } });
+    const en = await rpc<any>("fn_stay_summary", { p_reservation: r.id });
+    expect(en.language).toBe("en"); expect(en.text).toMatch(/^Stay summary/); expect(en.text).toContain("Deposit: SAR 50.00"); expect(en.text).toContain("No noise after midnight");
+    await login("housekeeping@demo.sa");
+    expect(await fails(rpc("fn_stay_summary", { p_reservation: r.id }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("GU12 the guest accepts the summary on their page; a payment changes it and the earlier acceptance stays with its own text; the first registration needs the acceptance and keeps the text the guest read", async () => {
+    await login("reception@demo.sa");
+    const r = await book(10, 12); const [pg] = await guestsOf(r.id);
+    const tok = await token(r.internal_ref);
+    const s1 = await rpc<any>("fn_guest_stay_summary", { p_token: tok });
+    expect(s1.accepted_at).toBeNull(); expect(s1.current).toBe(false);
+    expect(await fails(rpc("fn_guest_acknowledge", { p_token: tok, p_hash: "stale" }))).toMatch(/^SUMMARY_CHANGED/);
+    // registering without the acceptance is refused; with the hash the acceptance is recorded first, with the text the guest read
+    const payload = { full_name: "سعد محمد العتيبي", identity_type: "national_id", identity_number: "1098765432", nationality: "سعودي", birth_date: "1988-05-04", consent: "true" };
+    expect(await fails(rpc("fn_guest_submit", { p_token: tok, p_guest_id: pg.id, p_payload: payload }))).toBe("VALIDATION: acknowledgement_required");
+    await rpc("fn_guest_submit", { p_token: tok, p_guest_id: pg.id, p_payload: { ...payload, ack_hash: s1.hash } });
+    const s2 = await rpc<any>("fn_guest_stay_summary", { p_token: tok });
+    expect(s2.accepted_at).toBeTruthy(); expect(s2.method).toBe("electronic");
+    expect(s2.hash).not.toBe(s1.hash);   // the name changed the text → the page says the current text is not yet accepted
+    expect(s2.current).toBe(false);
+    const acks = (await client.from("stay_acknowledgements").select("*").eq("reservation_id", r.id)).data as any[];
+    expect(acks).toHaveLength(1); expect(acks[0].text_hash).toBe(s1.hash); expect(acks[0].text_snapshot).toBe(s1.text);
+    await rpc("fn_guest_acknowledge", { p_token: tok, p_hash: s2.hash });
+    expect((await rpc<any>("fn_guest_stay_summary", { p_token: tok })).current).toBe(true);
+    expect(await rpc<any>("fn_guest_acknowledge", { p_token: tok, p_hash: s2.hash })).toMatchObject({ duplicate: true });
+    // a payment changes the summary
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 1000, method: "cash", idempotency_key: uid() } });
+    const s3 = await rpc<any>("fn_guest_stay_summary", { p_token: tok });
+    expect(s3.current).toBe(false); expect(s3.hash).not.toBe(s2.hash); expect(s3.accepted_at).toBeTruthy();
+    expect(((await client.from("stay_acknowledgements").select("id").eq("reservation_id", r.id)).data as any[])).toHaveLength(2);
+    expect((await rpc<any>("fn_guest_session", { p_token: tok })).reservation.summary_accepted).toBe(true);
+  });
+
+  it("GU13 the branch's fields (decision 31): the English name is required, the map link is a Google Maps https link, the platform link is https; the logo by its real type and size; a guest page reads the public card", async () => {
+    await login("manager@demo.sa");
+    const b = await get("branches", A);
+    const up = (p: Record<string, unknown>) => rpc<any>("fn_admin_upsert_branch", { p: { id: A, version: b.version, name_ar: b.name_ar, ...p } });
+    expect(await fails(up({ name_en: "  " }))).toBe("VALIDATION: name_en");
+    expect(await fails(rpc("fn_admin_upsert_branch", { p: { name_ar: "فرع بلا اسم إنجليزي" } }))).toBe("VALIDATION: name_en");
+    expect(await fails(up({ map_url: "http://maps.google.com/?q=1" }))).toBe("VALIDATION: map_url");
+    expect(await fails(up({ map_url: "https://evil.example/maps" }))).toBe("VALIDATION: map_url");
+    expect(await fails(up({ booking_platform_url: "javascript:alert(1)" }))).toBe("VALIDATION: booking_url");
+    expect(await fails(up({ default_language: "fr" }))).toBe("VALIDATION: language");
+    expect((await up({ map_url: "https://maps.app.goo.gl/AbCd123", booking_platform_url: "https://www.booking.com/hotel/sa/example.html", default_language: "ar", country_code: "SA" })).ok).toBe(true);
+    expect(await get("branches", A)).toMatchObject({ name_en: b.name_en, map_url: "https://maps.app.goo.gl/AbCd123", booking_platform_url: "https://www.booking.com/hotel/sa/example.html" });
+    // media: a PNG by its first bytes; an SVG refused; too large refused; the trail keeps the fingerprint, not the file; a supervisor cannot set it
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";   // a 1×1 PNG
+    const pngBytes = Buffer.from(png, "base64").length;
+    const svg = btoa('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    expect(await fails(rpc("fn_admin_set_branch_media", { p: { branch_id: A, kind: "logo", data_base64: svg } }))).toBe("VALIDATION: image_type");
+    expect(await fails(rpc("fn_admin_set_branch_media", { p: { branch_id: A, kind: "logo", data_base64: btoa("x".repeat(204801)) } }))).toBe("VALIDATION: image_too_large");
+    expect(await fails(rpc("fn_admin_set_branch_media", { p: { branch_id: A, kind: "banner", data_base64: png } }))).toBe("VALIDATION: kind");
+    const m = await rpc<any>("fn_admin_set_branch_media", { p: { branch_id: A, kind: "logo", data_base64: png } });
+    expect(m).toMatchObject({ ok: true, changed: true, media: { mime: "image/png", size_bytes: pngBytes } });
+    const [a] = await trail(A, "branch.logo_changed");
+    expect(a.details.after).toMatchObject({ mime: "image/png", size_bytes: pngBytes }); expect(JSON.stringify(a.details)).not.toContain(png.slice(0, 20));
+    expect((await rpc<any>("fn_admin_branch_media_info", { p_branch: A })).logo).toMatchObject({ mime: "image/png", updated_by: "سلطان مدير الفرع" });
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_admin_set_branch_media", { p: { branch_id: A, kind: "logo", data_base64: png } }))).toMatch(/^FORBIDDEN/);
+    // the public card and the logo, as the guest's page reads them (no session)
+    await client.auth.signOut();
+    const card = await rpc<any>("fn_public_branch", { p_branch: A });
+    expect(card).toMatchObject({ id: A, name_en: b.name_en, map_url: "https://maps.app.goo.gl/AbCd123", booking_platform_url: "https://www.booking.com/hotel/sa/example.html", default_language: "ar", country_code: "SA" });
+    expect(card.logo_version).toBeTruthy(); expect(card.image_version).toBeNull();
+    expect(await rpc<any>("fn_branch_media", { p_branch: A, p_kind: "logo" })).toBe(`data:image/png;base64,${png}`);
+    expect(JSON.stringify(card)).not.toContain("tax_rate");
+  });
+
+  it("GU14 no direct booking on the website (decision 23): a visitor cannot ask for availability; the platform link and the map come from the branch's card", async () => {
+    await client.auth.signOut();
+    expect(await fails(rpc("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toMatch(/permission denied/);
+    const card = await rpc<any>("fn_public_branch", { p_branch: A });
+    expect(typeof card.booking_platform_url === "string" || card.booking_platform_url === null).toBe(true);
+    await login("reception@demo.sa");
+    expect(Array.isArray(await rpc<any>("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toBe(true);   // the staff still read it inside
   });
 });

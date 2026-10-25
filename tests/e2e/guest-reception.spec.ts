@@ -42,15 +42,17 @@ test.describe("guest reception", () => {
     await expect(page.getByRole("button", { name: "إتمام الحجز عبر المنصة المعتمدة" })).toHaveCount(0);
   });
 
-  test("GR03 availability intent shows the inline availability card with public prices only", async ({ page, openAssistant, ask }) => {
+  test("GR03 a new booking or a price question is sent to the branch's booking platform: no availability, no prices in the chat (decision 23)", async ({ page, openAssistant, ask }) => {
     await openAssistant();
     const reply = await ask("أبغى حجز جديد، كم الأسعار؟");
-    expect(reply).toMatch(/التصنيفات المتاحة والأسعار/);
-    await expect(page.getByText("لليلة", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
-    // the branch charges no tax (decision 68): the price says nothing about tax
-    await expect(page.getByText(/قبل الضريبة|شامل الضريبة/)).toHaveCount(0);
-    // public card: category + base price only; no room numbers, no guest data
+    expect(reply).toMatch(/منصة الحجز المعتمدة فقط/);
+    expect(reply).toContain("https://www.booking.com/hotel/sa/demo-riyadh.html");
+    expect(reply).not.toMatch(/\d+(\.\d+)? ر\.س|لليلة/);
+    // no availability card, no prices, no unit numbers
+    await expect(page.getByText("لليلة", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/التصنيفات المتاحة/)).toHaveCount(0);
     await expect(page.getByText(/غرفة \d{3}/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "احجز الآن" }).first()).toBeVisible();
   });
 
   test("GR04 access code is never handed out in chat", async ({ openAssistant, ask }) => {

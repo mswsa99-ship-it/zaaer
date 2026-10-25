@@ -64,7 +64,7 @@ export default function StaffReservations() {
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-t border-ink-50 hover:bg-ink-50/60">
                   <td className="px-3 py-2 font-mono text-xs text-ink-700"><Link to={`/staff/reservations/${r.id}`} className="hover:underline">{r.internal_ref}</Link>{r.external_ref && <div className="text-[10px] text-ink-400">{r.source_name} · {r.external_ref}</div>}</td>
-                  <td className="px-3 py-2 text-ink-700">{r.guest_name ?? "—"}</td>
+                  <td className="px-3 py-2 text-ink-700">{r.guest_name ?? "—"}{r.ban && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600" data-testid="row-ban">محظور</span>}{r.hold && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600">حظر على الحجز</span>}{r.rating != null && r.rating <= 2 && <span className="mr-1 inline-flex items-center rounded-md bg-warning-500/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-600">تقييم {r.rating}/5</span>}</td>
                   <td className="px-3 py-2">{r.room_number ?? <span className="text-ink-300">—</span>}<div className="text-[10px] text-ink-400">{r.category_name}</div></td>
                   <td className="px-3 py-2"><Badge className={RESERVATION_STATUS_COLORS[r.status as ReservationStatus] ?? "bg-ink-100 text-ink-600"}>{RESERVATION_STATUS_LABELS[r.status as ReservationStatus] ?? r.status}</Badge></td>
                   <td className="whitespace-nowrap px-3 py-2 text-ink-600" dir="ltr">{r.check_in}</td>

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, UserCheck, UserX, CreditCard, CheckCircle2, XCircle, Sparkles, DoorClosed, ShieldAlert } from "lucide-react";
+import { ArrowLeft, UserCheck, UserX, CreditCard, CheckCircle2, XCircle, Sparkles, DoorClosed, IdCard, Printer, UserPlus } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { staffApi, toArabicError } from "../../lib/api";
@@ -12,7 +12,8 @@ import {
 import { formatCurrency, maskId, formatDateTime } from "../../lib/utils";
 import { ReservationOperations } from "../../components/ReservationOperations";
 import { StayCycle } from "../../components/StayCycle";
-import { opsApi } from "../../lib/api";
+import { GuestAlerts, OfficeGuestDialog, PlatformPanel, GroupPanel, StaySummaryDialog, GuestEntryBadge } from "../../components/Guests";
+import { opsApi, type ReservationDetail, type GroupSummary } from "../../lib/api";
 
 interface Detail {
   id: string; internal_ref: string; external_ref: string | null; status: ReservationStatus;
@@ -70,8 +71,13 @@ export default function StaffReservationDetail() {
   const [rejectingGuest, setRejectingGuest] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rooms, setRooms] = useState<RoomOption[]>([]);
-  const [group, setGroup] = useState<Array<{ id: string; internal_ref: string; room_number: string | null; category_name: string | null }>>([]);
+  const [group, setGroup] = useState<GroupSummary | null>(null);
   const [selectedRoom, setSelectedRoom] = useState("");
+  // phase 5 (0038): bans, the hold, the rating, the platform's fields and the acknowledgements come from fn_reservation_detail
+  const [extra, setExtra] = useState<ReservationDetail | null>(null);
+  const [officeGuest, setOfficeGuest] = useState<{ open: boolean; guest: GuestDetail | null }>({ open: false, guest: null });
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const canOffice = role === "owner" || role === "manager" || role === "supervisor";
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -91,6 +97,7 @@ export default function StaffReservationDetail() {
       }
       setDetail(d);
       setGuests((g.data as GuestDetail[]) ?? []);
+      if (canMoney) { try { setExtra(await opsApi.detail(id)); } catch { setExtra(null); } }
       setTick((t) => t + 1);
       setLoadError(null);
     } catch (e) {
@@ -102,9 +109,9 @@ export default function StaffReservationDetail() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (!id || !detail?.group_ref) { setGroup([]); return; }
-    supabase.rpc("fn_reservation_group", { p_reservation: id }).then(({ data }) => setGroup((data as typeof group) ?? []));
-  }, [id, detail?.group_ref]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!id || !detail?.group_ref) { setGroup(null); return; }
+    opsApi.groupSummary(id).then(setGroup).catch(() => setGroup(null));
+  }, [id, detail?.group_ref, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime
   useEffect(() => {
@@ -182,23 +189,20 @@ export default function StaffReservationDetail() {
           <Badge className={detail.identity_status === "verified" ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{GUEST_VERIFICATION_LABELS[detail.identity_status]}</Badge>
         </div>
       </div>
-      {group.length > 1 && (
+      {group && group.units.length > 1 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-100 bg-brand-50/50 px-3 py-2 text-xs text-ink-600">
-          <span className="font-medium text-brand-700">حجز جماعي {detail.group_ref} — {group.length} وحدات:</span>
-          {group.map((g) => g.id === detail.id
+          <span className="font-medium text-brand-700">حجز جماعي {detail.group_ref} — {group.units.length} وحدات:</span>
+          {group.units.map((g) => g.id === detail.id
             ? <span key={g.id} className="rounded-md bg-white px-2 py-0.5 font-mono font-semibold text-ink-800 shadow-sm">{g.internal_ref}{g.room_number ? ` · ${g.room_number}` : ""}</span>
             : <Link key={g.id} to={`/staff/reservations/${g.id}`} className="rounded-md px-2 py-0.5 font-mono hover:bg-white">{g.internal_ref}{g.room_number ? ` · ${g.room_number}` : ` · ${g.category_name ?? ""}`}</Link>)}
         </div>
       )}
 
-      {detail.security_hold && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
-          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
-          <div>
-            <p className="font-semibold">يوجد حظر أمني على هذا الحجز</p>
-            {detail.security_hold_reason && <p className="mt-0.5 text-xs">{detail.security_hold_reason}</p>}
-            <p className="mt-0.5 text-xs">لا يُسجَّل الوصول ولا يُسلَّم الرمز حتى يُرفع الحظر من الإدارة.</p>
-          </div>
+      {/* decision 21: the ban's red alert, the hold and the rating; the hold is also shown to roles without the detail RPC */}
+      {extra ? <div className="mb-4"><GuestAlerts d={extra} onChanged={load} /></div> : detail.security_hold && (
+        <div className="mb-4 rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
+          <p className="font-semibold">يوجد حظر على هذا الحجز</p>
+          {detail.security_hold_reason && <p className="mt-0.5 text-xs">{detail.security_hold_reason}</p>}
         </div>
       )}
 
@@ -207,9 +211,12 @@ export default function StaffReservationDetail() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Guests / Identity */}
         <Card>
-          <div className="mb-3 flex items-center gap-2">
-            <UserCheck className="h-5 w-5 text-brand-600" />
-            <h2 className="text-base font-semibold text-ink-800">النزلاء ومطابقة الهوية</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-brand-600" /><h2 className="text-base font-semibold text-ink-800">النزلاء ومطابقة الهوية</h2></div>
+            <div className="flex flex-wrap gap-2">
+              {canMoney && <button onClick={() => setSummaryOpen(true)} className="btn-outline text-xs" data-testid="stay-summary-btn"><Printer className="h-3.5 w-3.5" /> ملخص الإقامة</button>}
+              {canOffice && guests.length < detail.adults + detail.companions && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: null })} className="btn-outline text-xs" data-testid="office-add-guest"><UserPlus className="h-3.5 w-3.5" /> مرافق من الوثيقة</button>}
+            </div>
           </div>
           <div className="space-y-3">
             {guests.map((g) => (
@@ -224,17 +231,23 @@ export default function StaffReservationDetail() {
                       {g.identity_type ? IDENTITY_TYPE_LABELS[g.identity_type] : "—"} · {maskId(g.identity_number_last4 ?? undefined)} · {g.nationality ?? "—"}
                       {g.relationship && ` · ${g.relationship}`}
                     </p>
-                    <p className="mt-0.5 text-xs text-ink-400">الحالة: {GUEST_VERIFICATION_LABELS[g.verification_status]}{!g.data_submitted && " · لم تُدخل البيانات"}</p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">الحالة: {GUEST_VERIFICATION_LABELS[g.verification_status]}{!g.data_submitted && " · لم تُدخل البيانات"}{extraGuest(extra, g.id) && <GuestEntryBadge g={extraGuest(extra, g.id)!} />}</p>
                   </div>
                   {g.verification_status !== "verified" && g.verification_status !== "rejected" && (
-                    <div className="flex gap-2">
-                      <button onClick={() => approveIdentity(g.id)} disabled={action === "identity_" + g.id || !g.data_submitted} className="btn-accent text-xs">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {g.data_submitted && <button onClick={() => approveIdentity(g.id)} disabled={action === "identity_" + g.id} className="btn-accent text-xs">
                         {action === "identity_" + g.id ? <Spinner className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />} اعتمد
-                      </button>
-                      <button onClick={() => { setRejectingGuest(rejectingGuest === g.id ? null : g.id); setRejectReason(""); }} className="btn-danger text-xs">
+                      </button>}
+                      {canOffice && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: g })} className="btn-outline text-xs" data-testid={`office-enter-${g.id}`}>
+                        <IdCard className="h-3.5 w-3.5" /> {g.data_submitted ? "تصحيح من الوثيقة" : "إدخال من الوثيقة"}
+                      </button>}
+                      {g.data_submitted && <button onClick={() => { setRejectingGuest(rejectingGuest === g.id ? null : g.id); setRejectReason(""); }} className="btn-danger text-xs">
                         <UserX className="h-3.5 w-3.5" /> رفض
-                      </button>
+                      </button>}
                     </div>
+                  )}
+                  {g.verification_status === "verified" && canOffice && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && (
+                    <button onClick={() => setOfficeGuest({ open: true, guest: g })} className="btn-ghost text-xs" data-testid={`office-correct-${g.id}`}><IdCard className="h-3.5 w-3.5" /> تصحيح بسبب</button>
                   )}
                   {g.verification_status === "verified" && <CheckCircle2 className="h-5 w-5 text-success-600" />}
                   {g.verification_status === "rejected" && <XCircle className="h-5 w-5 text-danger-500" />}
@@ -256,9 +269,12 @@ export default function StaffReservationDetail() {
             {guests.length === 0 && <p className="text-sm text-ink-400">لم تُسجّل بيانات النزلاء بعد.</p>}
           </div>
           <p className="mt-3 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-500">
-            ملاحظة: إدخال البيانات لا يعني التحقق. يجب على المشرف مطابقة الوثيقة الأصلية.
+            مساران (القرار 2): يدخل الضيف بياناته بنفسه ثم يطابقها المشرف مع الوثيقة الأصلية، أو يدخلها المكتب من الوثيقة الأصلية فتُعتمد فورًا باسمه. التصحيح بسبب ويُراجَع.
           </p>
         </Card>
+
+        {extra?.platform && <PlatformPanel d={extra} canCheck={canOffice} onChanged={load} />}
+        {group && group.units.length > 1 && <div className="lg:col-span-2"><GroupPanel current={detail.id} group={group} /></div>}
 
         {/* Payment & Status */}
         <div className="space-y-4">
@@ -303,6 +319,9 @@ export default function StaffReservationDetail() {
           </Card>
         </div>
 
+        <OfficeGuestDialog open={officeGuest.open} reservationId={detail.id} guest={officeGuest.guest} onClose={() => setOfficeGuest({ open: false, guest: null })} onDone={async () => { setOfficeGuest({ open: false, guest: null }); await load(); }} />
+        <StaySummaryDialog open={summaryOpen} reservationId={detail.id} canRecord={canOffice} onClose={() => setSummaryOpen(false)} onChanged={load} />
+
         {/* The stay cycle (0033): Shomoos, the arrival, the code, the nights, the departure, the inspection, «مغلق» */}
         <div className="lg:col-span-2">
           <StayCycle reservationId={detail.id} branchId={detail.branch_id} refreshKey={tick} onChanged={load} />
@@ -328,6 +347,8 @@ export default function StaffReservationDetail() {
   );
 }
 
+const extraGuest = (extra: ReservationDetail | null, id: string) => extra?.guests?.find((x) => x.id === id) ?? null;
+
 const AUDIT_LABELS: Record<string, string> = {
   // the stay cycle (0033)
   "reservation.checked_in": "تسجيل الوصول", "reservation.checked_out": "تسجيل المغادرة", "reservation.shomoos_registered": "تسجيل شموس",
@@ -340,6 +361,10 @@ const AUDIT_LABELS: Record<string, string> = {
   "voucher.deposit_apply_created": "تغطية من التأمين", "voucher.cancelled": "إلغاء سند", "invoice.issued": "إصدار فاتورة",
   approve_identity: "اعتماد مطابقة الهوية",
   reject_identity: "رفض مطابقة الهوية",
+  // phase 5 (0038)
+  "guest.entered_from_document": "إدخال بيانات نزيل من الوثيقة", "guest.corrected": "تصحيح بيانات نزيل", "reservation.hold_set": "وضع حظر على الحجز", "reservation.hold_lifted": "رفع الحظر عن الحجز",
+  "reservation.platform_checked": "مطابقة مع المنصة", "reservation.platform_unchecked": "إلغاء المطابقة مع المنصة", "reservation.summary_signed": "توقيع ملخص الإقامة", guest_summary_accepted: "إقرار الضيف بملخص الإقامة",
+  guest_data_submitted: "إدخال الضيف لبياناته",
   confirm_payment: "تأكيد السداد",
   confirm_gov_registration: "تأكيد التسجيل النظامي",
   assign_room: "تخصيص غرفة",

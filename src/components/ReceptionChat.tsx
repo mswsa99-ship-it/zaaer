@@ -1,33 +1,32 @@
 /**
  * AI reception chat — the same assistant guests reach on WhatsApp, as a chat window. Guests no longer see it on the
  * website (the site shows the branch's WhatsApp QR code); staff use it on /admin/assistant to try the assistant.
- * Everything the assistant says comes from the `ai-reception` Edge Function (model with 13 narrow tools,
- * or the deterministic scripted path). The browser never computes availability/prices itself: the inline
- * availability card calls fn_get_public_availability, which applies the sequential-release rules.
+ * Everything the assistant says comes from the `ai-reception` Edge Function (model with narrow tools, or the
+ * deterministic scripted path). Decision 23: no availability and no prices are shown here; a new booking is one
+ * question to the assistant, which answers with the branch's platform link.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Hotel, Send, BookCheck, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Clock, Headset, RotateCcw, BedDouble, Users, ExternalLink } from "lucide-react";
-import { cn, formatCurrency, todayISO } from "../lib/utils";
-import { aiChat, guestApi, type AiReply } from "../lib/api";
-import { useBranch, priceTaxNote } from "../lib/branch";
+import { Hotel, Send, BookCheck, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Clock, Headset, RotateCcw } from "lucide-react";
+import { cn } from "../lib/utils";
+import { aiChat, type AiReply } from "../lib/api";
+import { useBranch } from "../lib/branch";
 import { supabase } from "../lib/supabase";
 import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 
-interface Message { id: string; sender: "assistant" | "guest"; content: string; mode?: "ai" | "scripted"; actions?: { label: string; route?: string; value?: string }[]; widget?: "availability" }
-type Availability = Array<{ category_id: string; category_name: string; base_price_halalas: number; base_capacity: number; max_capacity: number; available_to_show: number; total_available: number }>;
+interface Message { id: string; sender: "assistant" | "guest"; content: string; mode?: "ai" | "scripted"; actions?: { label: string; route?: string; value?: string }[] }
 
 const WELCOME = (name: string): Message => ({
   id: "init", sender: "assistant",
   content: `أهلًا بك في ${name}. كيف أخدمك؟`,
-  actions: [{ label: "احجز الآن", value: "__availability__" }, { label: "حجوزاتي", route: "/booking/lookup" }, { label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" }],
+  actions: [{ label: "احجز الآن", value: "أرغب بحجز جديد" }, { label: "حجوزاتي", route: "/booking/lookup" }, { label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" }],
 });
 const CONV_KEY = "reception_conversation_id";
 const CONV_AT_KEY = "reception_conversation_at";
 const CONV_MAX_AGE_MS = 6 * 60 * 60 * 1000;   // a conversation older than 6h starts fresh: the guest's situation has usually changed
 // four shortcuts only — everything else is one question away in the chat
 const QUICK = [
-  { icon: CalendarDays, label: "احجز الآن", value: "__availability__" },
+  { icon: CalendarDays, label: "احجز الآن", value: "أرغب بحجز جديد" },
   { icon: BookCheck, label: "حجوزاتي", route: "/booking/lookup" },
   { icon: Clock, label: "المواعيد والموقع", value: "ما هي مواعيد الوصول والمغادرة وأين يقع الفرع؟" },
   { icon: Headset, label: "موظف الاستقبال", value: "أرغب بالتحدث مع موظف الاستقبال" },
@@ -70,7 +69,6 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || thinking) return;
-    if (trimmed === "__availability__") { setMessages((m) => [...m, { id: crypto.randomUUID(), sender: "assistant", content: "اختر تاريخ الوصول لأعرض لك الأنواع المتاحة وأسعارها الأساسية:", widget: "availability" }]); return; }
     setMessages((m) => [...m, { id: crypto.randomUUID(), sender: "guest", content: trimmed }]);
     setThinking(true);
     let reply: AiReply | null = null;
@@ -78,14 +76,12 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
     if (reply) {
       if (reply.conversation_id !== conversationId) { setConversationId(reply.conversation_id); try { sessionStorage.setItem(CONV_KEY, reply.conversation_id); sessionStorage.setItem(CONV_AT_KEY, String(Date.now())); } catch { /* ignore */ } }
       setStatus({ verified: reply.verified, handedOff: reply.handed_off, mode: reply.mode, aiStatus: reply.ai_status });
-      // the inline availability card appears only when the conversation is actually about availability / a new booking
-      const showAvail = reply.intent === "availability" || (reply.mode === "ai" && reply.actions?.some((a) => a.route === "/booking/new"));
-      setMessages((m) => [...m, { id: crypto.randomUUID(), sender: "assistant", content: reply!.reply, mode: reply!.mode, actions: reply!.actions, widget: showAvail ? "availability" : undefined }]);
+      setMessages((m) => [...m, { id: crypto.randomUUID(), sender: "assistant", content: reply!.reply, mode: reply!.mode, actions: reply!.actions }]);
     } else {
       // Edge Function unreachable → the same deterministic script runs locally (with the branch's public times) so the guest is never stuck
-      const r = scriptedReply(trimmed, propertyName, undefined, { branchName: branch?.name_ar, checkInTime: branch?.check_in_time, checkOutTime: branch?.check_out_time });
+      const r = scriptedReply(trimmed, propertyName, undefined, { branchName: branch?.name_ar, checkInTime: branch?.check_in_time, checkOutTime: branch?.check_out_time, bookingUrl: branch?.booking_platform_url ?? null, mapUrl: branch?.map_url ?? null });
       setStatus((s) => ({ ...s, mode: "scripted", aiStatus: "offline" }));
-      setMessages((m) => [...m, { id: crypto.randomUUID(), sender: "assistant", content: r.text, mode: "scripted", actions: r.actions, widget: r.intent === "availability" ? "availability" : undefined }]);
+      setMessages((m) => [...m, { id: crypto.randomUUID(), sender: "assistant", content: r.text, mode: "scripted", actions: r.actions }]);
     }
     setThinking(false);
     inputRef.current?.focus();
@@ -145,7 +141,6 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
           {messages.map((m) => (
             <div key={m.id} className={cn("flex flex-col gap-2", m.sender === "guest" ? "items-start" : "items-end")}>
               <div className={cn("max-w-[88%] whitespace-pre-line rounded-2xl px-4 py-2.5 leading-relaxed", kiosk ? "text-base" : "text-sm", m.sender === "guest" ? "bg-brand-600 text-white" : "bg-ink-50 text-ink-800")}>{m.content}</div>
-              {m.widget === "availability" && branchId && <AvailabilityCard branchId={branchId} taxNote={priceTaxNote(branch)} onBook={() => navigate("/booking/new")} />}
               {m.actions && m.actions.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {m.actions.map((a, i) => (
@@ -172,33 +167,3 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   );
 }
 
-/** Inline availability widget: public data only (category, base price, units shown under the release rules). */
-function AvailabilityCard({ branchId, taxNote, onBook }: { branchId: string; taxNote: string | null; onBook: () => void }) {
-  const [date, setDate] = useState(todayISO());
-  const [guests, setGuests] = useState(2);
-  const [rows, setRows] = useState<Availability | null>(null);
-  const [err, setErr] = useState(false);
-  useEffect(() => { let alive = true; setRows(null); guestApi.availability(branchId, date).then((r) => { if (alive) { setRows(r); setErr(false); } }).catch(() => { if (alive) setErr(true); }); return () => { alive = false; }; }, [branchId, date]);
-  const fit = useMemo(() => (rows ?? []).filter((r) => r.max_capacity >= guests), [rows, guests]);
-  return (
-    <div className="w-full max-w-[88%] rounded-2xl border border-brand-100 bg-white p-3 text-sm shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-1 text-ink-500"><CalendarDays className="h-3.5 w-3.5" /> الوصول <input type="date" min={todayISO()} value={date} onChange={(e) => setDate(e.target.value)} className="input w-auto py-1" dir="ltr" /></label>
-        <label className="flex items-center gap-1 text-ink-500"><Users className="h-3.5 w-3.5" /> الأشخاص <input type="number" min={1} max={10} value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="input w-16 py-1" dir="ltr" /></label>
-      </div>
-      {err && <p className="text-xs text-danger-600">تعذّر جلب التوفر الآن.</p>}
-      {rows && !err && (fit.length === 0 ? <p className="text-xs text-ink-500">لا توجد أنواع مناسبة لهذا العدد في هذا التاريخ. جرّب تاريخًا آخر أو تواصل مع الاستقبال.</p> : (
-        <div className="space-y-2">
-          {fit.map((r) => (
-            <div key={r.category_id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-50 px-3 py-2">
-              <div className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-brand-500" /><div><p className="font-medium text-ink-800">{r.category_name}</p><p className="text-[11px] text-ink-400">حتى {r.max_capacity} أشخاص · {r.available_to_show > 0 ? `متاح (${r.available_to_show})` : "غير متاح حاليًا"}</p></div></div>
-              <div className="text-left"><p className="font-semibold text-ink-800" dir="ltr">{formatCurrency(r.base_price_halalas / 100)}</p><p className="text-[10px] text-ink-400">لليلة{taxNote ? ` · ${taxNote}` : ""}</p></div>
-            </div>
-          ))}
-          <button onClick={onBook} className="btn-accent w-full text-xs"><ExternalLink className="h-3.5 w-3.5" /> إتمام الحجز عبر المنصة المعتمدة</button>
-        </div>
-      ))}
-      {!rows && !err && <p className="text-xs text-ink-400">جارٍ التحقق من التوفر…</p>}
-    </div>
-  );
-}

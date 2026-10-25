@@ -101,6 +101,7 @@ test.describe("trace codes (decision 60)", () => {
     await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("ضيف تجربة التتبع");
     await page.getByPlaceholder("05xxxxxxxx").fill("0501112233");
     await page.locator("div:has(> label:has-text('مصدر الحجز')) select").selectOption({ label: "Booking.com" });
+    await page.getByTestId("platform-collects").selectOption("property");   // 0038: who collects is chosen on the form
     await page.waitForTimeout(500);
     await page.getByRole("button", { name: "إنشاء الحجز" }).click();   // no platform reference → refused by the server
 

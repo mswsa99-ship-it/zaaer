@@ -5,8 +5,9 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert, Hammer, PencilLine } from "lucide-react";
-import { opsApi, ratesApi, stayApi, invoiceApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance } from "../lib/api";
+import { opsApi, ratesApi, stayApi, invoiceApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance, type GroupSummary } from "../lib/api";
 import { InvoiceDialog, InvoiceList } from "./Invoices";
+import { CancelDialog } from "./Guests";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
@@ -36,6 +37,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   const [dialog, setDialog] = useState<Dialog>(null);
   const [tab, setTab] = useState<"ledger" | "stay" | "history">("ledger");
   const [correcting, setCorrecting] = useState<Voucher | null>(null);
+  const [group, setGroup] = useState<GroupSummary | null>(null);
 
   const load = useCallback(async () => { try { setD(await opsApi.detail(reservationId)); setError(null); } catch (e) { setError(toArabicError(e)); } }, [reservationId]);
   const accounts = useCashAccounts(canMoney ? d?.reservation.branch_id : null);
@@ -49,6 +51,8 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
     return () => { alive = false; };
   }, [branchOfRes]);
   useEffect(() => { load(); }, [load, refreshKey]);
+  const groupRef = d?.reservation.group_ref as string | null | undefined;
+  useEffect(() => { if (!groupRef) { setGroup(null); return; } opsApi.groupSummary(reservationId).then(setGroup).catch(() => setGroup(null)); }, [reservationId, groupRef, refreshKey]);
   useEffect(() => {
     const ch = supabase.channel(`ops-${reservationId}`).on("postgres_changes", { event: "*", schema: "public", table: "financial_vouchers", filter: `reservation_id=eq.${reservationId}` }, () => load()).subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -157,7 +161,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
       <ServiceDialog open={dialog === "service"} reservationId={reservationId} branchId={r.branch_id} onClose={() => setDialog(null)} onDone={done} />
       <ExtendDialog open={dialog === "extend"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <SwitchDialog open={dialog === "switch"} d={d} onClose={() => setDialog(null)} onDone={done} />
-      <ReasonDialog open={dialog === "cancel"} title="إلغاء الحجز" warning={`الإلغاء يحرر الوحدة ولا يسترد أي مبلغ تلقائيًا${f.net_collected + f.deposit_balance > 0 ? ` — يوجد ${sar(f.net_collected)} محصّل و${sar(f.deposit_balance)} تأمين تحتاج قرار استرداد مستقل` : ""}.`} onClose={() => setDialog(null)} onSubmit={async (reason) => { await opsApi.cancelReservation(reservationId, reason); await done(); }} />
+      <CancelDialog open={dialog === "cancel"} d={d} group={group} onClose={() => setDialog(null)} onDone={done} />
       <ReasonDialog open={dialog === "no_show"} title="تسجيل عدم حضور" warning="عدم الحضور حالة مستقلة عن الإلغاء، يحرر الوحدة ولا يغير المال." onClose={() => setDialog(null)} onSubmit={async (reason) => { await opsApi.noShow(reservationId, reason); await done(); }} />
       <InvoiceDialog open={dialog === "invoice"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <CorrectVoucherDialog v={correcting} accounts={accounts.active} onClose={() => setCorrecting(null)} onDone={async () => { setCorrecting(null); await done(); }} />
