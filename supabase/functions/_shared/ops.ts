@@ -171,7 +171,8 @@ export function buildBriefing(ctx: Record<string, any>): { headline: string; ite
   if (n(u.dirty)) items.push({ level: "warning", text: `${u.dirty} وحدة تحتاج تنظيفًا، ${hk.unassigned} مهمة غير مسندة، ${hk.in_progress} قيد التنفيذ، ${hk.completed_today} أُنجزت اليوم`, link: "/staff/housekeeping" });
   if (n(u.maintenance)) items.push({ level: "warning", text: `${u.maintenance} وحدة في الصيانة`, link: "/staff/tickets" });
   if (n(f.outstanding_in_house)) items.push({ level: "warning", text: `متبقٍ على النزلاء المقيمين: ${sar(f.outstanding_in_house)}`, link: "/staff/payments" });
-  if (n(f.deposit_to_settle_after_checkout)) items.push({ level: "warning", text: `تأمينات لم تُسوَّ بعد المغادرة: ${sar(f.deposit_to_settle_after_checkout)} — تحتاج ردًا أو تسوية بسند`, link: "/admin/finance" });
+  // 0033: a stay's deposit goes back after the departure's inspection; «متابعة الإقامات» lists the departures not closed
+  if (n(f.deposit_to_settle_after_checkout)) items.push({ level: "warning", text: `تأمينات لم تُسوَّ بعد المغادرة: ${sar(f.deposit_to_settle_after_checkout)} — تحتاج فحص المغادرة ثم ردًا أو رسم ضرر بسبب`, link: "/staff/followups" });
   if (n(s.tickets_open)) items.push({ level: "warning", text: `${s.tickets_open} تذكرة مفتوحة من المساعد الذكي تحتاج مشرفًا`, link: "/staff/tickets" });
   items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — ${u.occupied} مؤجرة من ${u.active} فعالة، ${u.ready} جاهزة للدخول، ${u.reserved} محجوزة، ${u.out_of_service} خارج الخدمة. تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` });
   const crit = items.filter((i) => i.level === "critical").length; const warn = items.filter((i) => i.level === "warning").length;

@@ -71,9 +71,30 @@ const ERROR_AR: Record<string, string> = {
   IDEMPOTENCY_CANCELLED: "هذا السند أُلغي سابقًا؛ أنشئ عملية جديدة بدل إعادة الإرسال.",
   TASK_TYPE_MISSING: "نوع مهمة التنظيف النظامي غير موجود لهذا الفرع.",
   REAUTH_REQUIRED: "أعد إدخال كلمة المرور للتأكيد.",
+  // the stay cycle (0033)
+  PAYMENT_OVERDUE: "على الإقامة ليلة لم تُدفع بعد موعدها: التمديد وإضافة الخدمات بعد سدادها، أو بعد تسجيل سبب يسمح بالاستمرار.",
+  CORRECTION_WINDOW_PASSED: "انتهت مهلة هذا التصحيح (التراجع عن الوصول خلال 30 دقيقة، وإعادة فتح المغادرة خلال ساعتين، والتراجع عن الإلغاء خلال ساعة).",
+  INSPECTION_REQUIRED: "سجّل فحص المغادرة قبل رد التأمين.",
+  ROOM_HAS_GUEST: "في الوحدة نزيل مقيم؛ لا تُعطَّل ولا تُؤرشف قبل مغادرته.",
+  CATEGORY_ARCHIVED: "نوع الوحدة مؤرشف ولا يقبل حجوزات جديدة.",
 };
 
 const VALIDATION_AR: Record<string, string> = {
+  // the stay cycle (0033)
+  shomoos_all_guests: "أكّد أن جميع النزلاء والمرافقين سُجّلوا في شموس.",
+  shomoos_reference: "رقم تسجيل شموس بين 3 و60 حرفًا.",
+  shomoos_not_registered: "سجّل النزلاء في شموس أولًا.",
+  shomoos_guest_count: "تغيّر عدد النزلاء بعد تسجيل شموس؛ حدِّث التسجيل أولًا.",
+  first_night_unpaid: "الليلة الأولى غير مدفوعة كاملة.",
+  deposit_reason: "التأمين لم يُستلم كاملًا: اكتب سبب ذلك.",
+  deposit_refund_before_checkout: "يُرد تأمين الإقامة بعد تسجيل المغادرة وفحصها.",
+  inspection_result: "اختر نتيجة الفحص: سليمة أو بملاحظات.",
+  inspection_notes: "اكتب ملاحظات الفحص.",
+  inspection_not_due: "فحص المغادرة يكون بعد تسجيل المغادرة أو في يومها.",
+  not_overdue: "لا توجد على هذه الإقامة ليلة متأخرة السداد.",
+  stay_ended: "انتهت فترة هذه الإقامة؛ لا يُتراجع عن إلغائها.",
+  late_checkout_until: "ساعة المغادرة المتأخرة تكون بعد موعد المغادرة في الفرع.",
+  late_checkout_unit: "المغادرة المتأخرة تُحتسب مرة واحدة للإقامة.",
   // core money (0028)
   method_retired: "هذه الطريقة لم تعد مستخدمة. طرق القبض والرد: نقد، شبكة، تحويل بنكي، آجل عبر المنصة.",
   deposit_method: "التأمين يُقبض ويُرد في المنشأة نفسها (نقد أو شبكة أو تحويل)، ولا تحصّله المنصة.",
@@ -190,6 +211,10 @@ export interface GuestSession {
     id: string; internal_ref: string; external_ref: string | null; status: string; check_in: string; check_out: string;
     adults: number; companions: number; payment_status: string; identity_status: string; government_registration: boolean;
     access_status: string; total_halalas: number; paid_halalas: number; branch_name: string | null; room_number: string | null; category_name: string | null;
+    /** 0033: a unit with a key box gets its code after the arrival; one without takes its key at reception */
+    has_keybox?: boolean;
+    /** 0033: the first night, paid in full before the arrival */
+    first_night_paid?: boolean;
   };
   guests: Array<{ id: string; is_primary: boolean; full_name: string; identity_type: string | null; identity_number_last4: string | null; nationality: string | null; birth_date: string | null; relationship: string | null; verification_status: string; data_submitted: boolean }>;
   access: { allowed: boolean; reasons: string[] };
@@ -227,12 +252,10 @@ export const staffApi = {
   approveIdentity: (guestId: string, approve: boolean, reason?: string) => rpc<{ ok: boolean; identity_status: string }>("fn_staff_approve_identity", { p_guest_id: guestId, p_approve: approve, p_reason: reason ?? null }),
   confirmPayment: (reservationId: string, method: string, amountHalalas: number, reference: string, provider?: string) =>
     rpc<{ ok: boolean; duplicate: boolean; payment_status?: string; paid_halalas?: number }>("fn_staff_confirm_payment", { p_reservation: reservationId, p_method: method, p_amount_halalas: amountHalalas, p_reference: reference, p_idempotency_key: `${reservationId}:${method}:${reference}`, p_provider: provider ?? null }),
-  confirmGovRegistration: (reservationId: string, reference: string) => rpc<{ ok: boolean }>("fn_staff_confirm_gov_registration", { p_reservation: reservationId, p_reference: reference }),
   assignRoom: (reservationId: string, roomId: string) => rpc<{ ok: boolean }>("fn_staff_assign_room", { p_reservation: reservationId, p_room: roomId }),
-  approveCheckin: (reservationId: string) => rpc<GateResult>("fn_staff_approve_checkin", { p_reservation: reservationId }),
+  /** «تسليم الرمز» (0033): only after the arrival, only for a unit with a key box */
   deliverAccessCode: (reservationId: string, channel: "screen" | "whatsapp" | "supervisor") => rpc<GateResult>("fn_staff_deliver_access_code", { p_reservation: reservationId, p_channel: channel }),
   markDeliveryFailed: (reservationId: string, reason: string) => rpc<{ ok: boolean }>("fn_staff_mark_delivery_failed", { p_reservation: reservationId, p_reason: reason }),
-  checkout: (reservationId: string, overrideReason?: string) => rpc<GateResult>("fn_staff_checkout", { p_reservation: reservationId, p_override_reason: overrideReason ?? null }),
   completeCleaning: (taskId: string) => rpc<{ ok: boolean; room_status: string }>("fn_staff_complete_cleaning", { p_task: taskId }),
   rotateKeybox: (roomId: string, newCode: string, fieldTested: boolean) => rpc<{ ok: boolean; room_status: string; code_version: number }>("fn_staff_rotate_keybox_code", { p_room: roomId, p_new_code: newCode, p_field_tested: fieldTested }),
   markKeyboxTested: (roomId: string) => rpc<{ ok: boolean; room_status: string }>("fn_staff_mark_keybox_tested", { p_room: roomId }),
@@ -243,6 +266,64 @@ export const staffApi = {
   claimProfile: (fullName?: string) => rpc<{ ok: boolean; role?: string; claimed?: boolean; bootstrap?: boolean; error?: string }>("fn_claim_staff_profile", { p_full_name: fullName ?? null }),
   invite: (email: string, fullName: string, role: string, branchIds: string[]) => rpc<{ ok: boolean; staff_id: string }>("fn_staff_invite", { p_email: email, p_full_name: fullName, p_role: role, p_branch_ids: branchIds }),
   updateAiSettings: (patch: Record<string, unknown>) => rpc<{ ok: boolean }>("fn_admin_update_ai_settings", { p: patch }),
+};
+
+// ---------------------------------------------------------------------------
+// The stay cycle (0033): Shomoos, the arrival and its two entries, night-by-night payment, the departure with
+// nothing owed, the inspection, damages, «مغلق», and the corrections within their windows
+// ---------------------------------------------------------------------------
+/** What is due night by night (decision 3): the first night before the arrival, every later night by the branch's check-out time on its day. */
+export interface StayDue {
+  nights: number; nights_due: number; nights_covered: number; total: number; collected: number; first_night: number;
+  due_now: number; shortfall_now: number; overdue: boolean; overdue_amount: number; overdue_since: string | null; overdue_through: string | null;
+  next_unpaid_night: string | null; next_deadline: string | null; deadline_time: string; balance_due: number; deposit_required: number; deposit_balance: number;
+}
+/** Everything the stay page needs, for the signed-in role (fn_stay_status): money only for the money roles. */
+export interface StayStatus {
+  status: string; version: number; access_status: string; room_number: string | null; has_keybox: boolean;
+  keybox_state: "none" | "unset" | "needs_change" | "untested" | "ready";
+  departure_time: string; late_checkout_until: string | null; late_departure: boolean;
+  checked_in_at: string | null; checked_in_by: string | null; checked_out_at: string | null; checked_out_by: string | null;
+  checkin: null | { blockers: string[]; money_blockers?: string[]; first_night?: number; collected?: number; first_night_short?: number; deposit_required?: number; deposit_balance?: number; deposit_short?: number };
+  code: null | { blockers: string[]; delivered: boolean };
+  due: StayDue | null; overdue_blocked: boolean | null;
+  payment_exception: null | { reason: string; through_night: string; by: string | null; at: string };
+  deposit_waiver: null | { reason: string; at: string; by: string | null };
+  shomoos: { registered: boolean; reference: string | null; registered_at: string | null; registered_by: string | null; guest_count: number | null; guests_now: number; accepted_at: string | null; accepted_by: string | null };
+  inspection: null | { result: "ok" | "notes"; notes: string | null; suggested: number | null; by: string | null; at: string };
+  inspection_due: boolean; deposit_refund_blocker: string | null;
+  corrections: { allowed: boolean; undo_check_in_until: string | null; reopen_until: string | null; undo_cancel_until: string | null };
+  closure: null | { closed: boolean; closed_at: string | null; missing: string[] };
+}
+/** One entry of the arrival screen: the rent receipt or the deposit receipt (each its own voucher). */
+export interface PaymentEntry { amount_halalas: number; method: string; account_id?: string; reference?: string; idempotency_key: string }
+export interface CheckInResult { ok: boolean; duplicate?: boolean; reasons?: string[]; has_keybox?: boolean; rent_voucher?: string | null; deposit_voucher?: string | null; released_count?: number | null; status?: string }
+export interface CheckOutResult { ok: boolean; duplicate?: boolean; status?: string; balance_due?: number; reasons?: string[]; deposit_to_settle_halalas?: number; credit_halalas?: number; missing?: string[] }
+export interface StayFollowups {
+  generated_at: string;
+  overdue: Array<{ id: string; internal_ref: string; room_number: string | null; guest: string | null; overdue_amount: number; overdue_since: string | null; check_out: string; excused: boolean }>;
+  departed_open: Array<{ id: string; internal_ref: string; room_number: string | null; guest: string | null; checked_out_at: string | null; missing: string[]; inspected: boolean; deposit_balance: number }>;
+  late_departures: Array<{ id: string; internal_ref: string; room_number: string | null; guest: string | null; check_out: string; departure_time: string }>;
+}
+export interface DaySummary { date: string; everyone: boolean; rows: Array<{ staff_id: string | null; staff_name: string; kind: string; method: string | null; count: number; total: number }> }
+
+export const stayApi = {
+  status: (reservationId: string) => rpc<StayStatus | null>("fn_stay_status", { p_reservation: reservationId }),
+  /** «تسجيل الوصول»: the conditions, then the rent and the deposit entries, then the arrival — all or nothing */
+  checkIn: (p: { reservation_id: string; expected_version?: number; rent?: PaymentEntry; deposit?: PaymentEntry; deposit_reason?: string }) => rpc<CheckInResult>("fn_staff_check_in", { p }),
+  /** Shomoos: «register» with the reference and «every guest registered», then «accept» once Shomoos accepted it */
+  shomoos: (p: { reservation_id: string; action: "register" | "accept"; reference?: string; all_guests?: boolean }) => rpc<{ ok: boolean; unchanged: boolean }>("fn_staff_shomoos", { p }),
+  /** the departure, with nothing owed for anyone (decision 8) */
+  checkOut: (reservationId: string, version?: number) => rpc<CheckOutResult>("fn_staff_check_out", { p: version == null ? { reservation_id: reservationId } : { reservation_id: reservationId, expected_version: version } }),
+  inspect: (p: { reservation_id: string; result: "ok" | "notes"; notes?: string; suggested_deduction_halalas?: number }) => rpc<{ ok: boolean; id: string }>("fn_staff_record_inspection", { p }),
+  damage: (p: { reservation_id: string; amount_halalas: number; description?: string; reason: string; apply_deposit?: boolean; idempotency_key: string }) =>
+    rpc<{ ok: boolean; duplicate: boolean; charge_id: string; from_deposit_halalas?: number; finance: Finance }>("fn_staff_add_damage", { p }),
+  paymentException: (reservationId: string, reason: string) => rpc<{ ok: boolean; through_night: string }>("fn_staff_payment_exception", { p: { reservation_id: reservationId, reason } }),
+  undoCheckIn: (reservationId: string, reason: string) => rpc<{ ok: boolean; code_needs_change: boolean }>("fn_staff_undo_check_in", { p: { reservation_id: reservationId, reason } }),
+  reopenStay: (reservationId: string, reason: string) => rpc<{ ok: boolean; access_status: string }>("fn_staff_reopen_stay", { p: { reservation_id: reservationId, reason } }),
+  undoCancel: (reservationId: string, reason: string) => rpc<{ ok: boolean; status: string }>("fn_staff_undo_cancel", { p: { reservation_id: reservationId, reason } }),
+  followups: (branchId: string) => rpc<StayFollowups>("fn_stay_followups", { p_branch: branchId }),
+  daySummary: (branchId: string, date: string) => rpc<DaySummary>("fn_staff_day_summary", { p_branch: branchId, p_date: date }),
 };
 
 // ---------------------------------------------------------------------------
@@ -472,10 +553,10 @@ export const opsApi = {
   amendStay: (id: string, newCheckOut: string, pricingMode: "keep_rate" | "reprice", reason: string, version?: number) =>
     rpc<{ ok: boolean; delta_nights?: number; finance?: Finance }>("fn_staff_amend_stay", { p_reservation: id, p_new_check_out: newCheckOut, p_pricing_mode: pricingMode, p_reason: reason, p_expected_version: version ?? null }),
   switchRoom: (id: string, roomId: string, effective: string | null, reason: string, version?: number) =>
-    rpc<{ ok: boolean; entry_code_review_required: boolean }>("fn_staff_switch_room", { p_reservation: id, p_room: roomId, p_effective: effective, p_reason: reason, p_expected_version: version ?? null }),
+    rpc<{ ok: boolean; entry_code_review_required: boolean; code_delivery_required?: boolean }>("fn_staff_switch_room", { p_reservation: id, p_room: roomId, p_effective: effective, p_reason: reason, p_expected_version: version ?? null }),
   adjustPrice: (id: string, kind: "discount" | "adjustment" | "penalty" | "addon", amountHalalas: number, description: string, reason: string, version?: number) =>
     rpc<{ ok: boolean; finance: Finance }>("fn_staff_adjust_price", { p_reservation: id, p_kind: kind, p_amount_halalas: amountHalalas, p_description: description, p_reason: reason, p_expected_version: version ?? null }),
-  addService: (id: string, serviceId: string, quantity = 1, note?: string) => rpc<{ ok: boolean; finance: Finance }>("fn_staff_add_service", { p_reservation: id, p_service: serviceId, p_quantity: quantity, p_note: note ?? null }),
+  addService: (id: string, serviceId: string, quantity = 1, note?: string) => rpc<{ ok: boolean; finance: Finance; late_checkout_until?: string | null }>("fn_staff_add_service", { p_reservation: id, p_service: serviceId, p_quantity: quantity, p_note: note ?? null }),
   cancelReservation: (id: string, reason: string, source: "staff" | "ota" | "guest" = "staff", externalEventId?: string) =>
     rpc<{ ok: boolean; duplicate: boolean; refund_required_separately?: boolean }>("fn_staff_cancel_reservation", { p_reservation: id, p_reason: reason, p_source: source, p_external_event_id: externalEventId ?? null }),
   noShow: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_staff_no_show", { p_reservation: id, p_reason: reason }),

@@ -198,12 +198,13 @@ do $$ declare n int; begin
 end $$;
 
 -- =====================================================================
--- Full happy path with the gate (scenario 2: BK-DEMO-1002)
+-- Full happy path through the arrival and the code (scenario 2: BK-DEMO-1002) — decision 1: the arrival is its own
+-- step, with fixed conditions; the code is delivered after it, for a unit with a key box
 -- =====================================================================
 select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ declare r jsonb; begin
   r := fn_staff_approve_checkin('00000000-0000-0000-0000-000000000201');
-  perform t_record('T12 approve check-in refused while identity unverified', (r->>'ok')::boolean = false and array_length(array(select jsonb_array_elements_text(r->'reasons')),1) >= 2, r::text);
+  perform t_record('T12 check-in refused while identity unverified', (r->>'ok')::boolean = false and array_length(array(select jsonb_array_elements_text(r->'reasons')),1) >= 2, r::text);
 end $$;
 -- supervisor verifies identity
 do $$ declare r jsonb; begin
@@ -212,8 +213,8 @@ do $$ declare r jsonb; begin
 end $$;
 -- T13 payment missing → still refused
 do $$ declare r jsonb; begin
-  r := fn_staff_approve_checkin('00000000-0000-0000-0000-000000000201');
-  perform t_record('T13 approve refused while payment pending', (r->>'ok')::boolean = false and r::text like '%السداد%', r::text);
+  r := fn_staff_check_in(jsonb_build_object('reservation_id', '00000000-0000-0000-0000-000000000201'));
+  perform t_record('T13 check-in refused while the first night is unpaid', (r->>'ok')::boolean = false and r::text like '%الليلة الأولى%', r::text);
 end $$;
 -- T17/T27 idempotent payment confirmation (no duplicate financial events)
 do $$ declare r1 jsonb; r2 jsonb; n int; begin
@@ -222,12 +223,23 @@ do $$ declare r1 jsonb; r2 jsonb; n int; begin
   n := t_payment_count('00000000-0000-0000-0000-000000000201');
   perform t_record('T17/T27 duplicate payment confirmation ignored (idempotency)', (r2->>'duplicate')::boolean = true and n = 1 and r1->>'payment_status' = 'paid', r2::text || ' n=' || n);
 end $$;
--- gov registration
-select fn_staff_confirm_gov_registration('00000000-0000-0000-0000-000000000201','SHOMOOS-TEST-1');
--- T14: no room assigned / not ready → refused
+-- Shomoos (decision 6): the former one-step confirmation now needs the explicit «every guest is registered»
+do $$ begin
+  begin
+    perform fn_staff_confirm_gov_registration('00000000-0000-0000-0000-000000000201','SHOMOOS-TEST-1');
+    perform t_record('T23 Shomoos registration needs the confirmation that every guest is registered', false, 'accepted');
+  exception when others then perform t_record('T23 Shomoos registration needs the confirmation that every guest is registered', sqlerrm like '%shomoos_all_guests%', sqlerrm); end;
+end $$;
+select fn_staff_shomoos(jsonb_build_object('reservation_id','00000000-0000-0000-0000-000000000201','action','register','reference','SHOMOOS-TEST-1','all_guests',true));
+do $$ declare r jsonb; begin
+  r := fn_staff_check_in(jsonb_build_object('reservation_id', '00000000-0000-0000-0000-000000000201'));
+  perform t_record('T23b check-in refused until Shomoos accepts the registration', (r->>'ok')::boolean = false and r::text like '%قبول شموس%', r::text);
+end $$;
+select fn_staff_shomoos(jsonb_build_object('reservation_id','00000000-0000-0000-0000-000000000201','action','accept'));
+-- T14: no unit assigned → refused
 do $$ declare r jsonb; begin
   r := fn_staff_approve_checkin('00000000-0000-0000-0000-000000000201');
-  perform t_record('T14 refused without an assigned ready room', (r->>'ok')::boolean = false and r::text like '%غرفة%', r::text);
+  perform t_record('T14 refused without an assigned unit', (r->>'ok')::boolean = false and r::text like '%لم تُخصَّص وحدة%', r::text);
 end $$;
 -- T21: cannot assign room under maintenance (203)
 do $$ begin
@@ -249,13 +261,32 @@ do $$ begin
     perform t_record('T6 overlapping assignment of same room rejected', false, 'assigned!');
   exception when others then perform t_record('T6 overlapping assignment of same room rejected', true, sqlerrm); end;
 end $$;
--- T15: keybox needing change blocks delivery — room 101 code is active in seed; force needs_change then check
+-- T24: the branch's deposit (50 SAR per unit) is taken at arrival, or the reason it was not is written (decision 3)
+do $$ declare r jsonb; begin
+  r := fn_staff_check_in(jsonb_build_object('reservation_id', '00000000-0000-0000-0000-000000000201'));
+  perform t_record('T24 check-in refused without the deposit or its reason', (r->>'ok')::boolean = false and r::text like '%التأمين%'
+    and jsonb_array_length(r->'reasons') = 1, r::text);
+end $$;
+-- T15: a key-box code that needs changing does not stop the arrival; it stops the code (decision 1)
 reset role;
 update keyboxes set code_status='needs_change' where room_id='00000000-0000-0000-0000-000000000100';
 set role authenticated; select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
+-- T2/T3: availability shows exactly 1 studio before the arrival
+do $$ declare n int; begin
+  select available_to_show into n from fn_get_public_availability('00000000-0000-0000-0000-000000000010', current_date) where category_id='00000000-0000-0000-0000-000000000030';
+  perform t_record('T2/T3 only initial release (1) shown before the arrival', n = 1, 'shown=' || n);
+end $$;
 do $$ declare r jsonb; begin
-  r := fn_staff_approve_checkin('00000000-0000-0000-0000-000000000201');
-  perform t_record('T15 keybox needing change blocks approval', (r->>'ok')::boolean = false and r::text like '%رمز الصندوق%', r::text);
+  r := fn_staff_check_in(jsonb_build_object('reservation_id', '00000000-0000-0000-0000-000000000201',
+         'deposit', jsonb_build_object('amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sec-dep-201')));
+  perform t_record('Gate passes once all conditions satisfied: the deposit is taken on its own voucher in the same step',
+    (r->>'ok')::boolean and r->>'deposit_voucher' like 'DEP-%' and (r->>'has_keybox')::boolean
+    and (select status from reservations where id = '00000000-0000-0000-0000-000000000201') = 'checked_in'
+    and (select access_status from reservations where id = '00000000-0000-0000-0000-000000000201') = 'approved', r::text);
+end $$;
+do $$ declare r jsonb; begin
+  r := fn_staff_deliver_access_code('00000000-0000-0000-0000-000000000201','screen');
+  perform t_record('T15 a key-box code needing change blocks its delivery, not the arrival', (r->>'ok')::boolean = false and r::text like '%رمز الصندوق%', r::text);
 end $$;
 -- T20: rotate code (supervisor), must differ, field tested
 do $$ declare r jsonb; begin
@@ -266,28 +297,18 @@ do $$ declare r jsonb; begin
   r := fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','4321',true);
   perform t_record('T20b rotation succeeds with new code + version bump', (r->>'ok')::boolean and (r->>'code_version')::int = 2, r::text);
 end $$;
--- Approve + deliver
-do $$ declare r jsonb; begin
-  r := fn_staff_approve_checkin('00000000-0000-0000-0000-000000000201');
-  perform t_record('Gate passes once all conditions satisfied', (r->>'ok')::boolean, r::text);
-end $$;
--- T2/T3: availability shows exactly 1 studio before delivery
-do $$ declare n int; begin
-  select available_to_show into n from fn_get_public_availability('00000000-0000-0000-0000-000000000010', current_date) where category_id='00000000-0000-0000-0000-000000000030';
-  perform t_record('T2/T3 only initial release (1) shown before delivery event', n = 1, 'shown=' || n);
-end $$;
 do $$ declare r jsonb; begin
   r := fn_staff_deliver_access_code('00000000-0000-0000-0000-000000000201','screen');
   perform t_record('Delivery marks delivered, returns no code on screen channel', (r->>'ok')::boolean and r->>'code' is null, r::text);
   r := fn_staff_deliver_access_code('00000000-0000-0000-0000-000000000201','screen');
   perform t_record('T17 second delivery refused', (r->>'ok')::boolean = false, r::text);
 end $$;
--- T4: next room released after delivery, occupied room not re-offered
+-- T4: next room released after the arrival, occupied room not re-offered
 do $$ declare n int; tot int; rel int; st text; begin
   select available_to_show, total_available into n, tot from fn_get_public_availability('00000000-0000-0000-0000-000000000010', current_date) where category_id='00000000-0000-0000-0000-000000000030';
   rel := t_released('00000000-0000-0000-0000-000000000030');
   st := t_room_status('00000000-0000-0000-0000-000000000100');
-  perform t_record('T4 release counter advanced to 2 after confirmed delivery; shown = min(counter, free stock); room occupied',
+  perform t_record('T4 release counter advanced to 2 after the arrival; shown = min(counter, free stock); room occupied',
     rel = 2 and n = least(2, tot) and st = 'occupied', 'released='||rel||' shown='||n||' free='||tot||' room='||st);
 end $$;
 -- T5: never exceed real stock: release many times

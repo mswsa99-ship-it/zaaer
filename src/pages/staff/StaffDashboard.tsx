@@ -1,13 +1,14 @@
 import { useReservations } from "../../lib/hooks";
 import { ReservationCardRow } from "../../components/ReservationCard";
 import { SectionTitle, LoadingScreen, EmptyState, LoadErrorCard, ErrorBanner } from "../../components/ui";
-import { CalendarClock, UserCheck, CreditCard, KeyRound, BookCheck } from "lucide-react";
+import { CalendarClock, UserCheck, CreditCard, KeyRound, BookCheck, LogIn, BellRing } from "lucide-react";
 import { Link } from "react-router-dom";
 import { DailyBriefing } from "../../components/DailyBriefing";
 import { BranchPicker } from "../../components/BranchPicker";
 import { useBranchQuery } from "../../lib/useBranchQuery";
-import { opsApi, type DailySummary } from "../../lib/api";
-import { formatCurrency } from "../../lib/utils";
+import { opsApi, stayApi, type DailySummary, type StayFollowups } from "../../lib/api";
+import { formatCurrency, todayISO } from "../../lib/utils";
+import { useAuth } from "../../lib/auth";
 
 export default function StaffDashboard() {
   const { data: arrivals, loading: l1, error: e1, reload: r1 } = useReservations({ todayOnly: true });
@@ -15,6 +16,11 @@ export default function StaffDashboard() {
   // G24 (decision 40): the active branch's summary only; it refreshes when the reservation count changes
   const sumQ = useBranchQuery<DailySummary | null>((branchId) => opsApi.dailySummary(branchId), [all.length], null);
   const sum = sumQ.data;
+  // 0033: what waits for a decision today (the money roles; the server refuses the others)
+  const { profile } = useAuth();
+  const followRole = ["owner", "manager", "supervisor", "finance"].includes(profile?.role ?? "");
+  const fuQ = useBranchQuery<StayFollowups | null>((branchId) => (followRole ? stayApi.followups(branchId) : Promise.resolve(null)), [all.length, followRole], null);
+  const fu = fuQ.data;
 
   if (l1 || l2) return <LoadingScreen />;
   const listError = e1 ?? e2;
@@ -29,15 +35,17 @@ export default function StaffDashboard() {
 
   const pendingIdentity = all.filter((r) => r.identity_status === "data_submitted" || r.identity_status === "pending_supervisor");
   const pendingPayment = all.filter((r) => r.payment_status === "pending");
-  const readyForApproval = all.filter((r) => r.identity_status === "verified" && r.payment_status === "paid" && r.access_status === "locked");
-  const delivered = all.filter((r) => r.access_status === "delivered" || r.access_status === "acknowledged");
+  // ready to arrive: today's stay, identity matched, Shomoos accepted — the money and the unit are checked at the arrival itself
+  const today = todayISO();
+  const readyForApproval = all.filter((r) => ["confirmed", "pending_verification"].includes(r.status) && r.check_in <= today && r.check_out > today && r.identity_status === "verified" && !!r.shomoos_accepted_at);
+  const delivered = all.filter((r) => r.status === "checked_in" && (r.access_status === "delivered" || r.access_status === "acknowledged" || r.access_status === "key_handed"));
 
   const stats = [
     { label: "وصول اليوم", value: arrivals.length, icon: CalendarClock, to: "/staff/arrivals", color: "bg-brand-50 text-brand-600" },
     { label: "بانتظار المطابقة", value: pendingIdentity.length, icon: UserCheck, to: "/staff/identity-verification", color: "bg-warning-500/10 text-warning-600" },
     { label: "بانتظار الدفع", value: pendingPayment.length, icon: CreditCard, to: "/staff/payments", color: "bg-danger-500/10 text-danger-600" },
-    { label: "جاهز لاعتماد الدخول", value: readyForApproval.length, icon: KeyRound, to: "/staff/access-approvals", color: "bg-accent-500/10 text-accent-600" },
-    { label: "تم تسليم الرمز", value: delivered.length, icon: KeyRound, to: "/staff/access-approvals", color: "bg-success-500/10 text-success-600" },
+    { label: "جاهز لتسجيل الوصول", value: readyForApproval.length, icon: LogIn, to: "/staff/access-approvals", color: "bg-accent-500/10 text-accent-600" },
+    { label: "استلموا الرمز أو المفتاح", value: delivered.length, icon: KeyRound, to: "/staff/access-approvals", color: "bg-success-500/10 text-success-600" },
     { label: "إجمالي الحجوزات", value: all.length, icon: BookCheck, to: "/staff/reservations", color: "bg-ink-100 text-ink-600" },
   ];
 
@@ -45,6 +53,14 @@ export default function StaffDashboard() {
     <div>
       <SectionTitle title="مركز عمليات الاستقبال" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
       {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
+      {fu && fu.overdue.length + fu.departed_open.length + fu.late_departures.length > 0 && (
+        <Link to="/staff/followups" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-600 hover:shadow-sm" data-testid="followups-banner">
+          <span className="flex items-center gap-2 font-medium"><BellRing className="h-4 w-4" /> متابعة الإقامات</span>
+          {fu.overdue.length > 0 && <span>{fu.overdue.length} بليلة غير مدفوعة بعد موعدها</span>}
+          {fu.departed_open.length > 0 && <span>{fu.departed_open.length} غادر ولم يُغلق</span>}
+          {fu.late_departures.length > 0 && <span>{fu.late_departures.length} تجاوز موعد المغادرة</span>}
+        </Link>
+      )}
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2"><DailyBriefing /></div>
@@ -85,7 +101,7 @@ export default function StaffDashboard() {
       {readyForApproval.length > 0 && (
         <>
           <div className="mt-8" />
-          <SectionTitle title="جاهز لاعتماد الدخول" subtitle={`${readyForApproval.length} حجز بانتظار الاعتماد`} action={<Link to="/staff/access-approvals" className="text-sm text-brand-600">عرض الكل</Link>} />
+          <SectionTitle title="جاهز لتسجيل الوصول" subtitle={`${readyForApproval.length} حجز اكتملت هويته وشموس`} action={<Link to="/staff/access-approvals" className="text-sm text-brand-600">عرض الكل</Link>} />
           <div className="space-y-3">
             {readyForApproval.slice(0, 5).map((r) => <ReservationCardRow key={r.id} r={r} />)}
           </div>

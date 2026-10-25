@@ -26,6 +26,8 @@ import StaffReservationDetail from "./pages/staff/StaffReservationDetail";
 import IdentityVerification from "./pages/staff/IdentityVerification";
 import StaffPayments from "./pages/staff/StaffPayments";
 import AccessApprovals from "./pages/staff/AccessApprovals";
+import StayFollowups from "./pages/staff/StayFollowups";
+import DaySummary from "./pages/staff/DaySummary";
 import StaffRooms from "./pages/staff/StaffRooms";
 import Housekeeping from "./pages/staff/Housekeeping";
 import Codes from "./pages/staff/Codes";
@@ -107,6 +109,8 @@ export default function App() {
           <Route path="/staff/payments" element={<StaffPayments />} />
           <Route path="/staff/pos-settlement" element={<PosSettlement />} />
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
+          <Route path="/staff/followups" element={<StayFollowups />} />
+          <Route path="/staff/day-summary" element={<DaySummary />} />
           <Route path="/staff/rooms" element={<StaffRooms />} />
           <Route path="/staff/housekeeping" element={<Housekeeping />} />
           <Route path="/staff/codes" element={<Codes />} />

@@ -104,13 +104,14 @@ export function seed(): Store {
   R["106"] = mk("106", cat.one, blockMain, fl.g, "maintenance", "clean");
   R["201"] = mk("201", cat.one, blockMain, fl.one, "occupied", "clean");
   R["202"] = mk("202", cat.one, blockMain, fl.one, "cleaning", "in_progress");
-  R["203"] = mk("203", cat.one, blockMain, fl.one, "ready", "clean");
+  R["203"] = mk("203", cat.one, blockMain, fl.one, "reserved", "clean");
   R["204"] = mk("204", cat.one, blockMain, fl.one, "occupied", "clean");
   R["205"] = mk("205", cat.two, blockMain, fl.one, "ready", "clean");
   R["206"] = mk("206", cat.two, blockMain, fl.one, "cleaning", "dirty");
+  // the annex (U) has ordinary keys handed at reception, no key boxes: clean and out of maintenance is ready (decision 7)
   R["U1"] = mk("U-1", cat.studio, blockU, fl.uG, "ready", "clean");
   R["U2"] = mk("U-2", cat.studio, blockU, fl.uG, "occupied", "clean");
-  R["U3"] = mk("U-3", cat.one, blockU, fl.uG, "available", "clean");
+  R["U3"] = mk("U-3", cat.one, blockU, fl.uG, "ready", "clean");
   R["U4"] = mk("U-4", cat.two, blockU, fl.uG, "out_of_service", "clean", { is_active: false, notes: "تجديد كامل" });
   rooms.push({ id: fixed(199), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-1", floor: 1, status: "ready", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   rooms.push({ id: fixed(198), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-2", floor: 1, status: "available", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
@@ -127,9 +128,10 @@ export function seed(): Store {
   }
   put("rate_calendar", rates);
   put("reservation_nights", []);
-  // Key boxes of branch A. The demo keeps a synthetic code in the browser (code_plain) so «الرموز» can show and change it;
-  // the real system keeps it encrypted on the server only. Units left by a guest wait for a new code (red) since then.
-  put("keyboxes", rooms.filter((r) => r.branch_id === BRANCH_A).map((r, i) => {
+  // Key boxes of branch A's main building (the annex and Jeddah have ordinary keys). The demo keeps a synthetic code in the
+  // browser (code_plain) so «الرموز» can show and change it; the real system keeps it encrypted on the server only. Units
+  // left by a guest wait for a new code (red) since then.
+  put("keyboxes", rooms.filter((r) => r.branch_id === BRANCH_A && r.block_id === blockMain).map((r, i) => {
     const change = r.cleanliness !== "clean" || r.room_number === "103";
     return { id: uid(), room_id: r.id, branch_id: BRANCH_A, code_encrypted: null, code_plain: String(2000 + ((i * 7919) % 7000)), code_version: 3,
       code_status: change ? "needs_change" : "active", needs_change_since: change ? new Date(Date.now() - (35 + i * 15) * 60_000).toISOString() : null,
@@ -153,9 +155,9 @@ export function seed(): Store {
   ]);
   const svc = { breakfast: fixed(440), late: fixed(441), extraClean: fixed(442) };
   put("service_definitions", [
-    { id: svc.breakfast, organization_id: ORG, branch_id: BRANCH_A, name_ar: "إفطار", name_en: "Breakfast", description: "لكل شخص لكل يوم", billing_unit: "person", price_halalas: 3500, is_free: false, taxable: true, task_type_id: null, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-300), updated_at: ts(-300) },
-    { id: svc.late, organization_id: ORG, branch_id: BRANCH_A, name_ar: "مغادرة متأخرة حتى 4 عصرًا", name_en: "Late check-out", description: null, billing_unit: "once", price_halalas: 10000, is_free: false, taxable: true, task_type_id: null, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-300), updated_at: ts(-300) },
-    { id: svc.extraClean, organization_id: ORG, branch_id: BRANCH_A, name_ar: "تنظيف إضافي أثناء الإقامة", name_en: "Extra cleaning", description: null, billing_unit: "once", price_halalas: 8000, is_free: false, taxable: true, task_type_id: tt.clean, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-300), updated_at: ts(-300) },
+    { id: svc.breakfast, organization_id: ORG, branch_id: BRANCH_A, name_ar: "إفطار", name_en: "Breakfast", description: "لكل شخص لكل يوم", billing_unit: "person", price_halalas: 3500, is_free: false, taxable: true, task_type_id: null, late_checkout_until: null, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-300), updated_at: ts(-300) },
+    { id: svc.late, organization_id: ORG, branch_id: BRANCH_A, name_ar: "مغادرة متأخرة حتى 4 عصرًا", name_en: "Late check-out", description: "تنقل موعد المغادرة إلى 4:00 عصرًا", billing_unit: "once", price_halalas: 10000, is_free: false, taxable: true, task_type_id: null, late_checkout_until: "16:00:00", is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-300), updated_at: ts(-300) },
+    { id: svc.extraClean, organization_id: ORG, branch_id: BRANCH_A, name_ar: "تنظيف إضافي أثناء الإقامة", name_en: "Extra cleaning", description: null, billing_unit: "once", price_halalas: 8000, is_free: false, taxable: true, task_type_id: tt.clean, late_checkout_until: null, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-300), updated_at: ts(-300) },
   ]);
 
   // reservations
@@ -208,7 +210,8 @@ export function seed(): Store {
   // arrivals today
   const rArr1 = mkRes({ guest: "منيرة سعود الحربي", phone: "0501110006", cat: cat.studio, room: "105", ci: 0, co: 3, status: "confirmed", receipts: [], deposit: 0, identity: "data_submitted", access: "locked", gov: false, otaPaid: true, source: fixed(20), ext: "BK-4471029" });
   const rArr2 = mkRes({ guest: "Ahmed Al Mansoori", phone: "0501110007", nat: "إماراتي", cat: cat.two, ci: 0, co: 2, status: "pending_verification", receipts: [], identity: "not_started", access: "locked", gov: false, otaPaid: true, source: fixed(22), ext: "HMABC123" });
-  const rArr3 = mkRes({ guest: "تركي عبدالعزيز المطيري", phone: "0501110008", cat: cat.one, room: "203", ci: 0, co: 5, status: "confirmed", receipts: [230000], identity: "verified", access: "locked", gov: true });
+  // ready to arrive except the deposit: the arrival screen takes it (or records why not)
+  const rArr3 = mkRes({ guest: "تركي عبدالعزيز المطيري", phone: "0501110008", cat: cat.one, room: "203", ci: 0, co: 5, status: "confirmed", adults: 1, receipts: [230000], identity: "verified", access: "locked", gov: true });
   // overdue arrival
   mkRes({ guest: "بدر راشد العنزي", phone: "0501110009", cat: cat.studio, ci: -1, co: 2, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false });
   // future
@@ -217,22 +220,54 @@ export function seed(): Store {
   mkRes({ guest: "ريم فهد الغامدي", phone: "0501110012", cat: cat.studio, room: "U1", ci: 1, co: 2, status: "confirmed", receipts: [28750], identity: "verified", access: "locked", gov: false, createdDays: -1 });
   // checked out with deposit to settle
   const rOut1 = mkRes({ guest: "ماجد سلمان الزهراني", phone: "0501110013", cat: cat.two, room: "206", ci: -4, co: 0, status: "checked_out", receipts: [276000], deposit: 40000, actualOut: true });
-  mkRes({ guest: "Hassan Karim", phone: "0501110014", nat: "مصري", cat: cat.studio, room: "103", ci: -3, co: 0, status: "checked_out", receipts: [86250], deposit: 20000, depositRefund: 20000, actualOut: true });
-  mkRes({ guest: "نواف خالد الشمري", phone: "0501110015", cat: cat.one, room: "202", ci: -5, co: -1, status: "checked_out", receipts: [184000], deposit: 30000, depositRefund: 20000, actualOut: true });
+  const rHassan = mkRes({ guest: "Hassan Karim", phone: "0501110014", nat: "مصري", cat: cat.studio, room: "103", ci: -3, co: 0, status: "checked_out", receipts: [86250], deposit: 20000, depositRefund: 20000, actualOut: true });
+  const rNawaf = mkRes({ guest: "نواف خالد الشمري", phone: "0501110015", cat: cat.one, room: "202", ci: -5, co: -1, status: "checked_out", receipts: [184000], deposit: 30000, depositRefund: 20000, actualOut: true });
   // cancelled / no-show
   mkRes({ guest: "هند عبدالله القرني", phone: "0501110016", cat: cat.studio, ci: -2, co: 0, status: "cancelled", receipts: [], identity: "not_started", source: fixed(20), ext: "BK-4432100", createdDays: -8 });
   mkRes({ guest: "Rami Nasser", phone: "0501110017", nat: "لبناني", cat: cat.one, ci: -1, co: 1, status: "no_show", receipts: [], identity: "not_started", createdDays: -6 });
   // history
-  for (let i = 1; i <= 6; i++) mkRes({ guest: ["عمر الحربي", "Sara Khan", "ياسر العمري", "Mohammed Ali", "دلال الراشد", "Noura Fahad"][i - 1], phone: "05011100" + (20 + i), cat: [cat.studio, cat.one, cat.two][i % 3], room: ["101", "203", "205", "U1", "102", "204"][i - 1], ci: -10 - i * 3, co: -7 - i * 3, status: "checked_out", receipts: [[86250, 138000, 207000][i % 3]], deposit: 20000, depositRefund: 20000, actualOut: true });
+  const history: string[] = [];
+  for (let i = 1; i <= 6; i++) history.push(mkRes({ guest: ["عمر الحربي", "Sara Khan", "ياسر العمري", "Mohammed Ali", "دلال الراشد", "Noura Fahad"][i - 1], phone: "05011100" + (20 + i), cat: [cat.studio, cat.one, cat.two][i % 3], room: ["101", "203", "205", "U1", "102", "204"][i - 1], ci: -10 - i * 3, co: -7 - i * 3, status: "checked_out", receipts: [[86250, 138000, 207000][i % 3]], deposit: 20000, depositRefund: 20000, actualOut: true }));
   // a returning guest with a second, later stay (WhatsApp lists both bookings of her number)
   mkRes({ guest: "لطيفة حمد السبيعي", phone: "0501110010", cat: cat.one, ci: 20, co: 23, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false, createdDays: -1 });
   // mark cancelled/no_show rows
   for (const r of res) { if (r.status === "cancelled") { r.cancelled_at = ts(-3); r.cancel_reason = "إلغاء من المنصة"; r.cancel_source = "ota"; } if (r.status === "no_show") { r.no_show_at = ts(0, 9); r.cancel_reason = "لم يحضر ولم يرد"; } }
+  // the stay cycle (0033): who registered each arrival and departure; Shomoos registered with every guest and accepted;
+  // the annex's units take their key at reception (no code to deliver)
+  const at = (iso: string, minutes: number) => new Date(Date.parse(iso) + minutes * 60_000).toISOString();
+  const annex = new Set(rooms.filter((x) => x.block_id === blockU).map((x) => x.id));
+  let shm = 480120;
+  for (const r of res) {
+    Object.assign(r, { checked_in_by: r.actual_check_in ? STAFF.supervisor.id : null, checkin_approved_by: r.actual_check_in ? STAFF.supervisor.id : null, checkin_approved_at: r.actual_check_in,
+      checked_out_by: r.actual_check_out ? STAFF.supervisor.id : null, closed_at: null, deposit_waiver_reason: null, deposit_waiver_by: null, deposit_waiver_at: null,
+      shomoos_guest_count: null, shomoos_accepted_at: null, shomoos_accepted_by: null, late_checkout_until: null, status_before_cancel: r.status === "cancelled" ? "confirmed" : null });
+    if (r.government_registration) {
+      const reg = r.actual_check_in ? at(r.actual_check_in, -25) : new Date(Date.now() - 50 * 60_000).toISOString();
+      Object.assign(r, { gov_registration_ref: `SHM-${shm += 7}`, gov_registration_by: STAFF.supervisor.id, gov_registration_at: reg, shomoos_guest_count: r.adults + r.companions, shomoos_accepted_at: at(reg, 12), shomoos_accepted_by: STAFF.supervisor.id });
+    }
+    if (r.room_id && annex.has(r.room_id) && ["checked_in", "checked_out"].includes(r.status)) Object.assign(r, { access_status: "key_handed", keybox_delivered: false });
+  }
+  for (const a of allocs) if (a.status === "closed") a.closed_at = res.find((r) => r.id === a.reservation_id)?.actual_check_out ?? null;
+  // a code delivered to a guest in house is that guest's (fn_staff_deliver_access_code sets it)
+  for (const r of res) if (r.status === "checked_in" && r.access_status === "delivered") { const kb = s.keyboxes.find((k) => k.room_id === r.room_id); if (kb) Object.assign(kb, { last_reservation_id: r.id, last_delivered_at: r.actual_check_in }); }
   put("reservations", res); put("reservation_guests", guests); put("reservation_allocations", allocs); put("reservation_charges", charges); put("financial_vouchers", vouchers);
-  // an invoice for the first checked-out stay
-  const invRes = res.find((r) => r.id === rOut1)!; const invLines = charges.filter((c) => c.reservation_id === rOut1);
-  const invId = uid(); invLines.forEach((c) => (c.invoice_id = invId));
-  put("invoices", [{ id: invId, organization_id: ORG, branch_id: BRANCH_A, reservation_id: rOut1, number: "INV-2026-000041", period_from: invRes.check_in, period_to: invRes.check_out, status: "issued", snapshot: { lines: invLines.map((c) => ({ ...c })) }, subtotal_halalas: invLines.filter((c) => c.kind !== "tax").reduce((a, c) => a + c.total_halalas, 0), tax_halalas: invLines.filter((c) => c.kind === "tax").reduce((a, c) => a + c.total_halalas, 0), total_halalas: invLines.reduce((a, c) => a + c.total_halalas, 0), issued_by: STAFF.finance.id, issued_at: ts(0, 11), cancelled_by: null, cancelled_at: null, cancel_reason: null }]);
+  // invoices: the first checked-out stay, and every stay of the history — whose stays are «مغلق» (decision 59: departed, nothing
+  // owed either way, the deposit settled, every line invoiced)
+  const invoices: Row[] = []; let invNo = 34;
+  const invoice = (resId: string, issuedAt: string) => {
+    const r = res.find((x) => x.id === resId)!; const lines = charges.filter((c) => c.reservation_id === resId); const id = uid(); lines.forEach((c) => (c.invoice_id = id));
+    invoices.push({ id, organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, number: `INV-2026-${String(++invNo).padStart(6, "0")}`, period_from: r.check_in, period_to: r.check_out, status: "issued", snapshot: { lines: lines.map((c) => ({ ...c })) }, subtotal_halalas: lines.filter((c) => c.kind !== "tax").reduce((a, c) => a + c.total_halalas, 0), tax_halalas: lines.filter((c) => c.kind === "tax").reduce((a, c) => a + c.total_halalas, 0), total_halalas: lines.reduce((a, c) => a + c.total_halalas, 0), issued_by: STAFF.finance.id, issued_at: issuedAt, cancelled_by: null, cancelled_at: null, cancel_reason: null });
+  };
+  for (const id of history) { const r = res.find((x) => x.id === id)!; invoice(id, at(r.actual_check_out, 40)); Object.assign(r, { status: "closed", closed_at: at(r.actual_check_out, 40) }); }
+  invoice(rOut1, ts(0, 11));
+  put("invoices", invoices);
+  // the check-out inspections (decision 5): sound for the history and Hassan (their deposits went back after it); notes with a
+  // suggested deduction for نواف (half his deposit is still held); none yet for ماجد, so his deposit waits for one
+  const inspection = (resId: string, result: string, notes: string | null, suggested: number) => { const r = res.find((x) => x.id === resId)!;
+    return { id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, room_id: r.room_id, result, notes, suggested_deduction_halalas: suggested, status: "active", inspected_by: STAFF.housekeeping.id, inspected_at: at(r.actual_check_out, 25), superseded_at: null, superseded_by: null }; };
+  put("checkout_inspections", [...history.map((id) => inspection(id, "ok", null, 0)), inspection(rHassan, "ok", null, 0), inspection(rNawaf, "notes", "بقعة على قماش الأريكة تحتاج تنظيفًا خاصًا", 2500)]);
+  put("stay_payment_exceptions", []);
+  put("review_items", []);
   put("guest_profiles", guests.map((g) => ({ id: uid(), organization_id: ORG, full_name: g.full_name, phone: g.phone, nationality: g.nationality, email: null, notes: null, created_at: g.created_at, updated_at: g.created_at })));
   put("payment_transactions", []);
 
@@ -250,8 +285,8 @@ export function seed(): Store {
     task({ facility: fixed(432) }, tt.corridors, "completed", "low", STAFF.housekeeping.id, -2),
   ]);
   put("maintenance_tickets", [{ id: uid(), room_id: R["106"], branch_id: BRANCH_A, title: "تسريب في حمام الغرفة", description: "صيانة السباكة مطلوبة قبل إعادة التسكين", status: "open", created_by: STAFF.supervisor.id, created_at: ts(-1, 15) }]);
-  put("code_rotation_events", [{ id: uid(), room_id: R["102"], from_version: 2, to_version: 3, field_tested: true, created_at: ts(-1, 13) }, { id: uid(), room_id: R["U1"], from_version: 1, to_version: 2, field_tested: true, created_at: ts(-1, 14) }]);
-  put("access_delivery_events", res.filter((r) => r.status === "checked_in").map((r) => ({ id: uid(), reservation_id: r.id, keybox_id: null, channel: "screen", delivered_by: STAFF.supervisor.id, acknowledged: true, created_at: r.actual_check_in })));
+  put("code_rotation_events", [{ id: uid(), room_id: R["102"], from_version: 2, to_version: 3, field_tested: true, created_at: ts(-1, 13) }, { id: uid(), room_id: R["203"], from_version: 2, to_version: 3, field_tested: true, created_at: ts(-1, 14) }]);
+  put("access_delivery_events", res.filter((r) => r.status === "checked_in" && r.access_status === "delivered").map((r) => ({ id: uid(), reservation_id: r.id, keybox_id: s.keyboxes.find((k) => k.room_id === r.room_id)?.id ?? null, channel: "screen", delivered_by: STAFF.supervisor.id, acknowledged: true, created_at: at(r.actual_check_in, 5) })));
   put("access_release_requests", []);
   put("notifications", [{ id: uid(), branch_id: BRANCH_A, audience: "supervisor", title: "مغادرة — تنظيف وتغيير رمز مطلوب", body: "غرفة 206", link: "/staff/housekeeping", read_at: null, created_at: ts(0, 11) }]);
 
@@ -296,7 +331,7 @@ export function seed(): Store {
   put("ai_ops_conversations", []); put("ai_ops_messages", []); put("ai_action_proposals", []);
   // audit extras
   audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.manager.id, action: "reservation.departure_changed", entity_type: "reservation", entity_id: rIn2, details: { before: { check_out: addDays(T, 1) }, after: { check_out: addDays(T, 2), delta_nights: 1 }, reason: "طلب الضيف" }, created_at: ts(-1, 12) });
-  audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "checkout", entity_type: "reservation", entity_id: rOut1, details: { deposit_balance_halalas: 40000 }, created_at: ts(0, 11) });
+  audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "reservation.checked_out", entity_type: "reservation", entity_id: rOut1, details: { before: { status: "checked_in" }, after: { status: "checked_out", deposit_balance_halalas: 5000, credit_halalas: 0 } }, created_at: ts(0, 11) });
   audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.owner.id, action: "facility.archived", entity_type: "facility", entity_id: fixed(434), details: { reason: "لم يعد مستخدمًا" }, created_at: ts(-20) });
   for (const id of [rIn1, rIn3, rIn4, rIn5, rArr3]) audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "voucher.receipt_created", entity_type: "voucher", entity_id: id, details: { after: { amount_halalas: 1 } }, created_at: ts(-1, 10) });
   put("audit_events", audits.sort((a, b) => (a.created_at < b.created_at ? 1 : -1)));

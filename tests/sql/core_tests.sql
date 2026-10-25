@@ -442,20 +442,37 @@ do $$ declare r jsonb; t uuid; before_sig text; after_sig text; begin
   select string_agg(id::text || status::text || cleanliness, ',' order by id) into after_sig from rooms where branch_id = '00000000-0000-0000-0000-000000000010';
   perform t_record('H04 facility task lifecycle changes no room state', before_sig = after_sig and (select status from housekeeping_tasks where id = t) = 'completed');
 exception when others then perform t_record('H04 facility task lifecycle changes no room state', false, sqlerrm); end $$;
--- H06: clean room whose keybox needs rotation is not "ready"
+-- H06: clean room whose keybox needs rotation is not "ready" (the unit gets a key box first: decision 7 makes a unit
+-- without one ready by cleanliness alone)
 do $$ declare room uuid := (select v from ids where k='room2'); t uuid; r jsonb; begin
+  perform fn_staff_rotate_keybox_code(room, '2580', true);
+  reset role; update keyboxes set code_status = 'needs_change', field_tested = false where room_id = room;
+  set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
   select id into t from housekeeping_tasks where room_id = room and status = 'pending' limit 1;
   r := fn_hk_complete_task(t, null, t_ver('housekeeping_tasks', t));
   perform t_record('H06 clean + keybox needs rotation → not ready (cleaning), not available for entry', (t_room(room)).cleanliness = 'clean' and (t_room(room)).status = 'cleaning', r::text);
 exception when others then perform t_record('H06 clean + keybox needs rotation → not ready (cleaning), not available for entry', false, sqlerrm); end $$;
--- manual "mark clean" refused while a cleaning task is open (task log stays truthful)
-do $$ declare room uuid := (select v from ids where k='room1'); r jsonb; begin
+-- H06b (decision 7): a unit without a key box is ready as soon as it is clean
+do $$ declare r jsonb; room uuid; begin
+  r := fn_admin_upsert_room(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030','room_number','U-NOBOX'));
+  room := (r->>'id')::uuid;
+  perform fn_hk_set_cleanliness(room, 'dirty', 'اختبار');
+  r := fn_hk_set_cleanliness(room, 'clean', 'اختبار');
+  perform t_record('H06b a unit without a key box is ready when clean (decision 7)', r->>'room_status' = 'ready' and (t_room(room)).status = 'ready', r::text);
+exception when others then perform t_record('H06b a unit without a key box is ready when clean (decision 7)', false, sqlerrm); end $$;
+-- HC01 (decision 12, with the tests of decision 50): the manual change is free — it no longer waits for an open cleaning
+-- task, leaves the task as it is, is recorded with who made it, and the task is still completed afterwards
+do $$ declare room uuid := (select v from ids where k='room1'); r jsonb; t uuid; begin
   r := fn_hk_create_task(jsonb_build_object('task_type_id','00000000-0000-0000-0000-000000000420','room_id', room));
-  begin
-    perform fn_hk_set_cleanliness(room, 'clean');
-    perform t_record('HC01 manual mark-clean blocked while cleaning task open', false, 'accepted');
-  exception when others then perform t_record('HC01 manual mark-clean blocked while cleaning task open', sqlerrm like '%OPEN_CLEANING_TASK%', sqlerrm); end;
-end $$;
+  t := (r->>'id')::uuid;
+  r := fn_hk_set_cleanliness(room, 'clean', 'تفقد سريع');
+  perform t_record('HC01 a manual «clean» is accepted while a cleaning task is open; the task stays open; the change is recorded with who made it',
+    (r->>'ok')::boolean and (t_room(room)).cleanliness = 'clean' and (select status from housekeeping_tasks where id = t) = 'pending'
+    and t_count(format('select count(*) from audit_events where entity_id = %L and action = %L and actor_id is not null and (details->''after''->>''open_cleaning_task'')::boolean',
+                       room, 'room.cleanliness_changed')) >= 1, r::text);
+  r := fn_hk_complete_task(t, null, t_ver('housekeeping_tasks', t));
+  perform t_record('HC01b the open task is completed afterwards as usual', (select status from housekeeping_tasks where id = t) = 'completed' and (t_room(room)).cleanliness = 'clean', r::text);
+exception when others then perform t_record('HC01 a manual «clean» is accepted while a cleaning task is open; the task stays open; the change is recorded with who made it', false, sqlerrm); end $$;
 
 -- =====================================================================
 -- A10–A12 / X04 isolation & permission
@@ -714,6 +731,10 @@ do $$ declare res uuid := (select v from ids where k='resRV'); a record; begin
   -- RV12: an active allocation that does not end at check_out blocks amend_stay instead of silently skipping it
   reset role; update reservation_allocations set to_date = to_date - 1 where reservation_id = res and status = 'active';
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
+  -- paid up, so that no overdue night (decision 3) is what refuses the extension
+  if (t_fin(res)->>'balance_due')::bigint > 0 then
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'rv12-pay'));
+  end if;
   begin
     perform fn_staff_amend_stay(res, (select check_out + 1 from reservations where id = res), 'keep_rate', 'تمديد', t_ver('reservations', res));
     perform t_record('RV12 amend_stay with mismatched allocation rejected', false, 'accepted');

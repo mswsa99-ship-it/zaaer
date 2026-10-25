@@ -38,5 +38,7 @@ echo "== running core money tests (methods, accounts, settlements, tax zero — 
 psql -d "$DB" -f tests/sql/money_core_tests.sql
 echo "== running rates tests (0030: price calendar, weekly/monthly, nights, discount limits)"
 psql -d "$DB" -f tests/sql/rates_tests.sql
+echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
+psql -d "$DB" -f tests/sql/stay_cycle_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

@@ -585,3 +585,315 @@ describe("G06/G14/G27 — rates (decisions 9, 15, 32, 33, 47)", () => {
     expect(res.dependencies.rate_calendar).toBe(1);
   });
 });
+
+describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 5, 6, 7, 8, 10, 12, 49, 59)", () => {
+  const A = "00000000-0000-0000-0000-000000000010";   // the seeded Riyadh branch (its supervisor works there)
+  const riyadh = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  const day = (n: number) => { const d = new Date(riyadh() + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  let CAT: string; let K1: string; let K2: string; let N1: string; let N2: string; let SVC: string;
+  const fails = async (p: Promise<unknown>) => { try { await p; return ""; } catch (e) { return (e as Error).message; } };
+  const status = (id: string) => rpc<any>("fn_stay_status", { p_reservation: id });
+  const fin = (id: string) => rpc<any>("fn_reservation_finance", { p_reservation: id });
+  const row = async (id: string) => (await client.from("reservations").select("*").eq("id", id).maybeSingle()).data as any;
+  const book = (room: string | null, from: number, to: number) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: CAT, source_id: SOURCE, check_in: day(from), check_out: day(to), guest_name: "ضيف الإقامة", guest_phone: "0500000000", room_id: room ?? undefined, adults: 1, companions: 0 } });
+  /** the guest registers on their page and the supervisor matches the identity; then Shomoos with every guest, and its acceptance */
+  const prepare = async (id: string, ref: string, shomoos = true) => {
+    const { token } = await rpc<any>("fn_guest_lookup", { p_external_ref: ref, p_phone_last4: "0000" });
+    const g = (await rpc<any>("fn_guest_session", { p_token: token })).guests[0];
+    await rpc("fn_guest_submit", { p_token: token, p_guest_id: g.id, p_payload: { full_name: "ضيف اختبار الإقامة", identity_type: "national_id", identity_number: "1012345678", nationality: "سعودي", birth_date: "1990-01-01", consent: "true" } });
+    await rpc("fn_staff_approve_identity", { p_guest_id: g.id, p_approve: true });
+    if (shomoos) {
+      await rpc("fn_staff_shomoos", { p: { reservation_id: id, action: "register", reference: "SHM-" + ref.slice(-6), all_guests: true } });
+      await rpc("fn_staff_shomoos", { p: { reservation_id: id, action: "accept" } });
+    }
+    return token as string;
+  };
+  const arrive = (id: string, rent: number | null, deposit: number | null = 5000, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_check_in", { p: { reservation_id: id,
+    ...(rent ? { rent: { amount_halalas: rent, method: "cash", idempotency_key: uid() } } : {}), ...(deposit ? { deposit: { amount_halalas: deposit, method: "cash", idempotency_key: uid() } } : {}), ...extra } });
+  const ready = async (room: string | null, from: number, to: number) => { const r = await book(room, from, to); await prepare(r.id, r.internal_ref); return r.id as string; };
+  /** in house with the whole stay paid (or `rent`) and the branch's deposit */
+  const inHouse = async (room: string | null, from: number, to: number, rent?: number) => { const id = await ready(room, from, to); const x = await arrive(id, rent ?? 10000 * (to - from)); expect(x.ok).toBe(true); return id; };
+  const pay = (id: string, amount: number) => rpc("fn_create_voucher", { p: { reservation_id: id, kind: "receipt", amount_halalas: amount, method: "cash", idempotency_key: uid() } });
+  /** test-only: moves a moment back (the real table refuses direct writes; the demo's does not) */
+  const backdate = (id: string, col: string, minutes: number) => client.from("reservations").update({ [col]: new Date(Date.now() - minutes * 60_000).toISOString() }).eq("id", id);
+
+  beforeEach(async () => {
+    CAT = (await rpc<any>("fn_admin_upsert_room_category", { p: { branch_id: A, name_ar: "نوع الإقامة", base_capacity: 2, max_capacity: 3, base_price_halalas: 10000 } })).id;
+    const room = async (n: string) => (await rpc<any>("fn_admin_upsert_room", { p: { branch_id: A, category_id: CAT, room_number: n } })).id as string;
+    K1 = await room("SD-K1"); K2 = await room("SD-K2"); N1 = await room("SD-N1"); N2 = await room("SD-N2");
+    await rpc("fn_staff_rotate_keybox_code", { p_room: K1, p_new_code: "3141", p_field_tested: true });
+    await rpc("fn_staff_rotate_keybox_code", { p_room: K2, p_new_code: "2718", p_field_tested: true });
+    SVC = (await rpc<any>("fn_admin_upsert_service", { p: { branch_id: A, name_ar: "مياه إضافية", billing_unit: "once", price_halalas: 500, taxable: true } })).id;
+  });
+
+  it("SD01 the arrival waits for Shomoos with every guest and its acceptance, then for the whole first night and the deposit; it records both vouchers, once", async () => {
+    const r = await book(K1, 0, 2);
+    await prepare(r.id, r.internal_ref, false);
+    expect((await arrive(r.id, null, null)).reasons).toContain("لم يُسجَّل النزلاء في شموس");
+    expect(await fails(rpc("fn_staff_confirm_gov_registration", { p_reservation: r.id, p_reference: "SHM-1" }))).toBe("VALIDATION: shomoos_all_guests");
+    expect(await fails(rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "register", reference: "SHM-100", all_guests: false } }))).toBe("VALIDATION: shomoos_all_guests");
+    await rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "register", reference: "SHM-100", all_guests: true } });
+    expect((await arrive(r.id, null, null)).reasons).toContain("لم يُؤكَّد قبول شموس للتسجيل");
+    await rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "accept" } });
+    expect((await arrive(r.id, null, null)).reasons).toEqual(["الليلة الأولى غير مدفوعة كاملة: المتبقي 100.00 ر.س", "التأمين لم يُستلم كاملًا: المطلوب 50.00 ر.س"]);
+    // part of the first night is not the first night — and a refused arrival records nothing
+    expect((await arrive(r.id, 9999, 5000)).reasons).toEqual(["الليلة الأولى غير مدفوعة كاملة: المتبقي 0.01 ر.س"]);
+    expect((await fin(r.id)).net_collected).toBe(0);
+    expect(await arrive(r.id, 10000, 5000)).toMatchObject({ ok: true, duplicate: false, has_keybox: true });
+    expect(await fin(r.id)).toMatchObject({ net_collected: 10000, deposit_balance: 5000, balance_due: 10000 });
+    const v = (await client.from("financial_vouchers").select("kind, amount_halalas").eq("reservation_id", r.id)).data as any[];
+    expect(v.map((y) => `${y.kind}:${y.amount_halalas}`).sort()).toEqual(["deposit:5000", "receipt:10000"]);
+    const res = await row(r.id);
+    expect(res).toMatchObject({ status: "checked_in", access_status: "approved", keybox_delivered: false });
+    expect(res.checked_in_by).toBeTruthy();
+    expect((await arrive(r.id, null, null)).duplicate).toBe(true);
+    const s = await status(r.id);
+    expect(s.shomoos).toMatchObject({ registered: true, reference: "SHM-100", guest_count: 1, guests_now: 1 });
+    expect(s.shomoos.accepted_at).toBeTruthy();
+  });
+
+  it("SD02 a deposit not taken needs its reason, kept with who and when; part of it is not the deposit", async () => {
+    const id = await ready(N1, 0, 1);
+    expect((await arrive(id, 10000, 2000)).reasons).toEqual(["التأمين لم يُستلم كاملًا: المطلوب 50.00 ر.س"]);
+    expect((await arrive(id, 10000, null, { deposit_reason: "ضيف معروف للمنشأة" })).ok).toBe(true);
+    const s = await status(id);
+    expect(s.deposit_waiver).toMatchObject({ reason: "ضيف معروف للمنشأة" });
+    expect(s.deposit_waiver.by).toBeTruthy();
+    expect(s).toMatchObject({ has_keybox: false, access_status: "key_handed", keybox_state: "none" });
+  });
+
+  it("SD03 the code comes after the arrival, once, for a unit with a key box — and is the guest's own on their page; a unit without a box takes its key at reception", async () => {
+    const r = await book(K1, 0, 2); const token = await prepare(r.id, r.internal_ref);
+    const ev = (await rpc<any[]>("fn_evaluate_access", { p_reservation: r.id }))[0];
+    expect(ev.allowed).toBe(false);
+    expect(ev.reasons).toContain("يُسجَّل الوصول في الاستقبال ثم يُسلَّم الرمز");
+    expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "supervisor" })).reasons).toEqual(["لم يُسجَّل الوصول بعد"]);
+    expect((await rpc<any>("fn_guest_access_code", { p_token: token })).allowed).toBe(false);
+    expect((await rpc<any>("fn_guest_session", { p_token: token })).reservation).toMatchObject({ has_keybox: true, first_night_paid: false });
+    await arrive(r.id, 20000);
+    expect(await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "supervisor" })).toEqual({ ok: true, code: "3141" });
+    expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "screen" })).reasons).toEqual(["تم تسليم الرمز مسبقًا لهذا الحجز"]);
+    expect(await rpc<any>("fn_guest_access_code", { p_token: token })).toMatchObject({ allowed: true, code: "3141" });
+    expect((await row(r.id)).access_status).toBe("acknowledged");
+    const n = await inHouse(N1, 0, 1);
+    expect((await row(n)).access_status).toBe("key_handed");
+    expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: n, p_channel: "screen" })).reasons).toEqual(["الوحدة بلا صندوق مفتاح؛ يُسلَّم مفتاحها يدويًا"]);
+  });
+
+  it("SD04 night by night: a night unpaid past its deadline stops extending and services until it is paid or a reason excuses it", async () => {
+    const id = await ready(N1, -2, 1);
+    expect((await arrive(id, 10000)).ok).toBe(true);   // the first night only
+    let s = await status(id);
+    expect(s.due).toMatchObject({ nights: 3, nights_covered: 1, overdue: true });
+    expect(s.due.overdue_amount).toBeGreaterThanOrEqual(10000);
+    expect(s.overdue_blocked).toBe(true);
+    expect(await fails(rpc("fn_staff_amend_stay", { p_reservation: id, p_new_check_out: day(2), p_pricing_mode: "keep_rate", p_reason: "تمديد", p_expected_version: (await row(id)).version }))).toMatch(/^PAYMENT_OVERDUE/);
+    expect(await fails(rpc("fn_staff_add_service", { p_reservation: id, p_service: SVC }))).toMatch(/^PAYMENT_OVERDUE/);
+    expect((await rpc<any>("fn_stay_followups", { p_branch: A })).overdue.find((x: any) => x.id === id)).toMatchObject({ excused: false });
+    expect(await fails(rpc("fn_staff_payment_exception", { p: { reservation_id: id, reason: " " } }))).toBe("VALIDATION: reason");
+    await rpc("fn_staff_payment_exception", { p: { reservation_id: id, reason: "وعد بالسداد مساءً" } });
+    expect((await rpc<any>("fn_stay_followups", { p_branch: A })).overdue.find((x: any) => x.id === id)).toMatchObject({ excused: true });
+    s = await status(id);
+    expect(s).toMatchObject({ overdue_blocked: false, payment_exception: { reason: "وعد بالسداد مساءً" } });
+    await rpc("fn_staff_add_service", { p_reservation: id, p_service: SVC });
+    await pay(id, (await fin(id)).balance_due);
+    expect((await status(id)).due.overdue).toBe(false);
+    expect((await rpc<any>("fn_staff_amend_stay", { p_reservation: id, p_new_check_out: day(2), p_pricing_mode: "keep_rate", p_reason: "تمديد بعد السداد", p_expected_version: (await row(id)).version })).ok).toBe(true);
+  });
+
+  it("SD05 the departure only with nothing owed, for anyone — the override is gone; a held deposit keeps the stay «غادر»", async () => {
+    const id = await inHouse(K1, 0, 2, 10000);   // one night of two paid
+    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    expect(out).toMatchObject({ ok: false, balance_due: 10000 });
+    expect(out.reasons[0]).toContain("على الحجز مبلغ مستحق 100.00 ر.س");
+    expect((await rpc<any>("fn_staff_checkout", { p_reservation: id, p_override_reason: "بقرار المالك" })).ok).toBe(false);
+    await pay(id, 10000);
+    const ok = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    expect(ok).toMatchObject({ ok: true, status: "checked_out", deposit_to_settle_halalas: 5000 });
+    expect(ok.missing).toContain("تأمين لم يُسوَّ 50.00 ر.س");
+    expect((await client.from("rooms").select("status, cleanliness").eq("id", K1).maybeSingle()).data).toMatchObject({ status: "cleaning", cleanliness: "dirty" });
+    expect((await rpc<any>("fn_stay_followups", { p_branch: A })).departed_open.some((x: any) => x.id === id)).toBe(true);
+    expect((await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } })).duplicate).toBe(true);
+  });
+
+  it("SD06 the deposit goes back after the departure and its inspection — the supervisor may return it; the invoice then closes the stay by itself, and cancelling it reopens «غادر»", async () => {
+    const id = await inHouse(N1, 0, 1);
+    const refund = () => rpc("fn_refund", { p: { reservation_id: id, kind: "deposit_refund", amount_halalas: 5000, method: "cash", reason: "إرجاع التأمين", idempotency_key: uid() } });
+    await login("reception@demo.sa");
+    expect(await fails(refund())).toBe("VALIDATION: deposit_refund_before_checkout");
+    await rpc("fn_staff_check_out", { p: { reservation_id: id } });
+    expect(await fails(refund())).toMatch(/^INSPECTION_REQUIRED/);
+    expect((await status(id)).deposit_refund_blocker).toBe("سجّل فحص المغادرة أولًا");
+    expect(await fails(rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "notes" } }))).toBe("VALIDATION: inspection_notes");
+    await login("finance@demo.sa");
+    expect(await fails(rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "ok" } }))).toMatch(/^FORBIDDEN/);
+    await login("housekeeping@demo.sa");
+    await rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "ok" } });
+    await login("reception@demo.sa");
+    await refund();
+    expect((await row(id)).status).toBe("checked_out");   // its lines are not invoiced yet
+    await rpc("fn_create_invoice", { p_reservation: id });
+    const closed = await row(id);
+    expect(closed.status).toBe("closed");
+    expect(closed.closed_at).toBeTruthy();
+    await login("owner@demo.sa");
+    const inv = ((await client.from("invoices").select("id").eq("reservation_id", id)).data as any[])[0];
+    await rpc("fn_cancel_invoice", { p_invoice: inv.id, p_reason: "خطأ في الاسم" });
+    expect((await row(id)).status).toBe("checked_out");
+    const acts = ((await client.from("audit_events").select("action").eq("entity_id", id)).data as any[]).map((a) => a.action);
+    expect(acts).toEqual(expect.arrayContaining(["reservation.checked_in", "reservation.checked_out", "reservation.inspected", "reservation.closed", "reservation.unclosed"]));
+  });
+
+  it("SD07 a damage charge carries its reason and comes off the deposit as far as it goes; the same key is one charge", async () => {
+    const id = await inHouse(N1, 0, 1);
+    await rpc("fn_staff_check_out", { p: { reservation_id: id } });
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 3000, reason: "", idempotency_key: "dmg" } }))).toBe("VALIDATION: reason");
+    const d = await rpc<any>("fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 3000, description: "كوب مكسور", reason: "كسر أثناء الإقامة", idempotency_key: "dmg" } });
+    expect(d).toMatchObject({ ok: true, duplicate: false, from_deposit_halalas: 3000 });
+    expect(d.finance).toMatchObject({ deposit_balance: 2000, balance_due: 0, penalties: 3000 });
+    expect((await rpc<any>("fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 3000, reason: "كسر أثناء الإقامة", idempotency_key: "dmg" } })).duplicate).toBe(true);
+    const lines = (await client.from("reservation_charges").select("kind, purpose, reason").eq("reservation_id", id)).data as any[];
+    expect(lines.filter((c) => c.purpose === "damage")).toEqual([{ kind: "penalty", purpose: "damage", reason: "كسر أثناء الإقامة" }]);
+  });
+
+  it("SD08 undoing an arrival is the owner's or a manager's, with a reason, within 30 minutes; a code already shown must change; it waits in the owner's review list", async () => {
+    const id = await inHouse(K1, 0, 2);
+    await rpc("fn_staff_deliver_access_code", { p_reservation: id, p_channel: "screen" });
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_staff_undo_check_in", { p: { reservation_id: id, reason: "خطأ" } }))).toMatch(/^FORBIDDEN/);
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_staff_undo_check_in", { p: { reservation_id: id, reason: " " } }))).toBe("VALIDATION: reason");
+    expect(await rpc<any>("fn_staff_undo_check_in", { p: { reservation_id: id, reason: "سُجّل الوصول للحجز الخطأ" } })).toEqual({ ok: true, code_needs_change: true });
+    expect(await row(id)).toMatchObject({ status: "confirmed", access_status: "locked" });
+    expect((await arrive(id, null, null)).ok).toBe(true);   // the first arrival's money is still there
+    expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: id, p_channel: "screen" })).reasons).toEqual(["رمز الصندوق يحتاج إلى تغيير"]);
+    await backdate(id, "actual_check_in", 31);
+    expect(await fails(rpc("fn_staff_undo_check_in", { p: { reservation_id: id, reason: "متأخر" } }))).toMatch(/^CORRECTION_WINDOW_PASSED/);
+    expect((await client.from("review_items").select("id")).data).toEqual([]);   // the owner's list only
+    await login("owner@demo.sa");
+    expect((await client.from("review_items").select("kind, reason").eq("reservation_id", id)).data).toEqual([{ kind: "check_in_undone", reason: "سُجّل الوصول للحجز الخطأ" }]);
+  });
+
+  it("SD09 a departure reopens within 2 hours (its cleaning cancelled, an unchanged code still the guest's); a cancellation comes back within the hour unless its unit was taken", async () => {
+    const id = await inHouse(K1, 0, 2);
+    await rpc("fn_staff_deliver_access_code", { p_reservation: id, p_channel: "screen" });
+    await rpc("fn_staff_check_out", { p: { reservation_id: id } });
+    await rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "ok" } });
+    expect(await rpc<any>("fn_staff_reopen_stay", { p: { reservation_id: id, reason: "سُجّلت المغادرة قبل موعدها" } })).toEqual({ ok: true, access_status: "delivered" });
+    expect((await row(id)).status).toBe("checked_in");
+    expect(((await client.from("housekeeping_tasks").select("status").eq("reservation_id", id)).data as any[]).map((x) => x.status)).toEqual(["cancelled"]);
+    expect((await status(id)).inspection).toBeNull();
+    const c = await book(K2, 3, 5);
+    await rpc("fn_staff_cancel_reservation", { p_reservation: c.id, p_reason: "طلب الضيف" });
+    expect(await rpc<any>("fn_staff_undo_cancel", { p: { reservation_id: c.id, reason: "تراجع الضيف" } })).toEqual({ ok: true, status: "confirmed" });
+    expect((await client.from("reservation_allocations").select("status").eq("reservation_id", c.id)).data).toEqual([{ status: "active" }]);
+    await rpc("fn_staff_cancel_reservation", { p_reservation: c.id, p_reason: "طلب الضيف مرة أخرى" });
+    await book(K2, 4, 6);
+    expect(await fails(rpc("fn_staff_undo_cancel", { p: { reservation_id: c.id, reason: "تراجع" } }))).toMatch(/^ALLOCATION_CONFLICT/);
+    await backdate(c.id, "cancelled_at", 61);
+    expect(await fails(rpc("fn_staff_undo_cancel", { p: { reservation_id: c.id, reason: "تراجع" } }))).toMatch(/^CORRECTION_WINDOW_PASSED/);
+  });
+
+  it("SD10 late check-out is a priced service that moves the departure to its hour: after the branch's check-out time, billed once", async () => {
+    const svc = (p: Record<string, unknown>) => rpc<any>("fn_admin_upsert_service", { p: { branch_id: A, name_ar: "مغادرة متأخرة اختبار", price_halalas: 3000, ...p } });
+    expect(await fails(svc({ billing_unit: "once", late_checkout_until: "11:00" }))).toBe("VALIDATION: late_checkout_until");
+    expect(await fails(svc({ billing_unit: "night", late_checkout_until: "15:00" }))).toBe("VALIDATION: late_checkout_unit");
+    const late = await svc({ billing_unit: "once", late_checkout_until: "15:00" });
+    const id = await inHouse(N1, 0, 1);
+    expect((await rpc<any>("fn_staff_add_service", { p_reservation: id, p_service: late.id })).late_checkout_until).toBe("15:00");
+    expect((await status(id)).departure_time).toBe("15:00");
+    const lines = (await client.from("reservation_charges").select("purpose, total_halalas").eq("reservation_id", id)).data as any[];
+    expect(lines.filter((c) => c.purpose === "late_checkout")).toEqual([{ purpose: "late_checkout", total_halalas: 3000 }]);
+  });
+
+  it("SD11 readiness: a unit without a key box is ready when clean, one with a box also needs a new tested code; a manual cleanliness change is free and recorded", async () => {
+    const n = await inHouse(N1, 0, 1); await rpc("fn_staff_check_out", { p: { reservation_id: n } });
+    const k = await inHouse(K1, 0, 1); await rpc("fn_staff_check_out", { p: { reservation_id: k } });
+    const task = async (room: string) => ((await client.from("housekeeping_tasks").select("id, status, version").eq("room_id", room)).data as any[]).find((t) => t.status === "pending");
+    await login("reception@demo.sa");
+    expect((await rpc<any>("fn_hk_set_cleanliness", { p_room: N1, p_state: "clean", p_reason: "نُظّفت قبل فتح المهمة" })).room_status).toBe("ready");
+    const t = await task(N1);
+    expect(t.status).toBe("pending");   // the task keeps its own state
+    const a = ((await client.from("audit_events").select("action, entity_id, details").eq("action", "room.cleanliness_changed")).data as any[]).find((e) => e.entity_id === N1);
+    expect(a.details.after).toMatchObject({ cleanliness: "clean", open_cleaning_task: true });
+    expect((await rpc<any>("fn_hk_complete_task", { p_task: t.id, p_expected_version: t.version })).room_status).toBe("ready");
+    const tk = await task(K1);
+    expect((await rpc<any>("fn_hk_complete_task", { p_task: tk.id, p_expected_version: tk.version })).room_status).toBe("cleaning");
+    await rpc("fn_staff_rotate_keybox_code", { p_room: K1, p_new_code: "5926", p_field_tested: true });
+    expect((await client.from("rooms").select("status").eq("id", K1).maybeSingle()).data).toEqual({ status: "ready" });
+  });
+
+  it("SD12 a unit with a guest in house is not deactivated or archived; a type with an open stay is not archived, even before a unit; an archived type takes no booking", async () => {
+    await inHouse(N1, 0, 1);
+    const v = ((await client.from("rooms").select("version").eq("id", N1).maybeSingle()).data as any).version;
+    expect(await fails(rpc("fn_admin_upsert_room", { p: { id: N1, version: v, is_active: false } }))).toMatch(/^ROOM_HAS_GUEST/);
+    expect(await fails(rpc("fn_admin_archive_definition", { p_entity: "room", p_id: N1, p_reason: "صيانة", p_archive: true }))).toMatch(/^ROOM_HAS_GUEST/);
+    const c2 = (await rpc<any>("fn_admin_upsert_room_category", { p: { branch_id: A, name_ar: "نوع بلا وحدات", base_price_halalas: 9000 } })).id;
+    const mk = (from: number) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: c2, source_id: SOURCE, check_in: day(from), check_out: day(from + 1), guest_name: "ضيف بلا وحدة", guest_phone: "0500000000", adults: 1, companions: 0 } });
+    const r = await mk(3);
+    expect(await fails(rpc("fn_admin_archive_definition", { p_entity: "room_category", p_id: c2, p_reason: "إيقاف", p_archive: true }))).toMatch(/^HAS_OPEN_COMMITMENTS/);
+    await rpc("fn_staff_cancel_reservation", { p_reservation: r.id, p_reason: "إلغاء" });
+    expect((await rpc<any>("fn_admin_archive_definition", { p_entity: "room_category", p_id: c2, p_reason: "إيقاف", p_archive: true })).ok).toBe(true);
+    expect(await fails(mk(5))).toMatch(/^CATEGORY_ARCHIVED/);
+  });
+
+  it("SD13 moving in house: to a unit without a box its key is handed; to one with a box its code is delivered as its own step", async () => {
+    const id = await inHouse(K1, 0, 2);
+    await rpc("fn_staff_deliver_access_code", { p_reservation: id, p_channel: "screen" });
+    const sw = async (room: string) => rpc<any>("fn_staff_switch_room", { p_reservation: id, p_room: room, p_effective: null, p_reason: "طلب الضيف", p_expected_version: (await row(id)).version });
+    expect(await sw(N2)).toMatchObject({ ok: true, code_delivery_required: false });
+    expect((await row(id)).access_status).toBe("key_handed");
+    expect(await sw(K2)).toMatchObject({ ok: true, code_delivery_required: true });
+    expect((await row(id)).access_status).toBe("approved");
+    expect(((await client.from("keyboxes").select("last_reservation_id").eq("room_id", K2)).data as any[])[0].last_reservation_id).toBeNull();
+    expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: id, p_channel: "supervisor" })).code).toBe("2718");
+  });
+
+  it("SD14 the seeded stays tell the story: overdue nights, departures not closed, a late departure, the closed history, an arrival waiting for its deposit, the annex's key", async () => {
+    const fu = await rpc<any>("fn_stay_followups", { p_branch: A });
+    expect(fu.overdue.map((x: any) => x.room_number)).toEqual(expect.arrayContaining(["101", "201"]));
+    expect(fu.departed_open.map((x: any) => x.room_number).sort()).toEqual(["103", "202", "206"]);
+    expect(fu.late_departures.map((x: any) => x.room_number)).toContain("204");
+    const all = (await client.from("reservations").select("id, status, room_id, access_status").eq("branch_id", A)).data as any[];
+    expect(all.filter((r) => r.status === "closed")).toHaveLength(6);
+    const rooms = (await client.from("rooms").select("id, room_number").eq("branch_id", A)).data as any[];
+    const unit = (n: string) => rooms.find((r) => r.room_number === n)!.id;
+    const s = await status(all.find((r) => r.room_id === unit("203") && r.status === "confirmed").id);
+    expect(s.checkin.blockers).toEqual([]);
+    expect(s.checkin.money_blockers).toEqual(["التأمين لم يُستلم كاملًا: المطلوب 50.00 ر.س"]);
+    expect(all.find((r) => r.room_id === unit("U-2") && r.status === "checked_in").access_status).toBe("key_handed");
+    expect((await client.from("rooms").select("status").eq("id", unit("U-3")).maybeSingle()).data).toEqual({ status: "ready" });
+  });
+
+  it("SD15 the day per employee: what each received and paid back, by method; a supervisor sees their own only", async () => {
+    const own = await book(N2, 0, 1);
+    await pay(own.id, 4000);
+    await login("reception@demo.sa");
+    const id = await ready(N1, 0, 1);
+    await arrive(id, 10000);
+    const mine = await rpc<any>("fn_staff_day_summary", { p_branch: A, p_date: day(0) });
+    expect(mine.everyone).toBe(false);
+    expect(new Set(mine.rows.map((x: any) => x.staff_id))).toEqual(new Set(["00000000-0000-0000-0000-000000000002"]));
+    expect(mine.rows).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "receipt", method: "cash", count: 1, total: 10000 }), expect.objectContaining({ kind: "deposit", method: "cash", count: 1, total: 5000 })]));
+    await login("owner@demo.sa");
+    const all = await rpc<any>("fn_staff_day_summary", { p_branch: A, p_date: day(0) });
+    expect(all.everyone).toBe(true);
+    expect(all.rows).toEqual(expect.arrayContaining([expect.objectContaining({ staff_id: "00000000-0000-0000-0000-000000000001", kind: "receipt", method: "cash", total: 4000 })]));
+    await login("housekeeping@demo.sa");
+    expect(await fails(rpc("fn_staff_day_summary", { p_branch: A, p_date: day(0) }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("SD16 finance and housekeeping register no arrival, departure, Shomoos, damage, code, overdue reason or correction", async () => {
+    const id = await ready(K1, 0, 2);
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["fn_staff_check_in", { p: { reservation_id: id } }], ["fn_staff_check_out", { p: { reservation_id: id } }], ["fn_staff_shomoos", { p: { reservation_id: id, action: "accept" } }],
+      ["fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 100, reason: "x", idempotency_key: uid() } }], ["fn_staff_deliver_access_code", { p_reservation: id, p_channel: "screen" }],
+      ["fn_staff_payment_exception", { p: { reservation_id: id, reason: "x" } }], ["fn_staff_undo_check_in", { p: { reservation_id: id, reason: "x" } }], ["fn_staff_reopen_stay", { p: { reservation_id: id, reason: "x" } }],
+    ];
+    for (const who of ["finance@demo.sa", "housekeeping@demo.sa"]) {
+      await login(who);
+      for (const [fn, args] of calls) expect(await fails(rpc(fn, args)), `${who} ${fn}`).toMatch(/^FORBIDDEN/);
+    }
+  });
+});

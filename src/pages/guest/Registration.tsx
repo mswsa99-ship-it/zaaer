@@ -97,7 +97,7 @@ export default function Registration() {
         </div>
       ) : (
         <div className="mt-6 rounded-xl bg-warning-500/10 p-4 text-sm text-warning-600">
-          <div className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><p>يجب إكمال بيانات جميع النزلاء قبل اعتماد الدخول. إدخال البيانات لا يعني مطابقة الهوية — سيراجعها المشرف مع الوثيقة الأصلية.</p></div>
+          <div className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><p>يجب إكمال بيانات جميع النزلاء قبل تسجيل الوصول. إدخال البيانات لا يعني مطابقة الهوية — سيراجعها المشرف مع الوثيقة الأصلية.</p></div>
         </div>
       )}
 

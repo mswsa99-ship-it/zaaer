@@ -15,6 +15,8 @@ export interface ReservationCard {
   payment_status: string;
   identity_status: string;
   government_registration: boolean;
+  /** 0033: Shomoos accepted the registration (the arrival's last fixed condition) */
+  shomoos_accepted_at?: string | null;
   access_status: string;
   keybox_delivered: boolean;
   source?: { name: string };
@@ -30,7 +32,7 @@ const NO_CARDS: ReservationCard[] = [];
 // fn_reservation_finance, which the server gates by role (GAP05).
 const SELECT = `
   id, internal_ref, external_ref, status, check_in, check_out, adults, companions,
-  payment_status, identity_status, government_registration, access_status, keybox_delivered,
+  payment_status, identity_status, government_registration, shomoos_accepted_at, access_status, keybox_delivered,
   source:booking_sources(name),
   room:rooms(room_number),
   room_category:room_categories(name_ar),

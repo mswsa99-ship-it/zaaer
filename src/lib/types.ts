@@ -64,14 +64,16 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   overpaid: "دفع زائد",
 };
 
-export type AccessStatus = "locked" | "eligibility_review" | "approved" | "delivery_pending" | "delivered" | "acknowledged";
+export type AccessStatus = "locked" | "eligibility_review" | "approved" | "delivery_pending" | "delivered" | "acknowledged" | "key_handed";
 export const ACCESS_STATUS_LABELS: Record<AccessStatus, string> = {
   locked: "مقفل",
-  eligibility_review: "مراجعة الأهلية",
-  approved: "معتمد",
+  eligibility_review: "وصل النزيل",
+  approved: "بانتظار تسليم الرمز",
   delivery_pending: "بانتظار التسليم",
-  delivered: "تم التسليم",
-  acknowledged: "تم الاستلام",
+  delivered: "سُلِّم الرمز",
+  acknowledged: "اطّلع النزيل على الرمز",
+  // 0033: a unit without a key box takes its ordinary key at reception
+  key_handed: "سُلِّم المفتاح",
 };
 
 export type RoomStatus =

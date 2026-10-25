@@ -15,7 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins,
+  Calculator, Vault, HandCoins, ClipboardList, BellRing,
 } from "lucide-react";
 import type { Role } from "./types";
 
@@ -59,7 +59,10 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, area: "staff", roles: MONEY_ROLES },
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, area: "staff", roles: MONEY_ROLES },
-  { path: "/staff/access-approvals", label: "اعتماد الدخول", icon: KeyRound, area: "staff", roles: MONEY_ROLES },
+  { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: MONEY_ROLES },
+  // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)
+  { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, area: "staff", roles: MONEY_ROLES },
+  { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, area: "staff", roles: MONEY_ROLES },
   { path: "/staff/rooms", label: "لوحة الوحدات", icon: DoorClosed, area: "staff", roles: ALL_STAFF },
   { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
   { path: "/staff/codes", label: "الرموز", icon: KeyRound, area: "staff", roles: CODES_ROLES },

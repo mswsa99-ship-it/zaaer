@@ -71,10 +71,14 @@ describe("«الرموز» in the demo (same rules as 0025)", () => {
 
   it("KD03 a check-out turns the unit red at once and raises the alert", async () => {
     await login("owner@demo.sa");
-    const { data } = await client.from("reservations").select("id, room_id, status").eq("branch_id", BRANCH).eq("status", "checked_in");
-    const stay = (data ?? [])[0] as { id: string; room_id: string };
+    const { data: boxes } = await client.from("keyboxes").select("room_id").eq("branch_id", BRANCH);
+    const withBox = new Set((boxes ?? []).map((k) => (k as { room_id: string }).room_id));
+    const { data } = await client.from("reservations").select("id, room_id, status, balance_due_halalas").eq("branch_id", BRANCH).eq("status", "checked_in");
+    const stay = (data ?? []).find((r) => withBox.has((r as { room_id: string }).room_id)) as { id: string; room_id: string; balance_due_halalas: number };
     const before = await alerts();
-    const out = await rpc<{ ok: boolean }>("fn_staff_checkout", { p_reservation: stay.id, p_override_reason: "اختبار الرموز" });
+    // nothing may be owed at check-out, for anyone (decision 8): the balance is paid first
+    if (stay.balance_due_halalas > 0) await rpc("fn_create_voucher", { p: { reservation_id: stay.id, kind: "receipt", amount_halalas: stay.balance_due_halalas, method: "cash", idempotency_key: "kd03-pay" } });
+    const out = await rpc<{ ok: boolean }>("fn_staff_checkout", { p_reservation: stay.id });
     expect(out.ok).toBe(true);
     await login("housekeeping@demo.sa");
     const unit = (await board()).find((u) => u.room_id === stay.room_id)!;

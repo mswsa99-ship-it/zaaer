@@ -85,7 +85,8 @@ export default function AdminReports() {
   const total = reservations.length;
   const confirmed = reservations.filter((r) => r.status === "confirmed").length;
   const checkedIn = reservations.filter((r) => r.status === "checked_in").length;
-  const checkedOut = reservations.filter((r) => r.status === "checked_out").length;
+  // «مغلق» (0033) is a departure too: departed and settled
+  const checkedOut = reservations.filter((r) => r.status === "checked_out" || r.status === "closed").length;
   const byStatus = [
     { name: "مؤكد", value: confirmed },
     { name: "دخل", value: checkedIn },

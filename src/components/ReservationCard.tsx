@@ -30,7 +30,7 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
           <div className="flex flex-wrap gap-1.5">
             <StatusBadge status={r.identity_status} map={GUEST_VERIFICATION_LABELS} colorMap={{ verified: "bg-success-500/10 text-success-600", rejected: "bg-danger-500/10 text-danger-600", data_submitted: "bg-warning-500/10 text-warning-600", not_started: "bg-ink-100 text-ink-400" }} />
             <StatusBadge status={r.payment_status} map={PAYMENT_STATUS_LABELS} colorMap={{ paid: "bg-success-500/10 text-success-600", pending: "bg-warning-500/10 text-warning-600", failed: "bg-danger-500/10 text-danger-600" }} />
-            <StatusBadge status={r.access_status} map={ACCESS_STATUS_LABELS} colorMap={{ approved: "bg-accent-500/10 text-accent-600", delivered: "bg-success-500/10 text-success-600", locked: "bg-ink-100 text-ink-400" }} />
+            <StatusBadge status={r.access_status} map={ACCESS_STATUS_LABELS} colorMap={{ approved: "bg-accent-500/10 text-accent-600", delivered: "bg-success-500/10 text-success-600", acknowledged: "bg-success-500/10 text-success-600", key_handed: "bg-success-500/10 text-success-600", eligibility_review: "bg-warning-500/10 text-warning-600", locked: "bg-ink-100 text-ink-400" }} />
           </div>
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-ink-50 pt-2 text-xs text-ink-400">
@@ -42,12 +42,14 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
   );
 }
 
+/** The stay's next step (0033): the arrival at reception first, then the code as its own step, then the departure. */
 export function nextAction(r: import("../lib/hooks").ReservationCard): string {
-  if (r.status === "checked_in") return "متابعة المغادرة";
-  if (r.access_status === "delivered" || r.access_status === "acknowledged") return "متابعة الإقامة";
-  if (r.access_status === "approved") return "تسليم الرمز";
+  if (r.status === "closed") return "مغلق";
+  if (r.status === "checked_out") return "فحص المغادرة وتسوية التأمين";
+  if (["cancelled", "rejected", "no_show"].includes(r.status)) return "—";
+  if (r.status === "checked_in") return r.access_status === "approved" || r.access_status === "delivery_pending" ? "تسليم الرمز" : "متابعة الإقامة والمغادرة";
   if (r.identity_status !== "verified") return "مطابقة الهوية";
-  if (r.payment_status === "pending") return "مراجعة الدفع";
-  if (!r.government_registration) return "تأكيد التسجيل النظامي";
-  return "اعتماد الدخول";
+  if (!r.government_registration) return "التسجيل في شموس";
+  if (!r.shomoos_accepted_at) return "تأكيد قبول شموس";
+  return "تسجيل الوصول";
 }

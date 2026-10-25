@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, Home, MessageCircle, MapPin } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn } from "lucide-react";
 import { guestApi, toArabicError, type GuestSession } from "../../lib/api";
 import { Card, Spinner, EmptyState, ErrorBanner } from "../../components/ui";
-import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, ACCESS_STATUS_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus, type AccessStatus } from "../../lib/types";
+import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
 import { formatCurrency, formatHijri } from "../../lib/utils";
 
 export default function BookingStatus() {
@@ -33,14 +33,19 @@ export default function BookingStatus() {
   const submitted = data.guests.filter((g) => g.data_submitted).length;
   const delivered = ["delivered", "acknowledged"].includes(r.access_status);
   const dueHalalas = r.total_halalas - r.paid_halalas;
+  // 0033: the arrival is registered at reception; a unit with a key box then gets its code, one without its key
+  const arrived = ["checked_in", "checked_out", "closed"].includes(r.status);
+  const hasKeybox = r.has_keybox !== false;
+  const firstNightPaid = r.first_night_paid ?? r.payment_status === "paid";
 
   const steps = [
     { label: "تسجيل بيانات النزلاء", icon: UserCheck, done: submitted >= required && required > 0, statusText: `${submitted} من ${required}`, action: submitted < required ? { label: "استكمال البيانات", to: `/booking/registration/${token}` } : null },
-    { label: "اعتماد مطابقة الهوية (المشرف)", icon: FileCheck, done: r.identity_status === "verified", statusText: GUEST_VERIFICATION_LABELS[r.identity_status as GuestVerificationStatus] },
-    { label: "السداد", icon: CreditCard, done: r.payment_status === "paid", statusText: `${PAYMENT_STATUS_LABELS[r.payment_status as PaymentStatus]}${dueHalalas > 0 ? ` · المتبقي ${formatCurrency(dueHalalas / 100)}` : ""}` },
-    { label: "التسجيل النظامي", icon: FileCheck, done: r.government_registration, statusText: r.government_registration ? "مؤكد" : "بانتظار المشرف" },
-    { label: "اعتماد الدخول", icon: Home, done: ["approved", "delivery_pending", "delivered", "acknowledged"].includes(r.access_status), statusText: ACCESS_STATUS_LABELS[r.access_status as AccessStatus] },
-    { label: "تسليم رمز الصندوق", icon: KeyRound, done: delivered, statusText: delivered ? "جاهز للعرض" : "بعد اعتماد المشرف" },
+    { label: "مطابقة الهوية (الاستقبال)", icon: FileCheck, done: r.identity_status === "verified", statusText: GUEST_VERIFICATION_LABELS[r.identity_status as GuestVerificationStatus] },
+    { label: "سداد الليلة الأولى", icon: CreditCard, done: firstNightPaid, statusText: `${PAYMENT_STATUS_LABELS[r.payment_status as PaymentStatus]}${dueHalalas > 0 ? ` · المتبقي على الإقامة ${formatCurrency(dueHalalas / 100)}` : ""}` },
+    { label: "تسجيل الوصول في الاستقبال", icon: LogIn, done: arrived, statusText: arrived ? "تم" : "عند وصولك: التسجيل في شموس والتأمين في الاستقبال" },
+    hasKeybox
+      ? { label: "رمز صندوق المفتاح", icon: KeyRound, done: delivered, statusText: delivered ? "جاهز للعرض" : "بعد تسجيل الوصول" }
+      : { label: "مفتاح الوحدة", icon: KeyRound, done: arrived, statusText: arrived ? "يُسلَّم في الاستقبال" : "يُسلَّم في الاستقبال بعد تسجيل الوصول" },
   ];
 
   async function confirmArrival() {
@@ -83,9 +88,9 @@ export default function BookingStatus() {
         ))}
       </div>
 
-      {!data.access.allowed && data.access.reasons.length > 0 && !delivered && (
+      {!data.access.allowed && data.access.reasons.length > 0 && !delivered && !(arrived && !hasKeybox) && (
         <div className="mt-4 rounded-xl bg-ink-50 p-4 text-xs text-ink-500">
-          <p className="mb-1 font-medium text-ink-600">المتطلبات المتبقية قبل تسليم الرمز:</p>
+          <p className="mb-1 font-medium text-ink-600">{arrived ? "قبل تسليم الرمز:" : "قبل تسجيل الوصول:"}</p>
           <ul className="list-disc space-y-0.5 pr-4">{data.access.reasons.map((x, i) => <li key={i}>{x}</li>)}</ul>
         </div>
       )}
@@ -93,13 +98,13 @@ export default function BookingStatus() {
       {error && <div className="mt-4"><ErrorBanner message={error} /></div>}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {["locked"].includes(r.access_status) && submitted >= required && (
+        {["locked"].includes(r.access_status) && !arrived && submitted >= required && (
           <button onClick={confirmArrival} disabled={acting} className="btn-primary">
-            {acting ? <Spinner /> : <><MapPin className="h-4 w-4" /> وصلت — أبلغ المشرف</>}
+            {acting ? <Spinner /> : <><MapPin className="h-4 w-4" /> وصلت — أبلغ الاستقبال</>}
           </button>
         )}
-        {r.access_status === "eligibility_review" && (
-          <div className="rounded-xl bg-brand-50 p-3 text-center text-sm text-brand-700">تم إبلاغ المشرف بوصولك؛ بانتظار الاعتماد.</div>
+        {r.access_status === "eligibility_review" && !arrived && (
+          <div className="rounded-xl bg-brand-50 p-3 text-center text-sm text-brand-700">أُبلغ الاستقبال بوصولك؛ يُسجَّل وصولك هناك.</div>
         )}
         <button onClick={() => navigate(`/reception?token=${token}`)} className="btn-outline"><MessageCircle className="h-4 w-4" /> محادثة المساعد (متحقق)</button>
       </div>

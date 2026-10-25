@@ -74,20 +74,15 @@ test.describe("«الرموز» — key-box codes", () => {
     await loginAs("owner");
     await go("/staff/reservations");
     await page.locator("select").filter({ has: page.locator('option[value="checked_in"]') }).selectOption("checked_in");
-    const row = page.locator("table tbody tr").first();
-    await expect(row).toBeVisible();
+    // a stay with nothing owed, in a unit with a key box (0033, decision 8: no departure with money owed, for anyone)
+    const room = "104";
+    const row = page.locator("table tbody tr").filter({ has: page.locator("td:nth-child(3)", { hasText: room }) }).first();
     await expect(row).toContainText("تم الدخول");
-    const room = (await row.locator("td").nth(2).innerText()).split("\n")[0].trim();
     await row.getByRole("link", { name: "فتح" }).click();
 
-    await page.getByRole("button", { name: "تأكيد المغادرة", exact: true }).click();
-    const override = page.getByRole("button", { name: "تأكيد المغادرة مع التجاوز" });
-    await expect(override.or(page.getByText("تمت المغادرة").first())).toBeVisible();
-    if (await override.isVisible()) {
-      await page.getByPlaceholder("يُسجل السبب في سجل العمليات").fill("اختبار الرموز بعد المغادرة");
-      await override.click();
-    }
-    await expect(page.getByRole("button", { name: "تأكيد المغادرة", exact: true })).toHaveCount(0);
+    await page.getByTestId("in-house").getByRole("button", { name: "تسجيل المغادرة" }).click();
+    await expect(page.getByTestId("departed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "تسجيل المغادرة" })).toHaveCount(0);
 
     await go("/staff/codes");
     await expect(unit(page, room)).toHaveAttribute("data-state", "change");

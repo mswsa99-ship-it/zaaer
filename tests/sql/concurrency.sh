@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# X01 / X02 — true concurrency tests with TWO independent sessions (see ZAAER-TESTING-AND-CONTROL-RULES §10).
+# X01 / X02 / X05 — true concurrency tests with TWO independent sessions (see ZAAER-TESTING-AND-CONTROL-RULES §10),
+# with the races of decisions 45 (extending, switching and several units, each against a new booking), 46 (check-out
+# against an extension read at the same version; one correction run twice at once) and 49 (deactivating a unit and
+# archiving a type, each against a booking, in both orders).
 # Session A starts a transaction and holds it open for 3s before committing; session B fires 1s later and must
 # block on the row/exclusion lock, then observe A's committed result. Running the two calls sequentially would
 # NOT prove anything — this script is the evidence.
@@ -39,7 +42,8 @@ ACTIVE=$(psql -d "$DB" -At -c "select count(*) from reservation_allocations wher
 CHARGES=$(psql -d "$DB" -At -c "select count(*) from reservations r where r.room_id='00000000-0000-0000-0000-000000000198'")
 echo "X01 session A result: $A"
 echo "X01 session B result: $B"
-if [[ "$ACTIVE" == "1" && "$CHARGES" == "1" && "$B" == *"ALLOCATION_CONFLICT"* || "$B" == *"ROOM_NOT_AVAILABLE"* ]]; then
+# decision 45: the counts are required whatever the loser's message (the parentheses were missing before)
+if [[ "$ACTIVE" == "1" && "$CHARGES" == "1" && ( "$B" == *"ALLOCATION_CONFLICT"* || "$B" == *"ROOM_NOT_AVAILABLE"* ) ]]; then
   echo "PASS X01 concurrent booking race → exactly one active allocation ($ACTIVE), one reservation ($CHARGES), loser got a conflict"
 else
   echo "FAIL X01 active=$ACTIVE reservations=$CHARGES B=$B"; fail=1
@@ -100,4 +104,140 @@ if [[ "$PA" == "true" && "$PB" == "true" && $((same - before)) -eq 1 && $((after
 else
   echo "FAIL F07c"; fail=1
 fi
+
+# =====================================================================================================================
+# Decisions 45, 46, 49 — every race below: session A holds its transaction 3 s, session B starts 1 s later.
+# Accepted outcomes only: one valid order, or a declared conflict for the loser. Never a hybrid.
+# =====================================================================================================================
+psql -d "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+insert into rooms(id, branch_id, organization_id, category_id, room_number, is_active, status) values
+ ('00000000-0000-0000-0000-000000000170','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R0', true, 'available'),
+ ('00000000-0000-0000-0000-000000000171','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R1', true, 'available'),
+ ('00000000-0000-0000-0000-000000000172','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R2', true, 'available'),
+ ('00000000-0000-0000-0000-000000000173','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R3', true, 'available'),
+ ('00000000-0000-0000-0000-000000000174','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R4', true, 'available'),
+ ('00000000-0000-0000-0000-000000000175','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R5', true, 'available'),
+ ('00000000-0000-0000-0000-000000000176','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R6', true, 'available'),
+ ('00000000-0000-0000-0000-000000000177','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R7', true, 'available'),
+ ('00000000-0000-0000-0000-000000000178','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R8', true, 'available'),
+ ('00000000-0000-0000-0000-000000000179','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R9', true, 'available')
+on conflict (id) do nothing;
+-- guests matched and Shomoos accepted (those paths have their own tests; here only the arrival matters)
+create or replace function t_race_ready(p uuid) returns void language plpgsql security definer set search_path = public as $$
+begin
+  update reservation_guests set data_submitted = true, verification_status = 'verified' where reservation_id = p;
+  update reservations set identity_status = 'verified', government_registration = true, gov_registration_ref = 'SHM-RACE',
+         shomoos_guest_count = adults + companions, shomoos_accepted_at = now() where id = p;
+end $$;
+SQL
+BR='00000000-0000-0000-0000-000000000010'; CAT='00000000-0000-0000-0000-000000000030'; SRC='00000000-0000-0000-0000-000000000021'
+q() { psql -d "$DB" -At -c "$login $1" | tail -1; }
+qs() { psql -d "$DB" -At -c "$1" | tail -1; }
+booking() { # $1 room (or empty for a type-level stay), $2 from, $3 to, $4 category (default the studio)
+  local room=""; [[ -n "$1" ]] && room="'room_id','$1',"
+  echo "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','${4:-$CAT}',${room}'check_in','$2','check_out','$3','guest_name','سباق','source_id','$SRC'))->>'ok'"
+}
+sess() { # $1 expression returning text, $2 seconds to hold the transaction
+  psql -d "$DB" -At <<SQL 2>&1 | grep -E "ERROR|^R:" | head -1
+$login
+begin;
+select 'R:' || coalesce(($1)::text, 'null');
+select pg_sleep($2);
+commit;
+SQL
+}
+race() { # $1 session A (holds), $2 session B (starts 1 s later) → RA, RB
+  sess "$1" 3 > "$OUT/race_a" & sleep 1
+  RB=$(sess "$2" 0)
+  wait
+  RA=$(cat "$OUT/race_a")
+}
+conflict() { [[ "$1" == *"ALLOCATION_CONFLICT"* || "$1" == *"ROOM_NOT_AVAILABLE"* ]]; }
+check() { # $1 name, $2 0|1 (the condition's status), $3 detail
+  if [[ "$2" == "0" ]]; then echo "PASS $1"; else echo "FAIL $1 — $3"; fail=1; fi
+}
+TODAY=$(qs "select fn_branch_today('$BR')")
+D2=$(qs "select fn_branch_today('$BR') + 2"); D3=$(qs "select fn_branch_today('$BR') + 3")
+# a stay in house today on $1, its nights paid, no deposit (with the reason)
+in_house() {
+  local res; res=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','$1','check_in','$TODAY','check_out','$D2','guest_name','سباق مقيم','source_id','$SRC')))->>'id';")
+  qs "select t_race_ready('$res');" >/dev/null
+  q "select fn_staff_check_in(jsonb_build_object('reservation_id','$res','deposit_reason','سباق',
+       'rent', jsonb_build_object('amount_halalas', (fn_reservation_finance('$res')->>'balance_due')::bigint, 'method','cash','idempotency_key','race-rent-$res')))->>'ok';" >/dev/null
+  echo "$res"
+}
+
+# ---------- X01b (decision 45): extending a stay against a new booking of the added nights ----------
+R1=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','00000000-0000-0000-0000-000000000170','check_in','2031-01-01','check_out','2031-01-03','guest_name','سباق تمديد','source_id','$SRC')))->>'id';")
+V1=$(qs "select version from reservations where id = '$R1'")
+race "fn_staff_amend_stay('$R1', '2031-01-05', 'keep_rate', 'سباق', $V1)->>'ok'" "$(booking 00000000-0000-0000-0000-000000000170 2031-01-03 2031-01-05)"
+N=$(qs "select count(*) from reservation_allocations where room_id = '00000000-0000-0000-0000-000000000170' and status = 'active'")
+M=$(qs "select count(*) from reservations where room_id = '00000000-0000-0000-0000-000000000170'")
+CO=$(qs "select check_out from reservations where id = '$R1'")
+echo "X01b A=$RA B=$RB active=$N stays=$M check_out=$CO"
+conflict "$RB" && [[ "$RA" == "R:true" && "$N" == "1" && "$M" == "1" && "$CO" == "2031-01-05" ]]; check "X01b extend vs new booking → the extension holds the added nights, exactly one active allocation, the booking gets a clear conflict" $? "A=$RA B=$RB"
+
+# ---------- X01c (decision 45): switching a stay's unit against a new booking of that unit ----------
+R2=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','00000000-0000-0000-0000-000000000171','check_in','2031-02-01','check_out','2031-02-03','guest_name','سباق تبديل','source_id','$SRC')))->>'id';")
+V2=$(qs "select version from reservations where id = '$R2'")
+race "fn_staff_switch_room('$R2', '00000000-0000-0000-0000-000000000172', null, 'سباق', $V2)->>'ok'" "$(booking 00000000-0000-0000-0000-000000000172 2031-02-01 2031-02-03)"
+N=$(qs "select count(*) from reservation_allocations where room_id = '00000000-0000-0000-0000-000000000172' and status = 'active'")
+M=$(qs "select count(*) from reservations where room_id = '00000000-0000-0000-0000-000000000172'")
+echo "X01c A=$RA B=$RB active=$N stays=$M"
+conflict "$RB" && [[ "$RA" == "R:true" && "$N" == "1" && "$M" == "1" ]]; check "X01c switch vs new booking → exactly one active allocation on the unit, the booking gets a clear conflict" $? "A=$RA B=$RB"
+
+# ---------- X01d (decision 45): a single booking against a booking of several units, one of them the same ----------
+race "$(booking 00000000-0000-0000-0000-000000000174 2031-03-01 2031-03-03)" \
+     "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-03-01','check_out','2031-03-03','guest_name','سباق جماعي','source_id','$SRC','units', jsonb_build_array(jsonb_build_object('room_id','00000000-0000-0000-0000-000000000173'), jsonb_build_object('room_id','00000000-0000-0000-0000-000000000174'))))->>'ok'"
+N=$(qs "select count(*) from reservation_allocations where room_id = '00000000-0000-0000-0000-000000000174' and status = 'active'")
+P=$(qs "select count(*) from reservations where room_id = '00000000-0000-0000-0000-000000000173'")
+echo "X01d A=$RA B=$RB active=$N partial=$P"
+conflict "$RB" && [[ "$RA" == "R:true" && "$N" == "1" && "$P" == "0" ]]; check "X01d single vs several units → one allocation on the shared unit, and no part of the several-unit booking survives" $? "A=$RA B=$RB partial=$P"
+
+# ---------- X05 (decision 46): check-out against an extension, both read at the same version ----------
+R4=$(in_house 00000000-0000-0000-0000-000000000175)
+V4=$(qs "select version from reservations where id = '$R4'")
+race "fn_staff_check_out(jsonb_build_object('reservation_id','$R4'))->>'ok'" "fn_staff_amend_stay('$R4', '$D3', 'keep_rate', 'سباق', $V4)->>'ok'"
+ST=$(qs "select status || ' ' || check_out from reservations where id = '$R4'")
+echo "X05a A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && ( "$RB" == *"VERSION_CONFLICT"* || "$RB" == *"RESERVATION_STATUS_INVALID"* ) && "$ST" == "checked_out $D2" ]]; check "X05a check-out first → the extension gets a declared conflict; the stay stays departed (never back in house)" $? "A=$RA B=$RB $ST"
+R5=$(in_house 00000000-0000-0000-0000-000000000176)
+V5=$(qs "select version from reservations where id = '$R5'")
+race "fn_staff_amend_stay('$R5', '$D3', 'keep_rate', 'سباق', $V5)->>'ok'" "fn_staff_check_out(jsonb_build_object('reservation_id','$R5'))->>'ok'"
+ST=$(qs "select status || ' ' || check_out from reservations where id = '$R5'")
+echo "X05b A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == "R:false" && "$ST" == "checked_in $D3" ]]; check "X05b extension first → the check-out sees the added night owed and is refused; one valid order, no hybrid" $? "A=$RA B=$RB $ST"
+
+# ---------- X05c (decision 49): deactivating a unit against a booking of it, both orders ----------
+V7=$(qs "select version from rooms where id = '00000000-0000-0000-0000-000000000177'")
+race "$(booking 00000000-0000-0000-0000-000000000177 2031-04-01 2031-04-03)" "fn_admin_upsert_room(jsonb_build_object('id','00000000-0000-0000-0000-000000000177','is_active',false,'version',$V7))->>'ok'"
+ST=$(qs "select is_active || ' ' || (select count(*) from reservation_allocations a where a.room_id = r.id and a.status = 'active') from rooms r where id = '00000000-0000-0000-0000-000000000177'")
+echo "X05c1 A=$RA B=$RB unit=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"HAS_FUTURE_COMMITMENTS"* && "$ST" == "true 1" ]]; check "X05c1 booking first → the unit stays active with its booking; deactivating gets a clear conflict" $? "A=$RA B=$RB $ST"
+V8=$(qs "select version from rooms where id = '00000000-0000-0000-0000-000000000178'")
+race "fn_admin_upsert_room(jsonb_build_object('id','00000000-0000-0000-0000-000000000178','is_active',false,'version',$V8))->>'ok'" "$(booking 00000000-0000-0000-0000-000000000178 2031-04-01 2031-04-03)"
+ST=$(qs "select is_active || ' ' || (select count(*) from reservations x where x.room_id = r.id) from rooms r where id = '00000000-0000-0000-0000-000000000178'")
+echo "X05c2 A=$RA B=$RB unit=$ST"
+conflict "$RB" && [[ "$RA" == "R:true" && "$ST" == "false 0" ]]; check "X05c2 deactivation first → the unit is inactive with no new booking; the booking gets a clear conflict" $? "A=$RA B=$RB $ST"
+
+# ---------- X05d (decision 49): archiving a unit type against a booking of it, both orders ----------
+C1=$(q "select (fn_admin_upsert_room_category(jsonb_build_object('branch_id','$BR','name_ar','نوع سباق 1','base_price_halalas',9000)))->>'id';")
+C2=$(q "select (fn_admin_upsert_room_category(jsonb_build_object('branch_id','$BR','name_ar','نوع سباق 2','base_price_halalas',9000)))->>'id';")
+race "$(booking '' 2031-05-01 2031-05-02 "$C1")" "fn_admin_archive_definition('room_category', '$C1', 'سباق')->>'ok'"
+ST=$(qs "select (archived_at is null) || ' ' || (select count(*) from reservations x where x.room_category_id = c.id) from room_categories c where id = '$C1'")
+echo "X05d1 A=$RA B=$RB type=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"HAS_OPEN_COMMITMENTS"* && "$ST" == "true 1" ]]; check "X05d1 booking first → the type stays with its booking; archiving gets a clear conflict" $? "A=$RA B=$RB $ST"
+race "fn_admin_archive_definition('room_category', '$C2', 'سباق')->>'ok'" "$(booking '' 2031-05-01 2031-05-02 "$C2")"
+ST=$(qs "select (archived_at is null) || ' ' || (select count(*) from reservations x where x.room_category_id = c.id) from room_categories c where id = '$C2'")
+echo "X05d2 A=$RA B=$RB type=$ST"
+[[ "$RA" == "R:true" && ( "$RB" == *"CATEGORY_ARCHIVED"* || "$RB" == *"BRANCH_MISMATCH"* ) && "$ST" == "false 0" ]]; check "X05d2 archiving first → the type is archived with no new booking; the booking gets a clear refusal" $? "A=$RA B=$RB $ST"
+
+# ---------- X05e (decision 46): the same correction run twice at once succeeds once ----------
+R6=$(in_house 00000000-0000-0000-0000-000000000179)
+q "select fn_staff_check_out(jsonb_build_object('reservation_id','$R6'))->>'ok';" >/dev/null
+race "fn_staff_reopen_stay(jsonb_build_object('reservation_id','$R6','reason','سباق'))->>'ok'" "fn_staff_reopen_stay(jsonb_build_object('reservation_id','$R6','reason','سباق'))->>'ok'"
+ST=$(qs "select status || ' ' || (select count(*) from review_items v where v.entity_id = r.id and v.kind = 'stay_reopened') from reservations r where id = '$R6'")
+echo "X05e A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"RESERVATION_STATUS_INVALID"* && "$ST" == "checked_in 1" ]]; check "X05e reopening a departure twice at once → reopened once, one review item; the second is refused" $? "A=$RA B=$RB $ST"
+
 exit $fail

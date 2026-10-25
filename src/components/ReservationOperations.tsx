@@ -4,8 +4,8 @@
  * Every button explains its effect before executing; nothing here writes to tables directly.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert } from "lucide-react";
-import { opsApi, ratesApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance } from "../lib/api";
+import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert, Hammer } from "lucide-react";
+import { opsApi, ratesApi, stayApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
@@ -16,13 +16,15 @@ import type { CashAccount } from "../lib/api";
 import { formatCurrency, formatDateTime, todayISO } from "../lib/utils";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
-type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice";
+type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice" | "damage";
 
-export function ReservationOperations({ reservationId, onChanged }: { reservationId: string; onChanged: () => void }) {
+export function ReservationOperations({ reservationId, refreshKey, onChanged }: { reservationId: string; refreshKey?: unknown; onChanged: () => void }) {
   const { profile } = useAuth();
   const role = profile?.role ?? "guest";
   const canMoney = ["owner", "manager", "supervisor", "finance"].includes(role);
+  // the stay's own money is refunded by the owner, a manager or finance; the deposit also by the supervisor (decision 5)
   const canRefund = ["owner", "manager", "finance"].includes(role);
+  const canDeposit = canMoney;
   const canManage = ["owner", "manager", "supervisor"].includes(role);
   const isMgr = ["owner", "manager"].includes(role);
 
@@ -42,7 +44,7 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
     supabase.from("branches").select("default_deposit_halalas").eq("id", branchOfRes).maybeSingle().then(({ data }) => { if (alive && data) setDepositDefault(Number((data as { default_deposit_halalas: number }).default_deposit_halalas) || 0); });
     return () => { alive = false; };
   }, [branchOfRes]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
   useEffect(() => {
     const ch = supabase.channel(`ops-${reservationId}`).on("postgres_changes", { event: "*", schema: "public", table: "financial_vouchers", filter: `reservation_id=eq.${reservationId}` }, () => load()).subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -68,8 +70,9 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
             {open && <button onClick={() => setDialog("receipt")} className="btn-accent text-xs"><Receipt className="h-3.5 w-3.5" /> سند قبض إقامة</button>}
             {open && <button onClick={() => setDialog("deposit")} className="btn-outline text-xs"><Receipt className="h-3.5 w-3.5" /> قبض تأمين</button>}
             {canRefund && f.received - f.refunded > 0 && <button onClick={() => setDialog("refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> استرداد إقامة</button>}
-            {canRefund && f.deposit_balance > 0 && <button onClick={() => setDialog("deposit_refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> رد تأمين</button>}
-            {canRefund && f.deposit_balance > 0 && f.balance_due > 0 && <button onClick={() => setDialog("deposit_apply")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تغطية رسوم من التأمين</button>}
+            {canDeposit && f.deposit_balance > 0 && <button onClick={() => setDialog("deposit_refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> رد تأمين</button>}
+            {canDeposit && f.deposit_balance > 0 && f.balance_due > 0 && <button onClick={() => setDialog("deposit_apply")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تغطية رسوم من التأمين</button>}
+            {canManage && ["checked_in", "checked_out", "closed"].includes(r.status) && <button onClick={() => setDialog("damage")} className="btn-outline text-xs"><Hammer className="h-3.5 w-3.5" /> رسم ضرر</button>}
             {canManage && open && <button onClick={() => setDialog("service")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> إضافة خدمة</button>}
             {canManage && open && <button onClick={() => setDialog("adjust")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> خصم / تسوية / غرامة</button>}
             {(d.charges ?? []).some((c) => !c.invoice_id) && <button onClick={() => setDialog("invoice")} className="btn-outline text-xs"><FileText className="h-3.5 w-3.5" /> إصدار فاتورة</button>}
@@ -133,6 +136,7 @@ export function ReservationOperations({ reservationId, onChanged }: { reservatio
       {/* ---------- dialogs ---------- */}
       <VoucherDialog open={dialog === "receipt" || dialog === "deposit"} kind={dialog === "deposit" ? "deposit" : "receipt"} reservationId={reservationId} accounts={accounts.active} suggested={dialog === "deposit" ? depositDefault : f.balance_due} onClose={() => setDialog(null)} onDone={done} />
       <RefundDialog open={dialog === "refund" || dialog === "deposit_refund" || dialog === "deposit_apply"} kind={(dialog as "refund" | "deposit_refund" | "deposit_apply") ?? "refund"} reservationId={reservationId} accounts={accounts.active} available={dialog === "refund" ? f.received - f.refunded : dialog === "deposit_apply" ? Math.min(f.deposit_balance, f.balance_due) : f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
+      <DamageDialog open={dialog === "damage"} reservationId={reservationId} depositBalance={f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
       <AdjustDialog open={dialog === "adjust"} reservationId={reservationId} version={r.version} isMgr={isMgr} onClose={() => setDialog(null)} onDone={done} />
       <ServiceDialog open={dialog === "service"} reservationId={reservationId} branchId={r.branch_id} onClose={() => setDialog(null)} onDone={done} />
       <ExtendDialog open={dialog === "extend"} d={d} onClose={() => setDialog(null)} onDone={done} />
@@ -190,7 +194,7 @@ function ReasonDialog({ open, title, warning, onClose, onSubmit }: { open: boole
  * bank account (the default is chosen, any other active one can be), nothing for the platform; the terminal and the
  * transfer need their transaction number. The server applies the same rules.
  */
-function PaymentFields({ method, setMethod, accountId, setAccountId, reference, setReference, accounts, verb, deposit = false }: {
+export function PaymentFields({ method, setMethod, accountId, setAccountId, reference, setReference, accounts, verb, deposit = false }: {
   method: PaymentMethod; setMethod: (m: PaymentMethod) => void; accountId: string; setAccountId: (id: string) => void;
   reference: string; setReference: (r: string) => void; accounts: CashAccount[]; verb: "receive" | "return";
   /** The deposit is held and returned by the property itself; a platform never collects it. */
@@ -302,6 +306,33 @@ function StayNights({ reservationId, version }: { reservationId: string; version
   );
 }
 
+/** «رسم ضرر» (decision 5): a charge with its reason, taken from the deposit as far as it goes; what is left of the deposit
+ *  is refunded on its own voucher. */
+function DamageDialog({ open, reservationId, depositBalance, onClose, onDone }: { open: boolean; reservationId: string; depositBalance: number; onClose: () => void; onDone: () => Promise<void> }) {
+  const [amount, setAmount] = useState<number | null>(null); const [desc, setDesc] = useState(""); const [reason, setReason] = useState(""); const [fromDeposit, setFromDeposit] = useState(true);
+  const [key, setKey] = useState(newIdempotencyKey());
+  useEffect(() => { if (open) { setAmount(null); setDesc(""); setReason(""); setFromDeposit(true); setKey(newIdempotencyKey()); } }, [open]);
+  return (
+    <Modal open={open} title="رسم ضرر" onClose={onClose}>
+      <ActionForm onSubmit={async () => {
+        if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
+        if (!reason.trim()) throw new Error("VALIDATION: reason");
+        await stayApi.damage({ reservation_id: reservationId, amount_halalas: amount, description: desc.trim() || undefined, reason: reason.trim(), apply_deposit: fromDeposit, idempotency_key: key });
+        await onDone();
+      }}>
+        <div className="space-y-3">
+          <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
+          <Field label="الوصف"><input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="مثال: كسر زجاج الطاولة" /></Field>
+          <ReasonInput value={reason} onChange={setReason} />
+          <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" className="h-4 w-4" checked={fromDeposit} onChange={(e) => setFromDeposit(e.target.checked)} /> يُخصم من التأمين بقدر ما يكفي (المتاح <span dir="ltr">{sar(depositBalance)}</span>)</label>
+        </div>
+        <p className="mt-2 text-xs text-ink-400">يُضاف بند غرامة بسببه ولا يُعدَّل أي سند سابق؛ ما يبقى من التأمين يُرد بسند مستقل بعد الفحص.</p>
+        <Submit label="حفظ رسم الضرر" onCancel={onClose} />
+      </ActionForm>
+    </Modal>
+  );
+}
+
 function AdjustDialog({ open, reservationId, version, isMgr, onClose, onDone }: { open: boolean; reservationId: string; version: number; isMgr: boolean; onClose: () => void; onDone: () => Promise<void> }) {
   // decision 9: the supervisor discounts too, before arrival and within limits; the window says how much
   const [kind, setKind] = useState<"discount" | "adjustment" | "penalty" | "addon">("discount");
@@ -326,9 +357,9 @@ function AdjustDialog({ open, reservationId, version, isMgr, onClose, onDone }: 
 }
 
 function ServiceDialog({ open, reservationId, branchId, onClose, onDone }: { open: boolean; reservationId: string; branchId: string; onClose: () => void; onDone: () => Promise<void> }) {
-  const [services, setServices] = useState<Array<{ id: string; name_ar: string; price_halalas: number; is_free: boolean; billing_unit: string }>>([]);
+  const [services, setServices] = useState<Array<{ id: string; name_ar: string; price_halalas: number; is_free: boolean; billing_unit: string; late_checkout_until: string | null }>>([]);
   const [svc, setSvc] = useState(""); const [qty, setQty] = useState(1);
-  useEffect(() => { if (!open) return; supabase.from("service_definitions").select("id, name_ar, price_halalas, is_free, billing_unit").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name_ar").then(({ data }) => { setServices((data as typeof services) ?? []); setSvc((data?.[0] as { id: string } | undefined)?.id ?? ""); }); }, [open, branchId]);
+  useEffect(() => { if (!open) return; supabase.from("service_definitions").select("id, name_ar, price_halalas, is_free, billing_unit, late_checkout_until").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name_ar").then(({ data }) => { setServices((data as typeof services) ?? []); setSvc((data?.[0] as { id: string } | undefined)?.id ?? ""); }); }, [open, branchId]);
   const s = services.find((x) => x.id === svc);
   return (
     <Modal open={open} title="إضافة خدمة" onClose={onClose}>
@@ -337,6 +368,7 @@ function ServiceDialog({ open, reservationId, branchId, onClose, onDone }: { ope
           <div className="space-y-3">
             <Field label="الخدمة"><select className="input" value={svc} onChange={(e) => setSvc(e.target.value)}>{services.map((x) => <option key={x.id} value={x.id}>{x.name_ar} — {x.is_free ? "مجانية" : sar(x.price_halalas)}</option>)}</select></Field>
             {s?.billing_unit === "quantity" && <Field label="الكمية"><input type="number" min={1} className="input" dir="ltr" value={qty} onChange={(e) => setQty(Number(e.target.value))} /></Field>}
+            {s?.late_checkout_until && <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">مغادرة متأخرة: ينتقل موعد مغادرة هذه الإقامة إلى الساعة <span dir="ltr">{s.late_checkout_until.slice(0, 5)}</span>.</p>}
             <p className="text-xs text-ink-400">يُحفظ الاسم والسعر والضريبة لحظة الإضافة.</p>
           </div>
         )}
@@ -380,7 +412,7 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <Field label="تاريخ السريان"><input type="date" className="input" dir="ltr" min={r.check_in} max={r.check_out} value={effective} onChange={(e) => setEffective(e.target.value)} /></Field>
           <Field label="الوحدة الجديدة (متاحة لبقية الفترة)"><select className="input" value={room} onChange={(e) => setRoom(e.target.value)}><option value="">اختر</option>{rooms.map((x) => <option key={x.room_id} value={x.room_id}>{x.room_number} · {x.category_name} · {CLEANLINESS_LABELS[x.cleanliness]}</option>)}</select></Field>
           <ReasonInput value={reason} onChange={setReason} />
-          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">يُغلق تخصيص الوحدة القديمة عند تاريخ السريان ويُفتح تخصيص جديد (التاريخ محفوظ). أثناء الإقامة: تتحول القديمة إلى «تحتاج تنظيفًا» ويلزم مراجعة رمز الدخول للجديدة. فرق السعر عند تغيير النوع يُضاف كتسوية منفصلة.</div>
+          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">يُغلق تخصيص الوحدة القديمة عند تاريخ السريان ويُفتح تخصيص جديد (التاريخ محفوظ). أثناء الإقامة: تتحول القديمة إلى «تحتاج تنظيفًا» ويتغير رمزها، ويُسلَّم رمز الجديدة خطوةً مستقلة إن كان لها صندوق، أو مفتاحها في الاستقبال. فرق السعر عند تغيير النوع يُضاف كتسوية منفصلة.</div>
         </div>
         <Submit label="تبديل" onCancel={onClose} />
       </ActionForm>
@@ -392,5 +424,8 @@ const ACTION_LABELS: Record<string, string> = {
   "reservation.created": "إنشاء الحجز", "reservation.departure_changed": "تغيير تاريخ المغادرة", "reservation.room_switched": "تبديل الوحدة", "reservation.total_changed": "تعديل إجمالي الحجز",
   "reservation.service_added": "إضافة خدمة", "reservation.cancelled": "إلغاء الحجز", "reservation.no_show": "عدم حضور", "voucher.receipt_created": "سند قبض", "voucher.deposit_created": "قبض تأمين",
   "voucher.refund_created": "استرداد", "voucher.deposit_refund_created": "رد تأمين", "voucher.deposit_apply_created": "تغطية من التأمين", "voucher.cancelled": "إلغاء سند", "invoice.issued": "إصدار فاتورة", "invoice.cancelled": "إلغاء فاتورة",
+  "reservation.checked_in": "تسجيل الوصول", "reservation.checked_out": "تسجيل المغادرة", "reservation.shomoos_registered": "تسجيل شموس", "reservation.shomoos_accepted": "قبول شموس",
+  "reservation.inspected": "فحص المغادرة", "reservation.damage_charged": "رسم ضرر", "reservation.payment_exception": "سبب استمرار مع ليلة غير مدفوعة", "reservation.check_in_undone": "تراجع عن تسجيل الوصول",
+  "reservation.stay_reopened": "إعادة فتح الإقامة", "reservation.cancel_undone": "تراجع عن الإلغاء", "reservation.closed": "إغلاق الإقامة", "reservation.unclosed": "العودة إلى «غادر»",
   assign_room: "تخصيص وحدة", checkout: "مغادرة", confirm_payment: "تأكيد سداد", approve_checkin: "اعتماد الدخول", deliver_access_code: "تسليم رمز الدخول", approve_identity: "اعتماد الهوية", reject_identity: "رفض الهوية", confirm_gov_registration: "تأكيد التسجيل النظامي",
 };

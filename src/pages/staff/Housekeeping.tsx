@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, CheckCircle2, Wrench, Play, Plus, UserPlus, XCircle, Landmark, DoorClosed } from "lucide-react";
+import { Sparkles, CheckCircle2, Wrench, Play, Plus, UserPlus, XCircle, Landmark, DoorClosed, ClipboardCheck } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
-import { staffApi, opsApi, toArabicError } from "../../lib/api";
+import { staffApi, opsApi, stayApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
-import { Modal, Field, ActionForm, Submit, ReasonInput } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, ReasonInput, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
 import { formatDateTime } from "../../lib/utils";
 
-interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
+interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
 interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string }
 interface Opt { id: string; name: string }
-interface HkData { tasks: Task[]; rooms: RoomLite[]; facilities: Opt[]; types: Opt[]; staff: Opt[] }
-const NO_HK: HkData = { tasks: [], rooms: [], facilities: [], types: [], staff: [] };
+interface HkData { tasks: Task[]; rooms: RoomLite[]; facilities: Opt[]; types: Opt[]; staff: Opt[]; inspected: Record<string, "ok" | "notes"> }
+const NO_HK: HkData = { tasks: [], rooms: [], facilities: [], types: [], staff: [], inspected: {} };
+/** the cleaning a departure creates: its inspection is recorded from the task (decision 5) */
+const DEPARTURE_CLEANING = "تنظيف بعد المغادرة";
 
 export default function Housekeeping() {
   const { profile } = useAuth();
@@ -31,19 +33,22 @@ export default function Housekeeping() {
 
   // G24: everything on this screen belongs to the active branch; a late answer for another branch is dropped
   const hk = useBranchQuery<HkData>(async (branchId) => {
-    const [t, r, f, tt, s] = await Promise.all([
-      supabase.from("housekeeping_tasks").select("id, status, priority, room_id, facility_id, task_type_name_snapshot, assignee_id, scheduled_start, description, created_at, version, room:rooms(room_number, status, cleanliness), facility:facilities(name), assignee:staff_profiles!housekeeping_tasks_assignee_id_fkey(full_name)").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(300),
+    const [t, r, f, tt, s, ins] = await Promise.all([
+      supabase.from("housekeeping_tasks").select("id, status, priority, room_id, facility_id, reservation_id, task_type_name_snapshot, assignee_id, scheduled_start, description, created_at, version, room:rooms(room_number, status, cleanliness), facility:facilities(name), assignee:staff_profiles!housekeeping_tasks_assignee_id_fkey(full_name)").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(300),
       supabase.from("rooms").select("id, room_number, status, cleanliness").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("room_number"),
       supabase.from("facilities").select("id, name").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("task_types").select("id, name, code").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("staff_profiles").select("id, full_name, role").eq("is_active", true),
+      supabase.from("checkout_inspections").select("reservation_id, result").eq("branch_id", branchId).eq("status", "active"),
     ]);
     return {
       tasks: must(t) as unknown as Task[], rooms: must(r) as RoomLite[], facilities: must(f) as Opt[], types: must(tt) as Opt[],
       staff: (must(s) as { id: string; full_name: string }[]).map((x) => ({ id: x.id, name: x.full_name })),
+      inspected: Object.fromEntries(((ins.data ?? []) as { reservation_id: string; result: "ok" | "notes" }[]).map((x) => [x.reservation_id, x.result])),
     };
   }, [], NO_HK);
-  const { tasks, rooms, facilities, types, staff } = hk.data;
+  const { tasks, rooms, facilities, types, staff, inspected } = hk.data;
+  const [inspect, setInspect] = useState<Task | null>(null); const [inspResult, setInspResult] = useState<"ok" | "notes">("ok"); const [inspNotes, setInspNotes] = useState(""); const [inspSuggested, setInspSuggested] = useState<number | null>(null);
   const { reload } = hk;
   useEffect(() => {
     const ch = supabase.channel("hk-rt").on("postgres_changes", { event: "*", schema: "public", table: "housekeeping_tasks" }, () => reload()).on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => reload()).subscribe();
@@ -82,10 +87,12 @@ export default function Housekeeping() {
                     <span>{t.assignee?.full_name ?? "غير مسندة"} · {formatDateTime(t.scheduled_start)}</span>
                   </p>
                   {t.description && <p className="mt-0.5 text-xs text-ink-500">{t.description}</p>}
+                  {t.reservation_id && t.description === DEPARTURE_CLEANING && inspected[t.reservation_id] && <p className="mt-0.5 text-xs text-success-600">فُحصت المغادرة: {inspected[t.reservation_id] === "ok" ? "الوحدة سليمة" : "بملاحظات"}</p>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {canManage && <button onClick={() => { setAssignTask(t); setAssignee(t.assignee_id ?? ""); }} className="btn-ghost text-xs"><UserPlus className="h-3.5 w-3.5" /> إسناد</button>}
+                {t.room && t.reservation_id && t.description === DEPARTURE_CLEANING && !inspected[t.reservation_id] && <button onClick={() => { setInspect(t); setInspResult("ok"); setInspNotes(""); setInspSuggested(null); }} className="btn-outline text-xs"><ClipboardCheck className="h-3.5 w-3.5" /> فحص المغادرة</button>}
                 {t.room && <button onClick={() => { setMaintTarget({ id: t.room_id!, room_number: t.room!.room_number, status: t.room!.status, cleanliness: t.room!.cleanliness }); setMaintTitle(""); setMaintDesc(""); }} className="btn-outline text-xs"><Wrench className="h-3.5 w-3.5" /> بلاغ صيانة</button>}
                 {t.status === "pending" && mine(t) && <button onClick={() => act(t.id, async () => { await opsApi.startTask(t.id); })} disabled={acting === t.id} className="btn-outline text-xs"><Play className="h-3.5 w-3.5" /> بدء</button>}
                 {mine(t) && <button onClick={() => act(t.id, async () => { const r = await opsApi.completeTask(t.id, undefined, t.version); return r.room_status ? `تم الإتمام. حالة الوحدة الآن: ${ROOM_STATUS_LABELS[r.room_status as RoomStatus] ?? r.room_status} (الإشغال لا يتغير بالتنظيف)` : "تم الإتمام."; })} disabled={acting === t.id} className="btn-accent text-xs">{acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} إتمام</button>}
@@ -147,6 +154,25 @@ export default function Housekeeping() {
         <ActionForm onSubmit={async () => { if (!cancelReason.trim()) throw new Error("VALIDATION: reason"); if (cancelTask) await opsApi.cancelTask(cancelTask.id, cancelReason.trim()); setCancelTask(null); reload(); }}>
           <ReasonInput value={cancelReason} onChange={setCancelReason} />
           <Submit label="إلغاء المهمة" onCancel={() => setCancelTask(null)} danger />
+        </ActionForm>
+      </Modal>
+      <Modal open={!!inspect} title={`فحص المغادرة · وحدة ${inspect?.room?.room_number ?? ""}`} onClose={() => setInspect(null)}>
+        <ActionForm onSubmit={async () => {
+          if (!inspect?.reservation_id) return;
+          if (inspResult === "notes" && !inspNotes.trim()) throw new Error("VALIDATION: inspection_notes");
+          await stayApi.inspect({ reservation_id: inspect.reservation_id, result: inspResult, notes: inspNotes.trim() || undefined, suggested_deduction_halalas: inspResult === "notes" && inspSuggested && inspSuggested > 0 ? inspSuggested : undefined });
+          setInspect(null); setNotice("سُجِّل فحص المغادرة؛ يُرد التأمين بعده."); reload();
+        }}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="نتيجة الفحص">
+              {(["ok", "notes"] as const).map((v) => <button key={v} type="button" role="radio" aria-checked={inspResult === v} onClick={() => setInspResult(v)} className={`rounded-xl border px-3 py-2 text-sm ${inspResult === v ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>{v === "ok" ? "الوحدة سليمة" : "بملاحظات"}</button>)}
+            </div>
+            {inspResult === "notes" && <>
+              <Field label="الملاحظات (إلزامية)"><textarea className="input" rows={2} value={inspNotes} onChange={(e) => setInspNotes(e.target.value)} placeholder="ما الذي وُجد في الوحدة؟" /></Field>
+              <Field label="خصم مقترح من التأمين (اختياري)" hint="يقرّره من يسوّي التأمين في الاستقبال."><MoneyInput valueHalalas={inspSuggested} onChange={setInspSuggested} /></Field>
+            </>}
+          </div>
+          <Submit label="حفظ الفحص" onCancel={() => setInspect(null)} />
         </ActionForm>
       </Modal>
       <Modal open={!!maintTarget} title={`بلاغ صيانة · وحدة ${maintTarget?.room_number ?? ""}`} onClose={() => setMaintTarget(null)}>
