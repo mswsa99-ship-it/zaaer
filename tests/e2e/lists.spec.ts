@@ -159,7 +159,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     expect(wb.data.length).toBe(1);
     expect(wb.data[0][1]).toBe("تسجيل خروج إجباري");
     // the row's detail shows the technical code and the masked details
-    await table.locator("[data-testid=audit-row]").first().click();
+    await table.locator("[data-testid=audit-row]").first().getByTestId("audit-action").click();   // the action cell: the row centre may land on «تتبّع» or «فقط هو»
     await expect(page.getByTestId("audit-detail")).toContainText("staff.signed_out");
     await page.getByTestId("audit-detail").getByLabel("إغلاق").click();
     // the supervisor: the same page without security rows and without the category filter
