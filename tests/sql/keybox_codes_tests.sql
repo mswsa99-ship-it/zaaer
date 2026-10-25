@@ -39,8 +39,8 @@ $$;
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare r jsonb; b uuid; b2 uuid; cat uuid; cat2 uuid; begin
-  r := fn_admin_upsert_branch('{"name_ar":"فرع الرموز","tax_rate_bp":0}'); b := (r->>'id')::uuid;
-  r := fn_admin_upsert_branch('{"name_ar":"فرع بلا أعضاء","tax_rate_bp":0}'); b2 := (r->>'id')::uuid;
+  r := fn_admin_upsert_branch('{"name_ar":"فرع الرموز","name_en":"Test branch","tax_rate_bp":0}'); b := (r->>'id')::uuid;
+  r := fn_admin_upsert_branch('{"name_ar":"فرع بلا أعضاء","name_en":"Test branch","tax_rate_bp":0}'); b2 := (r->>'id')::uuid;
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar', 'استوديو الرموز', 'base_price_halalas', 10000)); cat := (r->>'id')::uuid;
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b2, 'name_ar', 'استوديو آخر', 'base_price_halalas', 10000)); cat2 := (r->>'id')::uuid;
   insert into ids values ('b', b), ('b2', b2);

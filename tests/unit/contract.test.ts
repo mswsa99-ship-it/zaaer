@@ -99,10 +99,10 @@ describe("non-negotiable source rules", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("the owner's paste file carries 0022, 0031 and 0034 verbatim, each recorded in the history, in one transaction", () => {
-    // These three hold DELETE inside the purge functions, so the owner runs them from the SQL Editor (STAGING.md §0-ب)
-    const paste = read("supabase/paste/owner-paste-0022-0031-0034.sql");
-    for (const f of ["20261023091000_0022_data_purge.sql", "20261025040000_0031_purge_cascades.sql", "20261025052000_0034_stay_cascades.sql"]) {
+  it("the owner's paste file carries 0022, 0031, 0034 and 0039 verbatim, each recorded in the history, in one transaction", () => {
+    // These hold DELETE or DROP (the purge functions; 0039's old index), so the owner runs them from the SQL Editor (STAGING.md §0-ب)
+    const paste = read("supabase/paste/owner-paste-0022-0031-0034-0039.sql");
+    for (const f of ["20261023091000_0022_data_purge.sql", "20261025040000_0031_purge_cascades.sql", "20261025052000_0034_stay_cascades.sql", "20261027020000_0039_guest_cascades.sql"]) {
       expect(paste.includes(read(join("supabase/migrations", f))), `${f} is not in the paste file as it is in supabase/migrations`).toBe(true);
       const [version, ...rest] = f.replace(/\.sql$/, "").split("_");
       expect(paste).toContain(`values ('${version}', '${rest.join("_")}') on conflict (version) do nothing;`);

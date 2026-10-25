@@ -93,8 +93,8 @@ describe("scriptedReply with a knowledge base", () => {
     const r = scriptedReply("عندكم فطور؟", "x", undefined, knowledge);
     expect(r.intent).toBe("knowledge");
     expect(r.knowledgeId).toBe("breakfast");
-    expect(scriptedReply("كم سعر الليلة؟", "x", undefined, knowledge).intent).toBe("availability");
-    expect(scriptedReply("عندكم شي؟", "x").intent).not.toBe("availability");
+    expect(scriptedReply("كم سعر الليلة؟", "x", undefined, knowledge).intent).toBe("new_booking");
+    expect(scriptedReply("عندكم شي؟", "x").intent).not.toBe("new_booking");
   });
 
   it("without a knowledge base nothing changes for the existing intents", () => {

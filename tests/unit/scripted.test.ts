@@ -34,9 +34,9 @@ describe("deterministic reception — property facts", () => {
     expect(r.intent).toBe("policy");
     expect(r.text).not.toMatch(/\d{2}:\d{2}/);
   });
-  it("availability intent is separate from policy questions, and the generic fallback is marked unknown", () => {
-    expect(scriptedReply("أرغب بحجز جديد").intent).toBe("availability");
-    expect(scriptedReply("كم سعر الاستوديو؟").intent).toBe("availability");
+  it("the new-booking intent (platform link only) is separate from policy questions, and the generic fallback is marked unknown", () => {
+    expect(scriptedReply("أرغب بحجز جديد").intent).toBe("new_booking");
+    expect(scriptedReply("كم سعر الاستوديو؟").intent).toBe("new_booking");
     expect(scriptedReply("لدي حجز سابق").intent).toBe("existing_booking");
     expect(scriptedReply("بلا بلا").intent).toBe("unknown");
   });

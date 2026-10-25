@@ -46,14 +46,16 @@ describe("inbound parsing (WA-U02)", () => {
 
 describe("assistant reply → one WhatsApp message (WA-U03)", () => {
   const base = "https://example.test/app";
-  it("«حجوزاتي» and «موظف» become reply buttons; pages become links in the text", () => {
+  it("«حجوزاتي», «احجز الآن» and «موظف» become reply buttons; other pages become links in the text", () => {
     const p = toWhatsAppMessage("966500000111", "أهلًا", [
       { label: "حجوزاتي", route: "/booking/lookup" }, { label: "احجز الآن", route: "/booking/new" },
-      { label: "التحدث مع موظف", value: "أرغب بالتحدث مع موظف الاستقبال" },
+      { label: "التحدث مع موظف", value: "أرغب بالتحدث مع موظف الاستقبال" }, { label: "الخصوصية", route: "/privacy" },
     ], base) as any;
     expect(p.type).toBe("interactive");
-    expect(p.interactive.action.buttons.map((b: any) => b.reply.id)).toEqual([BTN.BOOKINGS, BTN.HUMAN]);
-    expect(p.interactive.body.text).toContain("https://example.test/app/booking/new");
+    // decision 23: the website's booking page is never linked from WhatsApp; the button answers with the platform link
+    expect(p.interactive.action.buttons.map((b: any) => b.reply.id)).toEqual([BTN.BOOKINGS, BTN.BOOK, BTN.HUMAN]);
+    expect(p.interactive.body.text).not.toContain("/booking/new");
+    expect(p.interactive.body.text).toContain("https://example.test/app/privacy");
   });
   it("one page link alone is a URL button; no actions is plain text", () => {
     expect((toWhatsAppMessage("1", "حالة حجزك", [{ label: "حالة الحجز", route: "/booking/status/ABC" }], base) as any).interactive.type).toBe("cta_url");

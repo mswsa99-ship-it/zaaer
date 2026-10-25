@@ -187,6 +187,7 @@ export function toWhatsAppMessage(to: string, reply: string, actions: AssistantA
       const path = a.route.split("?")[0];
       if (path === "/booking/lookup") buttons.push({ id: BTN.BOOKINGS, title: "حجوزاتي" });
       else if (path === "/reception") buttons.push({ id: BTN.NEW, title: "محادثة جديدة" });
+      else if (path === "/booking/new") buttons.push({ id: BTN.BOOK, title: "احجز الآن" });   // decision 23: the platform link, sent by the flow
       else if (base) links.push({ label: a.label, url: base + a.route });
     }
   }

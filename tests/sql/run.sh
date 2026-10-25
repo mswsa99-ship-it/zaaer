@@ -44,5 +44,7 @@ echo "== running invoice and review tests (0036: partial and automatic invoices,
 psql -d "$DB" -f tests/sql/invoices_review_tests.sql
 echo "== running monitoring tests (0037: the seven checks, once each, the owner's throttle)"
 psql -d "$DB" -f tests/sql/monitors_tests.sql
+echo "== running guest and platform tests (0038–0039: two paths for guest data, bans, ratings, platform fields, groups, the stay summary, branch fields)"
+psql -d "$DB" -f tests/sql/guests_platforms_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

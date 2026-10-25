@@ -226,11 +226,11 @@ exception when others then perform t_record('R10 no-show for a checked-in reserv
 select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000031',
-        'check_in',(current_date + 20)::text,'check_out',(current_date + 22)::text,'guest_name','ضيف OTA','guest_phone','0500000006','source_id','00000000-0000-0000-0000-000000000020','external_ref','OTA-TEST-1'));
+        'check_in',(current_date + 20)::text,'check_out',(current_date + 22)::text,'guest_name','ضيف OTA','guest_phone','0500000006','source_id','00000000-0000-0000-0000-000000000020','external_ref','OTA-TEST-1','platform_collects',false,'platform_booked_on',current_date::text));
   insert into ids values ('resOTA', (r->>'id')::uuid);
   begin
     r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000031',
-          'check_in',(current_date + 20)::text,'check_out',(current_date + 22)::text,'guest_name','ضيف OTA','guest_phone','0500000006','source_id','00000000-0000-0000-0000-000000000020','external_ref','OTA-TEST-1'));
+          'check_in',(current_date + 20)::text,'check_out',(current_date + 22)::text,'guest_name','ضيف OTA','guest_phone','0500000006','source_id','00000000-0000-0000-0000-000000000020','external_ref','OTA-TEST-1','platform_collects',false,'platform_booked_on',current_date::text));
     perform t_record('R12 duplicate (source, external_ref) rejected', false, 'accepted');
   exception when others then perform t_record('R12 duplicate (source, external_ref) rejected', sqlerrm like '%DUPLICATE_EXTERNAL_REF%', sqlerrm); end;
   begin
@@ -267,7 +267,7 @@ exception when others then perform t_record('R14 repeated checkout: single trans
 -- F. Money (branch with tax 0 for exact arithmetic; tax policy tested separately)
 -- =====================================================================
 do $$ declare r jsonb; b uuid; cat uuid; res uuid; begin
-  r := fn_admin_upsert_branch('{"name_ar":"فرع الاختبار المالي","tax_rate_bp":0}'); b := (r->>'id')::uuid; insert into ids values ('branchF', b);
+  r := fn_admin_upsert_branch('{"name_ar":"فرع الاختبار المالي","name_en":"Test branch","tax_rate_bp":0}'); b := (r->>'id')::uuid; insert into ids values ('branchF', b);
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar','قياسي','base_price_halalas', 10000)); cat := (r->>'id')::uuid;
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', current_date::text, 'check_out', (current_date + 3)::text, 'guest_name','ضيف مالي','guest_phone','0500000007','source_id','00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid; insert into ids values ('resF', res);
@@ -622,7 +622,7 @@ end $$;
 select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
 do $$ declare r jsonb; b uuid; cat uuid; rm uuid; res uuid; begin
   -- RV04: a branch created through the RPC has the system cleaning type; checkout there works
-  r := fn_admin_upsert_branch('{"name_ar":"فرع جديد RV","tax_rate_bp":0}'); b := (r->>'id')::uuid;
+  r := fn_admin_upsert_branch('{"name_ar":"فرع جديد RV","name_en":"Test branch","tax_rate_bp":0}'); b := (r->>'id')::uuid;
   perform t_record('RV04a new branch gets room_cleaning system task type', (select count(*) from task_types where branch_id = b and code = 'room_cleaning') = 1);
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar','ق','base_price_halalas', 10000)); cat := (r->>'id')::uuid;
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number','RV-1')); rm := (r->>'id')::uuid;
@@ -712,7 +712,7 @@ do $$ declare d jsonb; begin
   perform t_record('RV14 branch dependency count includes categories/vouchers/keyboxes/policies', (d ? 'room_categories') and (d ? 'vouchers') and (d ? 'keyboxes') and (d ? 'policies') and (d->>'room_categories')::int >= 1 and (d->>'vouchers')::int >= 1, d::text);
 end $$;
 do $$ begin
-  perform fn_admin_upsert_branch('{"name_ar":"منطقة خاطئة","timezone":"Riyadh"}');
+  perform fn_admin_upsert_branch('{"name_ar":"منطقة خاطئة","name_en":"Test branch","timezone":"Riyadh"}');
   perform t_record('RV19 invalid timezone rejected on branch save', false, 'accepted');
 exception when others then perform t_record('RV19 invalid timezone rejected on branch save', sqlerrm like '%timezone%', sqlerrm); end $$;
 do $$ begin

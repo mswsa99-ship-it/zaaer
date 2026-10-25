@@ -8,6 +8,7 @@ import { BTN, type WaInbound } from "../../supabase/functions/_shared/whatsapp";
 
 const FROM = "966501110006";
 const BASE = "https://hotel.example/app";
+const PLATFORM = "https://www.booking.com/hotel/sa/example.html";
 const b = (ref: string, status = "confirmed", extra: Partial<WaBooking> = {}): WaBooking =>
   ({ ref, internal_ref: "R-" + ref, status, check_in: "2026-10-24", check_out: "2026-10-27", nights: 3, category_name: "استوديو", ...extra });
 
@@ -19,13 +20,16 @@ interface World {
   asked: Array<{ thread: WaThread; message: string }>;
   answer: { reply: string; actions: Array<{ label: string; route?: string; value?: string }> } | null;
   base: string;
+  /** the branch's platform link (decision 23); null → none set */
+  platform: string | null;
 }
 
 function world(bookings: WaBooking[] = [], over: Partial<World> = {}): World & { ports: WaFlowPorts } {
-  const w: World = { bookings, threads: [], saved: [], sent: [], asked: [], answer: { reply: "أهلًا بك", actions: [] }, base: BASE, ...over };
+  const w: World = { bookings, threads: [], saved: [], sent: [], asked: [], answer: { reply: "أهلًا بك", actions: [] }, base: BASE, platform: PLATFORM, ...over };
   let n = 0;
   const ports: WaFlowPorts = {
     get appBaseUrl() { return w.base; },
+    bookingUrl: async () => w.platform,
     findThread: async () => w.threads.find((t) => !t.closed) ?? null,
     newThread: async () => { const t = { id: "T" + ++n, guest_token: null, closed: false }; w.threads.push(t); return t; },
     closeThread: async (id) => { w.threads.find((t) => t.id === id)!.closed = true; },
@@ -131,11 +135,33 @@ describe("WhatsApp conversation flow", () => {
     expect(w.saved.find((s) => s.meta.reason === "assistant_unreachable")).toBeTruthy();
   });
 
-  it("WF10 the assistant's actions become WhatsApp buttons and links", async () => {
-    const w = world([], { answer: { reply: "تفضل", actions: [{ label: "حجوزاتي", route: "/booking/lookup" }, { label: "احجز الآن", route: "/booking/new" }] } });
+  it("WF10 the assistant's actions become WhatsApp buttons and links (the booking page is a button, never a link)", async () => {
+    const w = world([], { answer: { reply: "تفضل", actions: [{ label: "حجوزاتي", route: "/booking/lookup" }, { label: "احجز الآن", route: "/booking/new" }, { label: "الخصوصية", route: "/privacy" }] } });
     await runWaFlow(text("أبغى أحجز"), w.ports);
-    expect(buttonIds(w.sent[0])).toEqual([BTN.BOOKINGS]);
-    expect(bodyOf(w.sent[0])).toContain(`${BASE}/booking/new`);
+    expect(buttonIds(w.sent[0])).toEqual([BTN.BOOKINGS, BTN.BOOK]);
+    expect(bodyOf(w.sent[0])).not.toContain("/booking/new");
+    expect(bodyOf(w.sent[0])).toContain(`${BASE}/privacy`);
+  });
+
+  it("WF16 «احجز الآن» sends the branch's platform link as a URL button — no availability, no prices, no website page", async () => {
+    const w = world([]);
+    await runWaFlow(tap(BTN.BOOK, "احجز الآن"), w.ports);
+    const p = w.sent[0];
+    expect(p.interactive.type).toBe("cta_url");
+    expect(p.interactive.action.parameters.url).toBe(PLATFORM);
+    expect(bodyOf(p)).toBe(WA_TEXTS.bookOnPlatform);
+    expect(bodyOf(p)).not.toMatch(/\d+\s*(ريال|ر\.س)/);
+    expect(bodyOf(p)).not.toContain("/booking/new");
+    expect(w.asked).toHaveLength(0);
+    expect(w.saved.find((s) => s.sender === "assistant")?.content).toContain(PLATFORM);
+  });
+
+  it("WF17 without a platform link the guest is sent to the reception, never to a price or a page", async () => {
+    const w = world([], { platform: null });
+    await runWaFlow(tap(BTN.BOOK, "احجز الآن"), w.ports);
+    expect(bodyOf(w.sent[0])).toBe(WA_TEXTS.bookNoLink);
+    expect(buttonIds(w.sent[0])).toEqual([BTN.HUMAN, BTN.BOOKINGS]);
+    expect(bodyOf(w.sent[0])).not.toMatch(/https?:/);
   });
 
   it("WF11 a booking that is not on this number cannot be opened from a forged list reply", async () => {
@@ -150,7 +176,8 @@ describe("WhatsApp conversation flow", () => {
     await runWaFlow(text("حجوزاتي"), w.ports);
     expect(bodyOf(w.sent[0])).not.toMatch(/https?:|\/booking\//);
     await runWaFlow(tap(BTN.BOOK, "احجز الآن"), w.ports);
-    expect(bodyOf(w.sent[1])).toBe("الحجز الجديد متاح عبر منصات الحجز المعتمدة.");
+    // the platform link is the branch's own setting: it is sent even when the website has no address
+    expect(w.sent[1].interactive.action.parameters.url).toBe(PLATFORM);
   });
 
   it("WF14 a chat whose number is hidden (privacy id on the reception computer) gets no digits and no guess", async () => {

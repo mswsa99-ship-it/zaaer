@@ -27,10 +27,8 @@ export interface ToolContext {
 }
 
 export const TOOL_DECLARATIONS: ToolDeclaration[] = [
-  { name: "get_public_room_types", description: "تصنيفات الوحدات المعلنة مع السعة والسعر الأساسي والمرافق.", parameters: { type: "object", properties: {} } },
-  { name: "get_public_availability", description: "عدد الوحدات المتاحة للعرض في تاريخ وصول محدد لعدد أشخاص. لا يحجز شيئًا.",
-    parameters: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD" }, guests: { type: "integer" } }, required: ["date"] } },
-  { name: "get_booking_sources", description: "منصات الحجز المعتمدة وروابطها الرسمية لإتمام الحجز.", parameters: { type: "object", properties: {} } },
+  // decision 23: a new booking, a price or an availability question → the branch's platform link; nothing is shown here
+  { name: "get_booking_link", description: "رابط منصة الحجز المعتمدة للفرع: الطريقة الوحيدة لحجز جديد ولمعرفة الأسعار والتوفر. لا يعرض أسعارًا ولا توفرًا.", parameters: { type: "object", properties: {} } },
   { name: "request_booking_verification", description: "يعيد رابط الصفحة الآمنة للتحقق من ملكية حجز سابق برقمه. لا يكشف أي بيانات.",
     parameters: { type: "object", properties: { external_ref: { type: "string" } }, required: ["external_ref"] } },
   { name: "get_verified_booking_summary", description: "ملخص محدود للحجز المتحقق منه في هذه الجلسة (الحالات والتواريخ).", parameters: { type: "object", properties: {} } },
@@ -49,7 +47,7 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] } },
 ];
 
-const halalasToSar = (h: number) => (Number(h || 0) / 100).toFixed(2);
+const halalasToSar = (h: number) => (Number(h || 0) / 100).toFixed(2);   // the guest's own balance only; never a price list
 
 export async function executeTool(name: ToolName, args: Record<string, unknown>, ctx: ToolContext): Promise<unknown> {
   if (VERIFIED_ONLY_TOOLS.has(name) && !ctx.guestToken) {
@@ -57,36 +55,11 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
   }
 
   switch (name) {
-    case "get_public_room_types": {
-      const { data } = await ctx.db.from("room_categories")
-        .select("name_ar, description, base_capacity, max_capacity, base_price_halalas, amenities")
-        .eq("branch_id", ctx.branchId).eq("is_public", true).eq("is_active", true).order("sort_order");
-      return (data ?? []).map((c: Record<string, unknown>) => ({
-        name: c.name_ar, description: c.description, base_capacity: c.base_capacity, max_capacity: c.max_capacity,
-        price_from_sar: halalasToSar(c.base_price_halalas as number), amenities: c.amenities,
-      }));
-    }
-    case "get_public_availability": {
-      const { data, error } = await ctx.db.rpc("fn_get_public_availability", { p_branch: ctx.branchId, p_date: args.date });
-      if (error) return { error: "تعذر جلب التوفر الآن" };
-      const guests = Number(args.guests ?? 1);
-      return {
-        date: args.date,
-        categories: (data ?? [])
-          .filter((r: Record<string, number>) => r.max_capacity >= guests)
-          .map((r: Record<string, unknown>) => ({
-            name: r.category_name,
-            // only the publicly releasable count — never the hidden stock
-            available: r.available_to_show,
-            price_from_sar: halalasToSar(r.base_price_halalas as number),
-            max_capacity: r.max_capacity,
-          })),
-        note: "الحجز النهائي يتم عبر منصة الحجز المعتمدة فقط.",
-      };
-    }
-    case "get_booking_sources": {
-      const { data } = await ctx.db.from("booking_sources").select("name, booking_url").eq("organization_id", ctx.organizationId).eq("is_active", true);
-      return (data ?? []).filter((s: Record<string, unknown>) => !!s.booking_url);
+    case "get_booking_link": {
+      const { data } = await ctx.db.rpc("fn_public_branch", { p_branch: ctx.branchId });
+      const link = (data as { booking_platform_url?: string | null } | null)?.booking_platform_url ?? null;
+      if (!link) return { link: null, instruction: "لا يوجد رابط منصة حجز مضبوط لهذا الفرع. أخبر النزيل أن الحجز الجديد عبر منصات الحجز المعتمدة واعرض عليه موظف الاستقبال ليوجّهه. لا تذكر أسعارًا ولا توفرًا." };
+      return { link, instruction: "أرسل الرابط كما هو. الأسعار والتوفر والحجز في المنصة فقط؛ لا تذكرها هنا. بعد الحجز يعود النزيل برقم حجزه إلى «حجوزاتي»." };
     }
     case "request_booking_verification": {
       const ref = String(args.external_ref ?? "");
@@ -146,6 +119,7 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
       const { data: pol } = await ctx.db.from("property_policies").select("topic, title, content_ar").eq("branch_id", ctx.branchId).eq("is_public", true);
       const policies = (pol ?? []).filter((p: Record<string, string>) => topic === "general" || p.topic === topic);
       return {
+        // decision 31: the map link goes to the guest as it is
         branch: b ? { name: b.name_ar, address: b.address, map_url: b.map_url, phone: b.phone, check_in_time: b.check_in_time, check_out_time: b.check_out_time } : null,
         policies,
       };

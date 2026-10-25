@@ -101,11 +101,14 @@ Deno.serve(async (req) => {
   let knowledgeOnce: Promise<PropertyKnowledge> | null = null;
   const loadKnowledge = () => knowledgeOnce ??= (async () => {
     const [{ data: bfull }, { data: pols }, { data: kb }] = await Promise.all([
-      db.from("branches").select("name_ar, check_in_time, check_out_time, address, phone").eq("id", branch.id).maybeSingle(),
+      // decisions 23 and 31: the platform link every new booking goes to, and the map link
+      db.from("branches").select("name_ar, check_in_time, check_out_time, address, phone, map_url, booking_platform_url").eq("id", branch.id).maybeSingle(),
       db.from("property_policies").select("topic, title, content_ar").eq("branch_id", branch.id).eq("is_public", true).order("sort_order"),
       db.rpc("fn_public_knowledge", { p_branch: branch.id }),
     ]);
-    return { branchName: bfull?.name_ar, checkInTime: bfull?.check_in_time, checkOutTime: bfull?.check_out_time, address: bfull?.address, phone: bfull?.phone, policies: (pols ?? []).map((p: { topic: string; title: string; content_ar: string }) => ({ topic: p.topic, title: p.title, content: p.content_ar })), entries: (kb ?? []) as PropertyKnowledge["entries"] };
+    return { branchName: bfull?.name_ar, checkInTime: bfull?.check_in_time, checkOutTime: bfull?.check_out_time, address: bfull?.address, phone: bfull?.phone,
+             mapUrl: bfull?.map_url ?? null, bookingUrl: bfull?.booking_platform_url ?? null,
+             policies: (pols ?? []).map((p: { topic: string; title: string; content_ar: string }) => ({ topic: p.topic, title: p.title, content: p.content_ar })), entries: (kb ?? []) as PropertyKnowledge["entries"] };
   })();
   // what the deterministic path learned: count answer usage, log questions nobody has answered yet
   const noteScripted = async (r: { intent: string; knowledgeId?: string }) => {
@@ -117,7 +120,7 @@ Deno.serve(async (req) => {
   if (handedOff) {
     const r = scriptedReply(message, org.name_ar, undefined, await loadKnowledge());
     await noteScripted(r);
-    const informative = ["policy", "knowledge", "existing_booking", "availability", "access_code"].includes(r.intent);
+    const informative = ["policy", "knowledge", "existing_booking", "new_booking", "access_code"].includes(r.intent);
     const reply = informative
       ? r.text + "\n\nمحادثتك ما زالت محوّلة إلى مشرف الاستقبال وسيرد عليك هنا عند توفره."
       : "تم تحويل محادثتك إلى مشرف الاستقبال وسيرد عليك هنا قريبًا. أثناء الانتظار يمكنك سؤالي عن مواعيد الوصول والمغادرة أو الإنترنت أو المواقف أو الموقع، أو بدء محادثة جديدة.";
@@ -222,7 +225,7 @@ Deno.serve(async (req) => {
             if (call.name === "request_booking_verification") actions.push({ label: "حجوزاتي", route: "/booking/lookup" });
             if (call.name === "create_registration_session" && guestToken) actions.push({ label: "تسجيل بيانات النزلاء", route: `/booking/registration/${guestToken}` });
             if (call.name === "get_verified_booking_summary" && guestToken) actions.push({ label: "حالة الحجز", route: `/booking/status/${guestToken}` });
-            if (call.name === "get_booking_sources" || call.name === "get_public_availability") actions.push({ label: "احجز الآن", route: "/booking/new" });
+            if (call.name === "get_booking_link") actions.push({ label: "احجز الآن", route: "/booking/new" });
           } catch (e) {
             status = "error"; result = { error: String((e as Error).message).slice(0, 120) };
           }
@@ -244,9 +247,9 @@ Deno.serve(async (req) => {
   if (fellBack.length) await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "output", rule: "provider_fallback:" + answeredBy, detail: fellBack.join(" | ").slice(0, 300) });
 
   // ---- OUTPUT GATE -----------------------------------------------------------
+  // the links the answer may carry: the website's pages, the branch's platform link and its map link (decisions 23, 31)
   const allowedUrls = [appBaseUrl, "/booking/", "/checkin/", "/kiosk", "/privacy", "/terms"];
-  const { data: sources } = await db.from("booking_sources").select("booking_url").eq("organization_id", org.id).eq("is_active", true);
-  for (const src of sources ?? []) if (src.booking_url) allowedUrls.push(src.booking_url);
+  { const k = await loadKnowledge(); if (k.bookingUrl) allowedUrls.push(k.bookingUrl); if (k.mapUrl) allowedUrls.push(k.mapUrl); }
 
   const out = finalText ? gateOutput(finalText, { allowedUrls, userWroteEnglish }) : { ok: false, text: "", violations: ["no_text"] };
   if (!out.ok) {

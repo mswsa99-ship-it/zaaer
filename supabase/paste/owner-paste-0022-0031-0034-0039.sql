@@ -1,13 +1,15 @@
 -- =====================================================================================================
 -- للصق مرة واحدة في Supabase ← SQL Editor ← New query ← الصق هذا الملف كله ← Run
 --
--- ثلاثة ترحيلات فيها أوامر حذف داخل دوال تفريغ البيانات، وأداة المساعد ممنوعة من تشغيل الحذف، فيشغّلها المالك بنفسه:
+-- أربعة ترحيلات فيها أوامر حذف، وأداة المساعد ممنوعة من تشغيل الحذف، فيشغّلها المالك بنفسه:
 --   0022  صفحة «تفريغ البيانات» للمالك (حذف بثلاثة تأكيدات)
 --   0031  التفريغ يشمل ليالي الحجز وتسويات الشبكة ومطابقات المنصات
 --   0034  التفريغ يشمل فحوص المغادرة وأسباب الاستمرار وبنود المراجعة
--- كل شيء في معاملة واحدة: إن فشل أي جزء لا يتغير شيء. لا يحذف هذا الملف أي بيانات عند تشغيله؛
--- الحذف لا يقع إلا حين يستعمل المالك الصفحة نفسها لاحقًا ويؤكد ثلاث مرات.
--- يُشغَّل بعد تطبيق 0033 (الترحيلات العادية يطبقها المساعد).
+--   0039  (المرحلة 5) إسقاط الفهرس القديم لرقم المنصة حتى تشترك وحدات المجموعة في رقم واحد (القرار 69)،
+--         وربط إقرارات ملخص الإقامة وشعار الفرع بحجزها وفرعها عند التفريغ، وبقاء الحظر إن حُذف ملف صاحبه
+-- كل شيء في معاملة واحدة: إن فشل أي جزء لا يتغير شيء. لا يحذف هذا الملف أي بيانات عند تشغيله (0039 يحذف فقط
+-- صفوفًا يتيمة إن وُجدت، ولا توجد)؛ حذف البيانات لا يقع إلا حين يستعمل المالك صفحة التفريغ نفسها لاحقًا ويؤكد ثلاث مرات.
+-- يُشغَّل بعد تطبيق 0038 (الترحيلات العادية يطبقها المساعد). تشغيله مرة ثانية لا يغيّر شيئًا.
 -- =====================================================================================================
 begin;
 
@@ -535,6 +537,45 @@ do $$ begin
 end $$;
 
 insert into supabase_migrations.schema_migrations (version, name) values ('20261025052000', '0034_stay_cascades') on conflict (version) do nothing;
+
+-- ===================== 20261027020000_0039_guest_cascades =====================
+-- =====================================================================
+-- 0039 — what phase 5 needs that the SQL tools refuse (they refuse any statement that removes rows or objects).
+-- Pasted by the owner in the Supabase SQL editor, after 0038, together with 0022, 0031 and 0034 (STAGING.md §0-ب).
+--   * decision 69: the older unique index on the platform number allowed it on one booking only, so a group whose
+--     units share their platform number could not be created. 0038's constraint (one booking or one group per number)
+--     replaces it.
+--   * the stay summaries accepted by a guest go with their stay in a purge; a branch's logo and image go with an
+--     unused branch that is removed; a ban stays when the profile it was made on is purged (its phones and documents
+--     still match).
+-- =====================================================================
+drop index if exists uniq_reservation_source_ref;
+
+delete from stay_acknowledgements a where not exists (select 1 from reservations r where r.id = a.reservation_id);
+update stay_acknowledgements a set guest_id = null where guest_id is not null and not exists (select 1 from reservation_guests g where g.id = a.guest_id);
+delete from branch_media m where not exists (select 1 from branches b where b.id = m.branch_id);
+update guest_bans b set guest_profile_id = null where guest_profile_id is not null and not exists (select 1 from guest_profiles p where p.id = b.guest_profile_id);
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'stay_acknowledgements_reservation_fk') then
+    alter table stay_acknowledgements add constraint stay_acknowledgements_reservation_fk
+      foreign key (reservation_id) references reservations(id) on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'stay_acknowledgements_guest_fk') then
+    alter table stay_acknowledgements add constraint stay_acknowledgements_guest_fk
+      foreign key (guest_id) references reservation_guests(id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'branch_media_branch_fk') then
+    alter table branch_media add constraint branch_media_branch_fk
+      foreign key (branch_id) references branches(id) on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'guest_bans_profile_fk') then
+    alter table guest_bans add constraint guest_bans_profile_fk
+      foreign key (guest_profile_id) references guest_profiles(id) on delete set null;
+  end if;
+end $$;
+
+insert into supabase_migrations.schema_migrations (version, name) values ('20261027020000', '0039_guest_cascades') on conflict (version) do nothing;
 
 commit;
 select 'تم' as result, (select count(*) from supabase_migrations.schema_migrations) as migrations;

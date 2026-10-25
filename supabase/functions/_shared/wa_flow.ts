@@ -12,7 +12,7 @@
  *     handoff as everywhere), and its answer comes back as buttons, a list, or links to the secure pages
  *   - identity documents and card numbers are never taken in the chat; only text is read
  */
-import { BTN, buttonsPayload, listPayload, shortDate, textPayload, toWhatsAppMessage, type AssistantAction, type WaInbound } from "./whatsapp.ts";
+import { BTN, buttonsPayload, ctaUrlPayload, listPayload, shortDate, textPayload, toWhatsAppMessage, type AssistantAction, type WaInbound } from "./whatsapp.ts";
 import { gateInput } from "./guardrails.ts";
 
 export const WA_STATUS_AR: Record<string, string> = {
@@ -34,8 +34,10 @@ export interface WaThread { id: string; guest_token: string | null }
 export interface WaAssistantAnswer { reply: string; actions: AssistantAction[] }
 
 export interface WaFlowPorts {
-  /** the website's address for links (status page, guest registration, new booking); "" → no links are sent */
+  /** the website's address for links (status page, guest registration); "" → no links are sent */
   appBaseUrl: string;
+  /** «رابط منصة الحجز» of the branch (decision 23): the only answer to a new booking; null or absent → the reception */
+  bookingUrl?(): Promise<string | null>;
   /** the sender's open thread with this branch (a message in the last WA_THREAD_HOURS), or null */
   findThread(): Promise<WaThread | null>;
   newThread(): Promise<WaThread>;
@@ -58,6 +60,8 @@ export interface WaFlowPorts {
 }
 
 export const WA_TEXTS = {
+  bookOnPlatform: "الحجوزات الجديدة والأسعار والتوفر عبر منصة الحجز المعتمدة فقط. بعد الحجز أرسل «حجوزاتي» هنا لإكمال إجراءات الوصول.",
+  bookNoLink: "الحجوزات الجديدة عبر منصات الحجز المعتمدة فقط، ولا أستطيع عرض الأسعار أو التوفر هنا. اطلب موظف الاستقبال ليوجّهك إلى رابط الحجز.",
   textOnly: "أقرأ الرسائل النصية فقط. لا ترسل صور الهوية أو البطاقات هنا؛ بيانات النزلاء تُدخل عبر الرابط الآمن الذي أرسله لك.",
   openFailed: "تعذر فتح هذا الحجز. اختر من «حجوزاتي» مرة أخرى.",
   unreachable: "عذرًا، تعذر الرد الآن. حاول بعد قليل أو اطلب موظف الاستقبال.",
@@ -176,10 +180,17 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     return;
   }
   if (id === BTN.BOOK) {
+    // decision 23: no availability and no prices here; the platform's link, or the reception when none is set
     await saveGuest(typed || "احجز الآن");
-    const text = base ? `اختر يوم الوصول وعدد الليالي والأشخاص، وتظهر لك الأسعار المتاحة فورًا:\n${base}/booking/new` : "الحجز الجديد متاح عبر منصات الحجز المعتمدة.";
-    await p.send(textPayload(m.from, text));
-    await saveBot(text);
+    const link = (await p.bookingUrl?.().catch(() => null)) ?? null;
+    if (link) {
+      const text = WA_TEXTS.bookOnPlatform;
+      await p.send(ctaUrlPayload(m.from, text, "احجز الآن", link));
+      await saveBot(`${text}\n${link}`);
+    } else {
+      await p.send(buttonsPayload(m.from, WA_TEXTS.bookNoLink, [{ id: BTN.HUMAN, title: "التحدث مع موظف" }, { id: BTN.BOOKINGS, title: "حجوزاتي" }]));
+      await saveBot(WA_TEXTS.bookNoLink);
+    }
     await p.touch(t.id);
     return;
   }

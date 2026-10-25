@@ -373,8 +373,20 @@ do $$ declare r jsonb; tok text; s jsonb; begin
     r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"12345","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
     perform t_record('T10b malformed national id rejected', false);
   exception when others then perform t_record('T10b malformed national id rejected', sqlerrm like '%identity_number_format%', sqlerrm); end;
-  r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
+  -- decision 19: the main guest accepts «ملخص الإقامة» when registering
+  begin
+    r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
+    perform t_record('T10c main guest without accepting the stay summary rejected', false);
+  exception when others then perform t_record('T10c main guest without accepting the stay summary rejected', sqlerrm like '%acknowledgement_required%', sqlerrm); end;
+  begin
+    r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true","ack_hash":"0000"}');
+    perform t_record('T10d a summary other than the current one rejected', false);
+  exception when others then perform t_record('T10d a summary other than the current one rejected', sqlerrm like '%SUMMARY_CHANGED%', sqlerrm); end;
+  r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر الدوسري","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}'::jsonb
+                       || jsonb_build_object('ack_hash', fn_guest_stay_summary(tok)->>'hash'));
   s := fn_guest_session(tok);
+  perform t_record('T10e the accepted summary is kept with its time (guest page shows it accepted)',
+     (s->'reservation'->>'summary_accepted')::boolean and (fn_guest_stay_summary(tok)->>'accepted_at') is not null and (fn_guest_stay_summary(tok)->>'current')::boolean, s->'reservation'->>'summary_accepted');
   perform t_record('T9 primary guest data accepted, only last4 exposed, status data_submitted (1 of 2)',
      (r->>'ok')::boolean and s->'guests'->0->>'identity_number_last4' = '5678' and (s::text not like '%1012345678%') and s->'reservation'->>'identity_status' = 'data_submitted', s::text);
   r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"2015-01-01","relationship":"child","consent":"true"}');
@@ -396,7 +408,8 @@ end $$;
 reset role;
 
 -- =====================================================================
--- T30: booking sources — every staff member reads them; only the owner or a manager changes them (0029, §16)
+-- T30: booking sources — every staff member reads them; only the owner or a manager switches one on or off, through
+-- fn_admin_set_source_active (audited); the list itself is fixed (0029, 0038, decision 22, §16)
 -- =====================================================================
 reset role;
 insert into booking_sources(id, organization_id, name, booking_url, is_active, code)
@@ -404,30 +417,31 @@ insert into booking_sources(id, organization_id, name, booking_url, is_active, c
   on conflict (id) do nothing;
 set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
-do $$ declare n int; m int; begin
+do $$ declare n int; denied_update boolean := false; denied_insert boolean := false; begin
   -- a switched-off platform is still readable by staff (old reservations show it)
   select count(*) into n from booking_sources where id = '00000000-0000-0000-0000-000000000029';
-  update booking_sources set booking_url = 'https://elsewhere.test' where id = '00000000-0000-0000-0000-000000000029';
-  get diagnostics m = row_count;
-  begin
-    insert into booking_sources(organization_id, name, code) values ('00000000-0000-0000-0000-000000000001', 'منصة دخيلة', 't30x');
-    perform t_record('T30a housekeeping reads the platforms but cannot change or add one', false, 'insert accepted');
-  exception when others then
-    perform t_record('T30a housekeeping reads the platforms but cannot change or add one', n = 1 and m = 0 and sqlerrm like '%row-level security%', 'read=' || n || ' updated=' || m || ' / ' || sqlerrm);
-  end;
+  begin update booking_sources set booking_url = 'https://elsewhere.test' where id = '00000000-0000-0000-0000-000000000029';
+  exception when insufficient_privilege then denied_update := true; end;
+  begin insert into booking_sources(organization_id, name, code) values ('00000000-0000-0000-0000-000000000001', 'منصة دخيلة', 't30x');
+  exception when insufficient_privilege then denied_insert := true; end;
+  perform t_record('T30a housekeeping reads the platforms but cannot change or add one', n = 1 and denied_update and denied_insert,
+                   'read=' || n || ' update_denied=' || denied_update || ' insert_denied=' || denied_insert);
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
-do $$ declare m int; begin
-  update booking_sources set is_active = true where id = '00000000-0000-0000-0000-000000000029';
-  get diagnostics m = row_count;
-  perform t_record('T30b a supervisor cannot switch a platform on or off', m = 0, 'updated=' || m);
+do $$ declare denied boolean := false; e text; begin
+  begin perform fn_admin_set_source_active('{"id":"00000000-0000-0000-0000-000000000029","is_active":true}');
+  exception when others then e := sqlerrm; denied := sqlerrm like 'FORBIDDEN%'; end;
+  perform t_record('T30b a supervisor cannot switch a platform on or off', denied, e);
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
-do $$ declare m int; u text; begin
-  update booking_sources set booking_url = 'https://example.test/book2' where id = '00000000-0000-0000-0000-000000000029';
-  get diagnostics m = row_count;
-  select booking_url into u from booking_sources where id = '00000000-0000-0000-0000-000000000029';
-  perform t_record('T30c the owner changes the booking link', m = 1 and u = 'https://example.test/book2', 'updated=' || m || ' url=' || coalesce(u, 'null'));
+do $$ declare r jsonb; a boolean; denied boolean := false; n int; begin
+  r := fn_admin_set_source_active('{"id":"00000000-0000-0000-0000-000000000029","is_active":true,"reason":"اختبار"}');
+  select is_active into a from booking_sources where id = '00000000-0000-0000-0000-000000000029';
+  select count(*) into n from audit_events where entity_id = '00000000-0000-0000-0000-000000000029' and action = 'source.enabled';
+  begin update booking_sources set booking_url = 'https://example.test/book2' where id = '00000000-0000-0000-0000-000000000029';
+  exception when insufficient_privilege then denied := true; end;
+  perform t_record('T30c the owner switches a platform on (audited); the list itself is not edited from the API', (r->>'changed')::boolean and a and n = 1 and denied,
+                   'active=' || a || ' audit=' || n || ' direct_update_denied=' || denied);
 end $$;
 reset role;
 

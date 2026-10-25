@@ -36,6 +36,10 @@ export function dbPorts(db: Db, ch: WaBranch, c: WaContact, send: (payload: Reco
   return {
     appBaseUrl: env.appBaseUrl.replace(/\/$/, ""),
     lastThreadId: () => last,
+    async bookingUrl() {
+      const { data } = await db.rpc("fn_public_branch", { p_branch: ch.branch_id });
+      return (data as { booking_platform_url?: string | null } | null)?.booking_platform_url ?? null;
+    },
 
     async findThread() {
       const t = await findWaThread(db, ch.branch_id, c.key);

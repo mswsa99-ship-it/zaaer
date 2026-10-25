@@ -135,14 +135,13 @@ describe("tool gate", () => {
   it("rejects unknown tools", () => {
     expect(isAllowedTool("delete_reservation")).toBe(false);
     expect(isAllowedTool("get_keybox_code")).toBe(false);
-    expect(isAllowedTool("get_public_availability")).toBe(true);
+    expect(isAllowedTool("get_booking_link")).toBe(true);
   });
-  it("validates availability args", () => {
-    expect(() => validateToolArgs("get_public_availability", { date: "not-a-date" })).toThrow();
-    expect(() => validateToolArgs("get_public_availability", { date: "1999-01-01" })).toThrow();
-    const today = new Date().toISOString().slice(0, 10);
-    expect(validateToolArgs("get_public_availability", { date: today, guests: "2" })).toEqual({ date: today, guests: 2 });
-    expect(() => validateToolArgs("get_public_availability", { date: today, guests: 99 })).toThrow();
+  it("decision 23: no availability, price or platform-list tool exists for the assistant any more", () => {
+    expect(isAllowedTool("get_public_availability")).toBe(false);
+    expect(isAllowedTool("get_public_room_types")).toBe(false);
+    expect(isAllowedTool("get_booking_sources")).toBe(false);
+    expect(validateToolArgs("get_booking_link", {})).toEqual({});
   });
   it("sanitises booking reference", () => {
     expect(validateToolArgs("request_booking_verification", { external_ref: " bk-1001' or 1=1 " })).toEqual({ external_ref: "BK-1001OR11" });
@@ -165,6 +164,26 @@ describe("scripted fallback", () => {
   it("routes existing / new booking", () => {
     expect(scriptedReply("لدي حجز سابق").actions[0].route).toBe("/booking/lookup");
     expect(scriptedReply("ابغى احجز").actions[0].route).toBe("/booking/new");
+  });
+  it("decision 23: a new booking, a price or an availability question gets the platform link and nothing else", () => {
+    const k = { bookingUrl: "https://www.booking.com/hotel/sa/x.html", mapUrl: "https://maps.app.goo.gl/abc" };
+    for (const q of ["ابغى احجز", "كم سعر الاستوديو؟", "فيه شقة متاحة بكرة؟"]) {
+      const r = scriptedReply(q, "x", undefined, k);
+      expect(r.intent).toBe("new_booking");
+      expect(r.text).toContain(k.bookingUrl);
+      expect(r.text).not.toMatch(/\d+\s*(ريال|ر\.س)|SAR/);
+    }
+    const none = scriptedReply("ابغى احجز");
+    expect(none.intent).toBe("new_booking");
+    expect(none.text).toMatch(/موظف الاستقبال/);
+    expect(none.text).not.toMatch(/https?:/);
+    expect(none.actions.some((a) => a.value?.includes("موظف"))).toBe(true);
+  });
+  it("decision 31: a location question carries the branch's map link", () => {
+    const r = scriptedReply("وين موقعكم؟", "x", undefined, { address: "حي العليا", mapUrl: "https://maps.app.goo.gl/abc" });
+    expect(r.intent).toBe("policy");
+    expect(r.text).toContain("https://maps.app.goo.gl/abc");
+    expect(r.text).toContain("حي العليا");
   });
   it("explains scope on off-topic", () => {
     expect(scriptedReply("x", "منازل الراحة", "off_scope").text).toMatch(/خارج نطاق/);
