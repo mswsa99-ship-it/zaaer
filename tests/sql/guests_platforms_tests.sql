@@ -221,13 +221,13 @@ end $$;
 -- GD09: the owner's report of identities approved at the office (the owner only)
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare m text; rep jsonb; begin
-  m := t_fails(format('select fn_reports_identities(%L, %L, %L)', '00000000-0000-0000-0000-000000000010', t_today() - 1, t_today()), 'FORBIDDEN%');
+  m := t_fails(format('select fn_reports_identities(%L, %L, %L, ''office'', ''{}''::jsonb)', '00000000-0000-0000-0000-000000000010', t_today() - 1, t_today()), 'FORBIDDEN%');
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
-  rep := fn_reports_identities('00000000-0000-0000-0000-000000000010', t_today() - 1, t_today());
+  rep := fn_reports_identities('00000000-0000-0000-0000-000000000010', t_today() - 1, t_today(), 'office', '{}'::jsonb);
   perform t_record('GD09 the owner''s report lists the identities approved at the office with who and when (a manager is refused)',
     m = 'ok' and (rep->>'count')::int >= 2 and not exists (select 1 from jsonb_array_elements(rep->'rows') x where x->>'entry_path' <> 'office')
     and exists (select 1 from jsonb_array_elements(rep->'rows') x where x->>'identity_last4' = '6781' and x->>'verified_by' is not null)
-    and rep::text not like '%1023456781%' and (fn_reports_identities('00000000-0000-0000-0000-000000000010', t_today() - 1, t_today(), 'all')->>'count')::int > (rep->>'count')::int,
+    and rep::text not like '%1023456781%' and (fn_reports_identities('00000000-0000-0000-0000-000000000010', t_today() - 1, t_today(), 'all', '{}'::jsonb)->>'count')::int > (rep->>'count')::int,
     m || ' / ' || (rep->>'count'));
 end $$;
 
@@ -389,9 +389,9 @@ end $$;
 -- PF08: bookings entered late (the owner and managers; the supervisor is refused)
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare rep jsonb; s text; begin
-  rep := fn_reports_late_entries('00000000-0000-0000-0000-000000000010', t_today(), t_today(), 1);
+  rep := fn_reports_late_entries('00000000-0000-0000-0000-000000000010', t_today(), t_today(), 1, '{}'::jsonb);
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  s := t_fails(format('select fn_reports_late_entries(%L, %L, %L, 1)', '00000000-0000-0000-0000-000000000010', t_today(), t_today()), 'FORBIDDEN%');
+  s := t_fails(format('select fn_reports_late_entries(%L, %L, %L, 1, ''{}''::jsonb)', '00000000-0000-0000-0000-000000000010', t_today(), t_today()), 'FORBIDDEN%');
   perform t_record('PF08 the late-entry report lists a booking entered three days after the platform took it, not the same-day ones',
     exists (select 1 from jsonb_array_elements(rep->'rows') x where (x->>'id')::uuid = t_id('resT0') and (x->>'lag_days')::int = 3)
     and not exists (select 1 from jsonb_array_elements(rep->'rows') x where (x->>'lag_days')::int < 1) and s = 'ok', (rep->>'late') || ' / ' || s);

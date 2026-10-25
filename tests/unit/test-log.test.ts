@@ -69,11 +69,12 @@ describe("test log (decision 56)", () => {
 });
 
 describe("change record (decision 58)", () => {
-  const check = (msg: string) => {
+  // the changed files are named explicitly so the test does not depend on what happens to be staged in the working tree
+  const check = (msg: string, files: string[] = []) => {
     const dir = mkdtempSync(join(tmpdir(), "msg-"));
     try {
       writeFileSync(join(dir, "MSG"), msg);
-      return execFileSync("node", [join(ROOT, "scripts/check-change.mjs"), "--message", join(dir, "MSG")], { cwd: ROOT, env: { ...process.env, GITHUB_ACTIONS: "" } }).toString();
+      return execFileSync("node", [join(ROOT, "scripts/check-change.mjs"), "--message", join(dir, "MSG"), "--files", files.join(",")], { cwd: ROOT, env: { ...process.env, GITHUB_ACTIONS: "" } }).toString();
     } finally { rmSync(dir, { recursive: true, force: true }); }
   };
   it("CC01 a complete record passes; missing or wrong fields are named, and the check never blocks", () => {
@@ -83,5 +84,12 @@ describe("change record (decision 58)", () => {
     expect(out).toContain("G77");
     expect(out).toContain("Area");
     expect(out).toContain("Migration");
+  });
+  it("CC02 a change that touches a migration must name it in «Migration»: none is a warning, the number passes", () => {
+    const files = ["supabase/migrations/20261028010000_0040_lists_reports_staff.sql", "src/lib/api.ts"];
+    const warned = check("Do a thing\n\nDecision: 14\nArea: القوائم\nControls: G24\nTests: LS01\nMigration: none\n", files);
+    expect(warned).toContain("0040_lists_reports_staff.sql");
+    expect(warned).not.toContain("✓");
+    expect(check("Do a thing\n\nDecision: 14\nArea: القوائم\nControls: G24\nTests: LS01\nMigration: 0040 — after a fresh backup\n", files)).toContain("✓");
   });
 });

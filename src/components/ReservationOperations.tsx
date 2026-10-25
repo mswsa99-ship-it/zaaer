@@ -4,6 +4,7 @@
  * Every button explains its effect before executing; nothing here writes to tables directly.
  */
 import { useCallback, useEffect, useState } from "react";
+import { auditActionLabel } from "../lib/auditLabels";
 import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert, Hammer, PencilLine } from "lucide-react";
 import { opsApi, ratesApi, stayApi, invoiceApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance, type GroupSummary } from "../lib/api";
 import { InvoiceDialog, InvoiceList } from "./Invoices";
@@ -143,7 +144,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
           <div className="space-y-2">
             {d.history.map((h, i) => (
               <div key={i} className="rounded-lg border border-ink-50 px-3 py-2 text-xs">
-                <div className="flex justify-between"><span className="font-medium text-ink-700">{ACTION_LABELS[h.action] ?? h.action}</span><span className="text-ink-400">{h.actor ?? "النظام"} · {formatDateTime(h.at)}</span></div>
+                <div className="flex justify-between"><span className="font-medium text-ink-700">{ACTION_LABELS[h.action] ?? auditActionLabel(h.action)}</span><span className="text-ink-400">{h.actor ?? "النظام"} · {formatDateTime(h.at)}</span></div>
                 {h.details?.reason ? <p className="mt-0.5 text-ink-500">السبب: {String(h.details.reason)}</p> : null}
                 {h.details?.before && h.details?.after ? <p className="mt-0.5 text-ink-400" dir="ltr">{JSON.stringify(h.details.before)} → {JSON.stringify(h.details.after)}</p> : null}
               </div>

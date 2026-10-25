@@ -15,7 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins, ClipboardList, BellRing, ClipboardCheck,
+  Calculator, Vault, HandCoins, ClipboardList, BellRing, ClipboardCheck, Activity,
 } from "lucide-react";
 import type { Role } from "./types";
 
@@ -112,7 +112,10 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/knowledge", label: "قاعدة المعرفة", icon: BookOpen, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"] },
   { path: "/admin/policies", label: "السياسات", icon: FileText, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"] },
   { path: "/admin/reports", label: "التقارير", icon: BarChart3, area: "admin", group: "الحوكمة", roles: ADMIN_FINANCE },
-  { path: "/admin/audit-logs", label: "سجل الإجراءات", icon: ScrollText, area: "admin", group: "الحوكمة", roles: ADMIN_FINANCE },
+  // decision 14 (10.3): the log is read through fn_audit_list — the owner, the manager and the supervisor (security rows for the owner alone)
+  { path: "/admin/audit-logs", label: "سجل الإجراءات", icon: ScrollText, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"] },
+  // decision 55: «استعمال القدرات» from the audit log, for the owner
+  { path: "/admin/usage", label: "استعمال القدرات", icon: Activity, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org" },
   // §16: corrections, invoice edits and cancellations, and what the monitors find (decision 54) wait for the owner alone
   { path: "/admin/review", label: "بحاجة لمراجعة وتدقيق", icon: ClipboardCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org" },
   { path: "/admin/data-purge", label: "تفريغ البيانات", icon: Trash2, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org" },

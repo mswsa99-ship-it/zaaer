@@ -91,7 +91,9 @@ let total = 0;
 const msgFile = opt("--message");
 if (msgFile) {
   const text = readFileSync(msgFile, "utf8").split("\n").filter((l) => !l.startsWith("#")).join("\n");
-  const staged = git("diff", "--cached", "--name-only").split("\n").filter(Boolean);
+  // --files a,b,c names the changed files explicitly (tests, tooling); otherwise the staged files of the working tree
+  const filesOpt = opt("--files");
+  const staged = filesOpt !== undefined ? filesOpt.split(",").filter(Boolean) : git("diff", "--cached", "--name-only").split("\n").filter(Boolean);
   total += report("هذا الإيداع", check(fields(text), staged));
 } else {
   let range = opt("--range");

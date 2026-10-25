@@ -60,11 +60,13 @@ export function seed(): Store {
   ]);
   put("pos_settlements", []);
   put("platform_payouts", []);
-  put("staff_profiles", Object.values(STAFF).map((x) => ({ id: x.id, auth_user_id: x.auth, organization_id: ORG, full_name: x.name, email: x.email, phone: null, role: x.role, is_active: true, created_at: ts(-300) })));
+  put("staff_profiles", Object.values(STAFF).map((x) => ({ id: x.id, auth_user_id: x.auth, organization_id: ORG, full_name: x.name, email: x.email, phone: null, role: x.role, is_active: true, created_at: ts(-300), sessions_ended_at: null, updated_at: null })));
+  // memberships are retired, never erased (0040, decision 35): removed_at marks one taken away
+  const member = (staff_id: string, branch_id: string) => ({ id: uid(), staff_id, branch_id, created_at: ts(-300), removed_at: null, removed_by: null });
   put("branch_memberships", [
-    { id: uid(), staff_id: STAFF.manager.id, branch_id: BRANCH_A }, { id: uid(), staff_id: STAFF.supervisor.id, branch_id: BRANCH_A },
-    { id: uid(), staff_id: STAFF.finance.id, branch_id: BRANCH_A }, { id: uid(), staff_id: STAFF.housekeeping.id, branch_id: BRANCH_A },
-    { id: uid(), staff_id: STAFF.manager.id, branch_id: BRANCH_B },
+    member(STAFF.manager.id, BRANCH_A), member(STAFF.supervisor.id, BRANCH_A),
+    member(STAFF.finance.id, BRANCH_A), member(STAFF.housekeeping.id, BRANCH_A),
+    member(STAFF.manager.id, BRANCH_B),
   ]);
   // the twelve sources of decision 22 (0038): a code, a kind, whether the platform's number is needed; Booking Engine off (decision 23)
   const src = (id: string, code: string, name: string, kind: "direct" | "external", ref: boolean, active = true) => ({ id, organization_id: ORG, name, code, kind, external_reference_required: ref, booking_url: null, is_active: active, archived_at: null, created_at: ts(-400) });
@@ -192,7 +194,7 @@ export function seed(): Store {
       platform_booked_on: platform ? addDays(T, o.bookedDays ?? Math.min(o.createdDays ?? o.ci - 5, -1)) : null, platform_collects: platform ? !!o.otaPaid : null, platform_verified_at: null, platform_verified_by: null, cancel_reference: o.status === "cancelled" && platform ? "CXL-" + String(o.ext ?? "").slice(-5) : null, security_hold_by: null, security_hold_at: null, booking_type: "individual", company_name: null, visit_purpose: "سياحة", check_in: ci, check_out: co, adults: o.adults ?? 2, companions: o.comp ?? 0, room_category_id: o.cat, room_id: roomId,
       rent_amount_halalas: rent, discount_halalas: disc, addons_halalas: addon, taxes_halalas: tax, total_halalas: total, paid_halalas: paid, payment_status, identity_status: o.identity ?? "verified", government_registration: o.gov ?? (o.status === "checked_in" || o.status === "checked_out"), access_status: o.access ?? (o.status === "checked_in" ? "delivered" : o.status === "checked_out" ? "delivered" : "locked"), keybox_delivered: o.keyboxDelivered ?? (o.status === "checked_in"),
       checkin_approved_by: null, checkin_approved_at: null, actual_check_in: o.actualIn || o.status === "checked_in" || o.status === "checked_out" ? ts(o.ci, 17) : null, actual_check_out: o.actualOut || o.status === "checked_out" ? ts(o.co, 11) : null, notes: null, created_at: ts(o.createdDays ?? o.ci - 5), created_by: STAFF.supervisor.id, security_hold: false, security_hold_reason: null, gov_registration_ref: null, gov_registration_by: null, gov_registration_at: null, updated_at: ts(-1),
-      version: 1, rate_type: "daily", nightly_rate_halalas: rate, tax_rate_bp: 0, prices_include_tax: false, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: dep - depRef, refunded_halalas: 0, balance_due_halalas: due };
+      version: 1, rate_type: "daily", price_basis: "daily", nightly_rate_halalas: rate, tax_rate_bp: 0, prices_include_tax: false, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: dep - depRef, refunded_halalas: 0, balance_due_halalas: due };
     res.push(r);
     if (!profileOf.has(o.phone)) profileOf.set(o.phone, uid());
     const verified = (o.identity ?? "verified") === "verified"; const last4 = String(1000 + Math.floor(Math.random() * 8999));
@@ -378,7 +380,8 @@ export function seed(): Store {
   audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "reservation.checked_out", entity_type: "reservation", entity_id: rOut1, details: { before: { status: "checked_in" }, after: { status: "checked_out", deposit_balance_halalas: 5000, credit_halalas: 0 } }, created_at: ts(0, 11) });
   audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.owner.id, action: "facility.archived", entity_type: "facility", entity_id: fixed(434), details: { reason: "لم يعد مستخدمًا" }, created_at: ts(-20) });
   for (const id of [rIn1, rIn3, rIn4, rIn5, rArr3]) audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "voucher.receipt_created", entity_type: "voucher", entity_id: id, details: { after: { amount_halalas: 1 } }, created_at: ts(-1, 10) });
-  put("audit_events", audits.sort((a, b) => (a.created_at < b.created_at ? 1 : -1)));
+  // the trace columns of 0026 as the migration back-fills them (a staff member at a screen, a successful business row)
+  put("audit_events", audits.sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).map((a) => ({ correlation_id: "legacy-" + a.id, source: "screen", actor_type: "staff", result: "success", category: "business", ...a })));
   void rArr2;
   return s;
 }

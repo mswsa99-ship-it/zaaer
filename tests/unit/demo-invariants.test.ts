@@ -1578,3 +1578,508 @@ describe("G01/G02/G03/G19/G22 — guests, platforms and the website in the demo 
     expect(Array.isArray(await rpc<any>("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toBe(true);   // the staff still read it inside
   });
 });
+
+describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", () => {
+  const A = "00000000-0000-0000-0000-000000000010", B = "00000000-0000-0000-0000-000000000012";   // the seeded branches (the supervisor works in A only; the manager in both)
+  const OWNER = "00000000-0000-0000-0000-000000000001", MANAGER = "00000000-0000-0000-0000-000000000008", SUP = "00000000-0000-0000-0000-000000000002", FIN = "00000000-0000-0000-0000-000000000004", HK = "00000000-0000-0000-0000-000000000003";
+  const CAT_B = "00000000-0000-0000-0000-000000000039", RECEPTION = "00000000-0000-0000-0000-000000000021", BOOKING_COM = "00000000-0000-0000-0000-000000000020", STUDIO = "00000000-0000-0000-0000-000000000030";
+  const CASH_A = "00000000-0000-0000-0000-000000000700", TT_CLEAN = "00000000-0000-0000-0000-000000000420";
+  const riyadh = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  const day = (n: number) => { const d = new Date(riyadh() + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const dayOf = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  const fails = async (p: Promise<unknown>) => { try { await p; return ""; } catch (e) { return (e as Error).message; } };
+  const all = async (table: string) => (await client.from(table).select("*")).data as any[];
+  const get = async (table: string, id: string) => (await client.from(table).select("*").eq("id", id).maybeSingle()).data as any;
+  const ilike = (v: unknown, q: string) => String(v ?? "").toLowerCase().includes(q.toLowerCase());
+  const ids = (rows: any[]) => rows.map((r) => r.id).sort();
+  const sum = (rows: any[], f: (r: any) => boolean) => rows.filter(f).reduce((s, r) => s + Number(r.amount_halalas), 0);
+  /** a booking at the reception, in A unless said otherwise */
+  const book = (from: number, to: number, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: STUDIO, source_id: RECEPTION, check_in: day(from), check_out: day(to), guest_name: "ضيف المرحلة السادسة", guest_phone: "0500000000", adults: 1, companions: 0, ...extra } });
+  /** every page of a list, as an export reads it (X09) */
+  const pages = async (fn: string, args: Record<string, unknown>, size: number) => { const got: any[] = []; let total = -1; for (let off = 0; ; off += size) { const r = await rpc<any>(fn, fn === "fn_reservation_list" ? { ...args, p_limit: size, p_offset: off } : { p: { ...(args.p as object), limit: size, offset: off } }); total = r.total; got.push(...r.rows); if (r.rows.length < size) break; } return { rows: got, total }; };
+
+  it("DS01 the reservations list: every filter of the reference equals an independent filter over the store, read in pages of 3 without overlap and with the exact total; a limit above 1000 is capped, not refused", async () => {
+    await rpc("fn_staff_create_reservation", { p: { branch_id: A, category_id: STUDIO, source_id: RECEPTION, check_in: day(50), check_out: day(52), guest_name: "ضيف بخصم", guest_phone: "0500000777", adults: 1, companions: 0, discount_halalas: 1000, discount_reason: "ضيف دائم" } });
+    const res = (await client.from("reservations").select("*").eq("branch_id", A)).data as any[]; const guests = await all("reservation_guests"); const rooms = await all("rooms"); const today = riyadh();
+    expect(res.length).toBeGreaterThan(20);
+    const qMatch = (r: any, q: string) => ilike(r.internal_ref, q) || ilike(r.external_ref, q) || ilike(r.cancel_reference, q) || ilike(r.company_name, q) || guests.some((g) => g.reservation_id === r.id && (ilike(g.full_name, q) || String(g.phone ?? "").includes(q)));
+    const cases: Array<[string, Record<string, unknown>, (r: any) => boolean]> = [
+      ["status", { status: "confirmed,checked_in" }, (r) => ["confirmed", "checked_in"].includes(r.status)],
+      ["open_only", { open_only: true }, (r) => ["pending_verification", "confirmed", "checked_in"].includes(r.status)],
+      ["check_in window", { check_in_from: day(-3), check_in_to: day(3) }, (r) => r.check_in >= day(-3) && r.check_in <= day(3)],
+      ["check_out window", { check_out_from: today, check_out_to: day(7) }, (r) => r.check_out >= today && r.check_out <= day(7)],
+      ["created today (branch day)", { created_from: today, created_to: today }, (r) => dayOf(r.created_at) === today],
+      ["stay_on", { stay_on: today }, (r) => r.check_in <= today && r.check_out > today],
+      ["source", { source_id: BOOKING_COM }, (r) => r.source_id === BOOKING_COM],
+      ["category", { category_id: STUDIO }, (r) => r.room_category_id === STUDIO],
+      ["room number", { room_number: "101" }, (r) => rooms.find((x) => x.id === r.room_id)?.room_number === "101"],
+      ["booking_type", { booking_type: "individual" }, (r) => r.booking_type === "individual"],
+      ["price_basis", { price_basis: "daily" }, (r) => r.price_basis === "daily"],
+      ["payment_status", { payment_status: "paid" }, (r) => r.payment_status === "paid"],
+      ["identity_status", { identity_status: "verified" }, (r) => r.identity_status === "verified"],
+      ["has_discount", { has_discount: "true" }, (r) => r.discount_halalas > 0],
+      ["has_balance (money role)", { has_balance: true }, (r) => r.balance_due_halalas > 0],
+      ["platform_collects", { platform_collects: "true" }, (r) => r.platform_collects === true],
+      ["q by number", { q: res[0].internal_ref }, (r) => qMatch(r, res[0].internal_ref)],
+      ["q by guest phone", { q: "0501110001" }, (r) => qMatch(r, "0501110001")],
+      ["cancelled with cancel_reference", { status: "cancelled", q: "CXL" }, (r) => r.status === "cancelled" && qMatch(r, "CXL")],
+    ];
+    const nonEmpty: string[] = [];
+    for (const [name, filters, pred] of cases) {
+      const want = ids(res.filter(pred)); const got = await pages("fn_reservation_list", { p_branch: A, p_filters: filters }, 3);
+      expect(got.rows.length, name).toBe(new Set(got.rows.map((r) => r.id)).size);
+      expect(ids(got.rows), name).toEqual(want); expect(got.total, name).toBe(want.length);
+      if (want.length) nonEmpty.push(name);
+    }
+    expect(nonEmpty.length).toBeGreaterThan(14);   // the seed exercises the filters, not only their empty answers
+    const capped = await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 5000, p_offset: 0 });
+    expect(capped.total).toBe(res.length); expect(capped.rows.length).toBe(Math.min(res.length, 1000));
+  });
+
+  it("DS02 sort: arrival ascending, departure, creation, number, and the default (arrival descending then creation descending); branch B's booking is the owner's to see and not the supervisor's; the row carries every column the column picker offers", async () => {
+    const inB = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: B, category_id: CAT_B, source_id: RECEPTION, check_in: day(40), check_out: day(42), guest_name: "ضيف الفرع ب", guest_phone: "0500009901", adults: 1, companions: 0 } });
+    const list = (sort?: string) => rpc<any>("fn_reservation_list", { p_branch: A, p_filters: sort ? { sort } : {}, p_limit: 1000, p_offset: 0 }).then((r) => r.rows as any[]);
+    const nonDecreasing = (xs: string[]) => xs.every((x, i) => i === 0 || xs[i - 1] <= x);
+    expect(nonDecreasing((await list("check_in_asc")).map((r) => r.check_in))).toBe(true);
+    expect(nonDecreasing((await list("ref")).map((r) => r.internal_ref))).toBe(true);
+    expect(nonDecreasing((await list("check_out")).map((r) => r.check_out).reverse())).toBe(true);
+    expect(nonDecreasing((await list("created")).map((r) => Date.parse(r.created_at)).reverse().map(String).map((x) => x.padStart(20, "0")))).toBe(true);
+    const dflt = await list();
+    expect(dflt.every((r, i) => i === 0 || dflt[i - 1].check_in > r.check_in || (dflt[i - 1].check_in === r.check_in && Date.parse(dflt[i - 1].created_at) >= Date.parse(r.created_at)))).toBe(true);
+    // the columns of the picker (decision 14): every key present on every row, the money columns filled for the owner
+    const keys = ["id", "internal_ref", "external_ref", "status", "check_in", "check_out", "nights", "guest_name", "room_number", "source_name", "category_name", "booking_type", "company_name", "price_basis", "adults", "companions", "platform_booked_on", "platform_collects", "created_by_name", "actual_check_in", "actual_check_out", "cancelled_at", "cancel_reference", "total_halalas", "paid_halalas", "discount_halalas", "nightly_rate_halalas", "balance_due_halalas", "deposit_balance_halalas", "payment_status", "identity_status", "access_status", "created_at", "group_ref", "hold", "ban", "rating"];
+    for (const r of dflt) for (const k of keys) expect(k in r, `${k} on ${r.internal_ref}`).toBe(true);
+    const seeded = dflt.find((r) => r.created_by_name === "فهد الاستقبال" && r.status === "checked_in")!;
+    expect(seeded).toMatchObject({ booking_type: "individual", price_basis: "daily", adults: 2, companions: 0, hold: false, ban: false });
+    expect(seeded.nights).toBe(Math.round((Date.parse(seeded.check_out) - Date.parse(seeded.check_in)) / 86400000));
+    expect(typeof seeded.total_halalas).toBe("number"); expect(typeof seeded.nightly_rate_halalas).toBe("number");
+    // branch scoping: the owner sees B's booking in B; the supervisor of A gets nothing of B (no throw) and nothing of B's in A
+    expect((await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 50, p_offset: 0 })).rows.map((r: any) => r.id)).toContain(inB.id);
+    await login("reception@demo.sa");
+    expect(await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 50, p_offset: 0 })).toEqual({ total: 0, rows: [] });
+    const mine = await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 1000, p_offset: 0 });
+    expect(mine.total).toBeGreaterThan(0); expect(mine.rows.some((r: any) => r.id === inB.id)).toBe(false);
+  });
+
+  it("DS03 housekeeping reads the list without money, bans or ratings, and the balance filter yields nothing for them (no inference from counts); the supervisor sees the money and the rating, finance the money and the ban but no rating", async () => {
+    await login("housekeeping@demo.sa");
+    const hk = await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 1000, p_offset: 0 });
+    expect(hk.total).toBeGreaterThan(0);
+    for (const r of hk.rows) for (const k of ["total_halalas", "paid_halalas", "discount_halalas", "nightly_rate_halalas", "balance_due_halalas", "deposit_balance_halalas", "ban", "rating"]) expect(r[k], k).toBeNull();
+    expect(hk.rows[0].guest_name).toBeTruthy(); expect(hk.rows[0].payment_status).toBeTruthy();
+    expect(await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: { has_balance: true }, p_limit: 50, p_offset: 0 })).toEqual({ total: 0, rows: [] });
+    await login("reception@demo.sa");
+    const sup = (await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: { has_balance: true }, p_limit: 50, p_offset: 0 })).rows as any[];
+    expect(sup.length).toBeGreaterThan(0); expect(sup.every((r) => r.balance_due_halalas > 0)).toBe(true);
+    const rated = (await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: { q: "0501110004" }, p_limit: 50, p_offset: 0 })).rows[0];
+    expect(rated.rating).toBe(2); expect(typeof rated.ban).toBe("boolean");
+    await login("finance@demo.sa");
+    const fin = (await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: { q: "0501110004" }, p_limit: 50, p_offset: 0 })).rows[0];
+    expect(fin.rating).toBeNull(); expect(typeof fin.ban).toBe("boolean"); expect(typeof fin.total_halalas).toBe("number");
+  });
+
+  it("DS04 saved views: own rows only (function and table), the second default replaces the first and the list is ordered default first, saving by id renames without a new row, a wrong screen or an empty name is refused, at most 20 live per screen, removing archives (the row stays, no default left), no direct write", async () => {
+    await login("reception@demo.sa");
+    const v1 = await rpc<any>("fn_saved_view_save", { p: { screen: "reservations", name: " الوصول اليوم ", filters: { check_in_from: day(0) }, columns: ["internal_ref", "guest_name"], is_default: true } });
+    const v2 = await rpc<any>("fn_saved_view_save", { p: { screen: "reservations", name: "بلا رصيد", filters: { has_balance: true }, is_default: true } });
+    let l = await rpc<any[]>("fn_saved_views_list", { p_screen: "reservations" });
+    expect(l.map((x) => [x.name, x.is_default])).toEqual([["بلا رصيد", true], ["الوصول اليوم", false]]);
+    expect(l[1]).toMatchObject({ id: v1.id, filters: { check_in_from: day(0) }, columns: ["internal_ref", "guest_name"] }); expect(l[0].columns).toBeNull();
+    expect(await rpc<any>("fn_saved_view_save", { p: { id: v1.id, screen: "reservations", name: "الوصول اليوم (معدّل)", filters: { check_in_from: "2026-02-01" } } })).toEqual({ ok: true, id: v1.id });
+    l = await rpc<any[]>("fn_saved_views_list", { p_screen: "reservations" });
+    expect(l).toHaveLength(2); expect(l.find((x) => x.id === v1.id)).toMatchObject({ name: "الوصول اليوم (معدّل)", filters: { check_in_from: "2026-02-01" }, columns: ["internal_ref", "guest_name"], is_default: false });
+    expect(await rpc<any[]>("fn_saved_views_list", { p_screen: "vouchers" })).toEqual([]);
+    expect(await fails(rpc("fn_saved_view_save", { p: { screen: "rooms", name: "x" } }))).toBe("VALIDATION: screen");
+    expect(await fails(rpc("fn_saved_view_save", { p: { screen: "audit", name: "   " } }))).toBe("VALIDATION: name");
+    expect(await fails(rpc("fn_saved_view_save", { p: { screen: "audit", name: "x".repeat(61) } }))).toBe("VALIDATION: name");
+    // another person sees none of them, through the function or the table, and cannot touch them
+    await login("manager@demo.sa");
+    expect(await rpc<any[]>("fn_saved_views_list", { p_screen: "reservations" })).toEqual([]);
+    expect(await all("staff_saved_views")).toEqual([]);
+    expect(await fails(rpc("fn_saved_view_remove", { p_id: v1.id }))).toBe("NOT_FOUND: view");
+    expect(await fails(rpc("fn_saved_view_save", { p: { id: v2.id, screen: "reservations", name: "مسروق" } }))).toBe("NOT_FOUND: view");
+    const direct = await client.from("staff_saved_views").insert({ organization_id: "00000000-0000-0000-0000-000000000001", staff_id: MANAGER, screen: "reservations", name: "مباشر" });
+    expect(direct.error?.code).toBe("42501");
+    // at most 20 live per screen; removal archives and frees a place
+    await login("reception@demo.sa");
+    for (let i = 3; i <= 20; i++) await rpc("fn_saved_view_save", { p: { screen: "reservations", name: `عرض ${i}` } });
+    expect(await fails(rpc("fn_saved_view_save", { p: { screen: "reservations", name: "الواحد والعشرون" } }))).toBe("LIMIT: saved_views");
+    expect(await rpc<any>("fn_saved_view_remove", { p_id: v2.id })).toEqual({ ok: true });
+    expect(await fails(rpc("fn_saved_view_remove", { p_id: v2.id }))).toBe("NOT_FOUND: view");
+    const gone = await get("staff_saved_views", v2.id);
+    expect(gone.archived_at).toBeTruthy(); expect(gone.is_default).toBe(false);
+    l = await rpc<any[]>("fn_saved_views_list", { p_screen: "reservations" });
+    expect(l).toHaveLength(19); expect(l.some((x) => x.is_default)).toBe(false);
+    expect((await rpc<any>("fn_saved_view_save", { p: { screen: "reservations", name: "الواحد والعشرون" } })).ok).toBe(true);
+    expect((await all("staff_saved_views")).length).toBe(21);   // the archived row stays
+    await client.auth.signOut();
+    expect(await fails(rpc("fn_saved_view_save", { p: { screen: "reservations", name: "زائر" } }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("DS05 the calendar: the window is at most 62 days and never reversed, another branch is refused; every live unit of the branch and exactly the allocations that touch the window, clipped to it with the before/after flags, nothing cancelled; housekeeping sees it without payment states or balances", async () => {
+    expect(await fails(rpc("fn_reservation_calendar", { p_branch: A, p_from: day(1), p_to: day(0) }))).toBe("VALIDATION: range");
+    expect(await fails(rpc("fn_reservation_calendar", { p_branch: A, p_from: day(0), p_to: day(63) }))).toBe("VALIDATION: range");
+    expect((await rpc<any>("fn_reservation_calendar", { p_branch: A, p_from: day(0), p_to: day(62) })).units.length).toBeGreaterThan(0);
+    const from = day(-2), to = day(5), end = day(6);
+    const c = await rpc<any>("fn_reservation_calendar", { p_branch: A, p_from: from, p_to: to });
+    expect(c).toMatchObject({ from, to, today: riyadh() });
+    const rooms = (await all("rooms")).filter((r) => r.branch_id === A && !r.archived_at);
+    expect(ids(c.units.map((u: any) => ({ id: u.room_id })))).toEqual(ids(rooms));
+    expect(c.units[0]).toMatchObject({ room_number: expect.any(String), category: expect.any(String), floor: expect.any(String), block: expect.any(String), status: expect.any(String), cleanliness: expect.any(String) });
+    expect(c.units.some((u: any) => u.is_active === false)).toBe(true);   // U-4 is out of service, not archived: still on the board
+    const res = await all("reservations"); const allocs = (await all("reservation_allocations")).filter((a) => a.branch_id === A && ["active", "closed"].includes(a.status) && a.from_date <= to && a.to_date > from && !["cancelled", "rejected", "no_show"].includes(res.find((r) => r.id === a.reservation_id)?.status));
+    expect(allocs.length).toBeGreaterThan(3);
+    expect(c.segments.map((s: any) => `${s.room_id}|${s.reservation_id}`).sort()).toEqual(allocs.map((a) => `${a.room_id}|${a.reservation_id}`).sort());
+    for (const s of c.segments) {
+      const a = allocs.find((x) => x.room_id === s.room_id && x.reservation_id === s.reservation_id)!;
+      expect(s.from_date).toBe(a.from_date > from ? a.from_date : from); expect(s.to_date).toBe(a.to_date < end ? a.to_date : end);
+      expect(s.starts_before).toBe(a.from_date < from); expect(s.ends_after).toBe(a.to_date > end);
+      expect(s.from_date >= from && s.to_date <= end && s.from_date < s.to_date).toBe(true);
+      expect(typeof s.guest).toBe("string"); expect(typeof s.source).toBe("string"); expect(typeof s.payment_status).toBe("string"); expect(typeof s.balance_due_halalas).toBe("number");
+    }
+    expect(c.segments.some((s: any) => s.starts_before)).toBe(true);
+    await login("housekeeping@demo.sa");
+    const h = await rpc<any>("fn_reservation_calendar", { p_branch: A, p_from: from, p_to: to });
+    expect(h.segments.length).toBe(c.segments.length); expect(h.segments.every((s: any) => s.payment_status === null && s.balance_due_halalas === null && s.guest)).toBe(true); expect(h.units[0]).toHaveProperty("cleanliness");
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_reservation_calendar", { p_branch: B, p_from: from, p_to: to }))).toBe("FORBIDDEN: branch not permitted");
+  });
+
+  it("DS06 the log: the owner reads the whole log with the security rows, the manager and the supervisor never a security row even when asked, the supervisor only their branches and the branch-less rows and no details; every filter equals an independent filter, read in pages; the rows read in Arabic with the booking's number, the person's name and the branch; housekeeping and finance are refused", async () => {
+    // a security row (branch-less), a business row of branch B, and a branch-less business row
+    await rpc("fn_admin_force_logout", { p_staff: FIN, p_reason: "جهاز مفقود" });
+    const inB = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: B, category_id: CAT_B, source_id: RECEPTION, check_in: day(40), check_out: day(42), guest_name: "ضيف الفرع ب", guest_phone: "0500009901", adults: 1, companions: 0 } });
+    await rpc("fn_admin_set_source_active", { p: { id: "00000000-0000-0000-0000-000000000529", is_active: true, reason: "تجربة" } });
+    const events = await all("audit_events"); const { auditActionLabel } = await import("../../src/lib/auditLabels");
+    const seeded = events.find((e) => e.action === "reservation.created" && e.actor_id === SUP)!; const seededRes = await get("reservations", seeded.entity_id);
+    const owner = await rpc<any>("fn_audit_list", { p: {} });
+    expect(owner).toMatchObject({ total: events.length, limit: 50, offset: 0, tz: "Asia/Riyadh" }); expect(owner.rows.length).toBe(Math.min(50, events.length));
+    expect((await rpc<any>("fn_audit_list", { p: { limit: 9999 } })).limit).toBe(500);
+    const sec = await rpc<any>("fn_audit_list", { p: { category: "security" } });
+    expect(sec.total).toBeGreaterThan(0); expect(sec.rows[0]).toMatchObject({ action: "staff.signed_out", action_label: "تسجيل خروج إجباري", entity_label: "موظف", entity_ref: "نورة المالية", actor_name: "عبدالله المالك", category: "security", branch_id: null, branch_name: null, reason: "جهاز مفقود" });
+    const cases: Array<[string, Record<string, unknown>, (e: any) => boolean]> = [
+      ["branch", { branch_id: A }, (e) => e.branch_id === A],
+      ["action", { action: "reservation.created" }, (e) => e.action === "reservation.created"],
+      ["prefix", { action: "reservation.", action_prefix: true }, (e) => String(e.action).startsWith("reservation.")],
+      ["entity", { entity_type: "reservation" }, (e) => e.entity_type === "reservation"],
+      ["entity id", { entity_id: inB.id }, (e) => e.entity_id === inB.id],
+      ["correlation", { correlation_id: seeded.correlation_id }, (e) => e.correlation_id === seeded.correlation_id],
+      ["actor", { actor_id: SUP }, (e) => e.actor_id === SUP],
+      ["category", { category: "business" }, (e) => e.category === "business"],
+      ["result", { result: "success" }, (e) => e.result === "success"],
+      ["source", { source: "screen" }, (e) => e.source === "screen"],
+      ["day", { from: riyadh(), to: riyadh() }, (e) => dayOf(e.created_at) === riyadh()],
+      ["name search", { q: "إنشاء حجز" }, (e) => ilike(e.action, "إنشاء حجز") || ilike(e.entity_type, "إنشاء حجز") || auditActionLabel(e.action).includes("إنشاء حجز")],
+      ["code search", { q: "voucher" }, (e) => ilike(e.action, "voucher") || ilike(e.entity_type, "voucher") || ilike(auditActionLabel(e.action), "voucher")],
+    ];
+    for (const [name, filters, pred] of cases) {
+      const want = ids(events.filter(pred)); const got = await pages("fn_audit_list", { p: filters }, 7);
+      expect(ids(got.rows), name).toEqual(want); expect(got.total, name).toBe(want.length); expect(want.length, name).toBeGreaterThan(0);
+    }
+    expect(await fails(rpc("fn_audit_list", { p: { from: day(1), to: day(0) } }))).toBe("VALIDATION: period");
+    const row = (await rpc<any>("fn_audit_list", { p: { entity_id: seededRes.id, action: "reservation.created" } })).rows[0];
+    expect(row).toMatchObject({ action_label: "إنشاء حجز", entity_label: "حجز", entity_ref: seededRes.internal_ref, actor_name: "فهد الاستقبال", actor_type: "staff", branch_id: A, branch_name: "فرع الرياض — طريق الملك فهد", result: "success", category: "business", reason: null });
+    expect(row.details).toBeTruthy(); expect(row.created_at).toBe(seeded.created_at);
+    // the manager: details, no security row even when asked; the supervisor: their branch and the branch-less rows, no details
+    await login("manager@demo.sa");
+    const mgr = await rpc<any>("fn_audit_list", { p: { limit: 500 } });
+    expect(mgr.rows.some((r: any) => r.category === "security")).toBe(false); expect(mgr.rows.some((r: any) => r.details)).toBe(true);
+    expect((await rpc<any>("fn_audit_list", { p: { category: "security" } })).total).toBe(0);
+    expect(mgr.total).toBe(events.filter((e) => e.category !== "security").length);
+    await login("reception@demo.sa");
+    const sup = await rpc<any>("fn_audit_list", { p: { limit: 500 } });
+    expect(sup.total).toBe(events.filter((e) => e.category !== "security" && (e.branch_id == null || e.branch_id === A)).length);
+    expect(sup.rows.some((r: any) => r.branch_id === B || r.category === "security")).toBe(false);
+    expect(sup.rows.some((r: any) => r.branch_id === null && r.action === "source.enabled")).toBe(true);
+    expect(sup.rows.every((r: any) => r.details === null)).toBe(true); expect(sup.rows.some((r: any) => r.reason)).toBe(true);
+    expect(await fails(rpc("fn_audit_list", { p: { branch_id: B } }))).toBe("FORBIDDEN: branch not permitted");
+    await login("housekeeping@demo.sa"); expect(await fails(rpc("fn_audit_list", { p: {} }))).toMatch(/^FORBIDDEN/);
+    await login("finance@demo.sa"); expect(await fails(rpc("fn_audit_list", { p: {} }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("DS07 the ledger: approved by default with the exact total; every filter (kind, method, account, «none», status, staff, booking, day, number) equals an independent filter read in pages of 4; the totals are over the whole set even when the page holds one row; a branch, a sane period and a known status are required; housekeeping is refused, branch B's supervisor is refused branch A, finance reads it", async () => {
+    const r = await book(60, 61); const key = uid();
+    const v = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 7000, method: "cash", idempotency_key: key } });
+    await rpc("fn_cancel_voucher", { p_voucher: v.voucher_id, p_reason: "خطأ إدخال" });
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 5000, method: "cash", idempotency_key: uid() } });
+    const vouchers = (await all("financial_vouchers")).filter((x) => x.branch_id === A); const res = await all("reservations");
+    const cancelledNumber = vouchers.find((x) => x.id === v.voucher_id)!.number;
+    const base = await rpc<any>("fn_voucher_list", { p: { branch_id: A } });
+    expect(base).toMatchObject({ total: vouchers.filter((x) => x.status === "approved").length, limit: 100, offset: 0, tz: "Asia/Riyadh" });
+    expect(base.rows.every((x: any) => x.status === "approved")).toBe(true);
+    const refOf = (x: any) => res.find((y) => y.id === x.reservation_id)?.internal_ref ?? "";
+    const cases: Array<[string, Record<string, unknown>, (x: any) => boolean]> = [
+      ["kind", { kind: "deposit" }, (x) => x.status === "approved" && x.kind === "deposit"],
+      ["method", { method: "pos" }, (x) => x.status === "approved" && x.method === "pos"],
+      ["account", { account_id: CASH_A }, (x) => x.status === "approved" && x.account_id === CASH_A],
+      ["no account", { account_id: "none" }, (x) => x.status === "approved" && x.account_id == null],
+      ["cancelled", { status: "cancelled" }, (x) => x.status === "cancelled"],
+      ["all", { status: "all" }, () => true],
+      ["staff", { staff_id: OWNER, status: "all" }, (x) => x.created_by === OWNER],
+      ["booking", { reservation_id: r.id, status: "all" }, (x) => x.reservation_id === r.id],
+      ["day", { from: riyadh(), to: riyadh() }, (x) => x.status === "approved" && dayOf(x.occurred_at) === riyadh()],
+      ["number", { q: cancelledNumber, status: "all" }, (x) => ilike(x.number, cancelledNumber) || ilike(x.reference, cancelledNumber) || ilike(refOf(x), cancelledNumber)],
+      ["booking number", { q: r.internal_ref, status: "all" }, (x) => ilike(x.number, r.internal_ref) || ilike(x.reference, r.internal_ref) || ilike(refOf(x), r.internal_ref)],
+    ];
+    for (const [name, filters, pred] of cases) {
+      const want = ids(vouchers.filter(pred)); const got = await pages("fn_voucher_list", { p: { branch_id: A, ...filters } }, 4);
+      expect(ids(got.rows), name).toEqual(want); expect(got.total, name).toBe(want.length); expect(want.length, name).toBeGreaterThan(0);
+    }
+    const one = await rpc<any>("fn_voucher_list", { p: { branch_id: A, limit: 1 } }); const ok = vouchers.filter((x) => x.status === "approved");
+    expect(one.rows).toHaveLength(1); expect(one.total).toBe(ok.length);
+    expect(one.totals).toMatchObject({ receipts: sum(ok, (x) => x.kind === "receipt"), refunds: sum(ok, (x) => x.kind === "refund"), deposits: sum(ok, (x) => x.kind === "deposit"), deposit_refunds: sum(ok, (x) => x.kind === "deposit_refund"), deposit_applied: 0, approved: ok.length, cancelled: 0 });   // the set is the approved rows: no cancelled one in it
+    expect((await rpc<any>("fn_voucher_list", { p: { branch_id: A, status: "all", limit: 1 } })).totals).toMatchObject({ approved: ok.length, cancelled: vouchers.filter((x) => x.status === "cancelled").length, receipts: sum(ok, (x) => x.kind === "receipt") });   // a cancelled voucher never adds to the money
+    for (const m of one.totals.by_method) expect(m.amount_halalas).toBe(sum(ok, (x) => x.kind === "receipt" && x.method === m.method));
+    expect(one.totals.by_method.map((m: any) => m.method).sort()).toEqual([...new Set(ok.filter((x) => x.kind === "receipt").map((x) => x.method))].sort());
+    expect(one.totals.by_method.every((m: any, i: number) => i === 0 || one.totals.by_method[i - 1].amount_halalas >= m.amount_halalas)).toBe(true);
+    const cash = one.totals.by_account.find((a: any) => a.account_id === CASH_A);
+    expect(cash).toMatchObject({ account_name: "صندوق الاستقبال", in_halalas: sum(ok, (x) => x.account_id === CASH_A && ["receipt", "deposit"].includes(x.kind)), out_halalas: sum(ok, (x) => x.account_id === CASH_A && ["refund", "deposit_refund"].includes(x.kind)) });
+    const row = (await rpc<any>("fn_voucher_list", { p: { branch_id: A, reservation_id: r.id, status: "all", kind: "receipt" } })).rows.find((x: any) => x.number === cancelledNumber);
+    expect(row).toMatchObject({ status: "cancelled", cancel_reason: "خطأ إدخال", creator_name: "عبدالله المالك", account_name: "صندوق الاستقبال", reservation: { id: r.id, internal_ref: r.internal_ref }, original_number: null });
+    expect(row.cancelled_at).toBeTruthy();
+    expect(await fails(rpc("fn_voucher_list", { p: {} }))).toBe("VALIDATION: branch_id");
+    expect(await fails(rpc("fn_voucher_list", { p: { branch_id: A, from: day(1), to: day(0) } }))).toBe("VALIDATION: period");
+    expect(await fails(rpc("fn_voucher_list", { p: { branch_id: A, status: "pending" } }))).toBe("VALIDATION: status");
+    await login("housekeeping@demo.sa"); expect(await fails(rpc("fn_voucher_list", { p: { branch_id: A } }))).toMatch(/^FORBIDDEN/);
+    await login("reception@demo.sa"); expect(await fails(rpc("fn_voucher_list", { p: { branch_id: B } }))).toBe("FORBIDDEN: branch not permitted");
+    await login("finance@demo.sa"); expect((await rpc<any>("fn_voucher_list", { p: { branch_id: A } })).total).toBe(ok.length);
+  });
+
+  it("DS08 report filters (decision 36): by staff member, payment method, box or account and «بلا صندوق», source and unit type — each total equals an independent sum, by_staff holds that person only, the collection rate is not claimed under a staff, method or account filter; the discounts, late-entries and identities reports echo their filters; the filter options of a branch", async () => {
+    const r = await book(60, 61, { discount_halalas: 500, discount_reason: "تجربة" });
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 9000, method: "cash", idempotency_key: uid() } });
+    const from = day(-30), to = riyadh(); const inPeriod = (x: any) => dayOf(x.occurred_at) >= from && dayOf(x.occurred_at) <= to;
+    const res = await all("reservations"); const vs = (await all("financial_vouchers")).filter((x) => x.branch_id === A && x.status === "approved" && inPeriod(x));
+    const resOf = (x: any) => res.find((y) => y.id === x.reservation_id);
+    const fin = (filters: Record<string, unknown>) => rpc<any>("fn_reports_finance", { p_branch: A, p_from: from, p_to: to, p_filters: filters });
+    const plain = await fin({});
+    expect(plain.filtered).toBe(false); expect(plain.filters).toEqual({}); expect(plain.collection_rate_pct).not.toBeNull(); expect(plain.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt"));
+    expect(plain.definitions.collection_rate.endsWith("؛ لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب.")).toBe(true);
+    expect(plain.by_staff.length).toBe(2); expect(plain.by_account.length).toBe(2);
+    const byStaff = await fin({ staff_id: SUP });
+    expect(byStaff).toMatchObject({ filtered: true, filters: { staff_id: SUP }, collection_rate_pct: null });
+    expect(byStaff.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.created_by === SUP)); expect(byStaff.ledger.receipts).toBeGreaterThan(0);
+    expect(byStaff.by_staff).toEqual([{ staff_id: SUP, staff: "فهد الاستقبال", receipts: byStaff.ledger.receipts, refunds: sum(vs, (x) => x.kind === "refund" && x.created_by === SUP), count: vs.filter((x) => ["receipt", "refund"].includes(x.kind) && x.created_by === SUP).length }]);
+    const byMethod = await fin({ method: "cash" });
+    expect(byMethod.collection_rate_pct).toBeNull(); expect(byMethod.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.method === "cash")); expect(byMethod.by_method).toEqual([{ method: "cash", amount_halalas: byMethod.ledger.receipts }]);
+    const byAccount = await fin({ account_id: CASH_A });
+    expect(byAccount.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.account_id === CASH_A)); expect(byAccount.by_account).toEqual([{ account_id: CASH_A, account: "صندوق الاستقبال", in_halalas: sum(vs, (x) => x.account_id === CASH_A && ["receipt", "deposit"].includes(x.kind)), out_halalas: sum(vs, (x) => x.account_id === CASH_A && ["refund", "deposit_refund"].includes(x.kind)) }]);
+    const none = await fin({ account_id: "none" });
+    expect(none.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.account_id == null)); expect(none.ledger.receipts).toBeGreaterThan(0); expect(none.by_account).toEqual([]); expect(none.collection_rate_pct).toBeNull();
+    const bySource = await fin({ source_id: BOOKING_COM });
+    expect(bySource.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && resOf(x)?.source_id === BOOKING_COM)); expect(bySource.ledger.receipts).toBeGreaterThan(0);
+    const inWin = res.filter((y) => y.branch_id === A && y.check_in <= to && y.check_out > from);
+    expect(bySource.reservations.count).toBe(inWin.filter((y) => y.source_id === BOOKING_COM).length); expect(bySource.collection_rate_pct).not.toBeNull(); expect(bySource.filters).toEqual({ source_id: BOOKING_COM });
+    const byCat = await fin({ category_id: STUDIO });
+    expect(byCat.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && resOf(x)?.room_category_id === STUDIO)); expect(byCat.reservations.count).toBe(inWin.filter((y) => y.room_category_id === STUDIO).length);
+    expect(byCat.charges.rent).toBe((await all("reservation_charges")).filter((c) => c.branch_id === A && c.kind === "rent" && inWin.some((y) => y.id === c.reservation_id && y.room_category_id === STUDIO && !["cancelled", "rejected", "no_show"].includes(y.status))).reduce((s, c) => s + c.total_halalas, 0));
+    expect(await fails(rpc("fn_reports_finance", { p_branch: A, p_from: day(1), p_to: day(0), p_filters: {} }))).toBe("VALIDATION: period");
+    // the discounts report: by staff member and «بعد الوصول»
+    const disc = (filters: Record<string, unknown>) => rpc<any>("fn_reports_discounts", { p_branch: A, p_from: from, p_to: to, p_filters: filters });
+    const dAll = await disc({}); const dMine = await disc({ staff_id: OWNER }); const dBefore = await disc({ after_arrival: false });
+    expect(dAll.filters).toEqual({}); expect(dMine.filters).toEqual({ staff_id: OWNER }); expect(dMine.count).toBe(1); expect(dMine.rows[0]).toMatchObject({ internal_ref: r.internal_ref, amount_halalas: 500, staff: "عبدالله المالك", after_arrival: false });
+    expect(dBefore.filters).toEqual({ after_arrival: false }); expect(dBefore.count).toBe(dAll.rows.filter((x: any) => !x.after_arrival).length); expect((await disc({ after_arrival: true })).count).toBe(dAll.rows.filter((x: any) => x.after_arrival).length);
+    expect(dAll.by_staff.some((s: any) => s.staff === "عبدالله المالك")).toBe(true); expect(dMine.by_staff).toHaveLength(1);
+    // the late-entries and identities reports echo their filters and follow them
+    const late = (filters: Record<string, unknown>) => rpc<any>("fn_reports_late_entries", { p_branch: A, p_from: from, p_to: to, p_min_days: 1, p_filters: filters });
+    expect((await late({})).late).toBeGreaterThan(0); expect((await late({ staff_id: SUP })).late).toBe((await late({})).late); expect(await late({ staff_id: OWNER })).toMatchObject({ filters: { staff_id: OWNER }, late: 0, platform_bookings: 0 });
+    expect((await late({ source_id: BOOKING_COM })).platform_bookings).toBe(res.filter((y) => y.branch_id === A && y.source_id === BOOKING_COM && y.platform_booked_on && dayOf(y.created_at) >= from && dayOf(y.created_at) <= to).length);
+    const idn = (filters: Record<string, unknown>) => rpc<any>("fn_reports_identities", { p_branch: A, p_from: from, p_to: to, p_path: "all", p_filters: filters });
+    const guests = await all("reservation_guests");
+    expect(await idn({ staff_id: SUP })).toMatchObject({ filters: { staff_id: SUP, path: "all" }, count: guests.filter((g) => res.find((y) => y.id === g.reservation_id)?.branch_id === A && g.verification_status === "verified" && g.verified_by === SUP && dayOf(g.verified_at) >= from && dayOf(g.verified_at) <= to).length });
+    expect(await idn({ staff_id: OWNER })).toMatchObject({ filters: { staff_id: OWNER, path: "all" }, count: 0 });
+    // the options of a branch
+    const opt = await rpc<any>("fn_report_filter_options", { p_branch: A });
+    expect(opt.staff.map((s: any) => s.id).sort()).toEqual([OWNER, MANAGER, SUP, FIN, HK].sort()); expect(opt.staff.find((s: any) => s.id === SUP)).toMatchObject({ name: "فهد الاستقبال", role: "supervisor", is_active: true });
+    expect(opt.accounts.map((a: any) => a.kind).sort()).toEqual(["bank_account", "cash_box"]); expect(opt.sources).toHaveLength(12); expect(opt.categories.map((c: any) => c.name)).toEqual(["استوديو مريح", "شقة بغرفة نوم", "شقة بغرفتين"]);
+    expect(opt.floors).toHaveLength(3); expect(opt.floors[0].block).toBeTruthy();
+    await login("reception@demo.sa");
+    expect(await rpc<any>("fn_report_filter_options", { p_branch: B })).toEqual({}); expect(await fails(rpc("fn_reports_finance", { p_branch: B, p_from: from, p_to: to, p_filters: {} }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("DS09 «تعديل موظف»: a reason, the email, the guest role and an unknown staff member are refused; no one changes their own role or branches (so the only owner is never demoted); name, phone and branches change in one call with one audit row (before, after, what changed, the reason, the phone masked); the branch taken away is retired, not erased, and gone from the person's branches at once; giving it back re-opens the same row; a role change is its own action; the manager reads the list without phones and edits nothing; no direct write", async () => {
+    const up = (p: Record<string, unknown>) => rpc<any>("fn_admin_update_staff", { p: { reason: "اختبار", ...p } });
+    expect(await fails(rpc("fn_admin_update_staff", { p: { staff_id: SUP, full_name: "x" } }))).toBe("VALIDATION: reason");
+    expect(await fails(up({ staff_id: SUP, email: "other@demo.sa" }))).toBe("EMAIL_NOT_EDITABLE");
+    expect(await up({ staff_id: SUP, email: " Reception@demo.sa " })).toEqual({ ok: true, unchanged: true });
+    expect(await fails(up({ staff_id: SUP, role: "guest" }))).toBe("INVALID_ROLE");
+    expect(await fails(up({ staff_id: SUP, full_name: "  " }))).toBe("VALIDATION: full_name");
+    expect(await fails(up({ staff_id: uid() }))).toBe("NOT_FOUND: staff");
+    expect(await fails(up({ staff_id: OWNER, role: "manager" }))).toBe("SELF_ROLE_OR_BRANCHES");
+    expect(await fails(up({ staff_id: OWNER, branch_ids: [A] }))).toBe("SELF_ROLE_OR_BRANCHES");
+    expect(await up({ staff_id: OWNER, full_name: "عبدالله المالك" })).toEqual({ ok: true, unchanged: true });
+    expect((await all("staff_profiles")).filter((s) => s.role === "owner" && s.is_active)).toHaveLength(1);   // the only owner stays an owner
+    // name, phone and branches in one call
+    const r = await up({ staff_id: SUP, full_name: "فهد الاستقبال الجديد", phone: "+966 50-123-4567", branch_ids: [A, B], reason: "نقل جزئي إلى جدة" });
+    expect(r).toEqual({ ok: true, changed: ["full_name", "phone", "branches"] });
+    expect(await get("staff_profiles", SUP)).toMatchObject({ full_name: "فهد الاستقبال الجديد", phone: "+966501234567", role: "supervisor" });
+    const trail = async (action: string) => (await rpc<any>("fn_audit_list", { p: { entity_id: SUP, action } })).rows as any[];
+    const [a1] = await trail("staff.updated");
+    expect(a1).toMatchObject({ category: "security", branch_id: null, entity_ref: "فهد الاستقبال الجديد", actor_name: "عبدالله المالك", reason: "نقل جزئي إلى جدة" });
+    expect(a1.details).toEqual({ changed: ["full_name", "phone", "branches"], before: { full_name: "فهد الاستقبال", phone: null, role: "supervisor", branch_ids: [A] }, after: { full_name: "فهد الاستقبال الجديد", phone: "••••4567", role: "supervisor", branch_ids: [A, B] }, reason: "نقل جزئي إلى جدة" });
+    expect(JSON.stringify(a1.details)).not.toContain("+966501234567");
+    // the branch taken away is retired (the row stays) and gone from the person's branches at their next request
+    const memberships = async () => ((await client.from("branch_memberships").select("*").eq("staff_id", SUP)).data as any[]).sort((x, y) => String(x.branch_id).localeCompare(String(y.branch_id)));
+    const before = await memberships(); expect(before.map((m) => [m.branch_id, m.removed_at])).toEqual([[A, null], [B, null]]);
+    expect(await up({ staff_id: SUP, branch_ids: [B] })).toEqual({ ok: true, changed: ["branches"] });
+    const retired = await memberships(); expect(retired).toHaveLength(2); expect(retired[0]).toMatchObject({ id: before[0].id, branch_id: A, removed_by: OWNER }); expect(retired[0].removed_at).toBeTruthy(); expect(retired[1].removed_at).toBeNull();
+    await login("reception@demo.sa");
+    expect(await rpc<string[]>("fn_user_branch_ids", {})).toEqual([B]);
+    expect(await fails(rpc("fn_reservation_calendar", { p_branch: A, p_from: day(0), p_to: day(7) }))).toBe("FORBIDDEN: branch not permitted");
+    expect(await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 5, p_offset: 0 })).toEqual({ total: 0, rows: [] });
+    expect((await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 5, p_offset: 0 })).total).toBe(0);
+    await login("owner@demo.sa");
+    expect(await up({ staff_id: SUP, branch_ids: [B, A] })).toEqual({ ok: true, changed: ["branches"] });
+    const back = await memberships(); expect(back).toHaveLength(2); expect(back[0]).toMatchObject({ id: before[0].id, branch_id: A, removed_at: null, removed_by: null });
+    expect(await up({ staff_id: SUP, branch_ids: [A, B] })).toEqual({ ok: true, unchanged: true });
+    await login("reception@demo.sa"); expect((await rpc<string[]>("fn_user_branch_ids", {})).sort()).toEqual([A, B].sort());
+    // a role change is its own action with before and after; an unknown branch is refused
+    await login("owner@demo.sa");
+    expect(await up({ staff_id: FIN, role: "supervisor", phone: "0555555555" })).toEqual({ ok: true, changed: ["phone", "role"] });
+    const [rc] = (await rpc<any>("fn_audit_list", { p: { entity_id: FIN, action: "staff.role_changed" } })).rows;
+    expect(rc.details).toMatchObject({ changed: ["phone", "role"], before: { role: "finance", phone: null }, after: { role: "supervisor", phone: "••••5555" } });
+    expect(await fails(up({ staff_id: SUP, branch_ids: [A, uid()] }))).toBe("FORBIDDEN: branch not permitted");
+    const list = await rpc<any[]>("fn_admin_staff_list", {});
+    expect(list.find((s) => s.id === OWNER)).toMatchObject({ is_me: true, linked: true, role: "owner", branch_ids: [] });
+    expect(list.find((s) => s.id === SUP)).toMatchObject({ is_me: false, phone: "+966501234567", branch_ids: [A, B], sessions_ended_at: null }); expect(list.find((s) => s.id === SUP).updated_at).toBeTruthy();
+    expect(list.map((s) => s.is_active)).toEqual([...list.map((s) => s.is_active)].sort((x, y) => Number(y) - Number(x)));
+    // the manager reads without phones and edits nothing; the supervisor gets nothing; the table is closed to direct writes
+    await login("manager@demo.sa");
+    const mgr = await rpc<any[]>("fn_admin_staff_list", {}); expect(mgr.length).toBe(list.length); expect(mgr.every((s) => s.phone === null)).toBe(true);
+    expect(await fails(up({ staff_id: SUP, full_name: "x" }))).toMatch(/^FORBIDDEN/);
+    expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: SUP, p_active: false, p_reason: "اختبار" }))).toMatch(/^FORBIDDEN/);
+    await login("reception@demo.sa");
+    expect(await rpc<any[]>("fn_admin_staff_list", {})).toEqual([]); expect(await fails(rpc("fn_admin_force_logout", { p_staff: HK, p_reason: "اختبار" }))).toMatch(/^FORBIDDEN/);
+    await login("owner@demo.sa");
+    expect((await client.from("staff_profiles").update({ is_active: false }).eq("id", HK)).data).toEqual([]); expect((await get("staff_profiles", HK)).is_active).toBe(true);
+    expect((await client.from("branch_memberships").insert({ staff_id: HK, branch_id: B })).error?.code).toBe("42501");
+  });
+
+  it("DS10 «تسجيل خروج إجباري» and deactivation: a reason, never oneself; the manager signs out a supervisor but neither an owner nor a manager; the token still in hand is refused on its next request (no identity, no branches, no rows, no operation) while a fresh sign-in works again; deactivation ends the sessions and records the reason, reactivation does not bring the old session back; all of it security rows for the owner alone", async () => {
+    await login("reception@demo.sa");
+    const held = (await client.auth.getSession()).data.session!;
+    expect(await rpc<string | null>("fn_staff_id", {})).toBe(SUP);
+    await login("owner@demo.sa");
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: SUP, p_reason: "  " }))).toBe("VALIDATION: reason");
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: OWNER, p_reason: "اختبار" }))).toBe("SELF_NOT_ALLOWED");
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: uid(), p_reason: "اختبار" }))).toBe("NOT_FOUND: staff");
+    expect(await rpc<any>("fn_admin_force_logout", { p_staff: SUP, p_reason: "جهاز مفقود" })).toEqual({ ok: true, sessions_ended: 1 });
+    const row = (await rpc<any[]>("fn_admin_staff_list", {})).find((s) => s.id === SUP)!; expect(row.is_active).toBe(true); expect(row.sessions_ended_at).toBeTruthy();
+    const [ev] = (await rpc<any>("fn_audit_list", { p: { entity_id: SUP, action: "staff.signed_out" } })).rows;
+    expect(ev).toMatchObject({ category: "security", actor_id: OWNER, branch_id: null, reason: "جهاز مفقود", details: { reason: "جهاز مفقود", sessions_ended: 1, role: "supervisor", linked: true } });
+    // the token still in hand: refused on its next request, on any device
+    await client.auth.setSession(held);
+    expect(await rpc<string | null>("fn_staff_id", {})).toBeNull(); expect(await rpc<string[]>("fn_user_branch_ids", {})).toEqual([]);
+    expect(await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 5, p_offset: 0 })).toEqual({ total: 0, rows: [] });
+    expect(await all("reservations")).toEqual([]);
+    expect(await fails(rpc("fn_hk_create_task", { p: { room_id: (await rpc<any[]>("fn_available_rooms", { p_branch: A, p_from: day(70), p_to: day(71), p_category: null, p_exclude_reservation: null }))[0]?.room_id ?? uid(), task_type_id: TT_CLEAN } }))).toMatch(/^FORBIDDEN/);
+    expect((await client.from("staff_profiles").select("id").eq("auth_user_id", held.user.id).maybeSingle()).data).toBeNull();
+    // a fresh sign-in is a new session
+    await login("reception@demo.sa");
+    expect(await rpc<string | null>("fn_staff_id", {})).toBe(SUP); expect((await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 5, p_offset: 0 })).total).toBeGreaterThan(0);
+    // the manager's limits
+    await login("owner@demo.sa"); const other = await rpc<any>("fn_staff_invite", { p_email: "second.manager@demo.sa", p_full_name: "مدير ثانٍ", p_role: "manager", p_branch_ids: [A] });
+    await login("manager@demo.sa");
+    expect(await rpc<any>("fn_admin_force_logout", { p_staff: SUP, p_reason: "اختبار المدير" })).toEqual({ ok: true, sessions_ended: 1 });
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: OWNER, p_reason: "اختبار" }))).toBe("FORBIDDEN: a manager signs out neither an owner nor a manager");
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: other.staff_id, p_reason: "اختبار" }))).toBe("FORBIDDEN: a manager signs out neither an owner nor a manager");
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: MANAGER, p_reason: "اختبار" }))).toBe("SELF_NOT_ALLOWED");
+    expect(await rpc<any>("fn_admin_force_logout", { p_staff: other.staff_id, p_reason: "اختبار" }).catch((e: Error) => e.message)).toMatch(/^FORBIDDEN/);
+    // deactivation ends the sessions and records the reason; reactivation does not revive them
+    await login("finance@demo.sa"); const finHeld = (await client.auth.getSession()).data.session!;
+    await login("owner@demo.sa");
+    expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: FIN, p_active: false, p_reason: "" }))).toBe("VALIDATION: reason");
+    expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: OWNER, p_active: false, p_reason: "اختبار" }))).toBe("SELF_NOT_ALLOWED");
+    expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: uid(), p_active: false, p_reason: "اختبار" }))).toBe("NOT_FOUND: staff");
+    expect(await rpc<any>("fn_admin_set_staff_active", { p_staff: FIN, p_active: true, p_reason: "لا تغيير" })).toEqual({ ok: true, unchanged: true });
+    expect(await rpc<any>("fn_admin_set_staff_active", { p_staff: FIN, p_active: false, p_reason: "انتهى عقده" })).toEqual({ ok: true, is_active: false, sessions_ended: 1 });
+    const [off] = (await rpc<any>("fn_audit_list", { p: { entity_id: FIN, action: "staff.deactivated" } })).rows;
+    expect(off).toMatchObject({ category: "security", reason: "انتهى عقده", details: { before: { role: "finance", is_active: true }, after: { role: "finance", is_active: false }, reason: "انتهى عقده" } });
+    expect(await rpc<any>("fn_admin_set_staff_active", { p_staff: other.staff_id, p_active: false, p_reason: "لم يُربط بعد" })).toEqual({ ok: true, is_active: false, sessions_ended: 0 });
+    await client.auth.setSession(finHeld); expect(await rpc<string | null>("fn_staff_id", {})).toBeNull();
+    await login("owner@demo.sa");
+    expect(await rpc<any>("fn_admin_set_staff_active", { p_staff: FIN, p_active: true, p_reason: "عاد" })).toEqual({ ok: true, is_active: true, sessions_ended: 0 });
+    expect((await rpc<any>("fn_audit_list", { p: { entity_id: FIN, action: "staff.activated" } })).rows[0].details).toMatchObject({ before: { is_active: false }, after: { is_active: true }, reason: "عاد" });
+    await client.auth.setSession(finHeld); expect(await rpc<string | null>("fn_staff_id", {})).toBeNull();   // the old session is not revived
+    await login("finance@demo.sa"); expect(await rpc<string | null>("fn_staff_id", {})).toBe(FIN);
+    await login("manager@demo.sa"); expect((await rpc<any>("fn_audit_list", { p: { category: "security" } })).total).toBe(0);
+    await login("owner@demo.sa");
+    const sec = (await rpc<any>("fn_audit_list", { p: { category: "security", limit: 500 } })).rows.map((x: any) => x.action);
+    for (const a of ["staff.signed_out", "staff.deactivated", "staff.activated", "staff_invited"]) expect(sec).toContain(a);
+  });
+
+  it("DS11 a task without a start gets «الآن» and no end, a planned start and end are kept, an end before the start is refused; fn_branch_staff lists the owner and the live members, not a retired membership nor a deactivated person, and a retired member cannot be assigned; the invite needs an email and a name, refuses the guest role, and is logged", async () => {
+    const room = (await all("rooms")).find((x) => x.room_number === "102")!;
+    const t1 = await rpc<any>("fn_hk_create_task", { p: { room_id: room.id, task_type_id: TT_CLEAN } }); const task1 = await get("housekeeping_tasks", t1.id);
+    expect(Math.abs(Date.now() - Date.parse(task1.scheduled_start))).toBeLessThan(60_000); expect(task1.scheduled_end).toBeNull();
+    const start = `${day(1)}T09:00:00.000Z`, end = `${day(1)}T11:00:00.000Z`;
+    const t2 = await rpc<any>("fn_hk_create_task", { p: { room_id: room.id, task_type_id: TT_CLEAN, scheduled_start: start, scheduled_end: end } });
+    expect(await get("housekeeping_tasks", t2.id)).toMatchObject({ scheduled_start: start, scheduled_end: end, status: "pending" });
+    expect(await fails(rpc("fn_hk_create_task", { p: { room_id: room.id, task_type_id: TT_CLEAN, scheduled_start: end, scheduled_end: start } }))).toBe("VALIDATION: schedule");
+    expect(await fails(rpc("fn_hk_create_task", { p: { room_id: room.id, task_type_id: TT_CLEAN, scheduled_start: "not a time" } }))).toBe("VALIDATION: schedule");
+    // the branch's staff: live members only
+    const staff = () => rpc<any[]>("fn_branch_staff", { p_branch: A }).then((l) => l.map((s) => s.id).sort());
+    expect(await staff()).toEqual([OWNER, MANAGER, SUP, FIN, HK].sort());
+    expect((await rpc<any[]>("fn_branch_staff", { p_branch: A }))[0]).toMatchObject({ full_name: expect.any(String), role: expect.any(String) });
+    await rpc("fn_admin_update_staff", { p: { staff_id: HK, branch_ids: [], reason: "نُقل" } });
+    await rpc("fn_admin_set_staff_active", { p_staff: FIN, p_active: false, p_reason: "إجازة طويلة" });
+    expect(await staff()).toEqual([OWNER, MANAGER, SUP].sort());
+    expect(await fails(rpc("fn_hk_assign_task", { p_task: t1.id, p_assignee: HK }))).toBe("ASSIGNEE_NOT_IN_BRANCH");
+    expect(await fails(rpc("fn_hk_create_task", { p: { room_id: room.id, task_type_id: TT_CLEAN, assignee_id: HK } }))).toBe("ASSIGNEE_NOT_IN_BRANCH");
+    expect((await rpc<any>("fn_hk_assign_task", { p_task: t1.id, p_assignee: SUP })).ok).toBe(true);
+    // the invite
+    expect(await fails(rpc("fn_staff_invite", { p_email: "  ", p_full_name: "بلا بريد", p_role: "supervisor", p_branch_ids: [A] }))).toBe("VALIDATION: email_and_name");
+    expect(await fails(rpc("fn_staff_invite", { p_email: "g@demo.sa", p_full_name: "ضيف", p_role: "guest", p_branch_ids: [] }))).toBe("INVALID_ROLE");
+    expect(await fails(rpc("fn_staff_invite", { p_email: "x@demo.sa", p_full_name: "فرع مجهول", p_role: "supervisor", p_branch_ids: [uid()] }))).toBe("FORBIDDEN: branch not permitted");
+    const inv = await rpc<any>("fn_staff_invite", { p_email: " New.Person@demo.sa ", p_full_name: " موظف جديد ", p_role: "housekeeping", p_branch_ids: [A] });
+    expect(await get("staff_profiles", inv.staff_id)).toMatchObject({ email: "new.person@demo.sa", full_name: "موظف جديد", role: "housekeeping", is_active: true, auth_user_id: null });
+    expect((await rpc<any>("fn_audit_list", { p: { entity_id: inv.staff_id, action: "staff_invited" } })).rows[0]).toMatchObject({ category: "security", entity_ref: "موظف جديد", details: { role: "housekeeping", branch_ids: [A] } });
+    expect(await staff()).toContain(inv.staff_id);
+    await login("reception@demo.sa"); expect(await rpc<any[]>("fn_branch_staff", { p_branch: B })).toEqual([]);
+  });
+
+  it("DS12 «استعمال القدرات» (the owner alone): a capability used this window is «مستخدم» with the log's own count and last use; read-only screens «غير مقيس»; the seed's log starts 33 days back, so a four-week window is covered — a fully audited capability never used is «غير مستخدم», a partly audited one «غير محسوم» — while a five-week window is not; the assistant's executions count as the assistant; an action outside the catalogue is listed; a purge of the log inside the window breaks the measure; weeks clamp 1..26; nothing is removed", async () => {
+    await login("manager@demo.sa"); expect(await fails(rpc("fn_reports_capability_usage", { p: { weeks: 4 } }))).toMatch(/^FORBIDDEN/);
+    await login("owner@demo.sa");
+    const events = await all("audit_events"); const oldest = events.map((e) => Date.parse(e.created_at)).sort()[0];
+    expect((Date.now() - oldest) / 86400000).toBeGreaterThan(32); expect((Date.now() - oldest) / 86400000).toBeLessThan(35);
+    const r = await rpc<any>("fn_reports_capability_usage", { p: { weeks: 4 } });
+    expect(r).toMatchObject({ weeks: 4, log_covers_window: true, log_since: new Date(oldest).toISOString() }); expect(r.note).toContain("القرار 53"); expect(r.note).toContain("غير محسوم");
+    expect(Math.abs(Date.parse(r.generated_at) - Date.parse(r.window_start) - 28 * 86400000)).toBeLessThan(5000);
+    const row = (code: string, rep = r) => rep.rows.find((x: any) => x.code === code);
+    const created = events.filter((e) => e.action === "reservation.created" && e.result === "success");
+    expect(row("reservations.create")).toMatchObject({ status: "used", area: "الحجوزات", core: false, coverage: "full", window_count: created.filter((e) => Date.parse(e.created_at) >= Date.parse(r.window_start)).length, week_count: created.filter((e) => Date.parse(e.created_at) >= Date.now() - 7 * 86400000).length, last_success_at: new Date(Math.max(...created.map((e) => Date.parse(e.created_at)))).toISOString() });
+    expect(row("reservations.create").by.human).toBe(row("reservations.create").window_count); expect(row("reservations.create").by.assistant).toBe(0);
+    expect(row("screens.reports").status).toBe("unmeasured"); expect(row("admin.facilities")).toMatchObject({ core: true, status: "used" });   // the seed archived a facility 20 days ago
+    expect(row("housekeeping.maintenance")).toMatchObject({ status: "idle", last_success_at: null, window_count: 0 }); expect(row("stay.summary")).toMatchObject({ status: "undetermined", coverage: "partial" });
+    expect(r.rows.map((x: any) => x.code).sort()).toEqual([...new Set(r.rows.map((x: any) => x.code))].sort()); expect(r.rows.length).toBe(50);
+    expect(r.rows.every((x: any, i: number) => i === 0 || r.rows[i - 1].area.localeCompare(x.area) <= 0)).toBe(true);
+    const r5 = await rpc<any>("fn_reports_capability_usage", { p: { weeks: 5 } });
+    expect(r5.log_covers_window).toBe(false); expect(r5.rows.some((x: any) => x.status === "idle")).toBe(false); expect(row("housekeeping.maintenance", r5).status).toBe("undetermined"); expect(row("reservations.create", r5).status).toBe("used");
+    expect((await rpc<any>("fn_reports_capability_usage", { p: { weeks: 0 } })).weeks).toBe(1); expect((await rpc<any>("fn_reports_capability_usage", { p: { weeks: 99 } })).weeks).toBe(26); expect((await rpc<any>("fn_reports_capability_usage", { p: {} })).weeks).toBe(4);
+    // the assistant's execution: every row it writes carries source = ops_assistant and counts as the assistant
+    const conv = (await client.from("ai_ops_conversations").insert({ organization_id: "00000000-0000-0000-0000-000000000001", branch_id: A, staff_id: OWNER, title: "تجربة", last_message_at: new Date().toISOString() }).select("id").single()).data as any;
+    const room = (await all("rooms")).find((x) => x.room_number === "U-1")!;
+    const prop = await rpc<any>("fn_ai_ops_propose", { p_conversation: conv.id, p_action: "create_task", p_args: { room_id: room.id, task_type_id: TT_CLEAN, priority: "medium", description: "من المحادثة" }, p_summary: "مهمة تنظيف" });
+    expect((await rpc<any>("fn_ai_ops_execute_proposal", { p_id: prop.proposal_id })).ok).toBe(true);
+    const written = (await all("audit_events")).filter((e) => ["task.created", "ai_proposal.executed"].includes(e.action));
+    expect(written).toHaveLength(2); expect(written.every((e) => e.source === "ops_assistant" && e.actor_id === OWNER)).toBe(true);
+    // a human row after it keeps its own source; an action outside the catalogue is listed under «other»
+    const res = await book(70, 72); const free = await rpc<any[]>("fn_available_rooms", { p_branch: A, p_from: day(70), p_to: day(72), p_category: STUDIO, p_exclude_reservation: null });
+    await rpc("fn_staff_assign_room", { p_reservation: res.id, p_room: free[0].room_id });
+    const r2 = await rpc<any>("fn_reports_capability_usage", { p: { weeks: 4 } });
+    expect(row("housekeeping.tasks", r2)).toMatchObject({ status: "used", window_count: 1, week_count: 1, by: { human: 0, assistant: 1, automation: 0, guest: 0 } });
+    expect(row("assistant.ops", r2)).toMatchObject({ status: "used", by: { assistant: 1 } });
+    expect(row("reservations.create", r2).by.human).toBe(row("reservations.create").by.human + 1);
+    expect(r2.other_actions.find((o: any) => o.action === "assign_room")).toMatchObject({ label: "تخصيص وحدة للحجز", window_count: 1 });
+    expect(r2.other_actions.some((o: any) => o.action === "reservation.created")).toBe(false);
+    // a purge of the log inside the window (a real one, over a period that holds nothing) breaks the measure; the report removes nothing
+    const pv = await rpc<any>("fn_admin_purge_preview", { p_branch: null, p_from: day(-800), p_to: day(-700), p_categories: ["audit"] });
+    expect((await rpc<any>("fn_admin_purge_execute", { p_token: pv.token, p_phrase: "احذف نهائيا" })).ok).toBe(true);
+    const n = (await all("audit_events")).length;
+    const r3 = await rpc<any>("fn_reports_capability_usage", { p: { weeks: 4 } });
+    expect(r3.log_covers_window).toBe(false); expect(r3.rows.some((x: any) => x.status === "idle")).toBe(false); expect(row("housekeeping.maintenance", r3).status).toBe("undetermined"); expect(row("housekeeping.tasks", r3).status).toBe("used");
+    expect(row("admin.purge", r3)).toMatchObject({ status: "used", window_count: 1, core: true });
+    expect((await all("audit_events")).length).toBe(n);
+  });
+});

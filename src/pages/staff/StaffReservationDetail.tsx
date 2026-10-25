@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { auditActionLabel } from "../../lib/auditLabels";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, UserCheck, UserX, CreditCard, CheckCircle2, XCircle, Sparkles, DoorClosed, IdCard, Printer, UserPlus } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -391,7 +392,7 @@ function AuditLog({ reservationId, refreshKey }: { reservationId: string; refres
     <div className="space-y-2">
       {events.map((e, i) => (
         <div key={i} className="flex items-center justify-between text-xs text-ink-500">
-          <span>{AUDIT_LABELS[e.action] ?? e.action}</span>
+          <span>{AUDIT_LABELS[e.action] ?? auditActionLabel(e.action)}</span>
           <span className="text-ink-400">{formatDateTime(e.created_at)}</span>
         </div>
       ))}

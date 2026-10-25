@@ -46,5 +46,7 @@ echo "== running monitoring tests (0037: the seven checks, once each, the owner'
 psql -d "$DB" -f tests/sql/monitors_tests.sql
 echo "== running guest and platform tests (0038–0039: two paths for guest data, bans, ratings, platform fields, groups, the stay summary, branch fields)"
 psql -d "$DB" -f tests/sql/guests_platforms_tests.sql
+echo "== running lists, calendar, log, exports, report filters, task times, staff editor, forced sign-out and capability usage tests (0040–0041, Phase 6)"
+psql -d "$DB" -f tests/sql/lists_reports_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

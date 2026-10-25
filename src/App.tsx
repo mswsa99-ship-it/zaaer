@@ -55,6 +55,7 @@ import AdminPolicies from "./pages/admin/AdminPolicies";
 import AdminKnowledge from "./pages/admin/AdminKnowledge";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
+import AdminUsage from "./pages/admin/AdminUsage";
 import AdminIntegrations from "./pages/admin/AdminIntegrations";
 import AdminStructure from "./pages/admin/AdminStructure";
 import AdminFacilities from "./pages/admin/AdminFacilities";
@@ -158,6 +159,7 @@ export default function App() {
           <Route path="/admin/knowledge" element={<AdminKnowledge />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
+          <Route path="/admin/usage" element={<AdminUsage />} />
           <Route path="/admin/review" element={<AdminReview />} />
           <Route path="/admin/integrations" element={<AdminIntegrations />} />
         </Route>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Hotel, LogIn, UserPlus } from "lucide-react";
-import { useAuth } from "../../lib/auth";
+import { useAuth, takeSignOutReason } from "../../lib/auth";
 import { isDemo } from "../../lib/supabase";
 import { homeFor } from "../../lib/nav";
 import { ErrorBanner, Spinner } from "../../components/ui";
@@ -16,6 +16,8 @@ export default function StaffLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [revoked, setRevoked] = useState(false);
+  useEffect(() => { if (takeSignOutReason() === "revoked") setRevoked(true); }, []);
 
   useEffect(() => {
     // each role lands where its work starts (housekeeping → tasks, finance → ledger, others → operations board)
@@ -96,6 +98,7 @@ export default function StaffLogin() {
             </div>
 
             {notice && <div role="status" className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
+            {revoked && <div role="status" data-testid="revoked-notice" className="rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-700">أُنهيت جلستك من الإدارة أو أُوقف الحساب. إن كان حسابك فعّالًا فسجّل الدخول من جديد.</div>}
             {error && <ErrorBanner message={error} />}
 
             <button type="submit" className="btn-primary w-full" disabled={loading}>

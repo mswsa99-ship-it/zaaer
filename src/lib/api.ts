@@ -13,6 +13,13 @@ export class ApiError extends Error {
 
 const ERROR_AR: Record<string, string> = {
   FORBIDDEN: "ليس لديك صلاحية لهذا الإجراء.",
+  // the staff editor and the forced sign-out (decisions 34, 35)
+  SELF_NOT_ALLOWED: "لا يُطبَّق هذا الإجراء على حسابك أنت.",
+  SELF_ROLE_OR_BRANCHES: "لا يغيّر أحد دوره أو فروعه بنفسه؛ يفعل ذلك مالك آخر.",
+  EMAIL_NOT_EDITABLE: "البريد هو هوية الدخول ولا يُعدَّل؛ ادعُ الموظف ببريد جديد.",
+  "LIMIT: saved_views": "الحد عشرون عرضًا محفوظًا لكل شاشة؛ احذف عرضًا قديمًا.",
+  "NOT_FOUND: view": "العرض المحفوظ غير موجود.",
+  "NOT_FOUND: staff": "الموظف غير موجود.",
   TOKEN_INVALID: "الرابط غير صالح أو منتهي الصلاحية.",
   RESERVATION_NOT_FOUND: "الحجز غير موجود.",
   GUEST_NOT_FOUND: "سجل النزيل غير موجود.",
@@ -176,6 +183,9 @@ const VALIDATION_AR: Record<string, string> = {
   mode: "طريقة الربط غير صحيحة.", auto_reply: "قيمة الرد الآلي غير صحيحة.", human_pause_minutes: "مدة توقف الرد الآلي بين 5 و720 دقيقة.",
   period_after_today: "لا يمكن أن تنتهي الفترة بعد اليوم.", choose_category: "اختر نوعًا واحدًا من البيانات على الأقل.", unknown_category: "نوع بيانات غير معروف.",
   confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
+  // the lists, the staff editor and the task's schedule (0040)
+  schedule: "نهاية المهمة لا تسبق بدايتها.", schedule_start: "بداية المهمة مطلوبة.",
+  branch_id: "اختر الفرع.", status: "الحالة غير صحيحة.", screen: "الشاشة غير معروفة.", full_name: "الاسم مطلوب.", email_and_name: "البريد والاسم مطلوبان.",
 };
 
 /** Refusals that say which rule refused, more useful than the generic «no permission». */
@@ -186,6 +196,7 @@ const FORBIDDEN_AR: Array<[RegExp, string]> = [
   [/tax settings are the owner/, "إعدادات الضريبة للمالك وحده."],
   [/supervisor corrects only the vouchers they issued/, "يصحح المشرف السندات التي أصدرها هو فقط؛ غيرها يصححه المالك أو المدير."],
   [/after 24 hours a voucher is corrected by a manager/, "مضت 24 ساعة على السند؛ يصححه الآن المالك أو المدير."],
+  [/a manager signs out neither an owner nor a manager/, "المدير لا يُخرج المالك ولا مديرًا آخر؛ يفعل ذلك المالك."],
 ];
 function arabicMessage(msg: string): string {
   const v = msg.match(/VALIDATION:\s*([a-z_0-9]+)/i);
@@ -217,6 +228,8 @@ async function rpc<T = unknown>(fn: string, args: Record<string, unknown>): Prom
   const { data, error } = await request;
   if (error) {
     logClientError(traceId, error.message, fn);
+    // a refusal may mean the session was ended by the owner (decision 34): the auth provider re-checks it
+    if (error.code === "42501" || /FORBIDDEN|permission denied/i.test(error.message)) { try { window.dispatchEvent(new Event("zaaer:forbidden")); } catch { /* not in a browser */ } }
     throw new ApiError(error.message, error.code, traceId);
   }
   return data as T;
@@ -557,6 +570,8 @@ export interface DiscountAllowance { rent: number; discounts: number; nights: nu
 export interface StayNight { night: string; price: number; basis: PriceRun["basis"]; status: "active" | "removed"; removed_at: string | null; removed_reason: string | null }
 export interface DiscountReport {
   period: { from: string; to: string }; total_halalas: number; count: number;
+  /** decision 36: the filters the figures were computed with */
+  filters?: ReportFilters;
   by_staff: Array<{ staff: string | null; role: string | null; count: number; total_halalas: number }>;
   rows: Array<{ id: string; reservation_id: string; internal_ref: string; amount_halalas: number; reason: string | null; staff: string | null; role: string | null; created_at: string; after_arrival: boolean }> | null;
 }
@@ -568,7 +583,8 @@ export const ratesApi = {
     rpc<{ ok: boolean; changed: number; matched: number }>("fn_rate_calendar_set", { p }),
   allowance: (reservationId: string) => rpc<DiscountAllowance>("fn_discount_allowance", { p_reservation: reservationId }),
   nights: (reservationId: string) => rpc<StayNight[] | null>("fn_reservation_nights", { p_reservation: reservationId }),
-  discounts: (branchId: string, from: string, to: string) => rpc<DiscountReport>("fn_reports_discounts", { p_branch: branchId, p_from: from, p_to: to }),
+  /** decision 36: filters by staff, source, unit type and «بعد الوصول»; every argument is named so the server resolves the one function */
+  discounts: (branchId: string, from: string, to: string, filters: ReportFilters = {}) => rpc<DiscountReport>("fn_reports_discounts", { p_branch: branchId, p_from: from, p_to: to, p_filters: filters }),
   capacityImpact: (categoryId: string, maxCapacity: number) => rpc<Array<{ id: string; internal_ref: string; check_in: string; check_out: string; guests: number; status: string }>>("fn_category_capacity_impact", { p_category: categoryId, p_max_capacity: maxCapacity }),
 };
 
@@ -620,7 +636,7 @@ export const opsApi = {
   flags: (branchId: string) => rpc<Record<string, { ban: boolean; hold: boolean; rating: number | null }>>("fn_reservation_flags", { p_branch: branchId }),
   noShow: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_staff_no_show", { p_reservation: id, p_reason: reason }),
   detail: (id: string) => rpc<ReservationDetail | null>("fn_reservation_detail", { p_reservation: id }),
-  list: (branchId: string, filters: Record<string, unknown>, limit = 50, offset = 0) => rpc<{ total: number; rows: ReservationRow[] }>("fn_reservation_list", { p_branch: branchId, p_filters: filters, p_limit: limit, p_offset: offset }),
+  list: (branchId: string, filters: ReservationListFilters, limit = 50, offset = 0) => rpc<{ total: number; rows: ReservationRow[] }>("fn_reservation_list", { p_branch: branchId, p_filters: filters, p_limit: limit, p_offset: offset }),
 
   // money
   createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; account_id?: string; reference?: string; note?: string; reason?: string; idempotency_key: string }) =>
@@ -645,7 +661,7 @@ export const opsApi = {
   dailySummary: (branchId: string, date?: string) => rpc<DailySummary | null>("fn_ops_daily_summary", { p_branch: branchId, p_date: date ?? null }),
 
   // reports (GAP05): money KPIs come from the voucher ledger, never from reservation totals. Role-gated on the server.
-  reportsFinance: (branchId: string, from: string, to: string) => rpc<ReportsFinance>("fn_reports_finance", { p_branch: branchId, p_from: from, p_to: to }),
+  reportsFinance: (branchId: string, from: string, to: string, filters: ReportFilters = {}) => rpc<ReportsFinance>("fn_reports_finance", { p_branch: branchId, p_from: from, p_to: to, p_filters: filters }),
 
   // AI ops proposals (human-in-the-loop)
   executeProposal: (id: string) => rpc<{ ok: boolean; result?: unknown; error?: string }>("fn_ai_ops_execute_proposal", { p_id: id }),
@@ -655,11 +671,27 @@ export const opsApi = {
 export interface ReservationRow {
   id: string; internal_ref: string; external_ref: string | null; status: string; check_in: string; check_out: string; nights: number;
   guest_name: string | null; room_number: string | null; source_name: string | null; category_name: string | null;
+  /** money: null for housekeeping (the server leaves the money columns empty for roles without money) */
   total_halalas: number; paid_halalas: number; balance_due_halalas: number; deposit_balance_halalas: number;
   payment_status: string; identity_status: string; access_status: string; created_at: string;
   /** 0038: the group, the hold, the ban (money roles) and the main guest's rating (owner, manager, supervisor) */
   group_ref?: string | null; hold?: boolean; ban?: boolean | null; rating?: number | null;
+  /** 0040 (decision 14): the columns the column picker offers */
+  booking_type?: string | null; company_name?: string | null; price_basis?: string | null; adults?: number; companions?: number;
+  platform_booked_on?: string | null; platform_collects?: boolean | null; created_by_name?: string | null;
+  actual_check_in?: string | null; actual_check_out?: string | null; cancelled_at?: string | null; cancel_reference?: string | null;
+  discount_halalas?: number | null; nightly_rate_halalas?: number | null;
 }
+/** The filters of the reservations list (0040, decision 14): every one of the reference, and a sort. Dates are ISO days; csv for several statuses. */
+export interface ReservationListFilters {
+  status?: string; open_only?: boolean | string; check_in_from?: string; check_in_to?: string; check_out_from?: string; check_out_to?: string;
+  created_from?: string; created_to?: string; stay_on?: string; source_id?: string; category_id?: string; room_id?: string; room_number?: string;
+  booking_type?: string; company?: string; price_basis?: string; payment_status?: string; identity_status?: string; access_status?: string;
+  group_ref?: string; has_discount?: boolean | string; platform_collects?: boolean | string; has_balance?: boolean | string; q?: string;
+  sort?: "check_in_asc" | "check_out" | "created" | "ref";
+}
+/** The filters a report takes beside its period (decision 36); each report reads the ones its data has. */
+export interface ReportFilters { staff_id?: string; method?: string; account_id?: string; source_id?: string; category_id?: string; after_arrival?: boolean }
 export interface ReservationDetail {
   reservation: Record<string, unknown> & { id: string; internal_ref: string; status: string; check_in: string; check_out: string; version: number; branch_id: string; room_id: string | null; room_category_id: string | null; adults: number; companions: number; nightly_rate_halalas: number; external_ref: string | null; actual_check_in: string | null; actual_check_out: string | null; cancel_reason: string | null };
   notes: string | null;
@@ -748,8 +780,8 @@ export const guestProfileApi = {
 };
 /** The owner's and the manager's reports of phase 5 (decisions 2, 4). */
 export const guestReportsApi = {
-  lateEntries: (branchId: string, from: string, to: string, minDays = 1) => rpc<{ platform_bookings: number; late: number; after_arrival: number; by_staff: Array<{ staff: string; count: number; max_lag: number }>; rows: Array<{ id: string; internal_ref: string; external_ref: string | null; source_name: string | null; booked_on: string; entered_on: string; entered_at: string; lag_days: number; check_in: string; after_arrival: boolean; status: string; created_by: string | null }> }>("fn_reports_late_entries", { p_branch: branchId, p_from: from, p_to: to, p_min_days: minDays }),
-  identities: (branchId: string, from: string, to: string, path: "office" | "guest" | "all" = "office") => rpc<{ count: number; by_staff: Array<{ staff: string; office: number; guest: number }>; rows: Array<{ guest_id: string; reservation_id: string; internal_ref: string; full_name: string; is_primary: boolean; identity_type: string | null; identity_last4: string | null; entry_path: string | null; entered_by: string | null; entered_at: string | null; verified_by: string | null; verified_at: string }> }>("fn_reports_identities", { p_branch: branchId, p_from: from, p_to: to, p_path: path }),
+  lateEntries: (branchId: string, from: string, to: string, minDays = 1, filters: ReportFilters = {}) => rpc<{ platform_bookings: number; late: number; after_arrival: number; by_staff: Array<{ staff: string; count: number; max_lag: number }>; rows: Array<{ id: string; internal_ref: string; external_ref: string | null; source_name: string | null; booked_on: string; entered_on: string; entered_at: string; lag_days: number; check_in: string; after_arrival: boolean; status: string; created_by: string | null }> }>("fn_reports_late_entries", { p_branch: branchId, p_from: from, p_to: to, p_min_days: minDays, p_filters: filters }),
+  identities: (branchId: string, from: string, to: string, path: "office" | "guest" | "all" = "office", filters: ReportFilters = {}) => rpc<{ count: number; by_staff: Array<{ staff: string; office: number; guest: number }>; rows: Array<{ guest_id: string; reservation_id: string; internal_ref: string; full_name: string; is_primary: boolean; identity_type: string | null; identity_last4: string | null; entry_path: string | null; entered_by: string | null; entered_at: string | null; verified_by: string | null; verified_at: string }> }>("fn_reports_identities", { p_branch: branchId, p_from: from, p_to: to, p_path: path, p_filters: filters }),
 };
 /** The branch's media (decision 31): the logo (≤200 KB) and the image (≤1 MB), kept with the branch's settings. */
 export const branchMediaApi = {
@@ -774,6 +806,10 @@ export interface ReportsFinance {
   collection_rate_pct: number | null;
   by_method: Array<{ method: string; amount_halalas: number }>;
   by_day: Array<{ day: string; receipts: number; refunds: number }>;
+  /** decision 36: per staff member (receipts and refunds they recorded) and per box or account */
+  by_staff?: Array<{ staff_id: string | null; staff: string; receipts: number; refunds: number; count: number }>;
+  by_account?: Array<{ account_id: string; account: string; in_halalas: number; out_halalas: number }>;
+  filters?: ReportFilters; filtered?: boolean;
   reservations: { count: number; nights: number; cancelled: number; no_show: number; by_source: Array<{ source: string; count: number; total_halalas: number }> };
   definitions: { revenue: string; collection_rate: string };
 }
@@ -785,6 +821,83 @@ export interface DailySummary {
   housekeeping: { open: number; in_progress: number; completed_today: number; unassigned: number };
   finance: { received_today: number; refunded_today: number; deposits_held: number; outstanding_in_house: number; deposit_to_settle_after_checkout: number };
   tickets_open: number; generated_at: string;
+}
+
+
+// ---------------------------------------------------------------------------
+// Phase 6 (0040–0041): the lists, the calendar, the log, the ledger, saved views, the staff editor, capability usage
+// ---------------------------------------------------------------------------
+export interface SavedView { id: string; name: string; filters: Record<string, unknown>; columns: string[] | null; is_default: boolean; updated_at: string }
+export type SavedViewScreen = "reservations" | "vouchers" | "audit";
+export interface CalendarUnit { room_id: string; room_number: string; category_id: string | null; category: string | null; floor_id: string | null; floor: string | null; block: string | null; status: string; cleanliness: string; is_active: boolean }
+export interface CalendarSegment { room_id: string; reservation_id: string; internal_ref: string; status: string; from_date: string; to_date: string; starts_before: boolean; ends_after: boolean; guest: string | null; source: string | null; group_ref: string | null; payment_status: string | null; balance_due_halalas: number | null }
+export interface ReservationCalendar { from: string; to: string; today: string; units: CalendarUnit[]; segments: CalendarSegment[] }
+export interface AuditListFilters { branch_id?: string; from?: string; to?: string; actor_id?: string; action?: string; action_prefix?: boolean; entity_type?: string; entity_id?: string; correlation_id?: string; category?: "business" | "security"; result?: string; source?: string; q?: string; limit?: number; offset?: number }
+export interface AuditRow {
+  id: string; created_at: string; action: string; action_label: string; entity_type: string | null; entity_label: string; entity_id: string | null; entity_ref: string | null;
+  actor_id: string | null; actor_name: string | null; actor_type: string | null; source: string | null; result: string | null; category: string; correlation_id: string | null;
+  branch_id: string | null; branch_name: string | null; reason: string | null; details: Record<string, unknown> | null;
+}
+export interface AuditList { total: number; rows: AuditRow[]; limit: number; offset: number; tz: string }
+export interface VoucherListFilters { branch_id: string; from?: string; to?: string; kind?: string; method?: string; account_id?: string; status?: "approved" | "cancelled" | "all"; staff_id?: string; reservation_id?: string; q?: string; limit?: number; offset?: number }
+export interface VoucherRow {
+  id: string; number: string; kind: string; amount_halalas: number; method: string; status: string; reference: string | null; reason: string | null; note: string | null; occurred_at: string;
+  cancel_reason: string | null; cancelled_at: string | null; created_by: string | null; creator_name: string | null; account_id: string | null; account_name: string | null; payout_id: string | null;
+  original_voucher_id: string | null; original_number: string | null; reservation: { id: string; internal_ref: string | null } | null;
+}
+export interface VoucherTotals { receipts: number; refunds: number; deposits: number; deposit_refunds: number; deposit_applied: number; approved: number; cancelled: number; by_method: Array<{ method: string; amount_halalas: number }>; by_account: Array<{ account_id: string; account_name: string | null; in_halalas: number; out_halalas: number }> }
+export interface VoucherList { total: number; rows: VoucherRow[]; totals: VoucherTotals; limit: number; offset: number; tz: string }
+export interface ReportFilterOptions { staff: Array<{ id: string; name: string; role: string; is_active: boolean }>; accounts: Array<{ id: string; name: string; kind: string; is_active: boolean }>; sources: Array<{ id: string; name: string; kind: string; is_active: boolean }>; categories: Array<{ id: string; name: string }>; floors: Array<{ id: string; name: string; block: string | null }> }
+
+export const listsApi = {
+  /** the units × days calendar of a branch (decision 14, 10.2): at most 62 days */
+  calendar: (branchId: string, from: string, to: string) => rpc<ReservationCalendar>("fn_reservation_calendar", { p_branch: branchId, p_from: from, p_to: to }),
+  /** the log with readable names, filters and pages (decision 14, 10.3); security rows for the owner, details for the owner and the manager */
+  audit: (p: AuditListFilters) => rpc<AuditList>("fn_audit_list", { p }),
+  /** the ledger with filters, pages and totals over the whole set (decision 14, 10.4) */
+  vouchers: (p: VoucherListFilters) => rpc<VoucherList>("fn_voucher_list", { p }),
+  savedViews: (screen: SavedViewScreen) => rpc<SavedView[]>("fn_saved_views_list", { p_screen: screen }),
+  saveView: (p: { id?: string; screen: SavedViewScreen; name: string; filters?: Record<string, unknown>; columns?: string[] | null; is_default?: boolean }) => rpc<{ ok: boolean; id: string }>("fn_saved_view_save", { p }),
+  removeView: (id: string) => rpc<{ ok: boolean }>("fn_saved_view_remove", { p_id: id }),
+  /** the filter options of a branch's reports and lists (decision 36) */
+  filterOptions: (branchId: string) => rpc<ReportFilterOptions | Record<string, never>>("fn_report_filter_options", { p_branch: branchId }),
+  /** the live members of a branch (the owner included), for assignment and filters */
+  branchStaff: (branchId: string) => rpc<Array<{ id: string; full_name: string; role: string }>>("fn_branch_staff", { p_branch: branchId }),
+};
+
+export interface StaffListRow { id: string; full_name: string; email: string; phone: string | null; role: string; is_active: boolean; linked: boolean; created_at: string; sessions_ended_at: string | null; updated_at: string | null; branch_ids: string[]; is_me: boolean }
+/** The staff screens (decisions 34, 35): the owner edits, activates and signs out; the manager reads and signs out non-managers. */
+export const staffAdminApi = {
+  list: () => rpc<StaffListRow[]>("fn_admin_staff_list", {}),
+  update: (p: { staff_id: string; reason: string; full_name?: string; phone?: string | null; role?: string; branch_ids?: string[] }) => rpc<{ ok: boolean; changed?: string[]; unchanged?: boolean }>("fn_admin_update_staff", { p }),
+  setActive: (staffId: string, active: boolean, reason: string) => rpc<{ ok: boolean; is_active?: boolean; sessions_ended?: number; unchanged?: boolean }>("fn_admin_set_staff_active", { p_staff: staffId, p_active: active, p_reason: reason }),
+  forceLogout: (staffId: string, reason: string) => rpc<{ ok: boolean; sessions_ended: number }>("fn_admin_force_logout", { p_staff: staffId, p_reason: reason }),
+};
+
+export interface CapabilityUsageRow { code: string; label: string; area: string; core: boolean; coverage: "full" | "partial" | "none"; last_success_at: string | null; week_count: number; window_count: number; by: { human: number; assistant: number; automation: number; guest: number }; rejected: number; status: "used" | "idle" | "undetermined" | "unmeasured" }
+export interface CapabilityUsage { weeks: number; window_start: string; generated_at: string; log_since: string | null; log_covers_window: boolean; rows: CapabilityUsageRow[]; other_actions: Array<{ action: string; label: string; window_count: number; last_at: string }>; note: string }
+/** «استعمال القدرات» (decision 55): the owner's report from the audit log itself. */
+export const usageApi = {
+  capabilities: (weeks = 4) => rpc<CapabilityUsage>("fn_reports_capability_usage", { p: { weeks } }),
+};
+
+/**
+ * Every page of a list, for an export (decision 43, X09): the server caps a page, so the export reads page after page
+ * until it holds exactly `total` rows; a set that changes under it is read again once, then reported as a page.
+ */
+export async function fetchAllPages<R>(page: (limit: number, offset: number) => Promise<{ total: number; rows: R[] }>, pageSize = 500, maxRows = 50_000): Promise<{ rows: R[]; total: number; complete: boolean }> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const first = await page(pageSize, 0);
+    const rows = [...first.rows]; let total = first.total; let stable = true;
+    while (rows.length < total && rows.length < maxRows) {
+      const next = await page(pageSize, rows.length);
+      if (next.total !== total || next.rows.length === 0) { stable = false; total = next.total; break; }
+      rows.push(...next.rows);
+    }
+    if (stable && rows.length === total) return { rows, total, complete: true };
+    if (attempt === 1 || rows.length >= maxRows) return { rows, total, complete: false };
+  }
+  return { rows: [], total: 0, complete: false };
 }
 
 // ---------------------------------------------------------------------------

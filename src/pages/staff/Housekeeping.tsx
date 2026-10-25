@@ -10,13 +10,16 @@ import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
 import { formatDateTime } from "../../lib/utils";
 
-interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
+interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; scheduled_end: string | null; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
 interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string }
 interface Opt { id: string; name: string }
 interface HkData { tasks: Task[]; rooms: RoomLite[]; facilities: Opt[]; types: Opt[]; staff: Opt[]; inspected: Record<string, "ok" | "notes"> }
 const NO_HK: HkData = { tasks: [], rooms: [], facilities: [], types: [], staff: [], inspected: {} };
 /** the cleaning a departure creates: its inspection is recorded from the task (decision 5) */
 const DEPARTURE_CLEANING = "تنظيف بعد المغادرة";
+/** the local clock as a datetime-local value (minutes), and back to an instant */
+const localNow = () => { const d = new Date(); d.setSeconds(0, 0); const p = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+const toIso = (local: string) => new Date(local).toISOString();
 
 export default function Housekeeping() {
   const { profile } = useAuth();
@@ -26,7 +29,8 @@ export default function Housekeeping() {
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<"open" | "done" | "board">("open");
-  const [create, setCreate] = useState<null | { target: "room" | "facility"; room_id?: string; facility_id?: string; task_type_id?: string; priority: string; assignee_id?: string; description?: string }>(null);
+  // decision 28: the task's start (required, «الآن» by default) and its end (optional); no reminder, no automatic end
+  const [create, setCreate] = useState<null | { target: "room" | "facility"; room_id?: string; facility_id?: string; task_type_id?: string; priority: string; assignee_id?: string; description?: string; scheduled_start: string; scheduled_end: string }>(null);
   const [cancelTask, setCancelTask] = useState<Task | null>(null); const [cancelReason, setCancelReason] = useState("");
   const [assignTask, setAssignTask] = useState<Task | null>(null); const [assignee, setAssignee] = useState("");
   const [maintTarget, setMaintTarget] = useState<RoomLite | null>(null); const [maintTitle, setMaintTitle] = useState(""); const [maintDesc, setMaintDesc] = useState("");
@@ -34,7 +38,7 @@ export default function Housekeeping() {
   // G24: everything on this screen belongs to the active branch; a late answer for another branch is dropped
   const hk = useBranchQuery<HkData>(async (branchId) => {
     const [t, r, f, tt, s, ins] = await Promise.all([
-      supabase.from("housekeeping_tasks").select("id, status, priority, room_id, facility_id, reservation_id, task_type_name_snapshot, assignee_id, scheduled_start, description, created_at, version, room:rooms(room_number, status, cleanliness), facility:facilities(name), assignee:staff_profiles!housekeeping_tasks_assignee_id_fkey(full_name)").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(300),
+      supabase.from("housekeeping_tasks").select("id, status, priority, room_id, facility_id, reservation_id, task_type_name_snapshot, assignee_id, scheduled_start, scheduled_end, description, created_at, version, room:rooms(room_number, status, cleanliness), facility:facilities(name), assignee:staff_profiles!housekeeping_tasks_assignee_id_fkey(full_name)").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(300),
       supabase.from("rooms").select("id, room_number, status, cleanliness").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("room_number"),
       supabase.from("facilities").select("id, name").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("task_types").select("id, name, code").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
@@ -65,7 +69,7 @@ export default function Housekeeping() {
   return (
     <div>
       <SectionTitle title="خدمة الغرف والمرافق" subtitle={`${openTasks.length} مهمة مفتوحة · ${rooms.filter((r) => r.cleanliness !== "clean").length} وحدة تحتاج تنظيفًا`} action={
-        <div className="flex flex-wrap items-center gap-2"><BranchPicker /><button onClick={() => setCreate({ target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
+        <div className="flex flex-wrap items-center gap-2"><BranchPicker /><button onClick={() => setCreate({ target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id, scheduled_start: localNow(), scheduled_end: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
       {(error || hk.error) && <div className="mb-4"><ErrorBanner message={(error ?? hk.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
       <div className="mb-4 flex gap-1 rounded-xl bg-ink-100 p-1 text-sm w-fit">
@@ -84,7 +88,7 @@ export default function Housekeeping() {
                     <Badge className={t.priority === "high" ? "bg-danger-500/10 text-danger-600" : t.priority === "low" ? "bg-ink-100 text-ink-500" : "bg-warning-500/10 text-warning-600"}>{TASK_PRIORITY_LABELS[t.priority]}</Badge>
                     <Badge className={t.status === "in_progress" ? "bg-warning-500/10 text-warning-600" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge>
                     {t.room && <Badge className={ROOM_STATUS_COLORS[t.room.status]}>{ROOM_STATUS_LABELS[t.room.status]}</Badge>}
-                    <span>{t.assignee?.full_name ?? "غير مسندة"} · {formatDateTime(t.scheduled_start)}</span>
+                    <span>{t.assignee?.full_name ?? "غير مسندة"} · البداية {formatDateTime(t.scheduled_start)}{t.scheduled_end && <span data-testid="task-end"> · النهاية {formatDateTime(t.scheduled_end)}</span>}</span>
                   </p>
                   {t.description && <p className="mt-0.5 text-xs text-ink-500">{t.description}</p>}
                   {t.reservation_id && t.description === DEPARTURE_CLEANING && inspected[t.reservation_id] && <p className="mt-0.5 text-xs text-success-600">فُحصت المغادرة: {inspected[t.reservation_id] === "ok" ? "الوحدة سليمة" : "بملاحظات"}</p>}
@@ -125,7 +129,7 @@ export default function Housekeeping() {
       {/* create task */}
       <Modal open={!!create} title="مهمة جديدة" onClose={() => setCreate(null)}>
         {create && (
-          <ActionForm onSubmit={async () => { await opsApi.createTask({ room_id: create.target === "room" ? create.room_id : null, facility_id: create.target === "facility" ? create.facility_id : null, task_type_id: create.task_type_id, priority: create.priority, assignee_id: create.assignee_id || null, description: create.description || null }); setCreate(null); reload(); }}>
+          <ActionForm onSubmit={async () => { if (!create.scheduled_start) throw new Error("VALIDATION: schedule_start"); if (create.scheduled_end && create.scheduled_end < create.scheduled_start) throw new Error("VALIDATION: schedule"); await opsApi.createTask({ room_id: create.target === "room" ? create.room_id : null, facility_id: create.target === "facility" ? create.facility_id : null, task_type_id: create.task_type_id, priority: create.priority, assignee_id: create.assignee_id || null, description: create.description || null, scheduled_start: toIso(create.scheduled_start), scheduled_end: create.scheduled_end ? toIso(create.scheduled_end) : null }); setCreate(null); reload(); }}>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setCreate({ ...create, target: "room", room_id: rooms[0]?.id })} className={`rounded-xl border px-3 py-2 text-sm ${create.target === "room" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>وحدة</button>
@@ -137,6 +141,10 @@ export default function Housekeeping() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="الأولوية"><select className="input" value={create.priority} onChange={(e) => setCreate({ ...create, priority: e.target.value })}>{Object.entries(TASK_PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
                 <Field label="الموكل إليه"><select className="input" value={create.assignee_id ?? ""} onChange={(e) => setCreate({ ...create, assignee_id: e.target.value })}><option value="">غير مسندة</option>{staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="البداية" hint="مطلوبة؛ الآن افتراضيًا"><input type="datetime-local" className="input" dir="ltr" value={create.scheduled_start} onChange={(e) => setCreate({ ...create, scheduled_start: e.target.value })} aria-label="البداية" data-testid="task-start" required /></Field>
+                <Field label="النهاية (اختياري)" hint="لا تنبيه عند تجاوزها ولا إنهاء تلقائي"><input type="datetime-local" className="input" dir="ltr" value={create.scheduled_end} onChange={(e) => setCreate({ ...create, scheduled_end: e.target.value })} aria-label="النهاية" data-testid="task-end-input" /></Field>
               </div>
               <Field label="وصف"><textarea className="input" rows={2} value={create.description ?? ""} onChange={(e) => setCreate({ ...create, description: e.target.value })} /></Field>
             </div>

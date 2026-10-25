@@ -99,10 +99,11 @@ describe("non-negotiable source rules", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("the owner's paste file carries 0022, 0031, 0034 and 0039 verbatim, each recorded in the history, in one transaction", () => {
-    // These hold DELETE or DROP (the purge functions; 0039's old index), so the owner runs them from the SQL Editor (STAGING.md §0-ب)
-    const paste = read("supabase/paste/owner-paste-0022-0031-0034-0039.sql");
-    for (const f of ["20261023091000_0022_data_purge.sql", "20261025040000_0031_purge_cascades.sql", "20261025052000_0034_stay_cascades.sql", "20261027020000_0039_guest_cascades.sql"]) {
+  it("the owner's paste file carries 0022, 0031, 0034, 0039 and 0041 verbatim, each recorded in the history, in one transaction", () => {
+    // These hold DELETE or DROP, or spell the word (the purge functions; 0039's old index; 0041's retired report signatures
+    // and the «حذف تعريف» labels), so the owner runs them from the SQL Editor (STAGING.md §0-ب)
+    const paste = read("supabase/paste/owner-paste-0022-0031-0034-0039-0041.sql");
+    for (const f of ["20261023091000_0022_data_purge.sql", "20261025040000_0031_purge_cascades.sql", "20261025052000_0034_stay_cascades.sql", "20261027020000_0039_guest_cascades.sql", "20261028020000_0041_phase6_paste.sql"]) {
       expect(paste.includes(read(join("supabase/migrations", f))), `${f} is not in the paste file as it is in supabase/migrations`).toBe(true);
       const [version, ...rest] = f.replace(/\.sql$/, "").split("_");
       expect(paste).toContain(`values ('${version}', '${rest.join("_")}') on conflict (version) do nothing;`);

@@ -22,6 +22,8 @@ create or replace function t_fin(p uuid) returns jsonb language sql security def
 create or replace function t_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function t_room(p uuid) returns rooms language sql security definer as $$ select * from rooms where id = p $$;
 create or replace function t_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
+-- a direct write as the table owner (A13c): the last-owner trigger must refuse it on any path, 0040 or not
+create or replace function t_direct_demote(p uuid) returns void language sql security definer as $$ update staff_profiles set role = 'manager' where id = p $$;
 
 -- ---------- fixtures (synthetic) ----------
 -- owner 10..01 (all branches), supervisor 10..02 (branch 10), housekeeping 10..03 (branch 10), finance 10..04 (branch 10)
@@ -586,16 +588,26 @@ do $$ declare pid uuid; begin
 end $$;
 
 
--- A13: last active owner cannot be deactivated or demoted
+-- A13: last active owner cannot be deactivated or demoted. Since 0040 the table is not written directly (the owner's
+-- editor and activation functions are the only path, and neither acts on oneself); the trigger still guards any path.
 select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
-do $$ begin
+do $$ declare n int; begin
   update staff_profiles set is_active = false where id = '10000000-0000-0000-0000-000000000001';
-  perform t_record('A13 deactivating the last active owner rejected', false, 'accepted');
-exception when others then perform t_record('A13 deactivating the last active owner rejected', sqlerrm like '%LAST_OWNER%' and (select is_active from staff_profiles where id = '10000000-0000-0000-0000-000000000001'), sqlerrm); end $$;
+  get diagnostics n = row_count;
+  perform t_record('A13 a direct update of the owner''s own row changes nothing (0040: the table is written by the functions only)', n = 0 and (select is_active from staff_profiles where id = '10000000-0000-0000-0000-000000000001'), n::text);
+exception when others then perform t_record('A13 a direct update of the owner''s own row changes nothing (0040: the table is written by the functions only)', false, sqlerrm); end $$;
 do $$ begin
-  update staff_profiles set role = 'manager' where id = '10000000-0000-0000-0000-000000000001';
-  perform t_record('A13b demoting the last active owner rejected', false, 'accepted');
-exception when others then perform t_record('A13b demoting the last active owner rejected', sqlerrm like '%LAST_OWNER%', sqlerrm); end $$;
+  perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000001', false, 'اختبار');
+  perform t_record('A13a the only owner cannot deactivate himself through the function', false, 'accepted');
+exception when others then perform t_record('A13a the only owner cannot deactivate himself through the function', sqlerrm like '%SELF_NOT_ALLOWED%' and (select is_active from staff_profiles where id = '10000000-0000-0000-0000-000000000001'), sqlerrm); end $$;
+do $$ begin
+  perform fn_admin_update_staff(jsonb_build_object('staff_id', '10000000-0000-0000-0000-000000000001', 'role', 'manager', 'reason', 'اختبار'));
+  perform t_record('A13b the only owner cannot demote himself through the editor', false, 'accepted');
+exception when others then perform t_record('A13b the only owner cannot demote himself through the editor', sqlerrm like '%SELF_ROLE_OR_BRANCHES%' and (select role from staff_profiles where id = '10000000-0000-0000-0000-000000000001') = 'owner', sqlerrm); end $$;
+do $$ begin
+  perform t_direct_demote('10000000-0000-0000-0000-000000000001');
+  perform t_record('A13c the trigger still refuses to demote the last active owner on any path', false, 'accepted');
+exception when others then perform t_record('A13c the trigger still refuses to demote the last active owner on any path', sqlerrm like '%LAST_OWNER%', sqlerrm); end $$;
 
 
 -- =====================================================================

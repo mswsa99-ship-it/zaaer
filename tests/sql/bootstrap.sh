@@ -16,6 +16,12 @@ create extension if not exists "uuid-ossp" with schema extensions;
 create schema if not exists auth;
 create or replace function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
 create or replace function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true),'')::jsonb, '{}'::jsonb) $$;
+-- the session tables as Supabase Auth keeps them (the columns 0040 reads and writes): a token's session_id names a
+-- row here; a session the owner ended has not_after in the past and its refresh tokens revoked
+create table if not exists auth.sessions (id uuid primary key, user_id uuid not null, created_at timestamptz default now(), updated_at timestamptz default now(),
+  factor_id uuid, aal text, not_after timestamptz, refreshed_at timestamp, user_agent text, ip inet, tag text);
+create table if not exists auth.refresh_tokens (id bigserial primary key, token varchar(255), user_id varchar(255), revoked boolean, created_at timestamptz default now(),
+  updated_at timestamptz default now(), parent varchar(255), session_id uuid);
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;

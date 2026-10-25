@@ -23,6 +23,14 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
 }
 
+/** Why the last session ended on this device, for the login page (decision 34): «revoked» = ended by the owner or a manager, or the account was deactivated. */
+export const SIGNOUT_REASON_KEY = "zaaer.signout_reason";
+export function takeSignOutReason(): string | null {
+  try { const r = sessionStorage.getItem(SIGNOUT_REASON_KEY); if (r) sessionStorage.removeItem(SIGNOUT_REASON_KEY); return r; } catch { return null; }
+}
+/** The api layer announces a refusal; the auth provider re-checks the session (an ended session is refused everywhere at once). */
+export const FORBIDDEN_EVENT = "zaaer:forbidden";
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -89,6 +97,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(data as StaffProfile | null);
     setLoading(false);
   }
+
+  // decision 34: a session the owner or a manager ended (or an account deactivated) is refused by the server on its next
+  // request; the browser notices on a refusal, when the tab comes back, and every minute, and signs out with a word for
+  // the login page — it never keeps showing a screen the server would no longer serve.
+  const hadProfileRef = useRef(false);
+  useEffect(() => { hadProfileRef.current = !!profile; }, [profile]);
+  useEffect(() => {
+    let checking = false;
+    const recheck = async () => {
+      const uid = session?.user?.id;
+      if (!uid || !hadProfileRef.current || checking) return;
+      checking = true;
+      try {
+        const { data, error } = await supabase.from("staff_profiles").select("id").eq("auth_user_id", uid).maybeSingle();
+        if (!error && !data && profileUserRef.current === uid) {
+          try { sessionStorage.setItem(SIGNOUT_REASON_KEY, "revoked"); } catch { /* the notice is a convenience */ }
+          await supabase.auth.signOut();
+          setProfile(null);
+        }
+      } finally { checking = false; }
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") void recheck(); };
+    window.addEventListener("focus", recheck); document.addEventListener("visibilitychange", onVisible); window.addEventListener(FORBIDDEN_EVENT, recheck);
+    const timer = window.setInterval(recheck, 60_000);
+    return () => { window.removeEventListener("focus", recheck); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener(FORBIDDEN_EVENT, recheck); window.clearInterval(timer); };
+  }, [session]);
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

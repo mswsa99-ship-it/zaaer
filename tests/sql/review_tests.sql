@@ -100,7 +100,7 @@ end $$;
 do $$ declare res uuid := (select v from rf where k='res'); rep jsonb; led jsonb; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'deposit', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'rf-dep'));
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'refund', 'amount_halalas', 2500, 'method', 'cash', 'reason', 'تعويض', 'idempotency_key', 'rf-ref'));
-  rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010'));
+  rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010'), '{}'::jsonb);
   led := rep->'ledger';
   perform t_record('RF12 A05 report ledger reconciles: net = receipts − refunds + deposit_apply, read straight from vouchers',
     (led->>'net_collected')::bigint = (led->>'receipts')::bigint - (led->>'refunds')::bigint + (led->>'deposits_applied')::bigint
@@ -115,7 +115,7 @@ reset role;
 select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
 set role authenticated;
 do $$ begin
-  begin perform fn_reports_finance('00000000-0000-0000-0000-000000000010'); perform t_record('RF14 A05 housekeeping cannot read the finance report', false);
+  begin perform fn_reports_finance('00000000-0000-0000-0000-000000000010', null, null, '{}'::jsonb); perform t_record('RF14 A05 housekeeping cannot read the finance report', false);
   exception when others then perform t_record('RF14 A05 housekeeping cannot read the finance report', sqlerrm like 'FORBIDDEN%', sqlerrm); end;
 end $$;
 
@@ -166,7 +166,7 @@ do $$ declare n int; begin
   perform t_record('RF16d org 2 sees no org 1 reservations', n = 0, 'saw ' || n);
   select count(*) into n from financial_vouchers where organization_id = '00000000-0000-0000-0000-000000000001';
   perform t_record('RF16e org 2 sees no org 1 vouchers', n = 0, 'saw ' || n);
-  begin perform fn_reports_finance('00000000-0000-0000-0000-000000000010'); perform t_record('RF16f org 2 cannot run reports on an org 1 branch', false);
+  begin perform fn_reports_finance('00000000-0000-0000-0000-000000000010', null, null, '{}'::jsonb); perform t_record('RF16f org 2 cannot run reports on an org 1 branch', false);
   exception when others then perform t_record('RF16f org 2 cannot run reports on an org 1 branch', sqlerrm like 'FORBIDDEN%', sqlerrm); end;
 end $$;
 reset role;

@@ -230,10 +230,10 @@ exception when others then perform t_record('PR07b shortening a weekly stay is t
 -- ---------------------------------------------------------------- PR08: the discount report
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare full_r jsonb; sup_r jsonb; mine jsonb; begin
-  full_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010') + 1);
+  full_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010') + 1, '{}'::jsonb);
   select x into mine from jsonb_array_elements(full_r->'rows') x where x->>'reservation_id' = t_id('resDisc')::text;
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  sup_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010') + 1);
+  sup_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010') + 1, '{}'::jsonb);
   perform t_record('PR08 the discount report shows who, how much and why; the supervisor gets the totals only',
     (mine->>'amount_halalas')::bigint = 6000 and mine->>'reason' = 'ضيف دائم' and mine->>'role' = 'supervisor' and (full_r->>'count')::int >= 2
     and sup_r->'rows' = 'null'::jsonb and (sup_r->>'total_halalas')::bigint = (full_r->>'total_halalas')::bigint,

@@ -19,8 +19,8 @@ export function SectionTitle({ title, subtitle, action }: { title: string; subti
   );
 }
 
-export function Badge({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn("badge", className)}>{children}</span>;
+export function Badge({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
+  return <span className={cn("badge", className)} title={title}>{children}</span>;
 }
 
 export function EmptyState({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {

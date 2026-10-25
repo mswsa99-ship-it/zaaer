@@ -11,6 +11,7 @@ import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
 import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, validHttpsUrl } from "./guests";
+import { phase6Rpcs } from "./phase6";
 
 const KEY = "zaaer_demo_store_v8";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
@@ -40,35 +41,53 @@ const byId = (t: string, id: string | null | undefined) => (id ? T(t).find((r) =
 type Listener = { table: string; cb: () => void };
 const listeners = new Set<Listener>();
 let emitTimer: number | null = null; const dirty = new Set<string>();
-function emit(table: string) {
-  dirty.add(table); persist();
+function emit(table: string) { dirty.add(table); persist(); notifyLater(); }
+function notifyLater() {
   if (emitTimer) return;
   emitTimer = window.setTimeout(() => { emitTimer = null; const tables = [...dirty]; dirty.clear(); for (const l of listeners) if (tables.includes(l.table)) { try { l.cb(); } catch { /* ignore */ } } }, 60);
 }
-function emitAll() { for (const t of Object.keys(S)) dirty.add(t); emit("rooms"); }
+function emitAll(save = true) { for (const t of Object.keys(S)) dirty.add(t); if (save) persist(); notifyLater(); }
+// two tabs of the demo see each other's changes: a store another tab wrote is adopted here as it is (an owner's forced
+// sign-out in one tab reaches the person's own tab on its next request, as fn_session_ok does on the server)
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", (e: StorageEvent) => { if (e.key === KEY) { S = load(); emitAll(false); } });
+}
 
 // ---------------------------------------------------------------------------
 // auth
 // ---------------------------------------------------------------------------
-type Session = { user: { id: string; email: string }; access_token: string } | null;
+/** signed_in_at stands for the session id a real token carries (0040): a staff member's sessions_ended_at after it refuses it */
+type Session = { user: { id: string; email: string }; access_token: string; signed_in_at?: string } | null;
 let session: Session = (() => { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null"); } catch { return null; } })();
 const authListeners = new Set<(e: string, s: Session) => void>();
 function setSession(s: Session) { session = s; try { if (s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } for (const l of authListeners) l(s ? "SIGNED_IN" : "SIGNED_OUT", s); }
 const DEMO_ACCOUNTS = Object.values(STAFF);
+/** when a new session of this account opens: now, and strictly after any end the owner set on the person's sessions (fn_end_sessions) */
+function newSessionAt(authUserId: string): string { const sp = T("staff_profiles").find((s) => s.auth_user_id === authUserId); const ended = sp?.sessions_ended_at ? Date.parse(sp.sessions_ended_at) + 1 : 0; return new Date(Math.max(Date.now(), ended)).toISOString(); }
 
 // ---------------------------------------------------------------------------
 // current staff context (mirrors fn_staff_id / fn_user_branch_ids / fn_require_*)
 // ---------------------------------------------------------------------------
-function me(): Row | null { if (!session) return null; return T("staff_profiles").find((s) => s.auth_user_id === session!.user.id && s.is_active) ?? null; }
-function myBranches(): string[] { const m = me(); if (!m) return []; if (m.role === "owner") return T("branches").filter((b) => b.organization_id === m.organization_id).map((b) => b.id); return T("branch_memberships").filter((x) => x.staff_id === m.id).map((x) => x.branch_id); }
+function me(): Row | null {
+  if (!session) return null;
+  const s = T("staff_profiles").find((x) => x.auth_user_id === session!.user.id && x.is_active);
+  // fn_session_ok (0040, decision 34): a session ended by a forced sign-out or a deactivation is refused on its next
+  // request, whatever token it still holds; a session without the mark (signed in before the rule) has nothing to check
+  if (!s || (s.sessions_ended_at && session.signed_in_at && Date.parse(s.sessions_ended_at) >= Date.parse(session.signed_in_at))) return null;
+  return s;
+}
+/** fn_user_branch_ids: the owner is on every branch; the others on their live memberships (a retired one, removed_at set, no longer counts) */
+function myBranches(): string[] { const m = me(); if (!m) return []; if (m.role === "owner") return T("branches").filter((b) => b.organization_id === m.organization_id).map((b) => b.id); return T("branch_memberships").filter((x) => x.staff_id === m.id && !x.removed_at).map((x) => x.branch_id); }
 function hasRole(...roles: string[]) { const m = me(); return !!m && roles.includes(m.role); }
 function requireRole(...roles: string[]) { if (!hasRole(...roles)) throw new Error(`FORBIDDEN: requires one of {${roles.join(",")}}`); }
 function requireBranch(b: string | null | undefined) { if (!b || !myBranches().includes(b)) throw new Error("FORBIDDEN: branch not permitted"); }
 function staffId() { return me()?.id ?? null; }
 function branchToday(_b?: string) { return todayISO(); }
+/** The source every audit row carries while set (the server's app.source): the operations assistant's executions (0040, decision 55). */
+let auditSource: string | null = null;
 function audit(branch: string | null, action: string, entity: string, entityId: string, details: Row) {
   // like the server trigger (0026): the request's trace code and source, or a per-call code when none was sent
-  const trace = requestHeaders?.["x-correlation-id"], source = requestHeaders?.["x-client-source"];
+  const trace = requestHeaders?.["x-correlation-id"], source = auditSource ?? requestHeaders?.["x-client-source"];
   T("audit_events").unshift({ id: uid(), organization_id: ORG, branch_id: branch, actor_id: staffId(), action, entity_type: entity, entity_id: entityId, details, created_at: nowISO(),
     correlation_id: trace && /^[A-Za-z0-9_-]{6,64}$/.test(trace) ? trace : "tx-" + uid().slice(0, 8),
     source: source && /^[a-z][a-z_-]{1,31}$/.test(source) ? source : staffId() ? "screen" : "system",
@@ -202,8 +221,10 @@ function project(table: string, row: Row, sel: string): Row {
 type Filter = (r: Row) => boolean;
 const MONEY_ROLES = ["owner", "manager", "supervisor", "finance"];
 /** Who may change a table directly (mirrors the write policies); other direct writes are not emulated.
- *  0038 revoked every direct write on the booking platforms: a source is switched through fn_admin_set_source_active (audited). */
-const WRITE_ROLES: Record<string, string[]> = { booking_sources: [] };
+ *  0038 revoked every direct write on the booking platforms: a source is switched through fn_admin_set_source_active (audited).
+ *  0040 closed the staff tables and the saved views: name, phone, role, activation and memberships go through fn_admin_* (audited,
+ *  with a reason), a saved view through fn_saved_view_save / fn_saved_view_remove. */
+const WRITE_ROLES: Record<string, string[]> = { booking_sources: [], staff_profiles: [], branch_memberships: [], staff_saved_views: [] };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
 /** Mirrors the row-level security of the real schema closely enough for the walkthrough. */
 function visible(table: string, r: Row): boolean {
@@ -212,6 +233,7 @@ function visible(table: string, r: Row): boolean {
   if (table === "property_policies" && !m) return !!r.is_public;
   if (table === "booking_sources" || table === "organizations" || table === "system_settings") return true;
   if (!m) return false;
+  if (table === "staff_saved_views") return r.staff_id === m.id;   // own rows only (0040)
   if (["financial_vouchers", "reservation_charges", "invoices", "reservation_guests"].includes(table) && !MONEY_ROLES.includes(m.role)) return false;
   if (["keyboxes", "code_rotation_events", "audit_events", "access_delivery_events"].includes(table) && !["owner", "manager", "supervisor"].includes(m.role)) return false;
   if (["cash_accounts", "pos_settlements"].includes(table)) return MONEY_ROLES.includes(m.role) && branches.includes(r.branch_id);
@@ -419,7 +441,13 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_staff_id: () => staffId(),
   fn_user_branch_ids: () => myBranches(),
   fn_claim_staff_profile: () => ({ ok: true, claimed: true }),
-  fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => { requireRole("owner"); const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: p_full_name, email: p_email, phone: null, role: p_role, is_active: true, created_at: nowISO() }); for (const b of p_branch_ids ?? []) T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b }); emit("staff_profiles"); return { ok: true, staff_id: id }; },
+  // 0040: a guest is no staff role; the invite re-opens a retired membership instead of a duplicate, and is logged
+  fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => { requireRole("owner"); if (p_role === "guest") throw new Error("INVALID_ROLE"); if (!["owner", "manager", "supervisor", "finance", "housekeeping"].includes(String(p_role))) throw new Error("INVALID_ROLE");
+    const email = String(p_email ?? "").trim().toLowerCase(), name = String(p_full_name ?? "").trim(); if (!email || !name) throw new Error("VALIDATION: email_and_name");
+    const branches: string[] = Array.isArray(p_branch_ids) ? p_branch_ids : []; for (const b of branches) requireBranch(b);   // all or nothing, as the transaction
+    const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone: null, role: p_role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
+    for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
+    emit("staff_profiles"); emit("branch_memberships"); audit(null, "staff_invited", "staff_profile", id, { role: p_role, branch_ids: branches }); return { ok: true, staff_id: id }; },
   fn_admin_update_ai_settings: ({ p }) => { requireRole("owner"); Object.assign(T("ai_settings")[0], p, { updated_at: nowISO() }); emit("ai_settings"); return { ok: true }; },
   fn_definition_dependencies: ({ p_entity, p_id }) => { requireRole("owner", "manager"); return deps(p_entity, p_id); },
 
@@ -501,13 +529,17 @@ const rpcs: Record<string, (a: any) => any> = {
     return { rent, discounts: disc, nights: n, after_arrival: after, max, percent_bp: bp, min_nightly: mn, unlimited: hasRole("owner", "manager") }; },
   fn_reservation_nights: ({ p_reservation }) => { const r = byId("reservations", p_reservation); if (!r || !hasRole(...MONEY_ROLES) || !myBranches().includes(r.branch_id)) return null; ensureNights(r.id);
     return T("reservation_nights").filter((x) => x.reservation_id === r.id).sort((a, b) => (a.night === b.night ? (a.created_at < b.created_at ? -1 : 1) : a.night < b.night ? -1 : 1)).map((x) => ({ night: x.night, price: x.price_halalas, basis: x.basis, status: x.status, removed_at: x.removed_at, removed_reason: x.removed_reason })); },
-  fn_reports_discounts: ({ p_branch, p_from, p_to }) => { requireRole("owner", "manager", "supervisor", "finance"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from) throw new Error("VALIDATION: range");
-    const full = hasRole("owner", "manager", "finance"); const dayOfIso = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
-    const rows = T("reservation_charges").filter((c) => c.branch_id === p_branch && c.kind === "discount" && dayOfIso(c.created_at) >= p_from && dayOfIso(c.created_at) <= p_to).map((c) => { const r = byId("reservations", c.reservation_id)!; const s = byId("staff_profiles", c.created_by);
-      return { id: c.id, reservation_id: r.id, internal_ref: r.internal_ref, amount_halalas: roundHalfUp(Math.abs(Number(c.quantity) * c.unit_price_halalas)), reason: c.reason ?? c.description, staff: s?.full_name ?? null, role: s?.role ?? null, created_at: c.created_at, after_arrival: !!r.actual_check_in && c.created_at >= r.actual_check_in }; })
+  // decision 36: by staff member, source, unit type and «بعد الوصول» (p_filters), the filters echoed back
+  fn_reports_discounts: ({ p_branch, p_from, p_to, p_filters }) => { requireRole("owner", "manager", "supervisor", "finance"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || nightsBetween(p_from, p_to).length > 366) throw new Error("VALIDATION: range");
+    const full = hasRole("owner", "manager", "finance"); const f = p_filters ?? {}; const fStaff = f.staff_id || null, fSource = f.source_id || null, fCat = f.category_id || null, fAfter: boolean | null = f.after_arrival == null || f.after_arrival === "" ? null : f.after_arrival === true || f.after_arrival === "true";
+    const rows = T("reservation_charges").filter((c) => c.branch_id === p_branch && c.kind === "discount" && dayOf(c.created_at) >= p_from && dayOf(c.created_at) <= p_to).map((c) => { const r = byId("reservations", c.reservation_id)!; const s = byId("staff_profiles", c.created_by);
+      return { id: c.id, reservation_id: r.id, internal_ref: r.internal_ref, amount_halalas: roundHalfUp(Math.abs(Number(c.quantity) * c.unit_price_halalas)), reason: c.reason ?? c.description, staff: s?.full_name ?? null, role: s?.role ?? null, created_at: c.created_at, after_arrival: !!r.actual_check_in && c.created_at >= r.actual_check_in, _by: c.created_by ?? null, _source: r.source_id, _cat: r.room_category_id }; })
+      .filter((x) => (!fStaff || x._by === fStaff) && (!fSource || x._source === fSource) && (!fCat || x._cat === fCat) && (fAfter == null || x.after_arrival === fAfter))
+      .map(({ _by, _source, _cat, ...x }) => { void _by; void _source; void _cat; return x; })
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
     const by = new Map<string, { staff: string | null; role: string | null; count: number; total_halalas: number }>(); for (const x of rows) { const k = `${x.staff}|${x.role}`; const e = by.get(k) ?? { staff: x.staff, role: x.role, count: 0, total_halalas: 0 }; e.count++; e.total_halalas += x.amount_halalas; by.set(k, e); }
-    return { period: { from: p_from, to: p_to }, total_halalas: rows.reduce((s, x) => s + x.amount_halalas, 0), count: rows.length, by_staff: [...by.values()].sort((a, b) => b.total_halalas - a.total_halalas), rows: full ? rows : null }; },
+    const filters: Row = {}; if (fStaff) filters.staff_id = fStaff; if (fSource) filters.source_id = fSource; if (fCat) filters.category_id = fCat; if (fAfter != null) filters.after_arrival = fAfter;
+    return { period: { from: p_from, to: p_to }, filters, total_halalas: rows.reduce((s, x) => s + x.amount_halalas, 0), count: rows.length, by_staff: [...by.values()].sort((a, b) => b.total_halalas - a.total_halalas), rows: full ? rows : null }; },
   fn_rate_calendar: ({ p_branch, p_from, p_to }) => { requireRole("owner", "manager"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || nightsBetween(p_from, p_to).length > 92) throw new Error("VALIDATION: range");
     const days = [...nightsBetween(p_from, p_to), p_to];
     return { today: branchToday(), from: p_from, to: p_to, categories: T("room_categories").filter((c) => c.branch_id === p_branch && !c.archived_at).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name_ar).localeCompare(String(b.name_ar))).map((c) => {
@@ -701,13 +733,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
         cancelled_at: i.cancelled_at, cancel_reason: i.cancel_reason, period_from: i.period_from, period_to: i.period_to, bill_to: i.bill_to ?? {}, lines: i.snapshot?.lines ?? [], versions: i.versions ?? [] })) : null,
       invoicing: money ? { uninvoiced_halalas: uninvoicedValue(r.id) } : null,
       finance: money ? financeOf(r.id) : null, history: hasRole("owner", "manager", "supervisor") ? T("audit_events").filter((e) => e.entity_id === r.id).slice(0, 50).map((e) => ({ action: e.action, at: e.created_at, actor: byId("staff_profiles", e.actor_id)?.full_name ?? null, details: e.details })) : null }; },
-  fn_reservation_list: ({ p_branch, p_filters, p_limit, p_offset }) => { if (!myBranches().includes(p_branch)) return { total: 0, rows: [] }; const f = p_filters ?? {}; const q = (f.q ?? "").toLowerCase();
-    let rows = T("reservations").filter((r) => r.branch_id === p_branch && (!f.status || String(f.status).split(",").includes(r.status)) && (f.open_only !== true && f.open_only !== "true" || ["pending_verification", "confirmed", "checked_in"].includes(r.status)) && (!f.check_in_from || r.check_in >= f.check_in_from) && (!f.check_in_to || r.check_in <= f.check_in_to) && (!f.source_id || r.source_id === f.source_id) && (f.has_balance !== true && f.has_balance !== "true" || r.balance_due_halalas > 0) && (!q || r.internal_ref.toLowerCase().includes(q) || (r.external_ref ?? "").toLowerCase().includes(q) || (r.cancel_reference ?? "").toLowerCase().includes(q) || T("reservation_guests").some((g) => g.reservation_id === r.id && ((g.full_name ?? "").toLowerCase().includes(q) || (g.phone ?? "").includes(q)))));
-    rows = rows.sort((a, b) => (a.check_in === b.check_in ? (a.created_at < b.created_at ? 1 : -1) : a.check_in < b.check_in ? 1 : -1));
-    const page = rows.slice(p_offset ?? 0, (p_offset ?? 0) + (p_limit ?? 50));
-    return { total: rows.length, rows: page.map((r) => ({ id: r.id, internal_ref: r.internal_ref, external_ref: r.external_ref, status: r.status, check_in: r.check_in, check_out: r.check_out, nights: Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000), guest_name: guestName(r.id), room_number: roomNo(r.room_id), source_name: byId("booking_sources", r.source_id)?.name ?? null, category_name: byId("room_categories", r.room_category_id)?.name_ar ?? null, total_halalas: r.total_halalas, paid_halalas: r.paid_halalas, balance_due_halalas: r.balance_due_halalas, deposit_balance_halalas: r.deposit_balance_halalas, payment_status: r.payment_status, identity_status: r.identity_status, access_status: r.access_status, created_at: r.created_at, group_ref: r.group_ref ?? null, hold: !!r.security_hold,
-      ban: hasRole("owner", "manager", "supervisor", "finance") ? rpcs.fn_reservation_ban_matches({ p_reservation: r.id }).length > 0 : null,
-      rating: hasRole("owner", "manager", "supervisor") ? (() => { const pg = T("reservation_guests").find((g) => g.reservation_id === r.id && g.is_primary); return pg?.guest_profile_id ? byId("guest_profiles", pg.guest_profile_id)?.rating ?? null : null; })() : null })) }; },
+  // fn_reservation_list: the phase 6 module (src/demo/phase6.ts) — every filter of the reference, the picker's columns, an exact total
 
   // ---- money ----
   fn_create_voucher: ({ p }) => { if (!["receipt", "deposit"].includes(p.kind)) throw new Error("VALIDATION: kind"); requireRole("owner", "manager", "supervisor", "finance"); const amount = parseHalalas(p.amount_halalas); nonEmpty(p.idempotency_key, "idempotency_key"); if (!p.method) throw new Error("VALIDATION: method"); const r = byId("reservations", p.reservation_id); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
@@ -807,7 +833,9 @@ const rpcsMore: Record<string, (a: any) => any> = {
 
   // ---- housekeeping ----
   fn_hk_create_task: ({ p }) => { requireRole("owner", "manager", "supervisor", "housekeeping"); if (!!p.room_id === !!p.facility_id) throw new Error("VALIDATION: one_target"); const target = p.room_id ? byId("rooms", p.room_id) : byId("facilities", p.facility_id); if (!target || target.archived_at) throw new Error("NOT_FOUND: target"); requireBranch(target.branch_id); const tt = byId("task_types", p.task_type_id); if (!tt || tt.branch_id !== target.branch_id || tt.archived_at) throw new Error("BRANCH_MISMATCH: task_type"); if (p.reservation_id && byId("reservations", p.reservation_id)?.branch_id !== target.branch_id) throw new Error("BRANCH_MISMATCH: reservation"); if (p.assignee_id && !staffInBranch(p.assignee_id, target.branch_id)) throw new Error("ASSIGNEE_NOT_IN_BRANCH");
-    const t = { id: uid(), organization_id: ORG, branch_id: target.branch_id, room_id: p.room_id ?? null, facility_id: p.facility_id ?? null, task_type_id: tt.id, task_type_name_snapshot: tt.name, reservation_id: p.reservation_id ?? null, priority: p.priority ?? "medium", status: "pending", assignee_id: p.assignee_id ?? null, scheduled_start: p.scheduled_start ?? nowISO(), scheduled_end: p.scheduled_end ?? null, started_at: null, completed_at: null, completed_by: null, cancelled_at: null, cancel_reason: null, description: p.description ?? null, result_note: null, images: [], version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() }; T("housekeeping_tasks").push(t);
+    // decision 28: the planned start (now by default) and the optional end are kept as given; an end before the start is refused; no reminder, no automatic end
+    const start = p.scheduled_start ? String(p.scheduled_start) : nowISO(), end = p.scheduled_end ? String(p.scheduled_end) : null; if (Number.isNaN(Date.parse(start)) || (end && (Number.isNaN(Date.parse(end)) || Date.parse(end) < Date.parse(start)))) throw new Error("VALIDATION: schedule");
+    const t = { id: uid(), organization_id: ORG, branch_id: target.branch_id, room_id: p.room_id ?? null, facility_id: p.facility_id ?? null, task_type_id: tt.id, task_type_name_snapshot: tt.name, reservation_id: p.reservation_id ?? null, priority: p.priority ?? "medium", status: "pending", assignee_id: p.assignee_id ?? null, scheduled_start: start, scheduled_end: end, started_at: null, completed_at: null, completed_by: null, cancelled_at: null, cancel_reason: null, description: p.description ?? null, result_note: null, images: [], version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() }; T("housekeeping_tasks").push(t);
     if (p.room_id && tt.code === "room_cleaning") { const rm = byId("rooms", p.room_id)!; if (rm.cleanliness === "clean") rm.cleanliness = "dirty"; recomputeRoomReady(p.room_id); } emit("housekeeping_tasks"); audit(target.branch_id, "task.created", "housekeeping_task", t.id, { after: t }); return { ok: true, id: t.id }; },
   fn_hk_start_task: ({ p_task }) => { requireRole("owner", "manager", "supervisor", "housekeeping"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); requireBranch(t.branch_id); if (t.status !== "pending") throw new Error("TASK_STATUS_INVALID"); if (hasRole("housekeeping") && t.assignee_id && t.assignee_id !== staffId()) throw new Error("FORBIDDEN: not assignee"); Object.assign(t, { status: "in_progress", started_at: nowISO(), assignee_id: t.assignee_id ?? staffId(), version: t.version + 1 }); if (t.room_id && byId("task_types", t.task_type_id)?.code === "room_cleaning") { byId("rooms", t.room_id)!.cleanliness = "in_progress"; emit("rooms"); } emit("housekeeping_tasks"); return { ok: true }; },
   fn_hk_complete_task: ({ p_task, p_note, p_expected_version }) => { requireRole("owner", "manager", "supervisor", "housekeeping"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); requireBranch(t.branch_id); checkVersion(t.version, p_expected_version); if (!["pending", "in_progress"].includes(t.status)) throw new Error("TASK_STATUS_INVALID"); if (hasRole("housekeeping") && t.assignee_id && t.assignee_id !== staffId()) throw new Error("FORBIDDEN: not assignee"); Object.assign(t, { status: "completed", completed_at: nowISO(), completed_by: staffId(), assignee_id: t.assignee_id ?? staffId(), result_note: p_note ?? null, version: t.version + 1 }); let st: string | undefined; if (t.room_id) { if (byId("task_types", t.task_type_id)?.code === "room_cleaning") byId("rooms", t.room_id)!.cleanliness = "clean"; st = recomputeRoomReady(t.room_id); } emit("housekeeping_tasks"); audit(t.branch_id, "task.completed", "housekeeping_task", t.id, { after: { room_status: st, note: p_note } }); return { ok: true, room_status: st }; },
@@ -900,44 +928,62 @@ const rpcsMore: Record<string, (a: any) => any> = {
     return { room_id: r.id, room_number: r.room_number, category: byId("room_categories", r.category_id)?.name_ar, block: byId("blocks", r.block_id)?.name ?? null, floor: byId("floors", r.floor_id)?.name ?? null, is_active: r.is_active, status: r.status, cleanliness: r.cleanliness, open_tasks: T("housekeeping_tasks").filter((h) => h.room_id === r.id && ["pending", "in_progress"].includes(h.status)).length, open_maintenance: T("maintenance_tickets").filter((m) => m.room_id === r.id && m.status !== "resolved").length, keybox_ready: !!kb && kb.code_status === "active" && kb.field_tested, current: cur ? { reservation_id: cur.id, internal_ref: cur.internal_ref, status: cur.status, check_in: cur.check_in, check_out: cur.check_out, guest: guestName(cur.id) ?? "—", balance_due: cur.balance_due_halalas } : null, next: next ? { internal_ref: byId("reservations", next.reservation_id)!.internal_ref, check_in: next.from_date } : null }; }).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })); },
   fn_ops_daily_summary: ({ p_branch, p_date }) => summary(p_branch, p_date ?? branchToday()),
   // Ledger-based finance KPIs for reports (GAP05): revenue = vouchers, never reservation totals; deposits never count as revenue.
-  fn_reports_finance: ({ p_branch, p_from, p_to }) => {
+  // decision 36 (0040): the filters beside the period — staff member, payment method, box or account («none» = no account),
+  // source and unit type; a source or unit-type filter follows the voucher's booking; the collection rate is not claimed
+  // under a staff, method or account filter (its denominator is the whole stay)
+  fn_reports_finance: ({ p_branch, p_from, p_to, p_filters }) => {
     requireRole("owner", "manager", "finance"); requireBranch(p_branch);
-    const from = p_from ?? addDays(branchToday(), -29), to = p_to ?? branchToday();
-    const inPeriod = (iso: string) => { const d = String(iso).slice(0, 10); return d >= from && d <= to; };
-    const vouchers = T("financial_vouchers").filter((v) => v.branch_id === p_branch && v.status === "approved" && inPeriod(v.occurred_at));
+    const from = p_from ?? addDays(branchToday(p_branch), -29), to = p_to ?? branchToday(p_branch); if (to < from) throw new Error("VALIDATION: period");
+    const f = p_filters ?? {}; const fStaff: string | null = f.staff_id || null, fMethod: string | null = f.method || null, fAccount: string | null = f.account_id || null, fSource: string | null = f.source_id || null, fCat: string | null = f.category_id || null;
+    const filtered = !!(fStaff || fMethod || fAccount || fSource || fCat); const accNone = fAccount === "none", acc = fAccount && fAccount !== "none" ? fAccount : null;
+    const inPeriod = (iso: string) => { const d = dayOf(iso); return d >= from && d <= to; };
+    const followsBooking = (r: Row | undefined) => (!fSource || r?.source_id === fSource) && (!fCat || r?.room_category_id === fCat);
+    const vouchers = T("financial_vouchers").filter((v) => v.branch_id === p_branch && v.status === "approved" && inPeriod(v.occurred_at)
+      && (!fStaff || v.created_by === fStaff) && (!fMethod || v.method === fMethod) && (!fAccount || (accNone && v.account_id == null) || v.account_id === acc) && followsBooking(byId("reservations", v.reservation_id)));
     const sumV = (kind: string) => vouchers.filter((v) => v.kind === kind).reduce((a, v) => a + v.amount_halalas, 0);
     const receipts = sumV("receipt"), refunds = sumV("refund"), deposits_received = sumV("deposit"), deposits_refunded = sumV("deposit_refund"), deposits_applied = sumV("deposit_apply");
     const net_collected = receipts - refunds + deposits_applied;
-    const stays = T("reservations").filter((r) => r.branch_id === p_branch && r.check_in <= to && r.check_out > from && !["cancelled", "rejected", "no_show"].includes(r.status));
-    const charges = T("reservation_charges").filter((c) => c.branch_id === p_branch && stays.some((r) => r.id === c.reservation_id));
+    const allRes = T("reservations").filter((r) => r.branch_id === p_branch && r.check_in <= to && r.check_out > from && followsBooking(r));
+    const stays = allRes.filter((r) => !["cancelled", "rejected", "no_show"].includes(r.status)); const stayIds = new Set(stays.map((r) => r.id));
+    const charges = T("reservation_charges").filter((c) => c.branch_id === p_branch && stayIds.has(c.reservation_id));
     const sumC = (kind: string) => charges.filter((c) => c.kind === kind).reduce((a, c) => a + c.total_halalas, 0);
     const rent = sumC("rent"), addons = sumC("addon") + sumC("penalty") + sumC("adjustment"), discounts = sumC("discount"), tax = sumC("tax");
     const total_charged = rent + addons + discounts + tax;
-    const allRes = T("reservations").filter((r) => r.branch_id === p_branch && r.check_in <= to && r.check_out > from);
-    const by_method = Object.values(vouchers.filter((v) => v.kind === "receipt").reduce((acc: Record<string, { method: string; amount_halalas: number }>, v) => { (acc[v.method] ??= { method: v.method, amount_halalas: 0 }).amount_halalas += v.amount_halalas; return acc; }, {}));
+    const by_method = Object.values(vouchers.filter((v) => v.kind === "receipt").reduce((acc: Record<string, { method: string; amount_halalas: number }>, v) => { (acc[v.method] ??= { method: v.method, amount_halalas: 0 }).amount_halalas += v.amount_halalas; return acc; }, {})).sort((a, b) => b.amount_halalas - a.amount_halalas || a.method.localeCompare(b.method));
     const days: Record<string, { day: string; receipts: number; refunds: number }> = {};
-    for (const v of vouchers) { const d = String(v.occurred_at).slice(0, 10); const row = (days[d] ??= { day: d, receipts: 0, refunds: 0 }); if (v.kind === "receipt" || v.kind === "deposit_apply") row.receipts += v.amount_halalas; if (v.kind === "refund") row.refunds += v.amount_halalas; }
-    const by_source = Object.values(allRes.reduce((acc: Record<string, { source: string; count: number; total_halalas: number }>, r) => { const s = byId("booking_sources", r.source_id)?.name ?? "—"; (acc[s] ??= { source: s, count: 0, total_halalas: 0 }); acc[s].count++; acc[s].total_halalas += r.total_halalas ?? 0; return acc; }, {}));
+    for (const v of vouchers) { const d = dayOf(v.occurred_at); const row = (days[d] ??= { day: d, receipts: 0, refunds: 0 }); if (v.kind === "receipt" || v.kind === "deposit_apply") row.receipts += v.amount_halalas; if (v.kind === "refund") row.refunds += v.amount_halalas; }
+    const staffRows = new Map<string | null, { staff_id: string | null; staff: string; receipts: number; refunds: number; count: number }>();
+    for (const v of vouchers.filter((x) => x.kind === "receipt" || x.kind === "refund")) { const k = v.created_by ?? null; const row = staffRows.get(k) ?? { staff_id: k, staff: staffName(k) ?? "—", receipts: 0, refunds: 0, count: 0 }; if (v.kind === "receipt") row.receipts += v.amount_halalas; else row.refunds += v.amount_halalas; row.count++; staffRows.set(k, row); }
+    const by_staff = [...staffRows.values()].sort((a, b) => b.receipts - a.receipts);
+    const accRows = new Map<string, { account_id: string; account: string; in_halalas: number; out_halalas: number }>();
+    for (const v of vouchers.filter((x) => x.account_id != null)) { const row = accRows.get(v.account_id) ?? { account_id: v.account_id, account: byId("cash_accounts", v.account_id)?.name ?? "—", in_halalas: 0, out_halalas: 0 }; if (v.kind === "receipt" || v.kind === "deposit") row.in_halalas += v.amount_halalas; if (v.kind === "refund" || v.kind === "deposit_refund") row.out_halalas += v.amount_halalas; accRows.set(v.account_id, row); }
+    const by_account = [...accRows.values()].sort((a, b) => b.in_halalas - a.in_halalas);
+    const by_source = Object.values(allRes.reduce((acc: Record<string, { source: string; count: number; total_halalas: number }>, r) => { const s = byId("booking_sources", r.source_id)?.name ?? "—"; (acc[s] ??= { source: s, count: 0, total_halalas: 0 }); acc[s].count++; acc[s].total_halalas += r.total_halalas ?? 0; return acc; }, {})).sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
     const nights = stays.reduce((a, r) => a + Math.max(0, (new Date(r.check_out + "T00:00:00Z").getTime() - new Date(r.check_in + "T00:00:00Z").getTime()) / 86400000), 0);
     const openDeposits = T("reservations").filter((r) => r.branch_id === p_branch).reduce((a, r) => a + Math.max(0, r.deposit_balance_halalas ?? 0), 0);
+    const filters: Row = {}; if (fStaff) filters.staff_id = fStaff; if (fMethod) filters.method = fMethod; if (fAccount) filters.account_id = fAccount; if (fSource) filters.source_id = fSource; if (fCat) filters.category_id = fCat;
     return {
-      period: { from, to },
+      period: { from, to }, filters, filtered,
       ledger: { receipts, refunds, net_collected, deposits_received, deposits_refunded, deposits_applied, deposit_balance_open: openDeposits },
       charges: { total_charged, rent, addons, discounts, tax },
-      collection_rate_pct: total_charged > 0 ? Math.round((net_collected / total_charged) * 1000) / 10 : null,
-      by_method, by_day: Object.values(days).sort((a, b) => a.day.localeCompare(b.day)),
+      collection_rate_pct: total_charged > 0 && !fStaff && !fMethod && !fAccount ? (() => { const pct = Math.round((Math.abs(net_collected) * 1000) / total_charged) / 10; return net_collected < 0 ? -pct || 0 : pct; })() : null,
+      by_method, by_day: Object.values(days).sort((a, b) => a.day.localeCompare(b.day)), by_staff, by_account,
       reservations: { count: allRes.length, nights, cancelled: allRes.filter((r) => r.status === "cancelled").length, no_show: allRes.filter((r) => r.status === "no_show").length, by_source },
       definitions: {
         revenue: "صافي التحصيل = سندات قبض الإقامة − الاستردادات + التأمين المستخدم لتغطية رسوم، بتاريخ السند. التأمين المقبوض ليس إيرادًا.",
-        collection_rate: "نسبة التحصيل = صافي التحصيل ÷ إجمالي الرسوم (إيجار + إضافات − خصومات + ضريبة) للإقامات المتقاطعة مع الفترة.",
+        collection_rate: "نسبة التحصيل = صافي التحصيل ÷ إجمالي الرسوم (إيجار + إضافات − خصومات + ضريبة) للإقامات المتقاطعة مع الفترة؛ لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب.",
       },
     };
   },
   fn_ai_ops_context: ({ p_branch, p_date }) => { const ctx = opsContext(p_branch, p_date ?? branchToday()); if (!ctx || hasRole(...MONEY_ROLES)) return ctx; const strip = (rows: Row[]) => rows.map((e) => { const x = { ...e }; delete x.balance_due; delete x.deposit_balance; delete x.payment_status; return x; }); const c: any = { ...ctx, summary: { ...ctx.summary, finance: undefined }, arrivals: strip(ctx.arrivals), departures: strip(ctx.departures), overstays: strip(ctx.overstays) }; delete c.in_house_with_balance; delete c.checked_out_with_deposit; return c; },
   fn_ai_ops_find_reservation: ({ p_branch, p_query }) => findRes(p_branch, p_query),
   fn_ai_ops_propose: ({ p_conversation, p_action, p_args, p_summary }) => { const c = byId("ai_ops_conversations", p_conversation); if (!c) throw new Error("NOT_FOUND: conversation"); const id = uid(); const args = { ...(p_args ?? {}) }; if (["amend_stay", "switch_room", "complete_task"].includes(p_action) && args.expected_version == null) { const tgt = p_action === "complete_task" ? byId("housekeeping_tasks", args.task_id) : byId("reservations", args.reservation_id); if (tgt && tgt.branch_id === c.branch_id) args.expected_version = tgt.version; } T("ai_action_proposals").push({ id, organization_id: ORG, branch_id: c.branch_id, conversation_id: c.id, staff_id: staffId(), action: p_action, args, summary: p_summary, status: "proposed", result: null, error: null, created_at: nowISO(), expires_at: new Date(Date.now() + 30 * 60000).toISOString(), decided_at: null, decided_by: null }); return { ok: true, proposal_id: id, requires_confirmation: true }; },
+  // the assistant's executions carry source = 'ops_assistant' on every audit row they write (decision 55: the usage report
+  // tells a person from the assistant); the proposal stays the staff member's own
   fn_ai_ops_execute_proposal: ({ p_id }) => { const p = byId("ai_action_proposals", p_id); if (!p || p.staff_id !== staffId()) throw new Error("FORBIDDEN: not your proposal"); if (p.status !== "proposed") throw new Error("PROPOSAL_STATUS_INVALID"); const a = p.args ?? {}; const key = "ai:" + p.id;
-    const snapshot = JSON.stringify(S);
+    if (Date.parse(p.expires_at) < Date.now()) { Object.assign(p, { status: "expired", decided_at: nowISO(), decided_by: staffId() }); return { ok: false, error: "PROPOSAL_EXPIRED" }; }
+    requireBranch(p.branch_id);
+    const snapshot = JSON.stringify(S); auditSource = "ops_assistant";
     try { let res: any; switch (p.action) {
       case "create_task": res = rpcs.fn_hk_create_task({ p: { ...a, description: (a.description ?? "") + " (اقتراح المساعد)" } }); break;
       case "complete_task": res = rpcs.fn_hk_complete_task({ p_task: a.task_id, p_note: a.note, p_expected_version: a.expected_version }); break;
@@ -952,7 +998,8 @@ const rpcsMore: Record<string, (a: any) => any> = {
       case "create_invoice": res = rpcs.fn_create_invoice({ p_reservation: a.reservation_id }); break;
       default: throw new Error("VALIDATION: action"); }
       Object.assign(p, { status: "executed", result: res, decided_at: nowISO(), decided_by: staffId() }); audit(p.branch_id, "ai_proposal.executed", "ai_action_proposal", p.id, { after: { action: p.action, summary: p.summary } }); return { ok: true, result: res };
-    } catch (e) { S = JSON.parse(snapshot); const p2 = byId("ai_action_proposals", p_id)!; Object.assign(p2, { status: "failed", error: (e as Error).message, decided_at: nowISO(), decided_by: staffId() }); emitAll(); return { ok: false, error: (e as Error).message }; } },
+    } catch (e) { S = JSON.parse(snapshot); const p2 = byId("ai_action_proposals", p_id)!; Object.assign(p2, { status: "failed", error: (e as Error).message, decided_at: nowISO(), decided_by: staffId() }); emitAll(); return { ok: false, error: (e as Error).message }; }
+    finally { auditSource = null; } },
   fn_ai_ops_reject_proposal: ({ p_id, p_reason }) => { const p = byId("ai_action_proposals", p_id); if (!p || p.staff_id !== staffId() || p.status !== "proposed") throw new Error("NOT_FOUND"); Object.assign(p, { status: "rejected", error: p_reason ?? null, decided_at: nowISO(), decided_by: staffId() }); return { ok: true }; },
 
   // ---- guest ----
@@ -1675,6 +1722,17 @@ const rpcsStay: Record<string, (a: any) => any> = {
 Object.assign(rpcs, rpcsMore);
 Object.assign(rpcs, rpcsStay);
 Object.assign(rpcs, rpcsInvoices);
+/** what the phase 6 module (phase6.ts) needs from the demo's core; registered last, so it supersedes the older emulations it replaces */
+const phase6Ctx = {
+  T, byId, me, myBranches, hasRole, requireRole, requireBranch, staffId, audit, emit,
+  staffName: (id: string | null | undefined) => staffName(id),
+  branchToday: (b?: string) => branchToday(b),
+  roomNo: (roomId: string | null) => roomNo(roomId),
+  guestName: (resId: string) => guestName(resId),
+  isMember: (sid: string, branch: string) => staffInBranch(sid, branch),
+  banMatches: (resId: string): Row[] => rpcs.fn_reservation_ban_matches({ p_reservation: resId }),
+};
+Object.assign(rpcs, phase6Rpcs(phase6Ctx));
 
 // ---- data purge (demo): same rules as fn_purge_run in 0022 ----
 const purgeRequests = new Map<string, { branch: string | null; from: string; to: string; cats: string[]; staff: string | null; expires: number; used: boolean }>();
@@ -1768,7 +1826,8 @@ function openCommitments(entity: string, id: string) {
   if (entity === "branch") { if (T("branches").filter((b) => !b.archived_at && b.is_active).length <= 1) throw new Error("LAST_ACTIVE_BRANCH"); return T("reservations").filter((r) => r.branch_id === id && ["confirmed", "checked_in", "pending_verification"].includes(r.status) && r.check_out > today).length; }
   return 0;
 }
-function staffInBranch(sid: string, branch: string) { const s = byId("staff_profiles", sid); return !!s && s.is_active && (s.role === "owner" || T("branch_memberships").some((m) => m.staff_id === sid && m.branch_id === branch)); }
+/** fn_is_member (0040): an active owner of the organisation, or an active member whose membership was not retired */
+function staffInBranch(sid: string, branch: string) { const s = byId("staff_profiles", sid); return !!s && s.is_active && ((s.role === "owner" && s.organization_id === byId("branches", branch)?.organization_id) || T("branch_memberships").some((m) => m.staff_id === sid && m.branch_id === branch && !m.removed_at)); }
 // ---------------------------------------------------------------------------
 // rates (0030): the price calendar, weekly and monthly prices, the nights of a stay, the supervisor's discount limits
 // ---------------------------------------------------------------------------
@@ -2004,8 +2063,11 @@ export function createDemoClient() {
     auth: {
       getSession: async () => ({ data: { session }, error: null }),
       onAuthStateChange: (cb: (e: string, s: Session) => void) => { authListeners.add(cb); return { data: { subscription: { unsubscribe: () => authListeners.delete(cb) } } }; },
-      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo" }); return { data: { session }, error: null }; },
-      signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo" }); return { data: { session }, error: null }; },
+      // a fresh sign-in is a new session (0040): it opens after any forced end of the person's sessions, so it is not refused by it
+      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      /** a token put back in hand (supabase.auth.setSession): the same session as before, refused if it was ended since */
+      setSession: async (s: Session) => { if (!s?.user?.id) return { data: { session: null }, error: { message: "invalid session" } }; setSession({ user: { id: s.user.id, email: s.user.email }, access_token: s.access_token ?? "demo", signed_in_at: s.signed_in_at }); return { data: { session }, error: null }; },
       signOut: async () => { setSession(null); return { error: null }; },
     },
     channel: (_name: string) => { const mine: Listener[] = []; const ch = { on: (_e: string, f: { table: string }, cb: () => void) => { const l = { table: f.table, cb }; mine.push(l); listeners.add(l); return ch; }, subscribe: () => ch, unsubscribe: () => { for (const l of mine) listeners.delete(l); }, _mine: mine }; return ch; },

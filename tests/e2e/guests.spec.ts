@@ -352,8 +352,9 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await page.getByTestId("source-agoda").getByRole("button", { name: "تفعيل" }).click();
     await expect(page.getByTestId("source-agoda")).toContainText("نشط");
     await go("/admin/audit-logs");
-    await expect(page.getByText("source.disabled").first()).toBeVisible();
-    await expect(page.getByText("source.enabled").first()).toBeVisible();
+    // the log reads in Arabic (decision 14, 10.3): the codes behind the names stay in the row's detail
+    await expect(page.getByTestId("audit-table").getByText("تعطيل مصدر حجز").first()).toBeVisible();
+    await expect(page.getByTestId("audit-table").getByText("تفعيل مصدر حجز").first()).toBeVisible();
     // the supervisor books from the list but has no screen to change it (the server refuses them too: T30, GU)
     await signOut(page);
     await loginAs("supervisor");

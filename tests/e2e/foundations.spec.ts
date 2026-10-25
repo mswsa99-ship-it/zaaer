@@ -136,7 +136,7 @@ test.describe("trace codes (decision 60)", () => {
     const mine = page.locator("table tbody tr", { hasText: "شاشات الاستقبال" }).first();
     await expect(mine).toBeVisible();
     await expect(mine).toContainText("عبدالله المالك");
-    const code = (await mine.locator("td").nth(4).innerText()).trim();
+    const code = (await mine.locator("td").nth(9).innerText()).trim();   // the trace code is the log's last column (0040)
     expect(code).toMatch(/^[A-Z0-9]{8}$/);
 
     await page.getByLabel("رمز التتبع").fill(code);

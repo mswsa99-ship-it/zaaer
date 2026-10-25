@@ -81,11 +81,13 @@ exception when others then perform t_record('AT05 a trusted in-database source (
 select set_config('app.source', '', false);
 
 -- ---------------------------------------------------------------- AT06: staff changes are security events, owner only
-do $$ declare n int; begin
-  update staff_profiles set is_active = false where id = '10000000-0000-0000-0000-000000000006';
-  update staff_profiles set is_active = true where id = '10000000-0000-0000-0000-000000000006';
-  select count(*) into n from audit_events where entity_id = '10000000-0000-0000-0000-000000000006' and action in ('staff.deactivated','staff.activated') and category = 'security';
-  perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', n = 2, n::text);
+-- since 0040 the profile table is written through fn_admin_set_staff_active only (a direct update changes nothing);
+-- the function keeps the trigger's two security events and adds the reason to them
+do $$ declare n int; r int; begin
+  perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000006', false, 'اختبار التتبع');
+  perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000006', true, 'اختبار التتبع');
+  select count(*), count(*) filter (where details->>'reason' = 'اختبار التتبع') into n, r from audit_events where entity_id = '10000000-0000-0000-0000-000000000006' and action in ('staff.deactivated','staff.activated') and category = 'security';
+  perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', n = 2 and r = 2, n || ' / with reason ' || r);
 exception when others then perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', false, sqlerrm); end $$;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare n int; m int; begin

@@ -321,21 +321,25 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       emit("reservations"); audit(r.branch_id, checked ? "reservation.platform_checked" : "reservation.platform_unchecked", "reservation", r.id, { after: { units: units.length, external_ref: r.external_ref } });
       return { ok: true, units: units.length };
     },
-    fn_reports_late_entries: ({ p_branch, p_from, p_to, p_min_days }) => {
-      requireRole("owner", "manager"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from) throw new Error("VALIDATION: period"); const min = Math.max(Number(p_min_days ?? 1), 0);
-      const all = T("reservations").filter((r) => r.branch_id === p_branch && r.platform_booked_on && byId("booking_sources", r.source_id)?.kind === "external").map((r) => { const entered = localDay(r.created_at); return { r, entered, lag: Math.round((Date.parse(entered) - Date.parse(r.platform_booked_on)) / 86400000) }; }).filter((x) => x.entered >= p_from && x.entered <= p_to);
+    // decision 36 (0040): by the staff member who entered the booking and by source (p_filters), the filters echoed back
+    fn_reports_late_entries: ({ p_branch, p_from, p_to, p_min_days, p_filters }) => {
+      requireRole("owner", "manager"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || Math.round((Date.parse(p_to) - Date.parse(p_from)) / 86400000) > 366) throw new Error("VALIDATION: period"); const min = Math.max(Number(p_min_days ?? 1), 0);
+      const f = p_filters ?? {}; const fStaff: string | null = f.staff_id || null, fSource: string | null = f.source_id || null; const filters: Row = {}; if (fStaff) filters.staff_id = fStaff; if (fSource) filters.source_id = fSource;
+      const all = T("reservations").filter((r) => r.branch_id === p_branch && r.platform_booked_on && byId("booking_sources", r.source_id)?.kind === "external" && (!fStaff || r.created_by === fStaff) && (!fSource || r.source_id === fSource)).map((r) => { const entered = localDay(r.created_at); return { r, entered, lag: Math.round((Date.parse(entered) - Date.parse(r.platform_booked_on)) / 86400000) }; }).filter((x) => x.entered >= p_from && x.entered <= p_to);
       const late = all.filter((x) => x.lag >= min);
       const by = new Map<string, { count: number; max: number }>(); for (const x of late) { const k = staffName(x.r.created_by) ?? "—"; const cur = by.get(k) ?? { count: 0, max: 0 }; cur.count++; cur.max = Math.max(cur.max, x.lag); by.set(k, cur); }
-      return { platform_bookings: all.length, late: late.length, after_arrival: late.filter((x) => x.entered > x.r.check_in).length,
+      return { filters, platform_bookings: all.length, late: late.length, after_arrival: late.filter((x) => x.entered > x.r.check_in).length,
         by_staff: [...by.entries()].map(([staff, v]) => ({ staff, count: v.count, max_lag: v.max })).sort((a, b) => b.count - a.count),
         rows: late.sort((a, b) => b.lag - a.lag).map((x) => ({ id: x.r.id, internal_ref: x.r.internal_ref, external_ref: x.r.external_ref, source_name: byId("booking_sources", x.r.source_id)?.name ?? null, booked_on: x.r.platform_booked_on, entered_on: x.entered, entered_at: x.r.created_at, lag_days: x.lag, check_in: x.r.check_in, after_arrival: x.entered > x.r.check_in, status: x.r.status, created_by: staffName(x.r.created_by) })) };
     },
-    fn_reports_identities: ({ p_branch, p_from, p_to, p_path }) => {
-      requireRole("owner"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from) throw new Error("VALIDATION: period"); const path = p_path || "office"; if (!["office", "guest", "all"].includes(path)) throw new Error("VALIDATION: path");
-      const rows = T("reservation_guests").map((g) => ({ g, r: byId("reservations", g.reservation_id)! })).filter(({ g, r }) => r && r.branch_id === p_branch && g.verification_status === "verified" && g.verified_at && localDay(g.verified_at) >= p_from && localDay(g.verified_at) <= p_to && (path === "all" || (g.entry_path ?? "guest") === path))
+    // decision 36 (0040): by the staff member who verified (p_filters.staff_id); the filters echoed back with the path
+    fn_reports_identities: ({ p_branch, p_from, p_to, p_path, p_filters }) => {
+      requireRole("owner"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || Math.round((Date.parse(p_to) - Date.parse(p_from)) / 86400000) > 366) throw new Error("VALIDATION: period"); const path = p_path || "office"; if (!["office", "guest", "all"].includes(path)) throw new Error("VALIDATION: path");
+      const fStaff: string | null = (p_filters ?? {}).staff_id || null; const filters: Row = { path }; if (fStaff) filters.staff_id = fStaff;
+      const rows = T("reservation_guests").map((g) => ({ g, r: byId("reservations", g.reservation_id)! })).filter(({ g, r }) => r && r.branch_id === p_branch && g.verification_status === "verified" && g.verified_at && localDay(g.verified_at) >= p_from && localDay(g.verified_at) <= p_to && (path === "all" || (g.entry_path ?? "guest") === path) && (!fStaff || g.verified_by === fStaff))
         .sort((a, b) => (a.g.verified_at < b.g.verified_at ? 1 : -1)).map(({ g, r }) => ({ guest_id: g.id, reservation_id: r.id, internal_ref: r.internal_ref, full_name: g.full_name, is_primary: g.is_primary, identity_type: g.identity_type, identity_last4: g.identity_number_last4, entry_path: g.entry_path ?? null, entered_by: staffName(g.entered_by), entered_at: g.entered_at ?? null, verified_by: staffName(g.verified_by), verified_at: g.verified_at }));
       const by = new Map<string, { office: number; guest: number }>(); for (const x of rows) { const k = x.verified_by ?? "—"; const cur = by.get(k) ?? { office: 0, guest: 0 }; if (x.entry_path === "office") cur.office++; else cur.guest++; by.set(k, cur); }
-      return { count: rows.length, by_staff: [...by.entries()].map(([staff, v]) => ({ staff, ...v })).sort((a, b) => b.office + b.guest - (a.office + a.guest)), rows };
+      return { filters, count: rows.length, by_staff: [...by.entries()].map(([staff, v]) => ({ staff, ...v })).sort((a, b) => b.office + b.guest - (a.office + a.guest)), rows };
     },
 
     // ---- the group's page (decision 69) ----
