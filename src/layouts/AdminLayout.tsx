@@ -4,9 +4,12 @@ import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
 import { adminNav, firstAdminPath } from "../lib/nav";
 import { LogOut, Hotel } from "lucide-react";
+import { ROLE_LABELS } from "../lib/types";
 import { OpsCopilot } from "../components/OpsCopilot";
 import { KeyboxAlertBanner } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
+import { useReviewSummary } from "../lib/reviewAlerts";
+import { ReviewNavCount } from "../components/ReviewBanner";
 
 export default function AdminLayout() {
   const { profile, signOut } = useAuth();
@@ -15,6 +18,7 @@ export default function AdminLayout() {
   const groups = adminNav(profile?.role).map((g) => ({ title: g.title, items: g.items.map((p) => ({ to: p.path, label: p.label, icon: p.icon })) }));
   const adminHome = firstAdminPath(profile?.role) ?? "/staff/dashboard";
   const codeAlerts = useKeyboxAlerts();   // «الرموز»: red until the codes of the units left by guests are changed
+  const review = useReviewSummary();       // the owner's «بحاجة لمراجعة وتدقيق»: its count on the link
 
   async function handleSignOut() {
     await signOut();
@@ -51,6 +55,7 @@ export default function AdminLayout() {
                   >
                     <item.icon className="h-4 w-4" />
                     {item.label}
+                    {item.to === "/admin/review" && <ReviewNavCount summary={review} />}
                   </NavLink>
                 ))}
               </div>
@@ -64,7 +69,7 @@ export default function AdminLayout() {
           <div className="mt-1 flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
             <div className="leading-tight">
               <p className="text-sm font-medium text-ink-700">{profile?.full_name}</p>
-              <p className="text-[11px] text-ink-400">مدير</p>
+              <p className="text-[11px] text-ink-400">{profile ? ROLE_LABELS[profile.role] : ""}</p>
             </div>
             <button onClick={handleSignOut} className="text-ink-400 hover:text-danger-500" title="تسجيل الخروج" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />

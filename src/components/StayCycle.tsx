@@ -263,8 +263,10 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
           <button disabled={busy === "checkout"} onClick={() => run("checkout", async () => {
             const r = await stayApi.checkOut(id, s.version);
             if (!r.ok) { refused(r.reasons ?? []); return null; }
-            if (r.status === "closed") return "سُجِّلت المغادرة وأُغلقت الإقامة: لا مستحق، ولا رصيد للضيف، والتأمين مُسوّى، وكل البنود مفوترة.";
-            return `سُجِّلت المغادرة.${(r.deposit_to_settle_halalas ?? 0) > 0 ? ` يبقى تأمين ${sar(r.deposit_to_settle_halalas)} يُرد بعد فحص المغادرة.` : ""}`;
+            // decision 27: the departure invoices what is not yet invoiced, in the same operation
+            const invoiced = r.invoice ? ` وصدرت فاتورة الإقامة ${r.invoice}` : "";
+            if (r.status === "closed") return `سُجِّلت المغادرة${invoiced} وأُغلقت الإقامة: لا مستحق، ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.`;
+            return `سُجِّلت المغادرة${invoiced}.${(r.deposit_to_settle_halalas ?? 0) > 0 ? ` يبقى تأمين ${sar(r.deposit_to_settle_halalas)} يُرد بعد فحص المغادرة.` : ""}`;
           })} className="btn-danger w-full">{busy === "checkout" ? <Spinner className="h-4 w-4" /> : <LogOut className="h-4 w-4" />} تسجيل المغادرة</button>
           <p className="mt-1.5 text-xs text-ink-400">لا مغادرة وعلى الحجز مبلغ مستحق، لأي دور. يُصفَّر بسند قبض، أو بالخصم من التأمين بسبب، أو بتسوية سعر من المالك أو المدير بسبب.</p>
         </Section>
@@ -293,7 +295,7 @@ function DepartedCard({ s, id, done, canInspect, money, isMgr }: Common & { canI
       <Head icon={LogOut} title={closed ? "مغلق" : "غادر"} badge={closed ? <Badge className="bg-ink-100 text-ink-600">مغلق</Badge> : <Badge className="bg-warning-500/10 text-warning-600">غادر ولم يُغلق</Badge>} />
       <p className="text-xs text-ink-500">غادر {when(s.checked_out_at)}{s.checked_out_by ? ` · سجّله ${s.checked_out_by}` : ""}</p>
       {closed
-        ? <div className="mt-3"><Ok>أُغلقت الإقامة{s.closure?.closed_at ? ` في ${formatDateTime(s.closure.closed_at)}` : ""}: لا مستحق ولا رصيد للضيف، والتأمين مُسوّى، وكل البنود مفوترة.</Ok></div>
+        ? <div className="mt-3"><Ok>أُغلقت الإقامة{s.closure?.closed_at ? ` في ${formatDateTime(s.closure.closed_at)}` : ""}: لا مستحق ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.</Ok></div>
         : <div className="mt-3"><Reasons tone="info" title="تُغلق الإقامة وحدها حين يكتمل ما يلي:" items={money && s.closure?.missing.length ? s.closure.missing : ["تسوية المال والتأمين وإصدار الفاتورة"]} /></div>}
       {s.inspection ? <InspectionView s={s} money={money} /> : canInspect && s.inspection_due && <InspectionForm id={id} done={done} />}
       {money && s.deposit_refund_blocker && <p className="mt-3 flex items-center gap-1.5 text-xs text-warning-600"><ShieldAlert className="h-3.5 w-3.5" /> رد التأمين: {s.deposit_refund_blocker}</p>}

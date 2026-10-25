@@ -65,6 +65,7 @@ import PosSettlement from "./pages/staff/PosSettlement";
 import AdminCashAccounts from "./pages/admin/AdminCashAccounts";
 import AdminPlatformPayouts from "./pages/admin/AdminPlatformPayouts";
 import AdminRates from "./pages/admin/AdminRates";
+import AdminReview from "./pages/admin/AdminReview";
 /** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
 const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
 
@@ -152,6 +153,7 @@ export default function App() {
           <Route path="/admin/knowledge" element={<AdminKnowledge />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
+          <Route path="/admin/review" element={<AdminReview />} />
           <Route path="/admin/integrations" element={<AdminIntegrations />} />
         </Route>
       </Route>

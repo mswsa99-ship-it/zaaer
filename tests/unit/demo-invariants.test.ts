@@ -716,7 +716,7 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
     expect((await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } })).duplicate).toBe(true);
   });
 
-  it("SD06 the deposit goes back after the departure and its inspection — the supervisor may return it; the invoice then closes the stay by itself, and cancelling it reopens «غادر»", async () => {
+  it("SD06 the deposit goes back after the departure and its inspection — the supervisor may return it; the departure invoiced the stay, so the refund closes it, and cancelling its invoice reopens «غادر»", async () => {
     const id = await inHouse(N1, 0, 1);
     const refund = () => rpc("fn_refund", { p: { reservation_id: id, kind: "deposit_refund", amount_halalas: 5000, method: "cash", reason: "إرجاع التأمين", idempotency_key: uid() } });
     await login("reception@demo.sa");
@@ -731,15 +731,18 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
     await rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "ok" } });
     await login("reception@demo.sa");
     await refund();
-    expect((await row(id)).status).toBe("checked_out");   // its lines are not invoiced yet
-    await rpc("fn_create_invoice", { p_reservation: id });
+    // the departure invoiced everything (decision 27), so the deposit back is the last thing: «مغلق» by itself
     const closed = await row(id);
     expect(closed.status).toBe("closed");
     expect(closed.closed_at).toBeTruthy();
     await login("owner@demo.sa");
-    const inv = ((await client.from("invoices").select("id").eq("reservation_id", id)).data as any[])[0];
-    await rpc("fn_cancel_invoice", { p_invoice: inv.id, p_reason: "خطأ في الاسم" });
+    const inv = ((await client.from("invoices").select("id, origin").eq("reservation_id", id)).data as any[]);
+    expect(inv.map((x) => x.origin)).toEqual(["checkout"]);
+    await rpc("fn_cancel_invoice", { p_invoice: inv[0].id, p_reason: "خطأ في الاسم" });
     expect((await row(id)).status).toBe("checked_out");
+    expect((await rpc<any>("fn_stay_followups", { p_branch: A })).departed_open.find((x: any) => x.id === id).missing).toEqual(["قيمة لم تُفوتر 100.00 ر.س"]);
+    await rpc("fn_create_invoice", { p_reservation: id });
+    expect((await row(id)).status).toBe("closed");
     const acts = ((await client.from("audit_events").select("action").eq("entity_id", id)).data as any[]).map((a) => a.action);
     expect(acts).toEqual(expect.arrayContaining(["reservation.checked_in", "reservation.checked_out", "reservation.inspected", "reservation.closed", "reservation.unclosed"]));
   });
@@ -895,5 +898,300 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
       await login(who);
       for (const [fn, args] of calls) expect(await fails(rpc(fn, args)), `${who} ${fn}`).toMatch(/^FORBIDDEN/);
     }
+  });
+});
+
+describe("G10/G13/G14/G15/G22 — invoices, voucher correction and the review list in the demo (0036–0037: decisions 11, 26, 27, 54)", () => {
+  const A = "00000000-0000-0000-0000-000000000010";   // the seeded Riyadh branch (its supervisor works there)
+  const riyadh = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  const day = (n: number) => { const d = new Date(riyadh() + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  let CAT: string; let U: string[]; let SVC: string;
+  const fails = async (p: Promise<unknown>) => { try { await p; return ""; } catch (e) { return (e as Error).message; } };
+  const get = async (table: string, id: string) => (await client.from(table).select("*").eq("id", id).maybeSingle()).data as any;
+  const fin = (id: string) => rpc<any>("fn_reservation_finance", { p_reservation: id });
+  const detail = (id: string) => rpc<any>("fn_reservation_detail", { p_reservation: id });
+  const uninvoiced = async (id: string) => (await detail(id)).invoicing.uninvoiced_halalas as number;
+  const share = (inv: any, kind: string) => (inv.snapshot.lines as any[]).filter((l) => l.kind === kind).reduce((a, l) => a + l.amount_halalas, 0);
+  const book = (room: string, from: number, to: number, name = "ضيف الفواتير") => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: CAT, source_id: SOURCE, check_in: day(from), check_out: day(to), guest_name: name, guest_phone: "0500000000", room_id: room, adults: 1, companions: 0 } });
+  const version = async (id: string) => (await get("reservations", id)).version as number;
+  const adjust = async (id: string, kind: string, amount: number, reason: string) => rpc("fn_staff_adjust_price", { p_reservation: id, p_kind: kind, p_amount_halalas: amount, p_description: kind === "discount" ? "خصم" : "تسوية", p_reason: reason, p_expected_version: await version(id) });
+  const issue = (id: string, from?: number, to?: number, extra: Record<string, unknown> = {}) => rpc<any>("fn_staff_issue_invoice", { p: { reservation_id: id, ...(from != null ? { from: day(from), to: day(to!) } : {}), ...extra } });
+  const invoicesOf = async (id: string) => ((await client.from("invoices").select("*").eq("reservation_id", id)).data as any[]).sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
+  /** in house today with the whole stay paid and the branch's deposit (the guest registered, Shomoos accepted) */
+  const inHouse = async (room: string, nights: number) => {
+    const r = await book(room, 0, nights, "ضيف المغادرة");
+    const { token } = await rpc<any>("fn_guest_lookup", { p_external_ref: r.internal_ref, p_phone_last4: "0000" });
+    const g = (await rpc<any>("fn_guest_session", { p_token: token })).guests[0];
+    await rpc("fn_guest_submit", { p_token: token, p_guest_id: g.id, p_payload: { full_name: "ضيف اختبار الفواتير", identity_type: "national_id", identity_number: "1012345678", nationality: "سعودي", birth_date: "1990-01-01", consent: "true" } });
+    await rpc("fn_staff_approve_identity", { p_guest_id: g.id, p_approve: true });
+    await rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "register", reference: "SHM-" + r.internal_ref.slice(-6), all_guests: true } });
+    await rpc("fn_staff_shomoos", { p: { reservation_id: r.id, action: "accept" } });
+    const x = await rpc<any>("fn_staff_check_in", { p: { reservation_id: r.id, rent: { amount_halalas: 10000 * nights, method: "cash", idempotency_key: uid() }, deposit: { amount_halalas: 5000, method: "cash", idempotency_key: uid() } } });
+    expect(x.ok).toBe(true);
+    return r.id as string;
+  };
+  const receipt = (id: string, amount: number, extra: Record<string, unknown> = {}) => rpc<any>("fn_create_voucher", { p: { reservation_id: id, kind: "receipt", amount_halalas: amount, method: "cash", idempotency_key: uid(), ...extra } });
+  const correct = (voucher: string, p: Record<string, unknown>) => rpc<any>("fn_staff_correct_voucher", { p: { voucher_id: voucher, idempotency_key: uid(), ...p } });
+
+  beforeEach(async () => {
+    CAT = (await rpc<any>("fn_admin_upsert_room_category", { p: { branch_id: A, name_ar: "نوع الفواتير", base_capacity: 2, max_capacity: 3, base_price_halalas: 10000 } })).id;
+    U = [];
+    for (const n of ["IV-1", "IV-2", "IV-3", "IV-4", "IV-5", "IV-6"]) U.push((await rpc<any>("fn_admin_upsert_room", { p: { branch_id: A, category_id: CAT, room_number: n } })).id);
+    SVC = (await rpc<any>("fn_admin_upsert_service", { p: { branch_id: A, name_ar: "غسيل ملابس", billing_unit: "once", price_halalas: 1500, taxable: true } })).id;
+  });
+
+  it("ID01 a partial invoice carries its period's nights at their saved price and the discount in the same proportion; periods add up to the stay, to the halala", async () => {
+    const r = await book(U[0], 20, 24);
+    await adjust(r.id, "discount", 4000, "عميل دائم");
+    const a = await issue(r.id, 20, 22), b = await issue(r.id, 22, 24);
+    const [ia, ib] = [await get("invoices", a.id), await get("invoices", b.id)];
+    expect(a).toMatchObject({ ok: true, scope: "period", total_halalas: 18000, period_from: day(20), period_to: day(22) });
+    expect([share(ia, "rent"), share(ia, "discount"), b.total_halalas]).toEqual([20000, -2000, 18000]);
+    expect(a.total_halalas + b.total_halalas).toBe((await fin(r.id)).total);
+    expect(await uninvoiced(r.id)).toBe(0);
+    expect(((await client.from("reservation_charges").select("invoice_id").eq("reservation_id", r.id)).data as any[]).every((c) => c.invoice_id === ib.id)).toBe(true);   // completed by the last
+    // a 10.00 discount over three nights: -3.33, -3.34, -3.33 — cumulative shares lose no halala
+    const t = await book(U[1], 30, 33);
+    await adjust(t.id, "discount", 1000, "تقريب");
+    const parts = [];
+    for (const n of [30, 31, 32]) parts.push(share(await get("invoices", (await issue(t.id, n, n + 1)).id), "discount"));
+    expect(parts).toEqual([-333, -334, -333]);
+    expect(await uninvoiced(t.id)).toBe(0);
+  });
+
+  it("ID02 two period invoices of a stay never overlap; nothing left is NOTHING_TO_INVOICE, never an empty invoice", async () => {
+    const r = await book(U[0], 20, 24);
+    await issue(r.id, 20, 22);
+    expect(await fails(issue(r.id, 21, 23))).toMatch(/^INVOICE_PERIOD_OVERLAP/);
+    expect(await fails(issue(r.id, 22, 22))).toBe("VALIDATION: period");
+    await issue(r.id, 22, 24);
+    expect(await fails(issue(r.id))).toBe("NOTHING_TO_INVOICE");
+    expect((await invoicesOf(r.id)).length).toBe(2);
+  });
+
+  it("ID03 the preview shows what «إنشاء» would issue and writes nothing; a one-off line goes with its day; no period is the rest of the stay", async () => {
+    const r = await book(U[2], 40, 43, "ضيف المعاينة");
+    await rpc("fn_staff_add_service", { p_reservation: r.id, p_service: SVC, p_quantity: 1 });
+    const before = (await client.from("invoices").select("id")).data!.length;
+    const pv = await rpc<any>("fn_invoice_preview", { p: { reservation_id: r.id, from: day(40), to: day(42) } });
+    expect(pv).toMatchObject({ ok: true, problems: [], scope: "period", total_halalas: 20000, reservation: { guest: "ضيف المعاينة", internal_ref: r.internal_ref } });
+    expect((await client.from("invoices").select("id")).data!.length).toBe(before);
+    // the service was added today, outside the period: it waits for the invoice of its day, or the rest of the stay
+    const i = await issue(r.id, 40, 42);
+    expect([i.total_halalas, share(await get("invoices", i.id), "addon"), await uninvoiced(r.id)]).toEqual([20000, 0, 11500]);
+    expect((await rpc<any>("fn_invoice_preview", { p: { reservation_id: r.id, from: day(41), to: day(43) } })).problems).toEqual(["فاتورة أخرى لهذا الحجز تغطي جزءًا من الفترة"]);
+    const rest = await issue(r.id);
+    expect(rest).toMatchObject({ scope: "remaining", total_halalas: 11500 });
+    expect(await uninvoiced(r.id)).toBe(0);
+    expect((await rpc<any>("fn_invoice_preview", { p: { reservation_id: r.id } })).problems).toEqual(["لا شيء لم يُفوتر في هذه الفترة"]);
+  });
+
+  it("ID04 a discount follows the period's share of the rent, not of the nights; a tax line records its line and goes with it", async () => {
+    const r = await book(U[3], 50, 52);
+    await client.from("reservation_nights").update({ price_halalas: 30000 }).eq("reservation_id", r.id).eq("night", day(51));   // test-only: a dearer second night
+    await adjust(r.id, "discount", 2000, "نسبة");
+    expect(share(await get("invoices", (await issue(r.id, 50, 51)).id), "discount")).toBe(-500);   // a quarter of the rent, a quarter of the discount
+    const t = await book(U[4], 60, 62);
+    await client.from("reservations").update({ tax_rate_bp: 1500, prices_include_tax: false }).eq("id", t.id);   // test-only: 15% on this stay
+    await adjust(t.id, "discount", 2000, "ضريبة");
+    const tax = ((await client.from("reservation_charges").select("*").eq("reservation_id", t.id)).data as any[]).find((c) => c.kind === "tax");
+    expect((await get("reservation_charges", tax.base_charge_id)).kind).toBe("discount");
+    const inv = await get("invoices", (await issue(t.id, 60, 61)).id);
+    expect([share(inv, "discount"), share(inv, "tax")]).toEqual([-1000, -150]);
+  });
+
+  it("ID05 the departure invoices everything not yet invoiced in the same operation; a damage after it is invoiced when the deposit is settled; paid, the stay closes by itself", async () => {
+    const id = await inHouse(U[5], 2);
+    await rpc("fn_staff_add_service", { p_reservation: id, p_service: SVC, p_quantity: 1 });
+    await receipt(id, 1500);
+    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    let inv = await invoicesOf(id);
+    expect(out).toMatchObject({ ok: true, status: "checked_out", invoice: inv[0].number });
+    expect(inv[0]).toMatchObject({ origin: "checkout", scope: "remaining", total_halalas: 21500 });
+    expect(await uninvoiced(id)).toBe(0);
+    expect(out.missing).toEqual(["تأمين لم يُسوَّ 50.00 ر.س"]);
+    // after the departure: a damage of 70.00 from a 50.00 deposit, 20.00 still owed; the deposit is gone, so it is invoiced at once
+    await rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "notes", notes: "كسر", suggested_deduction_halalas: 7000 } });
+    const d = await rpc<any>("fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 7000, reason: "كسر الطاولة", idempotency_key: uid() } });
+    inv = await invoicesOf(id);
+    expect(inv.map((x) => [x.origin, x.total_halalas])).toEqual([["checkout", 21500], ["deposit_settled", 7000]]);
+    expect(d.invoice).toBe(inv[1].number);
+    expect([await uninvoiced(id), (await fin(id)).balance_due]).toEqual([0, 2000]);
+    await receipt(id, 2000);
+    expect((await get("reservations", id)).status).toBe("closed");
+    // the reservation page: each line's invoiced share, each invoice's origin and version, and nothing left
+    const dt = await detail(id);
+    expect(dt.charges.filter((c: any) => c.total_halalas !== 0).every((c: any) => c.invoiced_halalas === c.total_halalas)).toBe(true);
+    expect(dt.invoices.map((x: any) => [x.origin, x.version, x.lines.length > 0])).toEqual([["checkout", 1, true], ["deposit_settled", 1, true]]);
+  });
+
+  it("ID06 an edit with its reason changes the bill-to and keeps the version before; it waits in the owner's review list; an edit that changes nothing writes nothing", async () => {
+    const r = await book(U[0], 20, 22);
+    const i = await issue(r.id, 20, 22);
+    await login("reception@demo.sa");
+    const e = await rpc<any>("fn_staff_edit_invoice", { p: { invoice_id: i.id, reason: "اسم الشركة على الفاتورة", bill_to: { name: "شركة الاختبار", note: "مرجع 77" } } });
+    const inv = await get("invoices", i.id);
+    expect(e).toMatchObject({ ok: true, unchanged: false, version: 2 });
+    expect(inv.bill_to).toEqual({ name: "شركة الاختبار", note: "مرجع 77" });
+    expect(inv.snapshot.bill_to.name).toBe("شركة الاختبار");
+    expect(inv.versions).toHaveLength(1);
+    expect(inv.versions[0]).toMatchObject({ version: 1, total_halalas: 20000, reason: "اسم الشركة على الفاتورة", bill_to: { name: "ضيف الفواتير" } });
+    expect((await rpc<any>("fn_staff_edit_invoice", { p: { invoice_id: i.id, reason: "لا شيء", bill_to: { name: "شركة الاختبار", note: "مرجع 77" } } })).unchanged).toBe(true);
+    expect(await fails(rpc("fn_staff_edit_invoice", { p: { invoice_id: i.id, reason: "بلا اسم", bill_to: { name: " " } } }))).toBe("VALIDATION: bill_to_name");
+    expect(await fails(rpc("fn_staff_edit_invoice", { p: { invoice_id: i.id } }))).toBe("VALIDATION: reason");
+    await login("owner@demo.sa");
+    const items = (await rpc<any>("fn_review_list", { p: { kind: "invoice_edited" } })).items.filter((x: any) => x.entity_id === i.id);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ summary: `تعديل الفاتورة ${i.number} (الإصدار 2)`, reason: "اسم الشركة على الفاتورة", internal_ref: r.internal_ref });
+    expect(((await client.from("audit_events").select("action").eq("entity_id", i.id)).data as any[]).map((x) => x.action)).toContain("invoice.edited");
+  });
+
+  it("ID07 a lower stay after its invoice: no credit note — only lines that lower it are INVOICE_NOT_POSITIVE, and the edit brings the invoice to the lines", async () => {
+    const r = await book(U[1], 70, 72);
+    const i = await issue(r.id, 70, 72);
+    await adjust(r.id, "adjustment", -2000, "تعويض عن عطل");
+    expect(await uninvoiced(r.id)).toBe(-2000);
+    expect(await fails(issue(r.id))).toBe("INVOICE_NOT_POSITIVE");
+    const e = await rpc<any>("fn_staff_edit_invoice", { p: { invoice_id: i.id, reason: "تضمين التسوية" } });
+    expect(e).toMatchObject({ ok: true, total_halalas: 18000 });
+    expect(share(await get("invoices", i.id), "adjustment")).toBe(-2000);
+    expect(await uninvoiced(r.id)).toBe(0);
+  });
+
+  it("ID08 cancelling an invoice is the owner's or a manager's: its shares are free again and it waits in the review list; a period is moved only onto nights no other invoice carries", async () => {
+    const r = await book(U[2], 20, 24);
+    await adjust(r.id, "discount", 4000, "عميل دائم");
+    const a = await issue(r.id, 20, 22), b = await issue(r.id, 22, 24);
+    await login("reception@demo.sa");
+    expect(await fails(rpc("fn_cancel_invoice", { p_invoice: a.id, p_reason: "خطأ" }))).toMatch(/^FORBIDDEN/);
+    expect(await fails(rpc("fn_staff_edit_invoice", { p: { invoice_id: b.id, reason: "فترة", from: day(21) } }))).toMatch(/^INVOICE_PERIOD_OVERLAP/);
+    const e = await rpc<any>("fn_staff_edit_invoice", { p: { invoice_id: b.id, reason: "ليلة واحدة", to: day(23) } });
+    expect(e).toMatchObject({ total_halalas: 9000, version: 2 });
+    expect(await uninvoiced(r.id)).toBe(9000);
+    await login("housekeeping@demo.sa");
+    expect(await fails(rpc("fn_staff_edit_invoice", { p: { invoice_id: a.id, reason: "x" } }))).toMatch(/^FORBIDDEN/);
+    await login("manager@demo.sa");
+    await rpc("fn_cancel_invoice", { p_invoice: a.id, p_reason: "أُصدرت بالخطأ" });
+    expect(await uninvoiced(r.id)).toBe(9000 + 18000);
+    expect(await fails(rpc("fn_staff_edit_invoice", { p: { invoice_id: a.id, reason: "x" } }))).toBe("INVOICE_STATUS_INVALID");
+    expect((await issue(r.id, 20, 22)).total_halalas).toBe(18000);
+    await login("owner@demo.sa");
+    expect((await rpc<any>("fn_review_list", { p: { kind: "invoice_cancelled" } })).items.map((x: any) => x.entity_id)).toEqual([a.id]);
+  });
+
+  it("ID09 «تصحيح سند»: the supervisor corrects their own voucher within 24 hours — the original cancelled with the reason, the replacement linked, the money follows; again, the same answer", async () => {
+    const r = await book(U[3], 90, 92);
+    await login("reception@demo.sa");
+    const v = await receipt(r.id, 15000);
+    const key = uid();
+    const c = await rpc<any>("fn_staff_correct_voucher", { p: { voucher_id: v.voucher_id, reason: "المبلغ المقبوض 120 لا 150", amount_halalas: 12000, idempotency_key: key } });
+    const [o, n] = [await get("financial_vouchers", v.voucher_id), await get("financial_vouchers", c.voucher_id)];
+    expect(c).toMatchObject({ ok: true, duplicate: false, original_number: v.number });
+    expect(o).toMatchObject({ status: "cancelled", cancel_reason: "تصحيح: المبلغ المقبوض 120 لا 150" });
+    expect(n).toMatchObject({ status: "approved", kind: "receipt", amount_halalas: 12000, original_voucher_id: o.id });
+    expect((await fin(r.id)).received).toBe(12000);
+    const again = await rpc<any>("fn_staff_correct_voucher", { p: { voucher_id: v.voucher_id, reason: "المبلغ المقبوض 120 لا 150", amount_halalas: 12000, idempotency_key: key } });
+    expect(again).toMatchObject({ duplicate: true, voucher_id: n.id });
+    expect((await client.from("financial_vouchers").select("id").eq("reservation_id", r.id)).data).toHaveLength(2);
+    const dv = (await detail(r.id)).vouchers;
+    expect(dv.find((x: any) => x.id === o.id)).toMatchObject({ replaced_by_number: n.number, created_by_name: expect.any(String) });
+    expect(dv.find((x: any) => x.id === n.id).original_number).toBe(o.number);
+    await login("owner@demo.sa");
+    expect((await rpc<any>("fn_review_list", { p: { kind: "voucher_corrected" } })).items[0]).toMatchObject({ entity_id: n.id, reason: "المبلغ المقبوض 120 لا 150", details: { original: o.number, replacement: n.number, issued_by_self: true } });
+  });
+
+  it("ID10 the supervisor corrects only the vouchers they issued, and only within 24 hours; then a manager; finance does not correct", async () => {
+    const r = await book(U[3], 90, 92);
+    const dep = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "deposit", amount_halalas: 5000, method: "cash", idempotency_key: uid() } });   // the owner's
+    await login("reception@demo.sa");
+    expect(await fails(correct(dep.voucher_id, { reason: "x", amount_halalas: 4000 }))).toBe("FORBIDDEN: a supervisor corrects only the vouchers they issued");
+    const v = await receipt(r.id, 12000);
+    await client.from("financial_vouchers").update({ created_at: new Date(Date.now() - 25 * 3_600_000).toISOString() }).eq("id", v.voucher_id);   // test-only
+    expect(await fails(correct(v.voucher_id, { reason: "x", amount_halalas: 11000 }))).toMatch(/^CORRECTION_WINDOW_PASSED/);
+    await login("manager@demo.sa");
+    const c = await correct(v.voucher_id, { reason: "تصحيح بعد يوم", amount_halalas: 11000 });
+    expect((await fin(r.id)).received).toBe(11000);
+    await login("finance@demo.sa");
+    expect(await fails(correct(c.voucher_id, { reason: "x", amount_halalas: 10000 }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("ID11 a correction needs its reason and a change, passes the checks of a new voucher (all or nothing), and never leaves more refunded than received", async () => {
+    const r = await book(U[4], 95, 97);
+    await login("manager@demo.sa");
+    const v = await receipt(r.id, 11000);
+    expect(await fails(correct(v.voucher_id, { amount_halalas: 10000 }))).toBe("VALIDATION: reason");
+    expect(await fails(correct(v.voucher_id, { reason: "لا تغيير" }))).toBe("VALIDATION: nothing_changed");
+    expect(await fails(correct(v.voucher_id, { reason: "شبكة", method: "pos" }))).toMatch(/^VALIDATION: reference/);
+    expect(await fails(correct(v.voucher_id, { reason: "مدى", method: "mada" }))).toBe("VALIDATION: method_retired");
+    expect((await get("financial_vouchers", v.voucher_id)).status).toBe("approved");
+    expect((await client.from("financial_vouchers").select("id").eq("reservation_id", r.id)).data).toHaveLength(1);
+    // to the terminal with its number: its own account (the bank account), not the cash box
+    const pos = await correct(v.voucher_id, { reason: "دُفع بالشبكة", method: "pos", reference: "TRX-5521" });
+    expect(await get("financial_vouchers", pos.voucher_id)).toMatchObject({ method: "pos", reference: "TRX-5521", amount_halalas: 11000 });
+    expect((await get("cash_accounts", (await get("financial_vouchers", pos.voucher_id)).account_id)).kind).toBe("bank_account");
+    // 110.00 received, 100.00 refunded: the receipt down to 50.00 would refund more than was received
+    const rf = await rpc<any>("fn_refund", { p: { reservation_id: r.id, kind: "refund", amount_halalas: 10000, method: "cash", reason: "إلغاء ليلة", idempotency_key: uid() } });
+    expect(await fails(correct(pos.voucher_id, { reason: "x", amount_halalas: 5000 }))).toBe("CANCEL_WOULD_GO_NEGATIVE");
+    expect((await get("financial_vouchers", pos.voucher_id)).status).toBe("approved");
+    const c = await correct(rf.voucher_id, { reason: "المبلغ المردود 90", amount_halalas: 9000 });
+    expect([(await get("financial_vouchers", c.voucher_id)).kind, (await fin(r.id)).refunded]).toEqual(["refund", 9000]);
+  });
+
+  it("ID12 cancelling a voucher waits in the review list too; a voucher in a platform payout is neither cancelled nor corrected", async () => {
+    const r = await book(U[5], 95, 96);
+    const v = await receipt(r.id, 3000);
+    await rpc("fn_cancel_voucher", { p_voucher: v.voucher_id, p_reason: "سند مكرر" });
+    expect((await rpc<any>("fn_review_list", { p: { kind: "voucher_cancelled" } })).items[0]).toMatchObject({ entity_id: v.voucher_id, reason: "سند مكرر", summary: `إلغاء السند ${v.number}` });
+    const w = await receipt(r.id, 3000, { method: "ota_deferred", reference: "OTA-9" });
+    await client.from("financial_vouchers").update({ payout_id: "payout-test" }).eq("id", w.voucher_id);   // test-only: in a confirmed payout
+    expect(await fails(rpc("fn_cancel_voucher", { p_voucher: w.voucher_id, p_reason: "x" }))).toBe("VOUCHER_IN_PAYOUT");
+    expect(await fails(correct(w.voucher_id, { reason: "x", amount_halalas: 2000 }))).toBe("VOUCHER_IN_PAYOUT");
+  });
+
+  it("ID13 the review list is the owner's alone: what waits, with who, when and why; marked, it moves to «تمت مراجعتها» with the note; the banner counts by kind", async () => {
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_review_list", { p: {} }))).toMatch(/^FORBIDDEN/);
+    expect(await rpc("fn_review_summary", {})).toBeNull();
+    const r = await book(U[0], 95, 96);
+    const v = await receipt(r.id, 3000);
+    await correct(v.voucher_id, { reason: "المبلغ 25", amount_halalas: 2500 });
+    await login("reception@demo.sa");
+    expect((await client.from("review_items").select("id")).data).toEqual([]);
+    await login("owner@demo.sa");
+    const l = await rpc<any>("fn_review_list", { p: {} });
+    expect(l.open_count).toBe(2);   // the seeded invoice edit, and this correction
+    expect(l.items.map((x: any) => x.kind).sort()).toEqual(["invoice_edited", "voucher_corrected"]);
+    expect(l.items.find((x: any) => x.kind === "invoice_edited")).toMatchObject({ created_by: "سلطان مدير الفرع", reason: "طلب الضيف إصدارها باسم جهة عمله", branch_name: expect.any(String) });
+    expect(await rpc("fn_review_summary", {})).toMatchObject({ open: 2, monitors: 0, by_kind: { invoice_edited: 1, voucher_corrected: 1 } });
+    const ids = l.items.filter((x: any) => x.kind === "voucher_corrected").map((x: any) => x.id);
+    expect(await rpc("fn_review_mark", { p: { ids, note: "راجعتها" } })).toEqual({ ok: true, marked: 1 });
+    expect((await rpc<any>("fn_review_list", { p: {} })).open_count).toBe(1);
+    expect((await rpc<any>("fn_review_list", { p: { status: "reviewed" } })).items[0]).toMatchObject({ review_note: "راجعتها", reviewed_by: expect.any(String) });
+    expect(await rpc("fn_review_mark", { p: { ids } })).toEqual({ ok: true, marked: 0 });
+    expect(await fails(rpc("fn_review_mark", { p: { ids: null } }))).toBe("VALIDATION: ids");
+  });
+
+  it("ID14 the monitors (decision 54): the seeded demo has nothing to report; a stored summary that differs from its ledger, or three refusals of one employee, are each raised once, without personal data", async () => {
+    const first = await rpc<any>("fn_monitors_if_due", { p_branch: A });
+    expect(first).toMatchObject({ ran: true, found: {} });
+    expect((await rpc<any>("fn_monitors_if_due", { p_branch: A })).ran).toBe(false);   // at most every 10 minutes
+    const stay = ((await client.from("reservations").select("id, internal_ref, total_halalas").eq("branch_id", A).eq("status", "checked_in")).data as any[])[0];
+    await client.from("reservations").update({ total_halalas: stay.total_halalas + 100 }).eq("id", stay.id);   // test-only: an inconsistency
+    await login("finance@demo.sa");
+    for (let i = 0; i < 3; i++) await rpc("fn_log_client_error", { p_trace: "TRACE00" + i, p_code: "FORBIDDEN", p_context: "fn_cancel_invoice" });
+    await login("owner@demo.sa");
+    const rewind = () => client.from("monitor_runs").update({ last_run_at: new Date(Date.now() - 11 * 60_000).toISOString() }).eq("branch_id", A);   // test-only
+    await rewind();
+    const run = await rpc<any>("fn_monitors_if_due", { p_branch: A });
+    expect(run).toMatchObject({ ran: true, found: { ledger_mismatch: 1, out_of_scope: 1 }, summary: { monitors: 2 } });
+    const items = (await rpc<any>("fn_review_list", { p: { kind: "monitor" } })).items;
+    expect(items.map((x: any) => x.kind).sort()).toEqual(["monitor:ledger_mismatch", "monitor:out_of_scope"]);
+    expect(items.find((x: any) => x.kind === "monitor:ledger_mismatch")).toMatchObject({ internal_ref: stay.internal_ref, summary: `الملخص المالي للحجز ${stay.internal_ref} يختلف عن الدفتر` });
+    expect(items.find((x: any) => x.kind === "monitor:out_of_scope").summary).toBe("نورة المالية: 3 محاولات مرفوضة خارج صلاحياته خلال يوم");
+    expect(JSON.stringify(items)).not.toMatch(/05\d{8}|1012345678/);
+    await rewind();
+    expect((await rpc<any>("fn_monitors_if_due", { p_branch: A })).found).toEqual({});   // not again while it is open
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_monitors_if_due", { p_branch: A }))).toMatch(/^FORBIDDEN/);
   });
 });

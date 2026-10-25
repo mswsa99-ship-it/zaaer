@@ -83,7 +83,7 @@ test.describe("the stay cycle (phase 3)", () => {
     await expect(dlg).toBeHidden();
   });
 
-  test("SU03 the departure only with nothing owed; then the inspection, the deposit back, the invoice — and «مغلق» by itself", async ({ page, loginAs, go }) => {
+  test("SU03 the departure only with nothing owed, invoiced in the same step; then the inspection and the deposit back — and «مغلق» by itself", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await openByRoom(page, go, "201", "checked_in");
     const inHouse = page.getByTestId("in-house");
@@ -97,6 +97,7 @@ test.describe("the stay cycle (phase 3)", () => {
     await expect(pay).toBeHidden();
     await expect.poll(() => financeCell(page, "المتبقي")).toBe(0);
     await inHouse.getByRole("button", { name: "تسجيل المغادرة" }).click();
+    await expect(page.getByTestId("stay-notice")).toContainText(/سُجِّلت المغادرة وصدرت فاتورة الإقامة INV-/);
     const departed = page.getByTestId("departed");
     await expect(departed).toContainText("غادر ولم يُغلق");
     await expect(departed).toContainText("سجّل فحص المغادرة أولًا");
@@ -109,12 +110,9 @@ test.describe("the stay cycle (phase 3)", () => {
     await back.getByRole("button", { name: "تنفيذ" }).click();
     await expect(back).toBeHidden();
     await expect.poll(() => financeCell(page, "رصيد التأمين")).toBe(0);
-    // the invoice: the last thing missing — the stay closes by itself
-    await page.getByRole("button", { name: "إصدار فاتورة" }).click();
-    const inv = page.getByRole("dialog");
-    await inv.getByRole("button", { name: "إصدار", exact: true }).click();
-    await expect(inv).toBeHidden();
+    // the departure invoiced the stay (decision 27): the deposit back was the last thing — the stay closes by itself
     await expect(page.getByTestId("departed")).toContainText("أُغلقت الإقامة");
+    await expect(page.getByTestId(/^invoice-INV-/)).toContainText("تلقائية عند المغادرة");
   });
 
   test("SU04 housekeeping inspects a departure from its cleaning task; the supervisor sees the notes and the suggested deduction", async ({ page, loginAs, go }) => {

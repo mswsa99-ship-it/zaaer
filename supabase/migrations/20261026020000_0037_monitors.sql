@@ -179,14 +179,20 @@ begin
 end $$;
 grant execute on function fn_monitors_if_due(uuid) to authenticated;
 
--- every 15 minutes on the server, where pg_cron is there (the hosted project); the test databases have none
+-- every 15 minutes on the server, where pg_cron is there (the hosted project); the test databases have none. If the
+-- schedule cannot be made, the rest of the migration still applies, the owner's dashboard still runs the checks (at
+-- most every 10 minutes), and the warning says so; the rollout checks cron.job afterwards.
 do $$ begin
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
-    create extension if not exists pg_cron with schema pg_catalog;
     begin
-      execute 'grant usage on schema cron to postgres';
-    exception when others then null;
+      create extension if not exists pg_cron with schema pg_catalog;
+      begin
+        execute 'grant usage on schema cron to postgres';
+      exception when others then null;
+      end;
+      execute $c$select cron.schedule('zaaer-monitors', '*/15 * * * *', 'select public.fn_run_monitors(null)')$c$;
+    exception when others then
+      raise warning 'monitors: no schedule (%); the owner''s dashboard runs the checks at most every 10 minutes', sqlerrm;
     end;
-    execute $c$select cron.schedule('zaaer-monitors', '*/15 * * * *', 'select public.fn_run_monitors(null)')$c$;
   end if;
 end $$;

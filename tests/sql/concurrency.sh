@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # X01 / X02 / X05 — true concurrency tests with TWO independent sessions (see ZAAER-TESTING-AND-CONTROL-RULES §10),
 # with the races of decisions 45 (extending, switching and several units, each against a new booking), 46 (check-out
-# against an extension read at the same version; one correction run twice at once) and 49 (deactivating a unit and
-# archiving a type, each against a booking, in both orders).
+# against an extension read at the same version; one correction run twice at once), 49 (deactivating a unit and
+# archiving a type, each against a booking, in both orders), and 11 and 27 (IR01–IR03: overlapping partial invoices,
+# one voucher corrected twice, the departure's invoice against a partial one).
 # Session A starts a transaction and holds it open for 3s before committing; session B fires 1s later and must
 # block on the row/exclusion lock, then observe A's committed result. Running the two calls sequentially would
 # NOT prove anything — this script is the evidence.
@@ -120,7 +121,8 @@ insert into rooms(id, branch_id, organization_id, category_id, room_number, is_a
  ('00000000-0000-0000-0000-000000000176','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R6', true, 'available'),
  ('00000000-0000-0000-0000-000000000177','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R7', true, 'available'),
  ('00000000-0000-0000-0000-000000000178','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R8', true, 'available'),
- ('00000000-0000-0000-0000-000000000179','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R9', true, 'available')
+ ('00000000-0000-0000-0000-000000000179','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R9', true, 'available'),
+ ('00000000-0000-0000-0000-000000000180','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-R10', true, 'available')
 on conflict (id) do nothing;
 -- guests matched and Shomoos accepted (those paths have their own tests; here only the arrival matters)
 create or replace function t_race_ready(p uuid) returns void language plpgsql security definer set search_path = public as $$
@@ -200,7 +202,8 @@ V4=$(qs "select version from reservations where id = '$R4'")
 race "fn_staff_check_out(jsonb_build_object('reservation_id','$R4'))->>'ok'" "fn_staff_amend_stay('$R4', '$D3', 'keep_rate', 'سباق', $V4)->>'ok'"
 ST=$(qs "select status || ' ' || check_out from reservations where id = '$R4'")
 echo "X05a A=$RA B=$RB state=$ST"
-[[ "$RA" == "R:true" && ( "$RB" == *"VERSION_CONFLICT"* || "$RB" == *"RESERVATION_STATUS_INVALID"* ) && "$ST" == "checked_out $D2" ]]; check "X05a check-out first → the extension gets a declared conflict; the stay stays departed (never back in house)" $? "A=$RA B=$RB $ST"
+# departed: the check-out invoiced the stay (0036), and with nothing owed or held it closed by itself
+[[ "$RA" == "R:true" && ( "$RB" == *"VERSION_CONFLICT"* || "$RB" == *"RESERVATION_STATUS_INVALID"* ) && "$ST" == "closed $D2" ]]; check "X05a check-out first → the extension gets a declared conflict; the stay stays departed (never back in house)" $? "A=$RA B=$RB $ST"
 R5=$(in_house 00000000-0000-0000-0000-000000000176)
 V5=$(qs "select version from reservations where id = '$R5'")
 race "fn_staff_amend_stay('$R5', '$D3', 'keep_rate', 'سباق', $V5)->>'ok'" "fn_staff_check_out(jsonb_build_object('reservation_id','$R5'))->>'ok'"
@@ -239,5 +242,29 @@ race "fn_staff_reopen_stay(jsonb_build_object('reservation_id','$R6','reason','�
 ST=$(qs "select status || ' ' || (select count(*) from review_items v where v.entity_id = r.id and v.kind = 'stay_reopened') from reservations r where id = '$R6'")
 echo "X05e A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"RESERVATION_STATUS_INVALID"* && "$ST" == "checked_in 1" ]]; check "X05e reopening a departure twice at once → reopened once, one review item; the second is refused" $? "A=$RA B=$RB $ST"
+
+# ---------- IR01–IR03 (decisions 11, 27): invoices and voucher corrections at the same time ----------
+# two partial invoices of one stay for overlapping nights: one invoice, the other refused with the overlap
+R7=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-06-01','check_out','2031-06-05','guest_name','سباق فاتورة','source_id','$SRC')))->>'id';")
+race "fn_staff_issue_invoice(jsonb_build_object('reservation_id','$R7','from','2031-06-01','to','2031-06-04'))->>'ok'" \
+     "fn_staff_issue_invoice(jsonb_build_object('reservation_id','$R7','from','2031-06-02','to','2031-06-05'))->>'ok'"
+ST=$(qs "select count(*) from invoices where reservation_id = '$R7' and status = 'issued'")
+echo "IR01 A=$RA B=$RB invoices=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"INVOICE_PERIOD_OVERLAP"* && "$ST" == "1" ]]; check "IR01 two partial invoices for overlapping nights at once → one invoice; the other is refused with the overlap" $? "A=$RA B=$RB $ST"
+# one voucher corrected twice at once (two keys): one replacement and one review item; the second finds it cancelled
+V8=$(q "select (fn_create_voucher(jsonb_build_object('reservation_id','$R7','kind','receipt','amount_halalas',10000,'method','cash','idempotency_key','race-v8')))->>'voucher_id';")
+race "fn_staff_correct_voucher(jsonb_build_object('voucher_id','$V8','reason','سباق','amount_halalas',9000,'idempotency_key','race-c1'))->>'ok'" \
+     "fn_staff_correct_voucher(jsonb_build_object('voucher_id','$V8','reason','سباق','amount_halalas',8000,'idempotency_key','race-c2'))->>'ok'"
+ST=$(qs "select count(*) filter (where status = 'approved') || ' ' || coalesce(sum(amount_halalas) filter (where status = 'approved'), 0) || ' '
+          || (select count(*) from review_items v where v.kind = 'voucher_corrected' and v.reservation_id = '$R7') from financial_vouchers where reservation_id = '$R7'")
+echo "IR02 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"VOUCHER_STATUS_INVALID"* && "$ST" == "1 9000 1" ]]; check "IR02 one voucher corrected twice at once → one replacement, one review item; the second finds it cancelled" $? "A=$RA B=$RB $ST"
+# the departure's automatic invoice against a partial invoice of the whole stay: either order, the stay is invoiced once
+R9=$(in_house 00000000-0000-0000-0000-000000000180)
+race "fn_staff_check_out(jsonb_build_object('reservation_id','$R9'))->>'ok'" \
+     "fn_staff_issue_invoice(jsonb_build_object('reservation_id','$R9','from','$TODAY','to','$D2'))->>'ok'"
+ST=$(qs "select count(*) || ' ' || (select status from reservations where id = '$R9') || ' ' || fn_uninvoiced_value('$R9') from invoices where reservation_id = '$R9' and status = 'issued'")
+echo "IR03 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"NOTHING_TO_INVOICE"* && "$ST" == "1 closed 0" ]]; check "IR03 check-out against a partial invoice of the whole stay → one invoice carries the stay; the other finds nothing left" $? "A=$RA B=$RB $ST"
 
 exit $fail

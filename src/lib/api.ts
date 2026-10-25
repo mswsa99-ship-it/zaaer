@@ -55,7 +55,12 @@ const ERROR_AR: Record<string, string> = {
   IDEMPOTENCY_CONFLICT: "مفتاح العملية مستخدم بمحتوى مختلف؛ أنشئ عملية جديدة.",
   CANCEL_WOULD_GO_NEGATIVE: "لا يمكن إلغاء السند لأن الرصيد سيصبح سالبًا.",
   VOUCHER_STATUS_INVALID: "حالة السند لا تسمح بهذا الإجراء.",
-  NOTHING_TO_INVOICE: "لا توجد بنود غير مفوترة.",
+  NOTHING_TO_INVOICE: "لا يوجد ما لم يُفوتر في هذه الفترة.",
+  // invoices and voucher correction (0036)
+  INVOICE_PERIOD_OVERLAP: "فاتورة أخرى لهذا الحجز تغطي جزءًا من هذه الفترة؛ اختر ليالي لم تُفوتر.",
+  INVOICE_NOT_POSITIVE: "ما بقي يخفّض قيمة الإقامة فقط؛ لا تُصدر به فاتورة — عدّل الفاتورة الصادرة لتشمله.",
+  VOUCHER_IN_PAYOUT: "السند داخل مطابقة منصة مؤكدة؛ تُلغى المطابقة أولًا ثم يُصحَّح السند أو يُلغى.",
+  INVOICE_UNCHANGED: "لم يتغير شيء في الفاتورة؛ عدّل الاسم أو الملاحظة أو الفترة، أو أغلق النافذة.",
   INVOICE_STATUS_INVALID: "حالة الفاتورة لا تسمح بهذا الإجراء.",
   SERVICE_NOT_AVAILABLE: "الخدمة غير متاحة أو مؤرشفة.",
   TASK_NOT_FOUND: "المهمة غير موجودة.",
@@ -80,6 +85,12 @@ const ERROR_AR: Record<string, string> = {
 };
 
 const VALIDATION_AR: Record<string, string> = {
+  // invoices, voucher correction and the review list (0036)
+  nothing_changed: "لم يتغير شيء في السند: عدّل المبلغ أو الطريقة أو رقم العملية أو الحساب أو الملاحظة.",
+  bill_to_name: "اسم العميل على الفاتورة مطلوب.",
+  original_voucher: "السند الأصلي ليس من هذا الحجز.",
+  service_period: "فترة البند غير صحيحة.",
+  ids: "اختر بندًا واحدًا على الأقل.",
   // the stay cycle (0033)
   shomoos_all_guests: "أكّد أن جميع النزلاء والمرافقين سُجّلوا في شموس.",
   shomoos_reference: "رقم تسجيل شموس بين 3 و60 حرفًا.",
@@ -161,6 +172,8 @@ const FORBIDDEN_AR: Array<[RegExp, string]> = [
   [/rate below the quoted price/, "سعر ليلة أقل من السعر المحسوب خصمٌ يعتمده المالك أو المدير؛ استخدم خانة الخصم ضمن حدك."],
   [/shortening a weekly or monthly stay/, "تقصير إقامة بالسعر الأسبوعي أو الشهري يقرر تسويته المالك أو المدير."],
   [/tax settings are the owner/, "إعدادات الضريبة للمالك وحده."],
+  [/supervisor corrects only the vouchers they issued/, "يصحح المشرف السندات التي أصدرها هو فقط؛ غيرها يصححه المالك أو المدير."],
+  [/after 24 hours a voucher is corrected by a manager/, "مضت 24 ساعة على السند؛ يصححه الآن المالك أو المدير."],
 ];
 function arabicMessage(msg: string): string {
   const v = msg.match(/VALIDATION:\s*([a-z_0-9]+)/i);
@@ -298,7 +311,7 @@ export interface StayStatus {
 /** One entry of the arrival screen: the rent receipt or the deposit receipt (each its own voucher). */
 export interface PaymentEntry { amount_halalas: number; method: string; account_id?: string; reference?: string; idempotency_key: string }
 export interface CheckInResult { ok: boolean; duplicate?: boolean; reasons?: string[]; has_keybox?: boolean; rent_voucher?: string | null; deposit_voucher?: string | null; released_count?: number | null; status?: string }
-export interface CheckOutResult { ok: boolean; duplicate?: boolean; status?: string; balance_due?: number; reasons?: string[]; deposit_to_settle_halalas?: number; credit_halalas?: number; missing?: string[] }
+export interface CheckOutResult { ok: boolean; duplicate?: boolean; status?: string; balance_due?: number; reasons?: string[]; deposit_to_settle_halalas?: number; credit_halalas?: number; missing?: string[]; invoice?: string | null }
 export interface StayFollowups {
   generated_at: string;
   overdue: Array<{ id: string; internal_ref: string; room_number: string | null; guest: string | null; overdue_amount: number; overdue_since: string | null; check_out: string; excused: boolean }>;
@@ -607,12 +620,54 @@ export interface ReservationDetail {
   room: { id: string; room_number: string; status: string; cleanliness: string } | null;
   guests: Array<{ id: string; is_primary: boolean; full_name: string; identity_type: string | null; identity_number_last4: string | null; nationality: string | null; phone: string | null; verification_status: string; data_submitted: boolean }>;
   allocations: Array<{ id: string; room_number: string; from_date: string; to_date: string; status: string; reason: string | null; created_at: string }>;
-  charges: Array<{ id: string; kind: string; description: string; quantity: number; unit_price_halalas: number; total_halalas: number; invoice_id: string | null; reason: string | null; created_at: string }> | null;
-  vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; method: string; account_id: string | null; payout_id: string | null; status: string; reference: string | null; note: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null }> | null;
-  invoices: Array<{ id: string; number: string; status: string; total_halalas: number; issued_at: string; period_from: string; period_to: string }> | null;
+  charges: Array<{ id: string; kind: string; description: string; quantity: number; unit_price_halalas: number; total_halalas: number; invoice_id: string | null; reason: string | null; created_at: string; invoiced_halalas?: number; service_from?: string; service_to?: string }> | null;
+  vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; method: string; account_id: string | null; payout_id: string | null; status: string; reference: string | null; note: string | null; reason: string | null; occurred_at: string; cancel_reason: string | null;
+    created_at?: string; created_by?: string | null; created_by_name?: string | null; original_voucher_id?: string | null; original_number?: string | null; replaced_by_number?: string | null }> | null;
+  invoices: Invoice[] | null;
+  /** the stay's value not yet carried by an issued invoice (negative: the invoices carry more than its lines) */
+  invoicing?: { uninvoiced_halalas: number } | null;
   finance: Finance | null;
   history: Array<{ action: string; at: string; actor: string | null; details: Record<string, unknown> | null }>;
 }
+/** One line of an invoice: its share of a line of the stay (a line can be split over period invoices — 0036). */
+export interface InvoiceLine { charge_id: string; kind: string; description: string; quantity: number; unit_price_halalas: number; total_halalas: number; amount_halalas: number; service_from: string; service_to: string; invoiced_halalas?: number }
+export interface InvoiceVersion { version: number; period_from: string; period_to: string; bill_to: { name?: string; note?: string }; subtotal_halalas: number; tax_halalas: number; total_halalas: number; lines: InvoiceLine[]; since: string; by: string | null; replaced_at: string; replaced_by: string | null; reason: string }
+export interface Invoice {
+  id: string; number: string; status: "issued" | "cancelled"; scope: "period" | "remaining"; origin: "manual" | "checkout" | "deposit_settled"; version: number;
+  subtotal_halalas: number; tax_halalas: number; total_halalas: number; issued_at: string; issued_by: string | null; updated_at: string | null; updated_by: string | null;
+  cancelled_at: string | null; cancel_reason: string | null; period_from: string; period_to: string; bill_to: { name?: string; note?: string }; lines: InvoiceLine[]; versions: InvoiceVersion[];
+}
+export interface InvoicePreview {
+  ok: boolean; problems: string[]; scope: "period" | "remaining"; from: string | null; to: string | null; lines: InvoiceLine[]; subtotal_halalas: number; tax_halalas: number; total_halalas: number;
+  reservation: { id: string; internal_ref: string; external_ref: string | null; guest: string | null; check_in: string; check_out: string; status: string }; uninvoiced_halalas: number;
+}
+export interface ReviewItem {
+  id: string; kind: string; entity_type: string; entity_id: string | null; reservation_id: string | null; internal_ref: string | null; branch_id: string | null; branch_name: string | null;
+  summary: string; reason: string | null; details: Record<string, unknown> | null; created_at: string; created_by: string | null; reviewed_at: string | null; reviewed_by: string | null; review_note: string | null;
+}
+export interface ReviewSummary { open: number; oldest_at: string | null; monitors: number; by_kind: Record<string, number> }
+
+/** Invoices (decisions 26, 27): partial by period with a preview, edited with a reason (versions kept), cancelled by management. */
+export const invoiceApi = {
+  preview: (p: { reservation_id?: string; invoice_id?: string; from?: string | null; to?: string | null }) => rpc<InvoicePreview>("fn_invoice_preview", { p }),
+  issue: (p: { reservation_id: string; from?: string | null; to?: string | null; bill_to?: { name?: string; note?: string } }) =>
+    rpc<{ ok: boolean; id: string; number: string; total_halalas: number; period_from: string; period_to: string; scope: string; line_count: number }>("fn_staff_issue_invoice", { p }),
+  edit: (p: { invoice_id: string; reason: string; bill_to?: { name?: string; note?: string }; from?: string; to?: string }) =>
+    rpc<{ ok: boolean; unchanged: boolean; id: string; number: string; version: number; total_halalas?: number }>("fn_staff_edit_invoice", { p }),
+  cancel: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_cancel_invoice", { p_invoice: id, p_reason: reason }),
+  /** «تصحيح سند» (decision 11): the original cancelled and its replacement issued in one step, with a reason */
+  correctVoucher: (p: { voucher_id: string; reason: string; idempotency_key: string; amount_halalas?: number; method?: string; reference?: string | null; account_id?: string | null; note?: string | null }) =>
+    rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; original_number: string; finance: Finance }>("fn_staff_correct_voucher", { p }),
+};
+
+/** «بحاجة لمراجعة وتدقيق» — the owner's review list (§16), and the monitors of decision 54. */
+export const reviewApi = {
+  list: (p: { status?: "open" | "reviewed" | "all"; kind?: string; branch_id?: string; before?: string; limit?: number }) => rpc<{ items: ReviewItem[]; open_count: number }>("fn_review_list", { p }),
+  mark: (ids: string[], note?: string) => rpc<{ ok: boolean; marked: number }>("fn_review_mark", { p: { ids, note: note ?? null } }),
+  summary: () => rpc<ReviewSummary | null>("fn_review_summary", {}),
+  monitorsIfDue: (branchId: string) => rpc<{ ran: boolean; last_run_at: string | null; found?: Record<string, number>; summary: ReviewSummary | null }>("fn_monitors_if_due", { p_branch: branchId }),
+};
+
 export interface UnitCard {
   room_id: string; room_number: string; category: string; block: string | null; floor: string | null; is_active: boolean; status: string; cleanliness: string;
   open_tasks: number; open_maintenance: number; keybox_ready: boolean;

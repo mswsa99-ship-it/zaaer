@@ -190,10 +190,10 @@ export function seed(): Store {
     res.push(r);
     guests.push({ id: uid(), reservation_id: id, guest_profile_id: null, is_primary: true, full_name: o.guest, identity_type: "national_id", identity_number_encrypted: null, identity_number_last4: String(1000 + Math.floor(Math.random() * 8999)), identity_issue_number: null, nationality: o.nat ?? "سعودي", birth_date: "1990-05-05", phone: o.phone, phone_verified: false, relationship: null, verification_status: o.identity ?? "verified", data_submitted: (o.identity ?? "verified") !== "not_started", created_at: r.created_at });
     if (roomId) allocs.push({ id: uid(), reservation_id: id, room_id: roomId, branch_id: BRANCH_A, from_date: ci, to_date: co, status: ["cancelled", "no_show", "rejected"].includes(o.status) ? "cancelled" : o.status === "checked_out" ? "closed" : "active", reason: "create", created_by: STAFF.supervisor.id, created_at: r.created_at, closed_at: null });
-    charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "rent", description: `إيجار ${nights} ليلة × ${(rate / 100).toFixed(2)} ر.س`, quantity: nights, unit_price_halalas: rate, total_halalas: rent, taxable: true, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
-    if (disc) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "discount", description: "خصم ضيف دائم", quantity: 1, unit_price_halalas: disc, total_halalas: -disc, taxable: true, service_definition_id: null, invoice_id: null, reason: "ضيف دائم", created_by: STAFF.manager.id, created_at: r.created_at });
-    if (o.addon) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "addon", description: o.addon.d, quantity: 1, unit_price_halalas: o.addon.a, total_halalas: o.addon.a, taxable: true, service_definition_id: svc.breakfast, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
-    if (tax) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "tax", description: "ضريبة القيمة المضافة", quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at });
+    charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "rent", description: `إيجار ${nights} ليلة × ${(rate / 100).toFixed(2)} ر.س`, quantity: nights, unit_price_halalas: rate, total_halalas: rent, taxable: true, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
+    if (disc) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "discount", description: "خصم ضيف دائم", quantity: 1, unit_price_halalas: disc, total_halalas: -disc, taxable: true, service_definition_id: null, invoice_id: null, reason: "ضيف دائم", created_by: STAFF.manager.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
+    if (o.addon) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "addon", description: o.addon.d, quantity: 1, unit_price_halalas: o.addon.a, total_halalas: o.addon.a, taxable: true, service_definition_id: svc.breakfast, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: ci, base_charge_id: null });
+    if (tax) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "tax", description: "ضريبة القيمة المضافة", quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
     // a platform collects when the guest books (never later than yesterday here); it pays the property later, monthly
     receipts.forEach((amt, i) => (o.otaPaid ? money(id, "receipt", amt, "ota_deferred", Math.min(o.createdDays ?? o.ci - 5, -1), o.ext ?? null) : money(id, "receipt", amt, i === 0 ? "pos" : "cash", o.ci - 1 + i, i === 0 ? "TRX-" + (7000 + rnum) : null)));
     if (dep) money(id, "deposit", dep, "cash", o.ci);
@@ -256,10 +256,27 @@ export function seed(): Store {
   const invoices: Row[] = []; let invNo = 34;
   const invoice = (resId: string, issuedAt: string) => {
     const r = res.find((x) => x.id === resId)!; const lines = charges.filter((c) => c.reservation_id === resId); const id = uid(); lines.forEach((c) => (c.invoice_id = id));
-    invoices.push({ id, organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, number: `INV-2026-${String(++invNo).padStart(6, "0")}`, period_from: r.check_in, period_to: r.check_out, status: "issued", snapshot: { lines: lines.map((c) => ({ ...c })) }, subtotal_halalas: lines.filter((c) => c.kind !== "tax").reduce((a, c) => a + c.total_halalas, 0), tax_halalas: lines.filter((c) => c.kind === "tax").reduce((a, c) => a + c.total_halalas, 0), total_halalas: lines.reduce((a, c) => a + c.total_halalas, 0), issued_by: STAFF.finance.id, issued_at: issuedAt, cancelled_by: null, cancelled_at: null, cancel_reason: null });
+    const name = guests.find((g) => g.reservation_id === resId && g.is_primary)?.full_name ?? null; const bill_to = name ? { name } : {};
+    const shares = lines.map((c) => ({ charge_id: c.id, kind: c.kind, description: c.description, quantity: c.quantity, unit_price_halalas: c.unit_price_halalas, total_halalas: c.total_halalas, amount_halalas: c.total_halalas, service_from: c.service_from, service_to: c.service_to }));
+    const sub = lines.filter((c) => c.kind !== "tax").reduce((a, c) => a + c.total_halalas, 0), tax = lines.filter((c) => c.kind === "tax").reduce((a, c) => a + c.total_halalas, 0);
+    const branch = s.branches.find((b) => b.id === BRANCH_A)!;
+    const inv: Row = { id, organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, number: `INV-2026-${String(++invNo).padStart(6, "0")}`, period_from: r.check_in, period_to: r.check_out, scope: "remaining", origin: "checkout", version: 1, versions: [], bill_to, status: "issued",
+      snapshot: { property: { name: branch.name_ar, tax_number: branch.tax_number ?? null, commercial_register: branch.commercial_register ?? null, address: branch.address ?? null }, guest: { name }, bill_to,
+        reservation: { internal_ref: r.internal_ref, external_ref: r.external_ref, check_in: r.check_in, check_out: r.check_out, room: rooms.find((x) => x.id === r.room_id)?.room_number ?? null },
+        period: { from: r.check_in, to: r.check_out, scope: "remaining", requested: false }, origin: "checkout", charge_ids: shares.map((x) => x.charge_id), lines: shares, tax_rate_bp: 0 },
+      subtotal_halalas: sub, tax_halalas: tax, total_halalas: sub + tax, issued_by: STAFF.supervisor.id, issued_at: issuedAt, updated_at: null, updated_by: null, cancelled_by: null, cancelled_at: null, cancel_reason: null };
+    invoices.push(inv); return inv;
   };
   for (const id of history) { const r = res.find((x) => x.id === id)!; invoice(id, at(r.actual_check_out, 40)); Object.assign(r, { status: "closed", closed_at: at(r.actual_check_out, 40) }); }
   invoice(rOut1, ts(0, 11));
+  // an invoice edited the day after (decision 26): the company the guest asked for on it; the version before is kept, and the
+  // edit waits in the owner's review list «بحاجة لمراجعة وتدقيق»
+  const edited = invoices[0]; const editedAt = at(edited.issued_at, 18 * 60);
+  const v1 = { version: 1, period_from: edited.period_from, period_to: edited.period_to, bill_to: edited.bill_to, subtotal_halalas: edited.subtotal_halalas, tax_halalas: edited.tax_halalas, total_halalas: edited.total_halalas,
+    lines: edited.snapshot.lines, since: edited.issued_at, by: STAFF.supervisor.name, replaced_at: editedAt, replaced_by: STAFF.manager.name, reason: "طلب الضيف إصدارها باسم جهة عمله" };
+  const company = { name: "شركة الأفق للتجارة", note: "مرجع الطلب PO-2231" };
+  Object.assign(edited, { version: 2, versions: [v1], bill_to: company, snapshot: { ...edited.snapshot, bill_to: company }, updated_at: editedAt, updated_by: STAFF.manager.id });
+  const editedRes = res.find((x) => x.id === edited.reservation_id)!;
   put("invoices", invoices);
   // the check-out inspections (decision 5): sound for the history and Hassan (their deposits went back after it); notes with a
   // suggested deduction for نواف (half his deposit is still held); none yet for ماجد, so his deposit waits for one
@@ -267,7 +284,10 @@ export function seed(): Store {
     return { id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, room_id: r.room_id, result, notes, suggested_deduction_halalas: suggested, status: "active", inspected_by: STAFF.housekeeping.id, inspected_at: at(r.actual_check_out, 25), superseded_at: null, superseded_by: null }; };
   put("checkout_inspections", [...history.map((id) => inspection(id, "ok", null, 0)), inspection(rHassan, "ok", null, 0), inspection(rNawaf, "notes", "بقعة على قماش الأريكة تحتاج تنظيفًا خاصًا", 2500)]);
   put("stay_payment_exceptions", []);
-  put("review_items", []);
+  put("review_items", [{ id: uid(), organization_id: ORG, branch_id: BRANCH_A, kind: "invoice_edited", entity_type: "invoice", entity_id: edited.id, reservation_id: editedRes.id,
+    summary: `تعديل الفاتورة ${edited.number} (الإصدار 2)`, reason: v1.reason, details: { number: edited.number, version: 2, before_total_halalas: v1.total_halalas, after_total_halalas: edited.total_halalas, before_period: [v1.period_from, v1.period_to], after_period: [edited.period_from, edited.period_to] },
+    created_by: STAFF.manager.id, created_at: editedAt, reviewed_at: null, reviewed_by: null, review_note: null }]);
+  put("monitor_runs", []);
   put("guest_profiles", guests.map((g) => ({ id: uid(), organization_id: ORG, full_name: g.full_name, phone: g.phone, nationality: g.nationality, email: null, notes: null, created_at: g.created_at, updated_at: g.created_at })));
   put("payment_transactions", []);
 

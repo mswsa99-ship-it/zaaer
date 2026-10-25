@@ -66,6 +66,15 @@ update reservation_charges t set base_charge_id = b.id
  where t.kind = 'tax' and t.base_charge_id is null and b.reservation_id = t.reservation_id and b.kind <> 'tax'
    and b.created_at = t.created_at and b.service_from = t.service_from and b.service_to = t.service_to
    and t.description = 'ضريبة القيمة المضافة — ' || b.description;
+-- the stays carried over by 0007 («(ترحيل)»): their rent and its tax were written together over the same nights, under
+-- other names; a tax line is linked only when exactly one line of its stay matches it
+update reservation_charges t set base_charge_id = (select b.id from reservation_charges b
+                                                    where b.reservation_id = t.reservation_id and b.kind <> 'tax' and b.created_at = t.created_at
+                                                      and b.service_from = t.service_from and b.service_to = t.service_to)
+ where t.kind = 'tax' and t.base_charge_id is null
+   and (select count(*) from reservation_charges b
+         where b.reservation_id = t.reservation_id and b.kind <> 'tax' and b.created_at = t.created_at
+           and b.service_from = t.service_from and b.service_to = t.service_to) = 1;
 
 -- identical to 0028, and the tax line records its line
 create or replace function fn_add_charge(p_reservation uuid, p_kind text, p_description text, p_quantity numeric, p_unit_price bigint, p_taxable boolean, p_reason text,
@@ -93,23 +102,30 @@ end $$;
 revoke all on function fn_add_charge(uuid, text, text, numeric, bigint, boolean, text, uuid, date, date) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------- 2. the share of each line in a period
--- The part of a line that falls before a day (0..1). A line over nights: the nights before that day, out of its
--- nights; a discount or a stay-wide adjustment: the rent of the stay's active nights before that day, out of the rent of
--- its nights (by count when it has no rent).
-create or replace function fn_charge_fraction(p_reservation uuid, p_weighted boolean, p_from date, p_to date, p_at date) returns numeric
+-- n / d in whole halalas, half away from zero (decision 47), exactly: the integer quotient, never a rounded fraction
+create or replace function fn_round_div(p_n numeric, p_d numeric) returns bigint
+language sql immutable set search_path = public as $$
+  select (sign(p_n) * sign(p_d) * div(2 * abs(p_n) + abs(p_d), 2 * abs(p_d)))::bigint
+$$;
+revoke all on function fn_round_div(numeric, numeric) from public, anon, authenticated;
+
+-- The part of a line's total that falls before a day, in halalas. A line over nights: the nights before that day, out
+-- of its nights; a discount or a stay-wide adjustment: the rent of the stay's active nights before that day, out of the
+-- rent of its nights (by count when it has no rent). Multiplied before it is divided, so a half is a half.
+create or replace function fn_charge_part(p_reservation uuid, p_total bigint, p_weighted boolean, p_from date, p_to date, p_at date) returns bigint
 language plpgsql stable security definer set search_path = public as $$
 declare w_all numeric; w_before numeric;
 begin
   if p_at <= p_from then return 0; end if;
-  if p_at >= p_to then return 1; end if;
+  if p_at >= p_to then return p_total; end if;
   if p_weighted then
     select coalesce(sum(price_halalas), 0), coalesce(sum(price_halalas) filter (where night < p_at), 0) into w_all, w_before
       from reservation_nights where reservation_id = p_reservation and status = 'active' and night >= p_from and night < p_to;
-    if w_all > 0 then return w_before / w_all; end if;
+    if w_all > 0 then return fn_round_div(p_total * w_before, w_all); end if;
   end if;
-  return (p_at - p_from)::numeric / (p_to - p_from);
+  return fn_round_div(p_total::numeric * (p_at - p_from), p_to - p_from);
 end $$;
-revoke all on function fn_charge_fraction(uuid, boolean, date, date, date) from public, anon, authenticated;
+revoke all on function fn_charge_part(uuid, bigint, boolean, date, date, date) from public, anon, authenticated;
 
 -- What an invoice for [p_from, p_to] would carry of each line (nights from..to-1, one-off days from..to); with no
 -- period, all that no issued invoice carries yet. p_exclude: an invoice being edited (its own shares count as free).
@@ -129,7 +145,7 @@ begin
                   group by 1) x on x.cid = rc.id
       left join reservation_charges b on b.id = rc.base_charge_id
      where rc.reservation_id = p_reservation and rc.total_halalas <> 0
-     order by rc.created_at, rc.id
+     order by rc.created_at, rc.kind = 'tax', rc.id
   loop
     lft := c.total_halalas - c.invoiced;
     if lft = 0 then continue; end if;
@@ -142,8 +158,8 @@ begin
         s := case when sf >= p_from and sf <= p_to then lft else 0 end;
       else
         weighted := k in ('discount', 'adjustment');
-        s := round(c.total_halalas * fn_charge_fraction(p_reservation, weighted, sf, st, p_to))
-           - round(c.total_halalas * fn_charge_fraction(p_reservation, weighted, sf, st, p_from));
+        s := fn_charge_part(p_reservation, c.total_halalas, weighted, sf, st, p_to)
+           - fn_charge_part(p_reservation, c.total_halalas, weighted, sf, st, p_from);
         if c.total_halalas > 0 then s := greatest(0, least(s, lft)); else s := least(0, greatest(s, lft)); end if;
       end if;
     end if;
@@ -202,7 +218,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object('charge_id', s.charge_id, 'kind', s.kind, 'description', s.description, 'quantity', s.quantity,
                                                'unit_price_halalas', s.unit_price_halalas, 'total_halalas', s.total_halalas,
                                                'amount_halalas', s.share_halalas, 'service_from', s.service_from, 'service_to', s.service_to)
-                            order by s.created_at, s.charge_id), '[]'::jsonb),
+                            order by s.created_at, s.kind = 'tax', s.charge_id), '[]'::jsonb),
          coalesce(sum(s.share_halalas) filter (where s.kind <> 'tax'), 0), coalesce(sum(s.share_halalas) filter (where s.kind = 'tax'), 0),
          count(*), min(s.service_from), max(s.service_to)
     into lines, sub, tax, n, pf, pt
@@ -315,7 +331,7 @@ begin
     select coalesce(jsonb_agg(jsonb_build_object('charge_id', s.charge_id, 'kind', s.kind, 'description', s.description, 'quantity', s.quantity,
                                                  'unit_price_halalas', s.unit_price_halalas, 'total_halalas', s.total_halalas,
                                                  'invoiced_halalas', s.invoiced_halalas, 'amount_halalas', s.share_halalas,
-                                                 'service_from', s.service_from, 'service_to', s.service_to) order by s.created_at, s.charge_id), '[]'::jsonb),
+                                                 'service_from', s.service_from, 'service_to', s.service_to) order by s.created_at, s.kind = 'tax', s.charge_id), '[]'::jsonb),
            coalesce(sum(s.share_halalas) filter (where s.kind <> 'tax'), 0), coalesce(sum(s.share_halalas) filter (where s.kind = 'tax'), 0), count(*)
       into lines, sub, tax, n
       from fn_invoice_shares(r.id, case when scope = 'period' then pf end, case when scope = 'period' then pt end, inv.id) s;
@@ -367,7 +383,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object('charge_id', s.charge_id, 'kind', s.kind, 'description', s.description, 'quantity', s.quantity,
                                                'unit_price_halalas', s.unit_price_halalas, 'total_halalas', s.total_halalas,
                                                'amount_halalas', s.share_halalas, 'service_from', s.service_from, 'service_to', s.service_to)
-                            order by s.created_at, s.charge_id), '[]'::jsonb),
+                            order by s.created_at, s.kind = 'tax', s.charge_id), '[]'::jsonb),
          coalesce(sum(s.share_halalas) filter (where s.kind <> 'tax'), 0), coalesce(sum(s.share_halalas) filter (where s.kind = 'tax'), 0), count(*)
     into lines, sub, tax, n
     from fn_invoice_shares(r.id, case when inv.scope = 'period' then pf end, case when inv.scope = 'period' then pt end, inv.id) s;

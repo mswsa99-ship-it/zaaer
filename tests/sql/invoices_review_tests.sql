@@ -75,8 +75,11 @@ $$;
 create or replace function t_set_night_price(p uuid, p_night date, p_price bigint) returns void language sql security definer as $$
   update reservation_nights set price_halalas = p_price where reservation_id = p and night = p_night and status = 'active'
 $$;
-create or replace function t_fraction(p uuid, p_weighted boolean, p_from date, p_to date, p_at date) returns numeric language sql security definer as $$
-  select fn_charge_fraction(p, p_weighted, p_from, p_to, p_at)
+create or replace function t_part(p uuid, p_total bigint, p_weighted boolean, p_from date, p_to date, p_at date) returns bigint language sql security definer as $$
+  select fn_charge_part(p, p_total, p_weighted, p_from, p_to, p_at)
+$$;
+create or replace function t_round_div(p_n numeric, p_d numeric) returns bigint language sql security definer as $$
+  select fn_round_div(p_n, p_d)
 $$;
 create or replace function t_tax_rate(p uuid, p_bp int) returns void language sql security definer as $$
   update reservations set tax_rate_bp = p_bp, prices_include_tax = false where id = p
@@ -167,16 +170,24 @@ do $$ declare res uuid; d0 date := t_today() + 40; p jsonb; i jsonb; n0 bigint; 
     (i->>'scope') = 'remaining' and (i->>'total_halalas')::bigint = 11500 and t_uninv(res) = 0, i::text);
 exception when others then perform t_record('IV03 the preview shows what «إنشاء» would issue and writes nothing', false, sqlerrm); end $$;
 
-do $$ declare res uuid; d0 date := t_today() + 50; i jsonb; f numeric; begin
+do $$ declare res uuid; d0 date := t_today() + 50; i jsonb; f bigint; begin
   -- nights at 100.00 and 300.00: the first night is a quarter of the rent, so it carries a quarter of the discount
   res := t_stay(t_id('u4'), d0, d0 + 2, 'ضيف الأسعار المختلفة');
   perform t_set_night_price(res, d0 + 1, 30000);
-  f := t_fraction(res, true, d0, d0 + 2, d0 + 1);
+  f := t_part(res, -2000, true, d0, d0 + 2, d0 + 1);
   perform fn_staff_adjust_price(res, 'discount', 2000, 'خصم', 'نسبة', (t_res(res)).version);
   i := fn_staff_issue_invoice(jsonb_build_object('reservation_id', res, 'from', d0, 'to', d0 + 1));
   perform t_record('IV05 a discount follows the period''s share of the rent, not its share of the nights',
-    f = 0.25 and t_share((i->>'id')::uuid, 'discount') = -500, format('fraction %s, discount share %s', f, t_share((i->>'id')::uuid, 'discount')));
+    f = -500 and t_share((i->>'id')::uuid, 'discount') = -500, format('part %s, discount share %s', f, t_share((i->>'id')::uuid, 'discount')));
 exception when others then perform t_record('IV05 a discount follows the period''s share of the rent, not its share of the nights', false, sqlerrm); end $$;
+
+do $$ begin
+  -- a share is multiplied before it is divided: 3 halalas over six nights, five of them, is 2.5 and rounds to 3 (a
+  -- fraction rounded first, 0.83333…, would give 2.49999… and 2)
+  perform t_record('IV05c a half is a half: shares round half away from zero exactly (decision 47)',
+    t_round_div(15, 6) = 3 and t_round_div(-15, 6) = -3 and t_round_div(14, 6) = 2 and t_round_div(-16, 6) = -3 and t_round_div(0, 7) = 0
+    and t_round_div(3 * 5, 6) = 3 and t_round_div(-1000, 3) = -333 and t_round_div(-2000, 3) = -667, null);
+exception when others then perform t_record('IV05c a half is a half: shares round half away from zero exactly (decision 47)', false, sqlerrm); end $$;
 
 do $$ declare res uuid; d0 date := t_today() + 60; i jsonb; base uuid; begin
   -- with a 15% tax, the discount's tax line knows its line and follows its proportion
@@ -412,6 +423,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 43 then raise exception 'INVOICE AND REVIEW TESTS INCOMPLETE: % of 43 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 44 then raise exception 'INVOICE AND REVIEW TESTS INCOMPLETE: % of 44 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'INVOICE AND REVIEW TESTS FAILED'; end if;
 end $$;

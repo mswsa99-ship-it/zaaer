@@ -6,6 +6,8 @@ import { useBranchQuery } from "../../lib/useBranchQuery";
 import { opsApi, type ReportsFinance } from "../../lib/api";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { addDaysISO, formatCurrency, todayISO } from "../../lib/utils";
+import { ReviewBanner } from "../../components/ReviewBanner";
+import { useReviewSummary } from "../../lib/reviewAlerts";
 
 interface Stats {
   totalRooms: number;
@@ -94,6 +96,7 @@ export default function AdminDashboard() {
   // G24 (decision 40): the active branch's figures only — a slow answer for the previous branch is dropped
   const q = useBranchQuery<Stats | null>(loadStats, [], null);
   const stats = q.data;
+  const review = useReviewSummary(true);   // the owner: what waits for review, and the monitors when due (decision 54)
 
   const header = <SectionTitle title="لوحة الإدارة" subtitle="مؤشرات الأداء التشغيلي" action={<BranchPicker />} />;
   if (q.loading) return <LoadingScreen />;
@@ -126,6 +129,7 @@ export default function AdminDashboard() {
   return (
     <div>
       {header}
+      <ReviewBanner summary={review} />
       {q.error && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map((k) => (

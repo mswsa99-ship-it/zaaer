@@ -11,7 +11,7 @@ import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
 import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 
-const KEY = "zaaer_demo_store_v6";
+const KEY = "zaaer_demo_store_v7";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
 function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); return s; }
 const SESSION_KEY = "zaaer_demo_session";
@@ -329,12 +329,17 @@ function taxBy(rate: number, incl: boolean, amount: number, taxable: boolean) { 
 function applyTax(branchId: string, amount: number, taxable: boolean) { const b = byId("branches", branchId)!; return taxBy(b.tax_rate_bp ?? 0, !!b.prices_include_tax, amount, taxable); }
 /** 0028: a reservation keeps the tax policy it was made under; a later change of the branch's policy only reaches new ones. */
 function reservationTax(resId: string, amount: number, taxable: boolean) { const r = byId("reservations", resId)!; const b = byId("branches", r.branch_id)!; return taxBy(r.tax_rate_bp ?? b.tax_rate_bp ?? 0, r.prices_include_tax ?? !!b.prices_include_tax, amount, taxable); }
-function addCharge(resId: string, kind: string, description: string, qty: number, unit: number, taxable: boolean, reason: string | null, serviceId: string | null = null) {
+/** A line of the stay (fn_add_charge): the period it is for — the stay's nights for rent, discounts and stay-wide adjustments,
+ *  the day it was added for the rest — and its tax as its own line that records its line (0036). */
+function addCharge(resId: string, kind: string, description: string, qty: number, unit: number, taxable: boolean, reason: string | null, serviceId: string | null = null, serviceFrom: string | null = null, serviceTo: string | null = null) {
   const r = byId("reservations", resId)!; let gross = roundHalfUp(qty * unit); if (kind === "discount") gross = -Math.abs(gross);
   const { net, tax } = reservationTax(resId, gross, taxable);
-  const id = uid();
-  T("reservation_charges").push({ id, organization_id: ORG, branch_id: r.branch_id, reservation_id: resId, kind, description, quantity: qty, unit_price_halalas: unit, total_halalas: net, taxable, service_definition_id: serviceId, invoice_id: null, reason, created_by: staffId(), created_at: nowISO() });
-  if (tax) T("reservation_charges").push({ id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: resId, kind: "tax", description: "ضريبة القيمة المضافة — " + description, quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason, created_by: staffId(), created_at: nowISO() });
+  const stayWide = ["rent", "discount", "adjustment"].includes(kind); const today = branchToday(r.branch_id);
+  const service_from = serviceFrom ?? (stayWide ? r.check_in : today), service_to = serviceTo ?? (stayWide ? r.check_out : today);
+  if (service_to < service_from) throw new Error("VALIDATION: service_period");
+  const id = uid(); const at = nowISO();
+  T("reservation_charges").push({ id, organization_id: ORG, branch_id: r.branch_id, reservation_id: resId, kind, description, quantity: qty, unit_price_halalas: unit, total_halalas: net, taxable, service_definition_id: serviceId, invoice_id: null, reason, created_by: staffId(), created_at: at, service_from, service_to, base_charge_id: null });
+  if (tax) T("reservation_charges").push({ id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: resId, kind: "tax", description: "ضريبة القيمة المضافة — " + description, quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason, created_by: staffId(), created_at: at, service_from, service_to, base_charge_id: id });
   emit("reservation_charges"); return id;
 }
 let docSeq = 500;
@@ -579,7 +584,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
       refund = gone.reduce((s, x) => s + x.price_halalas, 0);
       for (const x of gone) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: p_reason });
       emit("reservation_nights");
-      addCharge(r.id, "adjustment", `تقصير الإقامة ${-delta} ليلة`, 1, -refund, true, p_reason);
+      addCharge(r.id, "adjustment", `تقصير الإقامة ${-delta} ليلة`, 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
     }
     const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
     r.check_out = p_new_check_out; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f }; },
@@ -600,7 +605,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (r.status === "checked_in" && overdueBlocked(r.id)) throw new Error("PAYMENT_OVERDUE: a night is unpaid past its deadline");
     const late: string | null = s.late_checkout_until ?? null; if (late && !["pending_verification", "confirmed", "checked_in"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
     const nights = Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000); const qty = s.billing_unit === "night" ? nights : s.billing_unit === "person" ? r.adults + r.companions : s.billing_unit === "quantity" ? p_quantity ?? 1 : 1; if (!(Number(qty) > 0)) throw new Error("VALIDATION: quantity");
-    const cid = addCharge(r.id, "addon", s.name_ar + (p_note ? " — " + p_note : ""), qty, s.is_free ? 0 : s.price_halalas, s.taxable, null, s.id);
+    const cid = addCharge(r.id, "addon", s.name_ar + (p_note ? " — " + p_note : ""), qty, s.is_free ? 0 : s.price_halalas, s.taxable, null, s.id, s.billing_unit === "night" ? r.check_in : null, s.billing_unit === "night" ? r.check_out : null);
     if (late) { byId("reservation_charges", cid)!.purpose = "late_checkout"; const curLate = r.late_checkout_until ? String(r.late_checkout_until).slice(0, 5) + ":00" : null; r.late_checkout_until = curLate && curLate > late ? curLate : late; }
     r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.service_added", "reservation", r.id, { after: { service_id: s.id, name: s.name_ar, quantity: qty, unit_price: s.is_free ? 0 : s.price_halalas, late_checkout_until: late ? late.slice(0, 5) : null } }); return { ok: true, finance: f, late_checkout_until: late ? late.slice(0, 5) : null }; },
   fn_staff_cancel_reservation: ({ p_reservation, p_reason, p_source }) => { requireRole("owner", "manager", "supervisor"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (["cancelled", "rejected", "no_show"].includes(r.status)) return { ok: true, duplicate: true, status: r.status }; if (["checked_in", "checked_out", "closed"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
@@ -614,8 +619,14 @@ const rpcsMore: Record<string, (a: any) => any> = {
     return { reservation, notes: r.notes, source: src ? { name: src.name, code: src.code, kind: src.kind } : null, category: byId("room_categories", r.room_category_id)?.name_ar ?? null, room: room ? { id: room.id, room_number: room.room_number, status: room.status, cleanliness: room.cleanliness } : null,
       guests: money ? T("reservation_guests").filter((g) => g.reservation_id === r.id).map((g) => ({ id: g.id, is_primary: g.is_primary, full_name: g.full_name, identity_type: g.identity_type, identity_number_last4: g.identity_number_last4, nationality: g.nationality, phone: hasRole("owner", "manager", "supervisor") ? g.phone : null, verification_status: g.verification_status, data_submitted: g.data_submitted })) : null,
       allocations: T("reservation_allocations").filter((a) => a.reservation_id === r.id).map((a) => ({ id: a.id, room_number: roomNo(a.room_id), from_date: a.from_date, to_date: a.to_date, status: a.status, reason: a.reason, created_at: a.created_at })).sort((a, b) => (a.from_date < b.from_date ? -1 : 1)),
-      charges: money ? T("reservation_charges").filter((c) => c.reservation_id === r.id) : null, vouchers: money ? T("financial_vouchers").filter((v) => v.reservation_id === r.id).map((v) => { const x = { ...v }; delete x.content_hash; return x; }) : null,
-      invoices: money ? T("invoices").filter((i) => i.reservation_id === r.id).map((i) => ({ id: i.id, number: i.number, status: i.status, total_halalas: i.total_halalas, issued_at: i.issued_at, period_from: i.period_from, period_to: i.period_to })) : null,
+      charges: money ? (() => { const done = invoicedShares(r.id); return T("reservation_charges").filter((c) => c.reservation_id === r.id).map((c) => ({ ...c, invoiced_halalas: done.get(c.id) ?? 0 })); })() : null,
+      vouchers: money ? T("financial_vouchers").filter((v) => v.reservation_id === r.id).sort((a, b) => (a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0)).map((v) => { const x: Row = { ...v }; delete x.content_hash;
+        x.created_by_name = staffName(v.created_by); x.original_number = byId("financial_vouchers", v.original_voucher_id)?.number ?? null;
+        x.replaced_by_number = T("financial_vouchers").filter((o) => o.original_voucher_id === v.id).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]?.number ?? null; return x; }) : null,
+      invoices: money ? T("invoices").filter((i) => i.reservation_id === r.id).sort((a, b) => (a.issued_at < b.issued_at ? -1 : a.issued_at > b.issued_at ? 1 : 0)).map((i) => ({ id: i.id, number: i.number, status: i.status, scope: i.scope, origin: i.origin, version: i.version ?? 1,
+        subtotal_halalas: i.subtotal_halalas, tax_halalas: i.tax_halalas, total_halalas: i.total_halalas, issued_at: i.issued_at, issued_by: staffName(i.issued_by), updated_at: i.updated_at ?? null, updated_by: staffName(i.updated_by),
+        cancelled_at: i.cancelled_at, cancel_reason: i.cancel_reason, period_from: i.period_from, period_to: i.period_to, bill_to: i.bill_to ?? {}, lines: i.snapshot?.lines ?? [], versions: i.versions ?? [] })) : null,
+      invoicing: money ? { uninvoiced_halalas: uninvoicedValue(r.id) } : null,
       finance: money ? financeOf(r.id) : null, history: hasRole("owner", "manager", "supervisor") ? T("audit_events").filter((e) => e.entity_id === r.id).slice(0, 50).map((e) => ({ action: e.action, at: e.created_at, actor: byId("staff_profiles", e.actor_id)?.full_name ?? null, details: e.details })) : null }; },
   fn_reservation_list: ({ p_branch, p_filters, p_limit, p_offset }) => { if (!myBranches().includes(p_branch)) return { total: 0, rows: [] }; const f = p_filters ?? {}; const q = (f.q ?? "").toLowerCase();
     let rows = T("reservations").filter((r) => r.branch_id === p_branch && (!f.status || String(f.status).split(",").includes(r.status)) && (f.open_only !== true && f.open_only !== "true" || ["pending_verification", "confirmed", "checked_in"].includes(r.status)) && (!f.check_in_from || r.check_in >= f.check_in_from) && (!f.check_in_to || r.check_in <= f.check_in_to) && (!f.source_id || r.source_id === f.source_id) && (f.has_balance !== true && f.has_balance !== "true" || r.balance_due_halalas > 0) && (!q || r.internal_ref.toLowerCase().includes(q) || (r.external_ref ?? "").toLowerCase().includes(q) || T("reservation_guests").some((g) => g.reservation_id === r.id && ((g.full_name ?? "").toLowerCase().includes(q) || (g.phone ?? "").includes(q)))));
@@ -636,6 +647,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_refund: ({ p }) => { if (!["refund", "deposit_refund", "deposit_apply"].includes(p.kind)) throw new Error("VALIDATION: kind"); if (p.kind === "refund") requireRole("owner", "manager", "finance"); else requireRole("owner", "manager", "supervisor", "finance"); const amount = parseHalalas(p.amount_halalas); p.amount_halalas = amount; nonEmpty(p.reason, "reason"); nonEmpty(p.idempotency_key, "idempotency_key");
     const method = p.kind === "deposit_apply" ? "cash" : p.method; if (!method) throw new Error("VALIDATION: method"); const r = byId("reservations", p.reservation_id); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
     const hash = [r.id, p.kind, amount, p.method ?? "", p.reference ?? "", p.account_id ?? ""].join("|"); const ex = T("financial_vouchers").find((v) => v.idempotency_key === p.idempotency_key); if (ex) { if (ex.content_hash !== hash) throw new Error("IDEMPOTENCY_CONFLICT"); if (ex.status === "cancelled") throw new Error("IDEMPOTENCY_CANCELLED"); return { ok: true, duplicate: true, voucher_id: ex.id, number: ex.number, finance: financeOf(r.id) }; }
+    if (p.original_voucher_id && byId("financial_vouchers", p.original_voucher_id)?.reservation_id !== r.id) throw new Error("VALIDATION: original_voucher");
     if (p.kind === "deposit_refund" && (r.actual_check_in || ["checked_in", "checked_out", "closed"].includes(r.status))) {
       if (!["checked_out", "closed"].includes(r.status)) throw new Error("VALIDATION: deposit_refund_before_checkout");
       if (!T("checkout_inspections").some((i) => i.reservation_id === r.id && i.status === "active")) throw new Error("INSPECTION_REQUIRED: record the check-out inspection first");
@@ -645,7 +657,9 @@ const rpcsMore: Record<string, (a: any) => any> = {
     p.method = method; p.reference = reference;
     const f0 = financeOf(r.id); const available = p.kind === "refund" ? f0.received - f0.refunded : f0.deposit_balance; if (p.amount_halalas > available) throw new Error(`REFUND_EXCEEDS_AVAILABLE: available ${available} halalas`); if (p.kind === "deposit_apply" && p.amount_halalas > f0.balance_due) throw new Error("REFUND_EXCEEDS_AVAILABLE: nothing due");
     const v = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber(p.kind === "refund" ? "RFD" : p.kind === "deposit_refund" ? "DRF" : "DAP"), kind: p.kind, amount_halalas: p.amount_halalas, method: p.method ?? "cash", account_id, payout_id: null, status: "approved", reference: p.reference ?? null, note: p.note ?? null, reason: p.reason, original_voucher_id: p.original_voucher_id ?? null, payment_transaction_id: null, idempotency_key: p.idempotency_key, content_hash: hash, occurred_at: nowISO(), created_by: staffId(), created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null };
-    T("financial_vouchers").push(v); emit("financial_vouchers"); const f = recompute(r.id)!; audit(r.branch_id, "voucher." + p.kind + "_created", "voucher", v.id, { after: { number: v.number, amount_halalas: v.amount_halalas, available_before: available }, reason: p.reason }); return { ok: true, duplicate: false, voucher_id: v.id, number: v.number, finance: f }; },
+    T("financial_vouchers").push(v); emit("financial_vouchers"); recompute(r.id); audit(r.branch_id, "voucher." + p.kind + "_created", "voucher", v.id, { after: { number: v.number, amount_halalas: v.amount_halalas, available_before: available }, reason: p.reason });
+    const invoice = ["deposit_refund", "deposit_apply"].includes(p.kind) && ["checked_out", "closed"].includes(r.status) && financeOf(r.id).deposit_balance === 0 ? autoInvoice(r.id, "deposit_settled") : null;
+    return { ok: true, duplicate: false, voucher_id: v.id, number: v.number, finance: financeOf(r.id), invoice }; },
   // ---- cash boxes and bank accounts (decision 25) ----
   fn_admin_upsert_cash_account: ({ p }) => { requireRole("owner", "manager"); const name = String(p.name ?? "").trim(); if (!name || name.length > 60) throw new Error("VALIDATION: name");
     const last4 = String(p.account_last4 ?? "").trim() || null; if (last4 && !/^[0-9]{4}$/.test(last4)) throw new Error("VALIDATION: account_last4"); const bank = String(p.bank_name ?? "").trim() || null;
@@ -693,10 +707,14 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_platform_payout_cancel: ({ p_payout, p_reason }) => { requireRole("owner", "manager"); nonEmpty(p_reason, "reason"); const pay = byId("platform_payouts", p_payout); if (!pay) throw new Error("NOT_FOUND"); requireBranch(pay.branch_id); if (pay.status !== "confirmed") throw new Error("VALIDATION: payout_status");
     const before = { ...pay }; for (const v of T("financial_vouchers")) if (v.payout_id === pay.id) v.payout_id = null; Object.assign(pay, { status: "cancelled", cancelled_by: staffId(), cancelled_at: nowISO(), cancel_reason: p_reason });
     emit("platform_payouts"); emit("financial_vouchers"); audit(pay.branch_id, "platform.payout_cancelled", "platform_payout", pay.id, { before, after: { ...pay }, reason: p_reason }); return { ok: true }; },
-  fn_cancel_voucher: ({ p_voucher, p_reason }) => { requireRole("owner", "manager"); nonEmpty(p_reason, "reason"); const v = byId("financial_vouchers", p_voucher); if (!v) throw new Error("NOT_FOUND"); requireBranch(v.branch_id); if (v.status !== "approved") throw new Error("VOUCHER_STATUS_INVALID"); v.status = "cancelled"; const f = financeOf(v.reservation_id); if (f.deposit_balance < 0 || f.received - f.refunded < 0) { v.status = "approved"; throw new Error("CANCEL_WOULD_GO_NEGATIVE"); } Object.assign(v, { cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: p_reason }); emit("financial_vouchers"); recompute(v.reservation_id); audit(v.branch_id, "voucher.cancelled", "voucher", v.id, { before: { status: "approved" }, after: { status: "cancelled", number: v.number }, reason: p_reason }); return { ok: true, finance: f, provider_refund_note: "إلغاء السند محلي؛ لا يعني أن مزود الدفع ردّ المبلغ." }; },
+  fn_cancel_voucher: ({ p_voucher, p_reason }) => { requireRole("owner", "manager"); nonEmpty(p_reason, "reason"); const v = byId("financial_vouchers", p_voucher); if (!v) throw new Error("NOT_FOUND"); requireBranch(v.branch_id); if (v.status !== "approved") throw new Error("VOUCHER_STATUS_INVALID");
+    if (v.payout_id) throw new Error("VOUCHER_IN_PAYOUT");   // a voucher in a platform payout: the payout is cancelled first (0036)
+    v.status = "cancelled"; const f = financeOf(v.reservation_id); if (f.deposit_balance < 0 || f.received - f.refunded < 0) { v.status = "approved"; throw new Error("CANCEL_WOULD_GO_NEGATIVE"); }
+    Object.assign(v, { cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: p_reason }); emit("financial_vouchers"); recompute(v.reservation_id);
+    addReview(v.branch_id, "voucher_cancelled", "voucher", v.id, v.reservation_id, `إلغاء السند ${v.number}`, p_reason, { number: v.number, kind: v.kind, amount_halalas: v.amount_halalas, method: v.method });
+    audit(v.branch_id, "voucher.cancelled", "voucher", v.id, { before: { status: "approved" }, after: { status: "cancelled", number: v.number, amount_halalas: v.amount_halalas }, reason: p_reason }); return { ok: true, finance: f, provider_refund_note: "إلغاء السند محلي؛ لا يعني أن مزود الدفع ردّ المبلغ." }; },
   fn_staff_confirm_payment: ({ p_reservation, p_method, p_amount_halalas, p_reference, p_idempotency_key }) => { requireRole("owner", "manager", "supervisor", "finance"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (p_amount_halalas <= 0) throw new Error("VALIDATION: amount"); nonEmpty(p_reference, "reference_required"); const res = rpcs.fn_create_voucher({ p: { reservation_id: r.id, kind: "receipt", amount_halalas: p_amount_halalas, method: p_method, reference: p_reference, idempotency_key: p_idempotency_key } }); audit(r.branch_id, "confirm_payment", "reservation", r.id, { method: p_method, amount_halalas: p_amount_halalas, reference: p_reference }); return { ok: true, duplicate: res.duplicate, payment_status: r.payment_status, paid_halalas: r.paid_halalas, voucher: res.number }; },
-  fn_create_invoice: ({ p_reservation, p_from, p_to }) => { requireRole("owner", "manager", "supervisor", "finance"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); const lines = T("reservation_charges").filter((c) => c.reservation_id === r.id && !c.invoice_id); if (!lines.length) throw new Error("NOTHING_TO_INVOICE"); const b = byId("branches", r.branch_id)!; const id = uid(); const sub = lines.filter((c) => c.kind !== "tax").reduce((a, c) => a + c.total_halalas, 0), tax = lines.filter((c) => c.kind === "tax").reduce((a, c) => a + c.total_halalas, 0);
-    const inv = { id, organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber("INV"), period_from: p_from ?? r.check_in, period_to: p_to ?? r.check_out, status: "issued", snapshot: { property: { name: b.name_ar, tax_number: b.tax_number }, guest: { name: guestName(r.id) }, lines: lines.map((c) => ({ ...c })) }, subtotal_halalas: sub, tax_halalas: tax, total_halalas: sub + tax, issued_by: staffId(), issued_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null }; T("invoices").push(inv); for (const c of lines) c.invoice_id = id; emit("invoices"); emit("reservation_charges"); audit(r.branch_id, "invoice.issued", "invoice", id, { after: { number: inv.number, total_halalas: inv.total_halalas } }); syncClosed(r.id); return { ok: true, id, number: inv.number, total_halalas: inv.total_halalas }; },
+  fn_create_invoice: ({ p_reservation, p_from, p_to }) => rpcs.fn_staff_issue_invoice({ p: { reservation_id: p_reservation, from: p_from ?? null, to: p_to ?? null } }),
   // decision 60: failed operations are recorded by their trace code only (the demo keeps them in memory)
   fn_log_client_error: ({ p_trace, p_code, p_context }) => { if (!staffId() || !/^[A-Z0-9]{6,16}$/.test(String(p_trace ?? ""))) return { ok: false }; T("client_errors").push({ id: uid(), trace_id: p_trace, error_code: /^[A-Z][A-Z0-9_]{1,48}(: [a-z_0-9]{1,48})?$/.test(String(p_code ?? "")) ? p_code : "UNKNOWN", context: p_context ?? null, staff_id: staffId(), created_at: nowISO() }); return { ok: true }; },
   fn_lookup_trace: ({ p_trace }) => {
@@ -707,7 +725,10 @@ const rpcsMore: Record<string, (a: any) => any> = {
       events: T("audit_events").filter((e) => e.correlation_id === p_trace && (e.category !== "security" || hasRole("owner"))).reverse()
         .map((e) => ({ action: e.action, entity_type: e.entity_type, entity_id: e.entity_id, actor_id: e.actor_id, actor_name: name(e.actor_id), source: e.source, result: e.result, created_at: e.created_at })) };
   },
-  fn_cancel_invoice: ({ p_invoice, p_reason }) => { requireRole("owner", "manager"); nonEmpty(p_reason, "reason"); const inv = byId("invoices", p_invoice); if (!inv) throw new Error("NOT_FOUND"); if (inv.status !== "issued") throw new Error("INVOICE_STATUS_INVALID"); Object.assign(inv, { status: "cancelled", cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: p_reason }); for (const c of T("reservation_charges")) if (c.invoice_id === inv.id) c.invoice_id = null; emit("invoices"); emit("reservation_charges"); syncClosed(inv.reservation_id); return { ok: true }; },
+  fn_cancel_invoice: ({ p_invoice, p_reason }) => { requireRole("owner", "manager"); nonEmpty(p_reason, "reason"); const inv = byId("invoices", p_invoice); if (!inv) throw new Error("NOT_FOUND"); requireBranch(inv.branch_id); if (inv.status !== "issued") throw new Error("INVOICE_STATUS_INVALID");
+    Object.assign(inv, { status: "cancelled", cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: p_reason }); emit("invoices"); syncInvoiceMarkers(inv.reservation_id);
+    addReview(inv.branch_id, "invoice_cancelled", "invoice", inv.id, inv.reservation_id, `إلغاء الفاتورة ${inv.number}`, p_reason, { number: inv.number, total_halalas: inv.total_halalas });
+    audit(inv.branch_id, "invoice.cancelled", "invoice", inv.id, { before: { status: "issued" }, after: { status: "cancelled" }, reason: p_reason }); syncClosed(inv.reservation_id); return { ok: true }; },
 
   // ---- housekeeping ----
   fn_hk_create_task: ({ p }) => { requireRole("owner", "manager", "supervisor", "housekeeping"); if (!!p.room_id === !!p.facility_id) throw new Error("VALIDATION: one_target"); const target = p.room_id ? byId("rooms", p.room_id) : byId("facilities", p.facility_id); if (!target || target.archived_at) throw new Error("NOT_FOUND: target"); requireBranch(target.branch_id); const tt = byId("task_types", p.task_type_id); if (!tt || tt.branch_id !== target.branch_id || tt.archived_at) throw new Error("BRANCH_MISMATCH: task_type"); if (p.reservation_id && byId("reservations", p.reservation_id)?.branch_id !== target.branch_id) throw new Error("BRANCH_MISMATCH: reservation"); if (p.assignee_id && !staffInBranch(p.assignee_id, target.branch_id)) throw new Error("ASSIGNEE_NOT_IN_BRANCH");
@@ -1011,7 +1032,7 @@ function closureMissing(resId: string): string[] {
   if (f.balance_due > 0) v.push(`مبلغ مستحق ${sarText(f.balance_due)}`);
   if (f.credit > 0) v.push(`رصيد للضيف لم يُرد ${sarText(f.credit)}`);
   if (f.deposit_balance !== 0) v.push(`تأمين لم يُسوَّ ${sarText(f.deposit_balance)}`);
-  const n = T("reservation_charges").filter((c) => c.reservation_id === resId && !c.invoice_id && c.total_halalas !== 0).length; if (n > 0) v.push(`${n} بند بلا فاتورة`);
+  const u = uninvoicedValue(resId); if (u > 0) v.push(`قيمة لم تُفوتر ${sarText(u)}`); else if (u < 0) v.push(`الفواتير تزيد على قيمة الإقامة ${sarText(-u)}؛ عدّل الفاتورة`);
   return v;
 }
 /** Closes a departed stay once nothing is missing, and takes it back to «غادر» when something breaks (the triggers of 0033). */
@@ -1023,12 +1044,329 @@ function syncClosed(resId: string): string | null {
   return r.status;
 }
 /** «بحاجة لمراجعة وتدقيق» (the owner's list; Phase 4 shows it) */
-function addReview(branch: string, kind: string, resId: string, summary: string, reason: string, details: Row) {
-  T("review_items").unshift({ id: uid(), organization_id: ORG, branch_id: branch, kind, entity_type: "reservation", entity_id: resId, reservation_id: resId, summary, reason, details, created_by: staffId(), created_at: nowISO(), reviewed_at: null, reviewed_by: null, review_note: null });
+function addReview(branch: string, kind: string, entityType: string, entityId: string, resId: string | null, summary: string, reason: string | null, details: Row) {
+  T("review_items").unshift({ id: uid(), organization_id: ORG, branch_id: branch, kind, entity_type: entityType, entity_id: entityId, reservation_id: resId, summary, reason, details, created_by: staffId(), created_at: nowISO(), reviewed_at: null, reviewed_by: null, review_note: null });
   emit("review_items");
 }
 /** Runs a write as one unit: anything thrown restores the store as it was (a transaction rolled back). */
 function atomically<V>(fn: () => V): V { const snap = JSON.stringify(S); try { return fn(); } catch (e) { S = JSON.parse(snap); emitAll(); throw e; } }
+
+// ---------------------------------------------------------------------------
+// invoices and the owner's review list (0036–0037): an invoice carries a SHARE of each line, so a line can be split over
+// period invoices; the automatic invoice at the departure and when the deposit is settled; edits with a reason keep the
+// version before; «تصحيح سند»; «بحاجة لمراجعة وتدقيق»; the seven monitors
+// ---------------------------------------------------------------------------
+type Share = { charge_id: string; kind: string; description: string; quantity: number; unit_price_halalas: number; total_halalas: number; invoiced_halalas: number; share_halalas: number; service_from: string; service_to: string; created_at: string };
+/** a × b ÷ d in whole halalas, half away from zero, exactly: multiplied before it is divided (fn_round_div, decision 47) */
+function mulDivRound(a: number, b: number, d: number): number {
+  const n = BigInt(a) * BigInt(b), den = BigInt(d);
+  const neg = n !== 0n && (n < 0n) !== (den < 0n); const x = n < 0n ? -n : n, y = den < 0n ? -den : den;
+  const q = (2n * x + y) / (2n * y); return Number(neg ? -q : q);
+}
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
+/** fn_charge_part: the part of a line's total that falls before a day. Over nights: the nights before it; a discount or a
+ *  stay-wide adjustment: the rent of the active nights before it, out of the rent of its nights (by count without rent). */
+function chargePart(resId: string, total: number, weighted: boolean, from: string, to: string, at: string): number {
+  if (at <= from) return 0; if (at >= to) return total;
+  if (weighted) {
+    const ns = T("reservation_nights").filter((x) => x.reservation_id === resId && x.status === "active" && x.night >= from && x.night < to);
+    const all = ns.reduce((a, x) => a + Number(x.price_halalas), 0);
+    if (all > 0) return mulDivRound(total, ns.filter((x) => x.night < at).reduce((a, x) => a + Number(x.price_halalas), 0), all);
+  }
+  return mulDivRound(total, daysBetween(from, at), daysBetween(from, to));
+}
+/** what the issued invoices (but one being edited) carry of each line */
+function invoicedShares(resId: string, exclude: string | null = null): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const i of T("invoices")) if (i.reservation_id === resId && i.status === "issued" && i.id !== exclude) for (const l of i.snapshot?.lines ?? []) m.set(l.charge_id, (m.get(l.charge_id) ?? 0) + Number(l.amount_halalas));
+  return m;
+}
+/** a stay's lines in the order they were added, each tax line after its own line */
+const lineOrder = (a: Row, b: Row) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : (a.kind === "tax" ? 1 : 0) - (b.kind === "tax" ? 1 : 0));
+/** fn_invoice_shares: what an invoice for [from, to] would carry of each line — the nights from..to-1 at their saved price, a
+ *  discount and a stay-wide adjustment in the same proportion as the period's rent, a tax line with its line, a one-off
+ *  line when its day is in from..to. Shares are cumulative, so periods add up to each line to the halala. No period: all
+ *  that no issued invoice carries yet. */
+function invoiceShares(resId: string, from: string | null, to: string | null, exclude: string | null = null): Share[] {
+  const done = invoicedShares(resId, exclude); const out: Share[] = [];
+  for (const c of T("reservation_charges").filter((x) => x.reservation_id === resId && Number(x.total_halalas) !== 0).sort(lineOrder)) {
+    const total = Number(c.total_halalas), invoiced = done.get(c.id) ?? 0, left = total - invoiced;
+    if (left === 0) continue;
+    let s = left;
+    if (from && to) {
+      const b = c.base_charge_id ? byId("reservation_charges", c.base_charge_id) : undefined;
+      const k = b?.kind ?? c.kind, sf: string = b?.service_from ?? c.service_from, st: string = b?.service_to ?? c.service_to;
+      if (sf === st) s = sf >= from && sf <= to ? left : 0;
+      else {
+        const w = k === "discount" || k === "adjustment";
+        s = chargePart(resId, total, w, sf, st, to) - chargePart(resId, total, w, sf, st, from);
+        s = total > 0 ? Math.max(0, Math.min(s, left)) : Math.min(0, Math.max(s, left));
+      }
+    }
+    if (s === 0) continue;
+    out.push({ charge_id: c.id, kind: c.kind, description: c.description, quantity: Number(c.quantity), unit_price_halalas: Number(c.unit_price_halalas), total_halalas: total, invoiced_halalas: invoiced, share_halalas: s, service_from: c.service_from, service_to: c.service_to, created_at: c.created_at });
+  }
+  return out;
+}
+const shareLine = (x: Share) => ({ charge_id: x.charge_id, kind: x.kind, description: x.description, quantity: x.quantity, unit_price_halalas: x.unit_price_halalas, total_halalas: x.total_halalas, amount_halalas: x.share_halalas, service_from: x.service_from, service_to: x.service_to });
+const sumShares = (sh: Share[], tax: boolean) => sh.filter((x) => (x.kind === "tax") === tax).reduce((a, x) => a + x.share_halalas, 0);
+/** the stay's value not yet carried by an issued invoice (negative: the invoices carry more than its lines) */
+function uninvoicedValue(resId: string): number {
+  return T("reservation_charges").filter((c) => c.reservation_id === resId).reduce((a, c) => a + Number(c.total_halalas), 0)
+    - T("invoices").filter((i) => i.reservation_id === resId && i.status === "issued").reduce((a, i) => a + Number(i.total_halalas), 0);
+}
+/** reservation_charges.invoice_id = the issued invoice that completed the line, or nothing (fn_sync_invoice_markers) */
+function syncInvoiceMarkers(resId: string) {
+  const sums = new Map<string, number>(), last = new Map<string, Row>(); const at = (i: Row) => String(i.updated_at ?? i.issued_at);
+  for (const i of T("invoices")) if (i.reservation_id === resId && i.status === "issued") for (const l of i.snapshot?.lines ?? []) {
+    sums.set(l.charge_id, (sums.get(l.charge_id) ?? 0) + Number(l.amount_halalas));
+    const cur = last.get(l.charge_id); if (!cur || at(i) > at(cur) || (at(i) === at(cur) && i.id > cur.id)) last.set(l.charge_id, i);
+  }
+  let changed = false;
+  for (const c of T("reservation_charges")) if (c.reservation_id === resId) {
+    const done = Number(c.total_halalas) !== 0 && (sums.get(c.id) ?? 0) === Number(c.total_halalas) ? last.get(c.id)?.id ?? null : null;
+    if ((c.invoice_id ?? null) !== done) { c.invoice_id = done; changed = true; }
+  }
+  if (changed) emit("reservation_charges");
+}
+const OVERLAP = "INVOICE_PERIOD_OVERLAP: another invoice of this stay covers part of the period";
+function periodOverlap(resId: string, from: string, to: string, exclude: string | null) {
+  return T("invoices").some((i) => i.reservation_id === resId && i.status === "issued" && i.scope === "period" && i.id !== exclude && i.period_from < to && from < i.period_to);
+}
+/** a day sent by the screen ("" or nothing: none) */
+function dayParam(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v + "T00:00:00Z"))) throw new Error("VALIDATION: period");
+  return v;
+}
+const trimOrNull = (v: unknown) => { const t = String(v ?? "").trim(); return t || null; };
+const stripNulls = (o: Row): Row => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null));
+const canon = (o: Row | null | undefined) => JSON.stringify(Object.keys(o ?? {}).sort().map((k) => [k, (o as Row)[k]]));
+/** fn_issue_invoice: the caller checked the role and the branch; a period that overlaps another is refused; null when the
+ *  period (or the stay) has nothing left to carry */
+function issueInvoice(r: Row, scope: "period" | "remaining", from: string | null, to: string | null, origin: "manual" | "checkout" | "deposit_settled", billTo: Row | null): Row | null {
+  if (scope === "period") { if (!from || !to || to <= from) throw new Error("VALIDATION: period"); if (periodOverlap(r.id, from, to, null)) throw new Error(OVERLAP); }
+  const sh = invoiceShares(r.id, scope === "period" ? from : null, scope === "period" ? to : null);
+  if (!sh.length) return null;
+  const lines = sh.map(shareLine), sub = sumShares(sh, false), tax = sumShares(sh, true);
+  // a period invoice keeps its period; the rest of a stay is dated by the lines it carries
+  const pf = scope === "period" ? from! : sh.reduce((m, x) => (x.service_from < m ? x.service_from : m), sh[0].service_from);
+  const pt = scope === "period" ? to! : sh.reduce((m, x) => (x.service_to > m ? x.service_to : m), sh[0].service_to);
+  const b = byId("branches", r.branch_id)!; const gname = guestName(r.id);
+  const bt = stripNulls({ name: trimOrNull(billTo?.name) ?? gname, note: trimOrNull(billTo?.note) });
+  const inv: Row = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber("INV"), period_from: pf, period_to: pt, scope, origin, version: 1, versions: [], bill_to: bt, status: "issued",
+    snapshot: { property: { name: b.name_ar, tax_number: b.tax_number ?? null, commercial_register: b.commercial_register ?? null, address: b.address ?? null }, guest: { name: gname }, bill_to: bt,
+      reservation: { internal_ref: r.internal_ref, external_ref: r.external_ref ?? null, check_in: r.check_in, check_out: r.check_out, room: roomNo(r.room_id) },
+      period: { from: pf, to: pt, scope, requested: scope === "period" }, origin, charge_ids: lines.map((l) => l.charge_id), lines, tax_rate_bp: r.tax_rate_bp ?? b.tax_rate_bp ?? 0 },
+    subtotal_halalas: sub, tax_halalas: tax, total_halalas: sub + tax, issued_by: staffId(), issued_at: nowISO(), updated_at: null, updated_by: null, cancelled_by: null, cancelled_at: null, cancel_reason: null };
+  T("invoices").push(inv); emit("invoices"); syncInvoiceMarkers(r.id);
+  audit(r.branch_id, "invoice.issued", "invoice", inv.id, { after: { number: inv.number, total_halalas: inv.total_halalas, reservation_id: r.id, scope, origin, period_from: pf, period_to: pt, line_count: lines.length } });
+  syncClosed(r.id);   // the trigger of 0036: an invoice re-checks «مغلق»
+  return inv;
+}
+/** fn_auto_invoice: everything not yet invoiced, only when something positive is left */
+function autoInvoice(resId: string, origin: "checkout" | "deposit_settled"): string | null {
+  if (invoiceShares(resId, null, null).reduce((a, x) => a + x.share_halalas, 0) <= 0) return null;
+  return issueInvoice(byId("reservations", resId)!, "remaining", null, null, origin, null)?.number ?? null;
+}
+/** one finding into the review list, unless the same one is open or was raised within the last day (0037) */
+function monitorFinding(branch: string | null, kind: string, entityType: string, entityId: string, resId: string | null, summary: string, details: Row): boolean {
+  const k = "monitor:" + kind, dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  if (T("review_items").some((ri) => ri.kind === k && ri.entity_id === entityId && (ri.reviewed_at == null || ri.created_at > dayAgo))) return false;
+  T("review_items").unshift({ id: uid(), organization_id: ORG, branch_id: branch, kind: k, entity_type: entityType, entity_id: entityId, reservation_id: resId, summary, reason: null, details, created_by: null, created_at: nowISO(), reviewed_at: null, reviewed_by: null, review_note: null });
+  emit("review_items"); return true;
+}
+/** fn_run_monitors for one branch, then the organisation's own checks: counts, references, unit numbers and staff names
+ *  only — never a phone number or an identity */
+function runMonitors(branch: string): Record<string, number> {
+  const found: Record<string, number> = {}; const hit = (k: string, raised: boolean) => { if (raised) found[k] = (found[k] ?? 0) + 1; };
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString(); const ref = (id: string) => byId("reservations", id)?.internal_ref ?? "—";
+  // 1 two active allocations of a unit that overlap, or two guests in house in one unit
+  for (const rm of T("rooms").filter((x) => x.branch_id === branch)) {
+    const act = T("reservation_allocations").filter((a) => a.room_id === rm.id && a.status === "active"); const refs = new Set<string>();
+    for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) if (overlaps(act[i].from_date, act[i].to_date, act[j].from_date, act[j].to_date)) { refs.add(ref(act[i].reservation_id)); refs.add(ref(act[j].reservation_id)); }
+    const inHouse = T("reservations").filter((r) => r.branch_id === branch && r.status === "checked_in" && r.room_id === rm.id);
+    if (inHouse.length > 1) for (const r of inHouse) refs.add(r.internal_ref);
+    if (refs.size) hit("allocation_conflict", monitorFinding(branch, "allocation_conflict", "room", rm.id, null, `تعارض تخصيص في الوحدة ${rm.room_number}`, { room: rm.room_number, reservations: [...refs] }));
+  }
+  // 2 and 3: the stays of the last 90 days and every open one, against their ledger
+  for (const r of T("reservations").filter((x) => x.branch_id === branch && (["pending_verification", "confirmed", "checked_in", "checked_out"].includes(x.status) || String(x.updated_at ?? x.created_at) > ago(90 * 86_400_000)))) {
+    const f = financeOf(r.id);
+    if (r.total_halalas !== f.total || r.paid_halalas !== f.net_collected || r.balance_due_halalas !== f.balance_due || r.deposit_balance_halalas !== f.deposit_balance)
+      hit("ledger_mismatch", monitorFinding(branch, "ledger_mismatch", "reservation", r.id, r.id, `الملخص المالي للحجز ${r.internal_ref} يختلف عن الدفتر`,
+        { stored: { total: r.total_halalas, paid: r.paid_halalas, balance_due: r.balance_due_halalas, deposit: r.deposit_balance_halalas }, ledger: { total: f.total, paid: f.net_collected, balance_due: f.balance_due, deposit: f.deposit_balance } }));
+    if (f.deposit_balance < 0 || (r.status === "closed" && f.deposit_balance !== 0))
+      hit("deposit_invalid", monitorFinding(branch, "deposit_invalid", "reservation", r.id, r.id, `رصيد التأمين في الحجز ${r.internal_ref} غير صالح (${sarText(f.deposit_balance)})`, { deposit_balance: f.deposit_balance, status: r.status }));
+  }
+  // 4 (the branch's part): WhatsApp replies waiting for more than an hour while the channel is on
+  const waiting = T("branch_whatsapp_channels").some((c) => c.branch_id === branch && c.enabled) ? T("whatsapp_outbox").filter((o) => o.branch_id === branch && ["pending", "sending"].includes(o.status) && o.created_at < ago(3_600_000)).length : 0;
+  if (waiting > 0) hit("provider_stuck", monitorFinding(branch, "provider_stuck", "branch", branch, null, `${waiting} رد واتساب لم يُرسل منذ أكثر من ساعة`, { whatsapp_waiting: waiting }));
+  // 6 two open departure cleanings for one stay
+  const open = new Map<string, Row[]>();
+  for (const t of T("housekeeping_tasks")) if (t.branch_id === branch && t.reservation_id && ["pending", "in_progress"].includes(t.status) && t.description === "تنظيف بعد المغادرة") open.set(t.reservation_id, [...(open.get(t.reservation_id) ?? []), t]);
+  for (const [resId, ts] of open) if (ts.length > 1) hit("duplicate_departure", monitorFinding(branch, "duplicate_departure", "reservation", resId, resId, `${ts.length} مهام تنظيف مغادرة مفتوحة للحجز ${ref(resId)}`, { room: roomNo(ts[0].room_id), open_tasks: ts.length }));
+  // 7 (the organisation's): a staff member refused three times or more in a day (4 and 5: the demo has no provider events or guest look-ups to check)
+  const refused = new Map<string, Row[]>();
+  for (const e of T("client_errors")) if (e.staff_id && String(e.error_code ?? "").startsWith("FORBIDDEN") && e.created_at > ago(86_400_000)) refused.set(e.staff_id, [...(refused.get(e.staff_id) ?? []), e]);
+  for (const [sid, es] of refused) if (es.length >= 3) hit("out_of_scope", monitorFinding(null, "out_of_scope", "staff", sid, null, `${staffName(sid) ?? "موظف"}: ${es.length} محاولات مرفوضة خارج صلاحياته خلال يوم`, { attempts: es.length, operations: [...new Set(es.map((e) => e.context).filter(Boolean))] }));
+  const run = { branch_id: branch, last_run_at: nowISO(), result: found }; const at = T("monitor_runs").findIndex((x) => x.branch_id === branch);
+  if (at >= 0) T("monitor_runs")[at] = run; else T("monitor_runs").push(run);
+  return found;
+}
+function reviewSummary(): Row | null {
+  const m = me(); if (!m || m.role !== "owner") return null; const mine = myBranches();
+  const open = T("review_items").filter((ri) => ri.organization_id === m.organization_id && ri.reviewed_at == null && (ri.branch_id == null || mine.includes(ri.branch_id)));
+  const by_kind: Record<string, number> = {}; for (const ri of open) by_kind[ri.kind] = (by_kind[ri.kind] ?? 0) + 1;
+  return { open: open.length, oldest_at: open.reduce<string | null>((x, ri) => (x == null || ri.created_at < x ? ri.created_at : x), null), monitors: open.filter((ri) => String(ri.kind).startsWith("monitor:")).length, by_kind };
+}
+
+const rpcsInvoices: Record<string, (a: any) => any> = {
+  // «إصدار فاتورة» (decision 27): with a period, a partial invoice; without, everything left. Refused when nothing positive is left
+  fn_staff_issue_invoice: ({ p }) => {
+    requireRole("owner", "manager", "supervisor", "finance");
+    const pf = dayParam(p?.from), pt = dayParam(p?.to); if ((pf == null) !== (pt == null)) throw new Error("VALIDATION: period");
+    const r = byId("reservations", p?.reservation_id); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
+    if (pf && pt) { if (pt <= pf) throw new Error("VALIDATION: period"); if (periodOverlap(r.id, pf, pt, null)) throw new Error(OVERLAP); }
+    const sh = invoiceShares(r.id, pf, pt);
+    // nothing, or only lines that lower the bill: those go into an issued invoice by editing it (no credit notes, decision 26)
+    if (sh.reduce((a, x) => a + x.share_halalas, 0) <= 0) throw new Error(sh.length ? "INVOICE_NOT_POSITIVE" : "NOTHING_TO_INVOICE");
+    return atomically(() => {
+      const inv = issueInvoice(r, pf ? "period" : "remaining", pf, pt, "manual", p.bill_to ?? null)!;
+      return { ok: true, id: inv.id, number: inv.number, total_halalas: inv.total_halalas, period_from: inv.period_from, period_to: inv.period_to, scope: inv.scope, line_count: inv.snapshot.lines.length, charge_count: inv.snapshot.lines.length };
+    });
+  },
+  // what an invoice would carry, before «إنشاء» (or an edit, with invoice_id): the lines, the totals, and what stops it
+  fn_invoice_preview: ({ p }) => {
+    requireRole("owner", "manager", "supervisor", "finance");
+    let pf = dayParam(p?.from), pt = dayParam(p?.to); let r: Row | undefined; let inv: Row | undefined; let scope: string;
+    if (p?.invoice_id) {
+      inv = byId("invoices", p.invoice_id); if (!inv) throw new Error("NOT_FOUND"); r = byId("reservations", inv.reservation_id)!; scope = inv.scope;
+      if (scope === "period") { pf = pf ?? inv.period_from; pt = pt ?? inv.period_to; } else { pf = null; pt = null; }
+    } else {
+      r = byId("reservations", p?.reservation_id); if (!r) throw new Error("RESERVATION_NOT_FOUND");
+      if ((pf == null) !== (pt == null)) throw new Error("VALIDATION: period"); scope = pf ? "period" : "remaining";
+    }
+    requireBranch(r.branch_id);
+    const problems: string[] = [];
+    if (scope === "period") {
+      if (pt! <= pf!) problems.push("نهاية الفترة يجب أن تكون بعد بدايتها");
+      else if (periodOverlap(r.id, pf!, pt!, inv?.id ?? null)) problems.push("فاتورة أخرى لهذا الحجز تغطي جزءًا من الفترة");
+    }
+    let lines: Row[] = [], sub = 0, tax = 0;
+    if (!problems.length) {
+      const sh = invoiceShares(r.id, scope === "period" ? pf : null, scope === "period" ? pt : null, inv?.id ?? null);
+      lines = sh.map((x) => ({ ...shareLine(x), invoiced_halalas: x.invoiced_halalas })); sub = sumShares(sh, false); tax = sumShares(sh, true);
+      if (!sh.length) problems.push("لا شيء لم يُفوتر في هذه الفترة");
+      else if (sub + tax <= 0) problems.push("ما بقي يخفّض الفاتورة فقط؛ يُضاف إلى فاتورة صادرة بتعديلها");
+    }
+    return { ok: problems.length === 0, problems, scope, from: pf, to: pt, lines, subtotal_halalas: sub, tax_halalas: tax, total_halalas: sub + tax,
+      reservation: { id: r.id, internal_ref: r.internal_ref, external_ref: r.external_ref ?? null, guest: guestName(r.id), check_in: r.check_in, check_out: r.check_out, status: r.status },
+      uninvoiced_halalas: uninvoicedValue(r.id) };
+  },
+  // an invoice edited with a reason (decision 26): its bill-to, its period, and its amounts, which follow the stay's lines as
+  // they stand; the version before is kept in the invoice, and the edit waits in the owner's review list
+  fn_staff_edit_invoice: ({ p }) => {
+    requireRole("owner", "manager", "supervisor", "finance");
+    const reason = trimOrNull(p?.reason); if (!reason) throw new Error("VALIDATION: reason");
+    const inv = byId("invoices", p?.invoice_id); if (!inv) throw new Error("NOT_FOUND"); requireBranch(inv.branch_id); const r = byId("reservations", inv.reservation_id)!;
+    if (inv.status !== "issued") throw new Error("INVOICE_STATUS_INVALID");
+    let pf: string = inv.period_from, pt: string = inv.period_to;
+    if (inv.scope === "period") {
+      pf = dayParam(p.from) ?? inv.period_from; pt = dayParam(p.to) ?? inv.period_to;
+      if (pt <= pf) throw new Error("VALIDATION: period"); if (periodOverlap(r.id, pf, pt, inv.id)) throw new Error(OVERLAP);
+    }
+    let bt: Row = { ...(inv.bill_to ?? {}) };
+    if (p.bill_to && typeof p.bill_to === "object" && !Array.isArray(p.bill_to)) {
+      // a key sent empty is cleared
+      if ("name" in p.bill_to) bt.name = trimOrNull(p.bill_to.name); if ("note" in p.bill_to) bt.note = trimOrNull(p.bill_to.note);
+      bt = stripNulls(bt); if (!bt.name) throw new Error("VALIDATION: bill_to_name");
+    }
+    const sh = invoiceShares(r.id, inv.scope === "period" ? pf : null, inv.scope === "period" ? pt : null, inv.id);
+    if (!sh.length) throw new Error("NOTHING_TO_INVOICE");
+    const sub = sumShares(sh, false), tax = sumShares(sh, true); if (sub + tax <= 0) throw new Error("INVOICE_NOT_POSITIVE");
+    const lines = sh.map(shareLine);
+    const shares = (ls: Row[]) => JSON.stringify(ls.map((l) => [String(l.charge_id), String(l.amount_halalas)]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+    if (shares(inv.snapshot?.lines ?? []) === shares(lines) && pf === inv.period_from && pt === inv.period_to && canon(bt) === canon(inv.bill_to)) return { ok: true, unchanged: true, id: inv.id, number: inv.number, version: inv.version };
+    const prev = { version: inv.version, period_from: inv.period_from, period_to: inv.period_to, bill_to: inv.bill_to, subtotal_halalas: inv.subtotal_halalas, tax_halalas: inv.tax_halalas, total_halalas: inv.total_halalas,
+      lines: inv.snapshot?.lines ?? [], since: inv.updated_at ?? inv.issued_at, by: staffName(inv.updated_by ?? inv.issued_by), replaced_at: nowISO(), replaced_by: staffName(staffId()), reason };
+    Object.assign(inv, { versions: [...(inv.versions ?? []), prev], version: inv.version + 1, period_from: pf, period_to: pt, bill_to: bt,
+      snapshot: { ...inv.snapshot, lines, bill_to: bt, period: { from: pf, to: pt, scope: inv.scope, requested: inv.scope === "period" }, charge_ids: lines.map((l) => l.charge_id) },
+      subtotal_halalas: sub, tax_halalas: tax, total_halalas: sub + tax, updated_at: nowISO(), updated_by: staffId() });
+    emit("invoices"); syncInvoiceMarkers(r.id);
+    addReview(inv.branch_id, "invoice_edited", "invoice", inv.id, r.id, `تعديل الفاتورة ${inv.number} (الإصدار ${inv.version})`, reason,
+      { number: inv.number, version: inv.version, before_total_halalas: prev.total_halalas, after_total_halalas: inv.total_halalas, before_period: [prev.period_from, prev.period_to], after_period: [pf, pt] });
+    audit(inv.branch_id, "invoice.edited", "invoice", inv.id, { before: { version: prev.version, total_halalas: prev.total_halalas, period_from: prev.period_from, period_to: prev.period_to, bill_to: prev.bill_to }, after: { version: inv.version, total_halalas: inv.total_halalas, period_from: pf, period_to: pt, bill_to: bt }, reason });
+    syncClosed(r.id);
+    return { ok: true, unchanged: false, id: inv.id, number: inv.number, version: inv.version, total_halalas: inv.total_halalas };
+  },
+  // «تصحيح سند» (decision 11): the original cancelled and its replacement issued in one step, with a reason, through the
+  // same checks as any new voucher, linked to it. The supervisor: the vouchers they issued, within 24 hours
+  fn_staff_correct_voucher: ({ p }) => {
+    requireRole("owner", "manager", "supervisor");
+    const reason = trimOrNull(p?.reason); if (!reason) throw new Error("VALIDATION: reason");
+    const key = trimOrNull(p?.idempotency_key); if (!key) throw new Error("VALIDATION: idempotency_key");
+    const v = byId("financial_vouchers", p?.voucher_id); if (!v) throw new Error("NOT_FOUND"); requireBranch(v.branch_id); const r = byId("reservations", v.reservation_id)!;
+    // the same correction again answers with its replacement
+    const ex = T("financial_vouchers").find((x) => x.idempotency_key === key);
+    if (ex) { if (ex.original_voucher_id !== v.id) throw new Error("IDEMPOTENCY_CONFLICT: key already used"); return { ok: true, duplicate: true, voucher_id: ex.id, number: ex.number, original_number: v.number, finance: financeOf(r.id) }; }
+    if (v.status !== "approved") throw new Error("VOUCHER_STATUS_INVALID");
+    if (v.payout_id) throw new Error("VOUCHER_IN_PAYOUT");
+    if (!hasRole("owner", "manager")) {
+      if (v.created_by !== staffId()) throw new Error("FORBIDDEN: a supervisor corrects only the vouchers they issued");
+      if (Date.parse(v.created_at) < Date.now() - 24 * 3_600_000) throw new Error("CORRECTION_WINDOW_PASSED: after 24 hours a voucher is corrected by a manager");
+    }
+    const amt = p.amount_halalas != null && String(p.amount_halalas) !== "" ? p.amount_halalas : v.amount_halalas;
+    const m: string = trimOrNull(p.method) ?? v.method;
+    const ref = "reference" in p ? trimOrNull(p.reference) : v.reference ?? null;
+    // another method takes its own account: the one given, or that method's default
+    const acc = "account_id" in p ? p.account_id || null : m !== v.method ? null : v.account_id ?? null;
+    const note = "note" in p ? trimOrNull(p.note) : v.note ?? null;
+    if (String(amt) === String(v.amount_halalas) && (v.kind === "deposit_apply" || m === v.method) && ref === (v.reference ?? null) && acc === (v.account_id ?? null) && note === (v.note ?? null)) throw new Error("VALIDATION: nothing_changed");
+    return atomically(() => {
+      Object.assign(v, { status: "cancelled", cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: "تصحيح: " + reason });
+      const payload = stripNulls({ reservation_id: r.id, kind: v.kind, idempotency_key: key, amount_halalas: amt, method: m, reference: ref, account_id: acc, note, reason: v.reason ?? "تصحيح السند " + v.number, original_voucher_id: v.id });
+      const res = ["receipt", "deposit"].includes(v.kind) ? rpcs.fn_create_voucher({ p: payload }) : rpcs.fn_refund({ p: payload });
+      const nv = byId("financial_vouchers", res.voucher_id)!; if (!nv.original_voucher_id) nv.original_voucher_id = v.id;
+      const f = financeOf(r.id); if (f.deposit_balance < 0 || f.received - f.refunded < 0) throw new Error("CANCEL_WOULD_GO_NEGATIVE");
+      emit("financial_vouchers"); recompute(r.id);
+      const pick = (x: Row) => ({ amount_halalas: x.amount_halalas, method: x.method, reference: x.reference ?? null, account_id: x.account_id ?? null });
+      addReview(v.branch_id, "voucher_corrected", "voucher", nv.id, r.id, `تصحيح السند ${v.number} بالسند ${nv.number}`, reason, { original: v.number, replacement: nv.number, kind: v.kind, before: pick(v), after: pick(nv), issued_by_self: v.created_by === staffId() });
+      audit(v.branch_id, "voucher.corrected", "voucher", nv.id, { before: { number: v.number, ...pick(v) }, after: { number: nv.number, ...pick(nv), original_voucher_id: v.id }, reason });
+      return { ok: true, duplicate: false, voucher_id: nv.id, number: nv.number, original_number: v.number, finance: financeOf(r.id) };
+    });
+  },
+  // «بحاجة لمراجعة وتدقيق»: the owner reads and marks (§16)
+  fn_review_list: ({ p }) => {
+    requireRole("owner"); const st = trimOrNull(p?.status) ?? "open"; if (!["open", "reviewed", "all"].includes(st)) throw new Error("VALIDATION: status");
+    const n = p?.limit == null || p.limit === "" ? 100 : Math.trunc(Number(p.limit)); const lim = Math.min(Math.max(Number.isFinite(n) ? n : 100, 1), 500);
+    const m = me()!; const mine = myBranches(); const kind = trimOrNull(p?.kind), branch = trimOrNull(p?.branch_id), before = trimOrNull(p?.before);
+    const scoped = T("review_items").filter((ri) => ri.organization_id === m.organization_id && (ri.branch_id == null || mine.includes(ri.branch_id)));
+    const items = scoped.filter((ri) => (st === "all" || (st === "open") === (ri.reviewed_at == null)) && (!kind || ri.kind === kind || (kind === "monitor" && String(ri.kind).startsWith("monitor:")))
+        && (!branch || ri.branch_id === branch) && (!before || ri.created_at < before))
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0)).slice(0, lim)
+      .map((ri) => ({ id: ri.id, kind: ri.kind, entity_type: ri.entity_type, entity_id: ri.entity_id, reservation_id: ri.reservation_id, internal_ref: byId("reservations", ri.reservation_id)?.internal_ref ?? null,
+        branch_id: ri.branch_id, branch_name: byId("branches", ri.branch_id)?.name_ar ?? null, summary: ri.summary, reason: ri.reason, details: ri.details,
+        created_at: ri.created_at, created_by: staffName(ri.created_by), reviewed_at: ri.reviewed_at, reviewed_by: staffName(ri.reviewed_by), review_note: ri.review_note }));
+    return { items, open_count: scoped.filter((ri) => ri.reviewed_at == null).length };
+  },
+  fn_review_mark: ({ p }) => {
+    requireRole("owner"); const ids: string[] = Array.isArray(p?.ids) ? p.ids.map(String) : []; if (!ids.length) throw new Error("VALIDATION: ids");
+    const note = trimOrNull(p?.note); const m = me()!; const mine = myBranches(); let n = 0;
+    for (const ri of T("review_items")) if (ids.includes(ri.id) && ri.reviewed_at == null && ri.organization_id === m.organization_id && (ri.branch_id == null || mine.includes(ri.branch_id))) { Object.assign(ri, { reviewed_at: nowISO(), reviewed_by: staffId(), review_note: note }); n++; }
+    emit("review_items"); audit(null, "review.marked", "review_items", null as unknown as string, { after: { count: n, ids }, reason: note });
+    return { ok: true, marked: n };
+  },
+  // the owner's banner: how many wait, by kind (anyone else: nothing)
+  fn_review_summary: () => reviewSummary(),
+  // the owner's dashboard: the checks of this branch, unless they ran in the last 10 minutes (0037)
+  fn_monitors_if_due: ({ p_branch }) => {
+    requireRole("owner"); requireBranch(p_branch);
+    const last = T("monitor_runs").find((x) => x.branch_id === p_branch)?.last_run_at ?? null;
+    if (last && Date.parse(last) > Date.now() - 10 * 60_000) return { ran: false, last_run_at: last, summary: reviewSummary() };
+    const found = runMonitors(p_branch);
+    return { ran: true, last_run_at: T("monitor_runs").find((x) => x.branch_id === p_branch)!.last_run_at, found, summary: reviewSummary() };
+  },
+};
 
 const rpcsStay: Record<string, (a: any) => any> = {
   // «تسجيل الوصول»: the conditions, then the rent and the deposit entries, then the arrival — all or nothing
@@ -1091,8 +1429,9 @@ const rpcsStay: Record<string, (a: any) => any> = {
     if (r.room_id) createCleaningTask(r.branch_id, r.room_id, r.id, "تنظيف بعد المغادرة");
     emit("reservations");
     audit(r.branch_id, "reservation.checked_out", "reservation", r.id, { before: { status: "checked_in" }, after: { status: "checked_out", deposit_balance_halalas: f.deposit_balance, credit_halalas: f.credit } });
+    const invoice = autoInvoice(r.id, "checkout");
     const st = syncClosed(r.id);
-    return { ok: true, duplicate: false, status: st, deposit_to_settle_halalas: f.deposit_balance, credit_halalas: f.credit, missing: closureMissing(r.id) };
+    return { ok: true, duplicate: false, status: st, deposit_to_settle_halalas: f.deposit_balance, credit_halalas: f.credit, invoice, missing: closureMissing(r.id) };
   },
   // «فحص المغادرة» (decision 5): sound, or notes with a suggested deduction
   fn_staff_record_inspection: ({ p }) => {
@@ -1119,8 +1458,9 @@ const rpcsStay: Record<string, (a: any) => any> = {
       recompute(r.id); let applied = 0; let v: any = null;
       if (p.apply_deposit !== false) { const f = financeOf(r.id); applied = Math.min(amount, f.deposit_balance, f.balance_due); if (applied > 0) v = rpcs.fn_refund({ p: { reservation_id: r.id, kind: "deposit_apply", amount_halalas: applied, reason: "رسم ضرر: " + reason, idempotency_key: p.idempotency_key + ":apply" } }); }
       r.version++; recompute(r.id);
-      audit(r.branch_id, "reservation.damage_charged", "reservation", r.id, { after: { amount_halalas: amount, description: descr, from_deposit_halalas: applied, voucher: v?.number ?? null }, reason });
-      return { ok: true, duplicate: false, charge_id: cid, from_deposit_halalas: applied, finance: financeOf(r.id) };
+      const invoice: string | null = ["checked_out", "closed"].includes(r.status) && financeOf(r.id).deposit_balance === 0 ? v?.invoice ?? autoInvoice(r.id, "deposit_settled") : null;
+      audit(r.branch_id, "reservation.damage_charged", "reservation", r.id, { after: { amount_halalas: amount, description: descr, from_deposit_halalas: applied, voucher: v?.number ?? null, invoice }, reason });
+      return { ok: true, duplicate: false, charge_id: cid, from_deposit_halalas: applied, invoice, finance: financeOf(r.id) };
     });
   },
   // an overdue night: the reason that lets the stay go on (decision 3)
@@ -1144,7 +1484,7 @@ const rpcsStay: Record<string, (a: any) => any> = {
     const rm = byId("rooms", r.room_id); if (rm && rm.status === "occupied") rm.status = "reserved";
     if (shown) { const kb = T("keyboxes").find((k) => k.room_id === r.room_id && k.last_reservation_id === r.id); if (kb) Object.assign(kb, { code_status: "needs_change", field_tested: false, needs_change_since: nowISO() }); }
     emit("reservations"); emit("rooms"); emit("keyboxes");
-    addReview(r.branch_id, "check_in_undone", r.id, `تراجع عن تسجيل وصول ${r.internal_ref}`, reason, { checked_in_at: was, code_was_given: shown });
+    addReview(r.branch_id, "check_in_undone", "reservation", r.id, r.id, `تراجع عن تسجيل وصول ${r.internal_ref}`, reason, { checked_in_at: was, code_was_given: shown });
     audit(r.branch_id, "reservation.check_in_undone", "reservation", r.id, { before: { status: "checked_in", actual_check_in: was }, after: { status: "confirmed", code_needs_change: shown }, reason });
     return { ok: true, code_needs_change: shown };
   },
@@ -1170,7 +1510,7 @@ const rpcsStay: Record<string, (a: any) => any> = {
     Object.assign(r, { status: "checked_in", actual_check_out: null, checked_out_by: null, closed_at: null, access_status: access, keybox_delivered: kept ? r.keybox_delivered : false, version: r.version + 1, updated_at: nowISO() });
     for (const i of T("checkout_inspections")) if (i.reservation_id === r.id && i.status === "active") Object.assign(i, { status: "superseded", superseded_at: nowISO(), superseded_by: staffId() });
     recompute(r.id); emit("reservation_allocations"); emit("rooms"); emit("housekeeping_tasks"); emit("keyboxes"); emit("checkout_inspections");
-    addReview(r.branch_id, "stay_reopened", r.id, `إعادة فتح إقامة ${r.internal_ref}`, reason, { checked_out_at: was.actual_check_out, was_closed: was.status === "closed", code_kept: kept });
+    addReview(r.branch_id, "stay_reopened", "reservation", r.id, r.id, `إعادة فتح إقامة ${r.internal_ref}`, reason, { checked_out_at: was.actual_check_out, was_closed: was.status === "closed", code_kept: kept });
     audit(r.branch_id, "reservation.stay_reopened", "reservation", r.id, { before: was, after: { status: "checked_in", access_status: access }, reason });
     return { ok: true, access_status: access };
   },
@@ -1192,7 +1532,7 @@ const rpcsStay: Record<string, (a: any) => any> = {
     const backTo = ["pending_verification", "confirmed"].includes(r.status_before_cancel) ? r.status_before_cancel : "confirmed";
     Object.assign(r, { status: backTo, cancelled_at: null, cancel_reason: null, cancel_source: null, status_before_cancel: null, version: r.version + 1, updated_at: nowISO() });
     recompute(r.id); emit("reservation_allocations"); emit("rooms");
-    addReview(r.branch_id, "cancel_undone", r.id, `تراجع عن إلغاء ${r.internal_ref}`, reason, { cancelled_at: was.cancelled_at, cancel_reason: was.cancel_reason, allocations_restored: back.length });
+    addReview(r.branch_id, "cancel_undone", "reservation", r.id, r.id, `تراجع عن إلغاء ${r.internal_ref}`, reason, { cancelled_at: was.cancelled_at, cancel_reason: was.cancel_reason, allocations_restored: back.length });
     audit(r.branch_id, "reservation.cancel_undone", "reservation", r.id, { before: was, after: { status: backTo, allocations_restored: back.length }, reason });
     return { ok: true, status: backTo };
   },
@@ -1251,6 +1591,7 @@ const rpcsStay: Record<string, (a: any) => any> = {
 };
 Object.assign(rpcs, rpcsMore);
 Object.assign(rpcs, rpcsStay);
+Object.assign(rpcs, rpcsInvoices);
 
 // ---- data purge (demo): same rules as fn_purge_run in 0022 ----
 const purgeRequests = new Map<string, { branch: string | null; from: string; to: string; cats: string[]; staff: string | null; expires: number; used: boolean }>();
@@ -1376,7 +1717,7 @@ function bookNights(resId: string, runs: Run[], label: string, reason: string | 
   const r = byId("reservations", resId)!; let total = 0;
   for (const x of runs) {
     for (const night of nightsBetween(x.from, x.to)) T("reservation_nights").push(nightRow(r, night, x.price, x.basis));
-    addCharge(r.id, "rent", `${label} ${x.nights} ليلة × ${(x.price / 100).toFixed(2)} ر.س${x.basis === "weekly" ? " (السعر الأسبوعي)" : x.basis === "monthly" ? " (السعر الشهري)" : x.basis === "platform" ? " (سعر المنصات)" : ""}`, x.nights, x.price, true, reason);
+    addCharge(r.id, "rent", `${label} ${x.nights} ليلة × ${(x.price / 100).toFixed(2)} ر.س${x.basis === "weekly" ? " (السعر الأسبوعي)" : x.basis === "monthly" ? " (السعر الشهري)" : x.basis === "platform" ? " (سعر المنصات)" : ""}`, x.nights, x.price, true, reason, null, x.from, x.to);
     total += x.nights * x.price;
   }
   emit("reservation_nights"); return total;

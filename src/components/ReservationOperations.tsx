@@ -4,8 +4,9 @@
  * Every button explains its effect before executing; nothing here writes to tables directly.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert, Hammer } from "lucide-react";
-import { opsApi, ratesApi, stayApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance } from "../lib/api";
+import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert, Hammer, PencilLine } from "lucide-react";
+import { opsApi, ratesApi, stayApi, invoiceApi, toArabicError, newIdempotencyKey, type ReservationDetail, type Finance, type StayNight, type DiscountAllowance } from "../lib/api";
+import { InvoiceDialog, InvoiceList } from "./Invoices";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
@@ -17,6 +18,8 @@ import { formatCurrency, formatDateTime, todayISO } from "../lib/utils";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
 type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice" | "damage";
+type Voucher = NonNullable<ReservationDetail["vouchers"]>[number];
+const DAY_MS = 24 * 3_600_000;
 
 export function ReservationOperations({ reservationId, refreshKey, onChanged }: { reservationId: string; refreshKey?: unknown; onChanged: () => void }) {
   const { profile } = useAuth();
@@ -32,6 +35,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [tab, setTab] = useState<"ledger" | "stay" | "history">("ledger");
+  const [correcting, setCorrecting] = useState<Voucher | null>(null);
 
   const load = useCallback(async () => { try { setD(await opsApi.detail(reservationId)); setError(null); } catch (e) { setError(toArabicError(e)); } }, [reservationId]);
   const accounts = useCashAccounts(canMoney ? d?.reservation.branch_id : null);
@@ -54,6 +58,10 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   const r = d.reservation; const f = d.finance ?? ({ rent: 0, addons: 0, discounts: 0, penalties: 0, adjustments: 0, tax: 0, total: 0, received: 0, refunded: 0, deposit_applied: 0, net_collected: 0, balance_due: 0, credit: 0, deposit_received: 0, deposit_refunded: 0, deposit_balance: 0, payment_status: "pending" } as Finance);
   const open = !["cancelled", "rejected", "closed", "no_show"].includes(r.status);
   const done = async () => { setDialog(null); await load(); onChanged(); };
+  const uninvoiced = d.invoicing?.uninvoiced_halalas ?? 0;
+  // «تصحيح سند» (decision 11, §16): the owner and a manager any voucher; the supervisor the vouchers they issued, within 24 hours.
+  // A voucher in a platform payout is corrected by cancelling the payout first.
+  const canCorrect = (v: Voucher) => v.status === "approved" && !v.payout_id && (isMgr || (role === "supervisor" && !!profile && v.created_by === profile.id && Date.parse(v.created_at ?? v.occurred_at) > Date.now() - DAY_MS));
 
   return (
     <div className="space-y-4">
@@ -75,7 +83,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
             {canManage && ["checked_in", "checked_out", "closed"].includes(r.status) && <button onClick={() => setDialog("damage")} className="btn-outline text-xs"><Hammer className="h-3.5 w-3.5" /> رسم ضرر</button>}
             {canManage && open && <button onClick={() => setDialog("service")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> إضافة خدمة</button>}
             {canManage && open && <button onClick={() => setDialog("adjust")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> خصم / تسوية / غرامة</button>}
-            {(d.charges ?? []).some((c) => !c.invoice_id) && <button onClick={() => setDialog("invoice")} className="btn-outline text-xs"><FileText className="h-3.5 w-3.5" /> إصدار فاتورة</button>}
+            {uninvoiced > 0 && <button onClick={() => setDialog("invoice")} className="btn-outline text-xs"><FileText className="h-3.5 w-3.5" /> إنشاء فاتورة</button>}
           </div>
         )}
         {tab === "stay" && canManage && (
@@ -92,17 +100,25 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <h3 className="mb-2 text-sm font-semibold text-ink-700">الرسوم</h3>
-            <Table rows={(d.charges ?? []).map((c) => [<span key="k" className="text-xs text-ink-400">{CHARGE_KIND_LABELS[c.kind as ChargeKind] ?? c.kind}</span>, c.description, <span key="v" dir="ltr" className={c.total_halalas < 0 ? "text-success-600" : ""}>{sar(c.total_halalas)}</span>, c.invoice_id ? <Badge key="i" className="bg-ink-100 text-ink-500">مفوتر</Badge> : ""])} empty="لا رسوم" />
+            <Table rows={(d.charges ?? []).map((c) => { const inv = c.invoiced_halalas ?? (c.invoice_id ? c.total_halalas : 0);
+              return [<span key="k" className="text-xs text-ink-400">{CHARGE_KIND_LABELS[c.kind as ChargeKind] ?? c.kind}</span>, c.description, <span key="v" dir="ltr" className={c.total_halalas < 0 ? "text-success-600" : ""}>{sar(c.total_halalas)}</span>,
+                c.total_halalas !== 0 && inv === c.total_halalas ? <Badge key="i" className="bg-ink-100 text-ink-500">مفوتر</Badge> : inv !== 0 ? <Badge key="i" className="bg-brand-500/10 text-brand-700"><span title={`فُوتر ${sar(inv)}`}>مفوتر جزئيًا</span></Badge> : ""]; })} empty="لا رسوم" />
           </Card>
           <Card>
             <h3 className="mb-2 text-sm font-semibold text-ink-700">السندات</h3>
-            <Table rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="text-[10px] text-ink-400">{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}{accounts.nameOf(v.account_id) ? ` · ${accounts.nameOf(v.account_id)}` : ""}{v.reference ? ` · ${v.reference}` : ""} · {formatDateTime(v.occurred_at)}</div></span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
-              v.status === "cancelled" ? <Badge key="s" className="bg-danger-500/10 text-danger-600" >ملغى</Badge> : isMgr ? <CancelVoucherButton key="c" id={v.id} onDone={done} /> : ""])} empty="لا سندات" />
+            <Table rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="text-[10px] text-ink-400">{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}{accounts.nameOf(v.account_id) ? ` · ${accounts.nameOf(v.account_id)}` : ""}{v.reference ? ` · ${v.reference}` : ""} · {formatDateTime(v.occurred_at)}{v.created_by_name ? ` · ${v.created_by_name}` : ""}</div>
+                {v.original_number && <div className="text-[10px] text-brand-700">تصحيح للسند {v.original_number}</div>}
+                {v.replaced_by_number && <div className="text-[10px] text-ink-500">صُحّح بالسند {v.replaced_by_number}</div>}</span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
+              v.status === "cancelled" ? <Badge key="s" className="bg-danger-500/10 text-danger-600" >ملغى</Badge> : (
+                <div key="a" className="flex flex-col items-end gap-0.5">
+                  {canCorrect(v) && <button onClick={() => setCorrecting(v)} className="btn-ghost px-2 py-1 text-[11px]"><PencilLine className="h-3 w-3" /> تصحيح</button>}
+                  {isMgr && !v.payout_id && <CancelVoucherButton id={v.id} onDone={done} />}
+                  {v.payout_id && <span className="text-[10px] text-ink-400">ضمن مطابقة منصة</span>}
+                </div>)])} empty="لا سندات" />
           </Card>
-          {(d.invoices ?? []).length > 0 && (
+          {canMoney && ((d.invoices ?? []).length > 0 || uninvoiced !== 0) && (
             <Card className="lg:col-span-2">
-              <h3 className="mb-2 text-sm font-semibold text-ink-700">الفواتير</h3>
-              <Table rows={(d.invoices ?? []).map((i) => [<span key="n" className="font-mono text-xs">{i.number}</span>, `${i.period_from} → ${i.period_to}`, <span key="v" dir="ltr">{sar(i.total_halalas)}</span>, i.status === "cancelled" ? <Badge key="s" className="bg-danger-500/10 text-danger-600">ملغاة</Badge> : <Badge key="s" className="bg-success-500/10 text-success-600">صادرة</Badge>])} empty="" />
+              <InvoiceList d={d} canEdit={canMoney} canCancel={isMgr} onDone={done} />
             </Card>
           )}
         </div>
@@ -143,12 +159,8 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
       <SwitchDialog open={dialog === "switch"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <ReasonDialog open={dialog === "cancel"} title="إلغاء الحجز" warning={`الإلغاء يحرر الوحدة ولا يسترد أي مبلغ تلقائيًا${f.net_collected + f.deposit_balance > 0 ? ` — يوجد ${sar(f.net_collected)} محصّل و${sar(f.deposit_balance)} تأمين تحتاج قرار استرداد مستقل` : ""}.`} onClose={() => setDialog(null)} onSubmit={async (reason) => { await opsApi.cancelReservation(reservationId, reason); await done(); }} />
       <ReasonDialog open={dialog === "no_show"} title="تسجيل عدم حضور" warning="عدم الحضور حالة مستقلة عن الإلغاء، يحرر الوحدة ولا يغير المال." onClose={() => setDialog(null)} onSubmit={async (reason) => { await opsApi.noShow(reservationId, reason); await done(); }} />
-      <Modal open={dialog === "invoice"} title="إصدار فاتورة" onClose={() => setDialog(null)}>
-        <ActionForm onSubmit={async () => { await opsApi.createInvoice(reservationId); await done(); }}>
-          <p className="text-sm text-ink-600">تُصدر فاتورة بالبنود غير المفوترة ({(d.charges ?? []).filter((c) => !c.invoice_id).length} بند) كلقطة ثابتة لا تتأثر بتعديل الكتالوج لاحقًا. الفاتورة ليست إثبات قبض.</p>
-          <Submit label="إصدار" onCancel={() => setDialog(null)} />
-        </ActionForm>
-      </Modal>
+      <InvoiceDialog open={dialog === "invoice"} d={d} onClose={() => setDialog(null)} onDone={done} />
+      <CorrectVoucherDialog v={correcting} accounts={accounts.active} onClose={() => setCorrecting(null)} onDone={async () => { setCorrecting(null); await done(); }} />
     </div>
   );
 }
@@ -174,6 +186,43 @@ function CancelVoucherButton({ id, onDone }: { id: string; onDone: () => Promise
     <button onClick={() => setOpen(true)} className="btn-ghost px-2 py-1 text-[11px] text-danger-600">إلغاء السند</button>
     <ReasonDialog open={open} title="إلغاء سند" warning="الإلغاء يعكس أثر السند محاسبيًا ويبقي سجله. لا يعني أن مزود الدفع ردّ المبلغ للضيف." onClose={() => setOpen(false)} onSubmit={async (reason) => { await opsApi.cancelVoucher(id, reason); setOpen(false); await onDone(); }} />
   </>);
+}
+
+/**
+ * «تصحيح سند» (decision 11): the voucher is cancelled and its replacement issued in one step, with a reason, through the
+ * same checks as any new voucher, and linked to it. No silent edit of an amount: both stay in the ledger.
+ */
+function CorrectVoucherDialog({ v, accounts, onClose, onDone }: { v: Voucher | null; accounts: CashAccount[]; onClose: () => void; onDone: () => Promise<void> }) {
+  const [amount, setAmount] = useState<number | null>(null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [accountId, setAccountId] = useState(""); const [ref, setRef] = useState(""); const [note, setNote] = useState(""); const [reason, setReason] = useState("");
+  const [key, setKey] = useState(newIdempotencyKey());
+  useEffect(() => {
+    if (!v) return;
+    setAmount(v.amount_halalas); setMethod((v.method as PaymentMethod) ?? "cash"); setAccountId(v.account_id ?? ""); setRef(v.reference ?? ""); setNote(v.note ?? ""); setReason(""); setKey(newIdempotencyKey());
+  }, [v]);
+  if (!v) return null;
+  const moves = v.kind !== "deposit_apply";   // applying the deposit moves money between two balances: no method, no account
+  const refund = v.kind === "refund" || v.kind === "deposit_refund";
+  return (
+    <Modal open title={`تصحيح السند ${v.number}`} onClose={onClose}>
+      <ActionForm onSubmit={async () => {
+        if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
+        if (!reason.trim()) throw new Error("VALIDATION: reason");
+        if (moves && METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
+        await invoiceApi.correctVoucher({ voucher_id: v.id, reason: reason.trim(), idempotency_key: key, amount_halalas: amount, note: note.trim() || null,
+          ...(moves ? { method, reference: ref.trim() || null, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || null : null } : {}) });
+        await onDone();
+      }}>
+        <p className="mb-3 text-xs text-ink-500">يُلغى السند {v.number} بسبب «تصحيح» ويصدر بدله سند مرتبط به بالبيانات الصحيحة، ويمرّ بفحوص أي سند جديد. يبقى السندان في الدفتر، ويظهر التصحيح في قائمة المراجعة للمالك.</p>
+        <div className="space-y-3">
+          <Field label="المبلغ الصحيح"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
+          {moves && <PaymentFields method={method} setMethod={setMethod} accountId={accountId} setAccountId={setAccountId} reference={ref} setReference={setRef} accounts={accounts} verb={refund ? "return" : "receive"} deposit={v.kind === "deposit" || v.kind === "deposit_refund"} />}
+          <Field label="ملاحظة"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          <ReasonInput value={reason} onChange={setReason} label="سبب التصحيح (إلزامي)" />
+        </div>
+        <Submit label="تصحيح السند" onCancel={onClose} />
+      </ActionForm>
+    </Modal>
+  );
 }
 
 function ReasonDialog({ open, title, warning, onClose, onSubmit }: { open: boolean; title: string; warning: string; onClose: () => void; onSubmit: (reason: string) => Promise<void> }) {

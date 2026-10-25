@@ -9,6 +9,8 @@ import { useBranchQuery } from "../../lib/useBranchQuery";
 import { opsApi, stayApi, type DailySummary, type StayFollowups } from "../../lib/api";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { useAuth } from "../../lib/auth";
+import { ReviewBanner } from "../../components/ReviewBanner";
+import { useReviewSummary } from "../../lib/reviewAlerts";
 
 export default function StaffDashboard() {
   const { data: arrivals, loading: l1, error: e1, reload: r1 } = useReservations({ todayOnly: true });
@@ -21,6 +23,7 @@ export default function StaffDashboard() {
   const followRole = ["owner", "manager", "supervisor", "finance"].includes(profile?.role ?? "");
   const fuQ = useBranchQuery<StayFollowups | null>((branchId) => (followRole ? stayApi.followups(branchId) : Promise.resolve(null)), [all.length, followRole], null);
   const fu = fuQ.data;
+  const review = useReviewSummary(true);   // the owner: what waits for review, and the monitors when due (decision 54)
 
   if (l1 || l2) return <LoadingScreen />;
   const listError = e1 ?? e2;
@@ -52,6 +55,7 @@ export default function StaffDashboard() {
   return (
     <div>
       <SectionTitle title="مركز عمليات الاستقبال" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+      <ReviewBanner summary={review} />
       {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
       {fu && fu.overdue.length + fu.departed_open.length + fu.late_departures.length > 0 && (
         <Link to="/staff/followups" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-600 hover:shadow-sm" data-testid="followups-banner">
