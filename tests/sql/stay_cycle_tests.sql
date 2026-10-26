@@ -262,13 +262,22 @@ exception when others then perform t_record('SC08b a discount is spread over the
 
 -- ---------------------------------------------------------------- SC09: an overdue night stops extending and services, until paid or a reason
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-do $$ declare res uuid; r jsonb; svc uuid; m text := ''; begin
+do $$ declare res uuid; r jsonb; svc uuid; m text := ''; r2 jsonb; a1 timestamptz; nv bigint; na bigint; begin
   -- a stay that began two days ago, only its first night paid: the night of yesterday is overdue whatever the hour
   res := t_stay(t_id('n4'), t_today() - 2, t_today() + 2, 'ضيف متأخر الدفع');
   insert into ids values ('resLate', res);
   perform t_ready(res); perform t_shomoos(res);
   r := t_check_in(res, 'sc09');
   if not (r->>'ok')::boolean then raise exception 'check-in refused: %', r; end if;
+  -- R13: the same arrival again (a second tap, a retry) is one transition with one arrival time
+  a1 := (t_res(res)).actual_check_in;
+  nv := t_count(format('select count(*) from financial_vouchers where reservation_id = %L', res));
+  na := t_count(format('select count(*) from audit_events where entity_id = %L and action = %L', res, 'reservation.checked_in'));
+  r2 := t_check_in(res, 'sc09-again');
+  perform t_record('R13 the arrival recorded twice is one transition: the second answers «duplicate», the arrival time, the vouchers and the log row stay as the first left them',
+    (r2->>'duplicate')::boolean and (t_res(res)).actual_check_in = a1 and (t_res(res)).status = 'checked_in'
+    and t_count(format('select count(*) from financial_vouchers where reservation_id = %L', res)) = nv
+    and t_count(format('select count(*) from audit_events where entity_id = %L and action = %L', res, 'reservation.checked_in')) = na and na = 1, r2::text);
   svc := t_id('svc');
   m := t_fails(format('select fn_staff_amend_stay(%L, %L, %L, %L, %s)', res, t_today() + 3, 'keep_rate', 'تمديد', (t_res(res)).version), '%PAYMENT_OVERDUE%') || ' '
     || t_fails(format('select fn_staff_add_service(%L, %L)', res, svc), '%PAYMENT_OVERDUE%');
