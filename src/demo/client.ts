@@ -457,7 +457,9 @@ const rpcs: Record<string, (a: any) => any> = {
   // 0040: a guest is no staff role; the invite re-opens a retired membership instead of a duplicate, and is logged
   fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => { requireCap("staff.manage"); if (p_role === "guest") throw new Error("INVALID_ROLE"); if (!["owner", "manager", "supervisor", "finance", "housekeeping"].includes(String(p_role))) throw new Error("INVALID_ROLE");
     if (p_role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
+    if (!perm.roleWithinMine(String(p_role))) throw new Error("FORBIDDEN: a role beyond your own");                 // 0046
     const email = String(p_email ?? "").trim().toLowerCase(), name = String(p_full_name ?? "").trim(); if (!email || !name) throw new Error("VALIDATION: email_and_name");
+    if (T("staff_profiles").some((x) => x.organization_id === ORG && String(x.email ?? "").toLowerCase() === email)) throw new Error("DUPLICATE_EMAIL");   // 0046
     const branches: string[] = Array.isArray(p_branch_ids) ? p_branch_ids : []; for (const b of branches) requireBranch(b);   // all or nothing, as the transaction
     const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone: null, role: p_role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
     for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }

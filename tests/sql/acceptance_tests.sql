@@ -1,16 +1,16 @@
 -- =====================================================================
 -- Phase 7 acceptance: the owner's decisions 37, 38, 44 and 53, tested on the server.
--- X04a–X04f  branch isolation (decision 37): another branch's lists and reports refused to a manager with every
+-- X04a–X04g  branch isolation (decision 37): another branch's lists and reports refused to a manager with every
 --            permission, the log of the own branch never carries another's, roles and memberships unchangeable from
 --            the browser, a membership taken away stops the very next operation of the session already open.
--- SE01–SE05  no self-escalation (decision 44): no role changes its own role or branches, by a direct write or by any
+-- SE01–SE06  no self-escalation (decision 44): no role changes its own role or branches, by a direct write or by any
 --            function, even with «دعوة موظف وتعديله» ticked; an invitation's completion keeps the invited role; the
 --            owner does not change their own role from the editor.
 -- PG01–PG03  G20 with manual payments (decision 38): no voucher from a guest's session or a role without the cell,
 --            no «مدفوع» written from outside the server, the guest's «مدفوع» comes from the server's own state.
 -- D05        a facility untouched for a month stays in the administration (decision 53): nothing is removed for
 --            not being used.
--- AX01       a visitor with no account executes only the fourteen functions the guest pages call (0045).
+-- AX01       a visitor with no account executes only the thirteen functions the guest pages call (0045).
 -- Runs after permissions_tests.sql on the same database (its organisation, branches 010 and 012, staff).
 -- =====================================================================
 \set ON_ERROR_STOP off
@@ -41,6 +41,10 @@ end $$;
 create or replace function t_staff(p uuid) returns staff_profiles language sql security definer as $$ select * from staff_profiles where id = p $$;
 create or replace function t_branches(p uuid) returns uuid[] language sql security definer as $$
   select coalesce(array_agg(branch_id order by branch_id), '{}') from branch_memberships where staff_id = p and removed_at is null $$;
+-- the older lookup by number + last four digits is closed to visitors (0045): the token is taken on the server side
+create or replace function t_lookup(p_ref text, p_last4 text, p_source uuid, p_fp text) returns jsonb language sql security definer as $$
+  select fn_guest_lookup(p_ref, p_last4, p_source, p_fp) $$;
+grant execute on function t_lookup(text, text, uuid, text) to public;
 create or replace function t_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 -- a facility's last change moved back by p_days (as if nobody touched it since)
 create or replace function t_age_facility(p uuid, p_days int) returns void language sql security definer as $$
@@ -104,10 +108,15 @@ do $$ declare before staff_profiles; n int; s text; begin
   update staff_profiles set role = 'housekeeping' where id = '10000000-0000-0000-0000-000000000002';
   s := t_fails('insert into branch_memberships(staff_id, branch_id) values (''10000000-0000-0000-0000-000000000008'', ''00000000-0000-0000-0000-000000000012'')', '%');
   update branch_memberships set removed_at = now() where staff_id = '10000000-0000-0000-0000-000000000002';
+  delete from branch_memberships where staff_id = '10000000-0000-0000-0000-000000000002';
+  if t_fails('insert into staff_profiles(organization_id, full_name, email, role, is_active) values (''00000000-0000-0000-0000-000000000001'', ''مالك ثان'', ''x04c@test.local'', ''owner'', true)', '%') = 'accepted' then
+    s := 'direct insert of an owner profile accepted';
+  end if;
   perform t_record('X04c a role or a membership written from the browser does not move: the manager stays manager of 010 only, the supervisor keeps role and branches',
     (t_staff('10000000-0000-0000-0000-000000000008')).role = 'manager' and (t_staff('10000000-0000-0000-0000-000000000002')).role = 'supervisor'
     and t_branches('10000000-0000-0000-0000-000000000008') = array['00000000-0000-0000-0000-000000000010'::uuid]
-    and cardinality(t_branches('10000000-0000-0000-0000-000000000002')) = 2 and s <> 'accepted', s);
+    and cardinality(t_branches('10000000-0000-0000-0000-000000000002')) = 2 and s <> 'accepted'
+    and t_count('select count(*) from staff_profiles where email = ''x04c@test.local''') = 0, s);
 exception when others then perform t_record('X04c a role or a membership written from the browser does not move: the manager stays manager of 010 only, the supervisor keeps role and branches', false, sqlerrm); end $$;
 
 -- the membership taken away while the manager's session is open
@@ -123,11 +132,11 @@ exception when others then perform t_record('X04d a membership taken away stops 
 
 do $$ declare n int; s text; begin
   -- and the branch now theirs answers at once
-  n := (fn_reservation_list('00000000-0000-0000-0000-000000000012', '{}', 1000, 0)->>'total')::int;
+  n := (fn_voucher_list(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000012'))->>'total')::int;
   s := t_fails('select fn_voucher_list(jsonb_build_object(''branch_id'', ''00000000-0000-0000-0000-000000000010''))', '%FORBIDDEN%');
   perform t_as_owner('select fn_admin_update_staff(jsonb_build_object(''staff_id'', ''10000000-0000-0000-0000-000000000008'', ''branch_ids'', jsonb_build_array(''00000000-0000-0000-0000-000000000010''), ''reason'', ''عودة المدير إلى فرعه''))');
   perform t_record('X04e after the move the old branch''s ledger is refused and the new branch answers; moved back, the manager has branch 010 alone again',
-    s = 'ok' and n >= 0 and t_branches('10000000-0000-0000-0000-000000000008') = array['00000000-0000-0000-0000-000000000010'::uuid]
+    s = 'ok' and n is not null and t_branches('10000000-0000-0000-0000-000000000008') = array['00000000-0000-0000-0000-000000000010'::uuid]
     and (fn_reservation_list('00000000-0000-0000-0000-000000000010', '{}', 1000, 0)->>'total')::int > 0, s);
 exception when others then perform t_record('X04e after the move the old branch''s ledger is refused and the new branch answers; moved back, the manager has branch 010 alone again', false, sqlerrm); end $$;
 
@@ -169,13 +178,14 @@ exception when others then perform t_record('SE01 with «دعوة موظف وت�
 do $$ declare s text; n int; begin
   -- the supervisor invites a profile with their own address as manager: the session stays a supervisor's
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  s := t_fails('select fn_staff_invite(''sup@test.local'', ''المشرف مرة أخرى'', ''manager'', array[''00000000-0000-0000-0000-000000000010''::uuid])', '%');
+  s := t_fails('select fn_staff_invite(''sup@test.local'', ''المشرف مرة أخرى'', ''supervisor'', array[''00000000-0000-0000-0000-000000000010''::uuid])', '%DUPLICATE_EMAIL%');
   perform fn_claim_staff_profile('المشرف');
   n := t_count('select count(*) from staff_profiles where auth_user_id = ''a0000000-0000-0000-0000-000000000002''');
-  perform t_record('SE02 an invitation to one''s own address in a higher role changes nothing: the session keeps its supervisor profile alone, and the claim does not pick up the invitation',
-    n = 1 and (t_staff('10000000-0000-0000-0000-000000000002')).role = 'supervisor' and fn_my_permissions()->>'role' = 'supervisor'
+  perform t_record('SE02 an address that already has a profile is not invited again (even in the same role): the session keeps its supervisor profile alone',
+    s = 'ok' and n = 1 and t_count('select count(*) from staff_profiles where lower(email) = ''sup@test.local''') = 1
+    and (t_staff('10000000-0000-0000-0000-000000000002')).role = 'supervisor' and fn_my_permissions()->>'role' = 'supervisor'
     and not (fn_my_permissions()->'allowed' ? 'admin.permissions'), s || ', ' || n || ' profiles');
-exception when others then perform t_record('SE02 an invitation to one''s own address in a higher role changes nothing: the session keeps its supervisor profile alone, and the claim does not pick up the invitation', false, sqlerrm); end $$;
+exception when others then perform t_record('SE02 an address that already has a profile is not invited again (even in the same role): the session keeps its supervisor profile alone', false, sqlerrm); end $$;
 
 do $$ declare r jsonb; begin
   -- the invited person completes the invitation: the role is the one invited with, whatever the sign-up sends
@@ -206,6 +216,27 @@ do $$ declare bad text[] := '{}'; who record; s text; begin
     cardinality(bad) = 0 and t_count('select count(*) from role_permissions where capability = ''admin.permissions''') = 0, array_to_string(bad, ' | '));
 exception when others then perform t_record('SE05 no role gives itself a cell: the matrix function refuses everyone but the owner, and its table refuses a direct write', false, sqlerrm); end $$;
 
+do $$ declare s1 text; s2 text; s3 text; s4 text; inv jsonb; begin
+  -- no one gives what they do not hold (0046): the supervisor with the staff editor ticked
+  perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
+  s1 := t_fails('select fn_staff_invite(''second-acct@test.local'', ''حساب ثان'', ''manager'', array[''00000000-0000-0000-0000-000000000010''::uuid])', '%beyond your own%');
+  s2 := t_fails('select fn_admin_update_staff(jsonb_build_object(''staff_id'', ''10000000-0000-0000-0000-000000000003'', ''role'', ''manager'', ''reason'', ''ترقية''))', '%beyond your own%');
+  s3 := t_fails('select fn_admin_set_staff_active(''10000000-0000-0000-0000-000000000008'', false, ''إيقاف المدير'')', '%beyond your own%');
+  inv := fn_staff_invite('se06-hk@test.local', 'عامل نظافة جديد', 'housekeeping', array['00000000-0000-0000-0000-000000000010'::uuid]);
+  perform t_record('SE06 a supervisor holding the staff editor cannot invite a manager (a second account of their own), make housekeeping a manager or stop a manager; inviting housekeeping, within their cells, works',
+    s1 = 'ok' and s2 = 'ok' and s3 = 'ok' and (inv->>'ok')::boolean and (t_staff('10000000-0000-0000-0000-000000000003')).role = 'housekeeping'
+    and t_count('select count(*) from staff_profiles where email = ''second-acct@test.local''') = 0, s1 || ' / ' || s2 || ' / ' || s3);
+exception when others then perform t_record('SE06 a supervisor holding the staff editor cannot invite a manager (a second account of their own), make housekeeping a manager or stop a manager; inviting housekeeping, within their cells, works', false, sqlerrm); end $$;
+
+do $$ declare s text; before_b uuid[]; begin
+  -- a branch is taken away only by someone in it (0046): the manager of 010 and finance, who also has «فرع الرموز»
+  perform t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
+  before_b := t_branches('10000000-0000-0000-0000-000000000004');
+  s := t_fails('select fn_admin_update_staff(jsonb_build_object(''staff_id'', ''10000000-0000-0000-0000-000000000004'', ''branch_ids'', jsonb_build_array(''00000000-0000-0000-0000-000000000010''), ''reason'', ''حصر الفروع''))', '%FORBIDDEN%');
+  perform t_record('X04g a manager cannot take from someone a branch the manager is not in: finance keeps both branches',
+    s = 'ok' and t_branches('10000000-0000-0000-0000-000000000004') = before_b and cardinality(before_b) = 2, s);
+exception when others then perform t_record('X04g a manager cannot take from someone a branch the manager is not in: finance keeps both branches', false, sqlerrm); end $$;
+
 select t_as_owner('select fn_admin_reset_permissions(''عودة إلى المعتمدة بعد اختبار التصعيد'')');
 
 -- ---------------------------------------------------------------- PG: G20 with manual payments (decision 38)
@@ -221,10 +252,12 @@ do $$ declare bad text[] := '{}'; s text; q text; rid text := quote_literal(t_id
     'select fn_refund(jsonb_build_object(''reservation_id'', ' || rid || ', ''kind'', ''refund'', ''amount_halalas'', 1, ''method'', ''cash'', ''reason'', ''x'', ''idempotency_key'', ''g20-anon-3''))',
     'insert into financial_vouchers(organization_id, branch_id, reservation_id, number, kind, amount_halalas, method, idempotency_key, content_hash) values (''00000000-0000-0000-0000-000000000001'', ''00000000-0000-0000-0000-000000000010'', ' || rid || ', ''X'', ''receipt'', 1, ''cash'', ''g20-anon-4'', ''h'')',
     'insert into payment_transactions(reservation_id, method, amount_halalas, status, idempotency_key) values (' || rid || ', ''cash'', 1, ''paid'', ''g20-anon-5'')'] loop
-    s := t_fails(q, '%');
-    if s = 'accepted' then bad := bad || left(q, 50); end if;
+    s := t_fails(q, '%permission denied%');
+    if s <> 'ok' then s := t_fails(q, '%row-level security%'); end if;   -- refused by the grant or by the table's policy
+    if s <> 'ok' then bad := bad || (left(q, 50) || ' → ' || s); end if;
   end loop;
-  s := t_fails(format('update reservations set payment_status = ''paid'', paid_halalas = total_halalas where id = %L', t_id('res_g20')), '%');
+  s := t_fails(format('update reservations set payment_status = ''paid'', paid_halalas = total_halalas where id = %L', t_id('res_g20')), '%permission denied%');
+  if s <> 'ok' then bad := bad || ('update reservations → ' || s); end if;
   perform t_record('PG01 a visitor''s browser cannot issue a voucher, record a payment or refund, or write «مدفوع» on a booking',
     cardinality(bad) = 0 and (t_res(t_id('res_g20'))).payment_status = before.payment_status and (t_res(t_id('res_g20'))).paid_halalas = before.paid_halalas
     and t_count(format('select count(*) from financial_vouchers where reservation_id = %L', t_id('res_g20'))) = 0, array_to_string(bad, ' | '));
@@ -232,7 +265,7 @@ exception when others then perform t_record('PG01 a visitor''s browser cannot is
 
 -- the guest's own session (looked up by platform number and phone): it reads the status, it never sets it
 do $$ declare r jsonb; tok text; s jsonb; before reservations; begin
-  r := fn_guest_lookup('ACC-G20-1', '9876', null, 'fp-g20');
+  r := t_lookup('ACC-G20-1', '9876', null, 'fp-g20');
   tok := r->>'token';
   s := fn_guest_session(tok);
   before := t_res(t_id('res_g20'));
@@ -271,7 +304,9 @@ do $$ declare fid uuid; n_before bigint; u jsonb; row jsonb; f record; begin
   fid := (fn_admin_upsert_facility(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'name', 'المصلى — لم يُعدَّل منذ شهر')) ->>'id')::uuid;
   perform t_age_facility(fid, 40);
   n_before := t_count(format('select count(*) from audit_events where entity_id = %L', fid));
-  perform fn_monitors_if_due('00000000-0000-0000-0000-000000000010');
+  reset role;
+  perform fn_run_monitors('00000000-0000-0000-0000-000000000010');         -- the checks run now, not throttled
+  set local role authenticated;
   u := fn_reports_capability_usage('{"weeks": 4}');
   select x into row from jsonb_array_elements(u->'rows') x where x->>'code' = 'admin.facilities';
   select id, is_active, archived_at, updated_at into f from facilities where id = fid;
@@ -283,22 +318,30 @@ exception when others then perform t_record('D05 a facility nobody changed for 4
 
 -- ---------------------------------------------------------------- AX: what a visitor with no account can call (0045)
 reset role;
-do $$ declare guest text[] := array['fn_guest_lookup', 'fn_guest_phone_verify', 'fn_guest_phone_verify_ref', 'fn_guest_phone_reservations',
-                        'fn_guest_phone_open', 'fn_guest_session', 'fn_guest_submit', 'fn_guest_submit_checkin', 'fn_guest_access_code',
-                        'fn_guest_stay_summary', 'fn_guest_acknowledge', 'fn_public_branch', 'fn_branch_media', 'fn_public_whatsapp'];
-  extra text[]; missing text[]; s text; begin
-  select coalesce(array_agg(p.proname order by p.proname), '{}') into extra from pg_proc p
-   where p.pronamespace = 'public'::regnamespace and p.proname !~ '^t_' and not (p.proname = any(guest))
+do $$ declare guest text[] := array['fn_guest_phone_verify(p_phone text, p_code text, p_fingerprint text)',
+                        'fn_guest_phone_verify_ref(p_phone text, p_ref text, p_fingerprint text)', 'fn_guest_phone_reservations(p_token text)',
+                        'fn_guest_phone_open(p_token text, p_internal_ref text)', 'fn_guest_session(p_token text)',
+                        'fn_guest_submit(p_token text, p_guest_id uuid, p_payload jsonb)', 'fn_guest_submit_checkin(p_token text)',
+                        'fn_guest_access_code(p_token text)', 'fn_guest_stay_summary(p_token text)', 'fn_guest_acknowledge(p_token text, p_hash text)',
+                        'fn_public_branch(p_branch uuid)', 'fn_branch_media(p_branch uuid, p_kind text)', 'fn_public_whatsapp(p_branch uuid)'];
+  open_now text[]; extra text[]; missing text[]; loose text[]; s text; begin
+  select coalesce(array_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' order by 1), '{}') into open_now from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.proname !~ '^t_'
      and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
      and has_function_privilege('anon', p.oid, 'execute');
-  select coalesce(array_agg(g), '{}') into missing from unnest(guest) g
-   where not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = g and has_function_privilege('anon', p.oid, 'execute'));
+  select coalesce(array_agg(x), '{}') into extra from unnest(open_now) x where not (x = any(guest));
+  select coalesce(array_agg(g), '{}') into missing from unnest(guest) g where not (g = any(open_now));
+  select coalesce(array_agg(p.proname), '{}') into loose from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and has_function_privilege('anon', p.oid, 'execute') and p.proname !~ '^t_'
+     and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+     and not (p.prosecdef and coalesce(array_to_string(p.proconfig, ','), '') like '%search_path=%');
   set local role anon;
   s := t_fails('select fn_staff_check_in(''{}''::jsonb)', '%permission denied%');
   reset role;
-  perform t_record('AX01 a visitor with no account executes the fourteen functions the guest pages call and nothing else: a staff function is refused before it runs',
-    cardinality(extra) = 0 and cardinality(missing) = 0 and s = 'ok', 'extra ' || extra::text || ' missing ' || missing::text || ' / ' || s);
-exception when others then perform t_record('AX01 a visitor with no account executes the fourteen functions the guest pages call and nothing else: a staff function is refused before it runs', false, sqlerrm); end $$;
+  perform t_record('AX01 a visitor with no account executes the thirteen functions the guest pages call and nothing else: a staff function is refused before it runs',
+    cardinality(extra) = 0 and cardinality(missing) = 0 and cardinality(loose) = 0 and s = 'ok',
+    'extra ' || extra::text || ' missing ' || missing::text || ' loose ' || loose::text || ' / ' || s);
+exception when others then perform t_record('AX01 a visitor with no account executes the thirteen functions the guest pages call and nothing else: a staff function is refused before it runs', false, sqlerrm); end $$;
 
 -- =====================================================================
 -- RESULTS
@@ -308,6 +351,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 17 then raise exception 'ACCEPTANCE TESTS INCOMPLETE: % of 17 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 19 then raise exception 'ACCEPTANCE TESTS INCOMPLETE: % of 19 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'ACCEPTANCE TESTS FAILED'; end if;
 end $$;

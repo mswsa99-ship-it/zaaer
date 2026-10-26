@@ -65,7 +65,7 @@ const sameSet = (a: string[], b: string[]) => a.length === new Set(a).size && b.
 const reasonOf = (details: unknown): string | null => { const v = details && typeof details === "object" ? (details as Row).reason : null; return v == null ? null : typeof v === "string" ? v : JSON.stringify(v); };
 
 export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
-  const { T, byId, me, myBranches, hasRole, requireBranch, staffId, staffName, audit, emit, branchToday, roomNo, guestName, isMember, banMatches, can, capFull, requireCap, requireMoney, seesMoney } = c;
+  const { T, byId, me, myBranches, hasRole, requireBranch, staffId, staffName, audit, emit, branchToday, roomNo, guestName, isMember, banMatches, can, capFull, requireCap, requireMoney, seesMoney, roleWithinMine } = c;
   /** `coalesce(j->>'k', '')`: the text of a filter, '' when missing or null */
   const arg = (j: Row, k: string) => (j[k] == null ? "" : String(j[k]));
   const branchTz = (b: string | null | undefined) => (b ? byId("branches", b)?.timezone || "Asia/Riyadh" : "Asia/Riyadh");
@@ -273,8 +273,11 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       const beforeB = liveBranches(sp.id);
       const vBranches: string[] = has("branch_ids") ? [...new Set<string>((Array.isArray(q.branch_ids) ? q.branch_ids : []).map(String))] : beforeB;
       if (sp.id === mine && (vRole !== sp.role || !sameSet(vBranches, beforeB))) throw new Error("SELF_ROLE_OR_BRANCHES");
+      // 0046: no one acts on a role beyond their own, or gives one
+      if (sp.id !== mine && (!roleWithinMine(sp.role) || !roleWithinMine(vRole))) throw new Error("FORBIDDEN: a role beyond your own");
       if (sp.role === "owner" && vRole !== "owner" && !orgStaff().some((s) => s.role === "owner" && s.is_active && s.id !== sp.id)) throw new Error("LAST_OWNER: cannot remove or demote the last active owner");
       for (const b of vBranches) requireBranch(b);
+      for (const b of beforeB) if (!vBranches.includes(b)) requireBranch(b);   // 0046: a branch is taken away only by someone in it
       const changed: string[] = [];
       if (vName !== sp.full_name) changed.push("full_name"); if (vPhone !== (sp.phone ?? null)) changed.push("phone"); if (vRole !== sp.role) changed.push("role"); if (!sameSet(vBranches, beforeB)) changed.push("branches");
       if (!changed.length) return { ok: true, unchanged: true };
@@ -292,6 +295,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     fn_admin_set_staff_active: ({ p_staff, p_active, p_reason }) => {
       requireCap("staff.manage"); const reason = requireReason(p_reason); const sp = orgStaffRow(p_staff); if (sp.id === staffId()) throw new Error("SELF_NOT_ALLOWED");
       if (sp.role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
+      if (!roleWithinMine(sp.role)) throw new Error("FORBIDDEN: a role beyond your own");                             // 0046
       const active = p_active == null ? !!sp.is_active : !!p_active; if (!!sp.is_active === active) return { ok: true, unchanged: true };
       const before = { role: sp.role, is_active: !!sp.is_active };
       Object.assign(sp, { is_active: active, updated_at: nowISO(), sessions_ended_at: active ? sp.sessions_ended_at ?? null : nowISO() });

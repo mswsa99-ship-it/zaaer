@@ -41,12 +41,15 @@ do $$ declare n int; begin
     perform t_record('K01 anon cannot read knowledge_entries table', true);
   end;
 end $$;
+-- fn_public_knowledge is the reception assistant's (an Edge Function, with the service key); 0045 closed it to visitors
+reset role; set role service_role;
 do $$ declare n int; m int; k int; begin
   select count(*) into n from fn_public_knowledge('00000000-0000-0000-0000-000000000010');
   select count(*) into m from fn_public_knowledge('00000000-0000-0000-0000-000000000010') where answer = 'سري للموظفين فقط' or answer = 'معطل مؤقتًا' or answer = 'إجابة المنشأة الأخرى';
   select count(*) into k from fn_public_knowledge('00000000-0000-0000-0000-000000000011');
   perform t_record('K02 fn_public_knowledge returns only public+active entries of the branch/org', n >= 10 and m = 0 and k = 1, format('branch10=%s leaked=%s branch11=%s', n, m, k));
 end $$;
+reset role; set role anon;
 do $$ begin
   begin
     perform fn_record_unanswered('00000000-0000-0000-0000-000000000010', 'سؤال من مجهول', null);
@@ -147,5 +150,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
+  if (select count(*) from test_results) < 16 then raise exception 'KNOWLEDGE TESTS INCOMPLETE: % of 16 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'KNOWLEDGE TESTS FAILED'; end if;
 end $$;

@@ -22,6 +22,11 @@ end $$;
 create or replace function t_record(p_name text, p_ok boolean, p_detail text default null) returns void language sql security definer as $$
   insert into test_results values (p_name, p_ok, p_detail);
 $$;
+-- the older lookup by booking number + the phone's last four digits: no page calls it and 0045 closed it to visitors;
+-- its own checks are still tested here, called from the server side
+create or replace function t_lookup(p_ref text, p_last4 text, p_source uuid, p_fp text) returns jsonb language sql security definer as $$
+  select fn_guest_lookup(p_ref, p_last4, p_source, p_fp) $$;
+grant execute on function t_lookup(text, text, uuid, text) to public;
 -- superuser-privileged readers for assertions regardless of current role
 create or replace function t_room_status(p uuid) returns text language sql security definer as $$ select status::text from rooms where id = p $$;
 create or replace function t_keybox_status(p uuid) returns text language sql security definer as $$ select code_status from keyboxes where room_id = p $$;
@@ -61,12 +66,12 @@ do $$ declare n int; begin
   end;
 end $$;
 do $$ declare r jsonb; begin
-  r := fn_guest_lookup('BK-DEMO-1001', '9999', null, 'fp1');
+  r := t_lookup('BK-DEMO-1001', '9999', null, 'fp1');
   perform t_record('T8 wrong phone last4 → mismatch, no token', r->>'status' = 'mismatch' and r->>'token' is null, r::text);
 end $$;
 -- T7: unknown reservation → unmatched ticket, no data invented
 do $$ declare r jsonb; n int; begin
-  r := fn_guest_lookup('NOPE-123', '0111', null, 'fp1');
+  r := t_lookup('NOPE-123', '0111', null, 'fp1');
   reset role;
   select count(*) into n from human_handoff_tickets where kind='unmatched_reservation' and external_ref='NOPE-123';
   perform t_record('T7 unknown ref → supervisor ticket (unmatched)', r->>'status' = 'unmatched' and n = 1, r::text);
@@ -74,7 +79,7 @@ do $$ declare r jsonb; n int; begin
 end $$;
 -- T29: valid lookup gives a short-lived token; expired token rejected
 do $$ declare r jsonb; s jsonb; tok text; begin
-  r := fn_guest_lookup('BK-DEMO-1001', '0111', null, 'fp1');
+  r := t_lookup('BK-DEMO-1001', '0111', null, 'fp1');
   tok := r->>'token';
   s := fn_guest_session(tok);
   perform t_record('T29a valid token resolves session (limited summary)', r->>'status'='ok' and s->'reservation'->>'internal_ref' is not null and s->'guests' is not null, s::text);
@@ -90,8 +95,8 @@ do $$ declare r jsonb; s jsonb; tok text; begin
 end $$;
 -- brute force throttle
 do $$ declare r jsonb; i int; begin
-  for i in 1..5 loop r := fn_guest_lookup('BK-DEMO-1002', '0000', null, 'fp2'); end loop;
-  r := fn_guest_lookup('BK-DEMO-1002', '0222', null, 'fp2');
+  for i in 1..5 loop r := t_lookup('BK-DEMO-1002', '0000', null, 'fp2'); end loop;
+  r := t_lookup('BK-DEMO-1002', '0222', null, 'fp2');
   perform t_record('Lookup throttled after 5 failures', r->>'status' = 'throttled', r::text);
 end $$;
 reset role;
@@ -108,7 +113,7 @@ do $$ begin
   exception when insufficient_privilege then perform t_record('T18a anon cannot read keybox ciphertext column', true); end;
 end $$;
 do $$ declare r jsonb; tok text; begin
-  r := fn_guest_lookup('BK-DEMO-1002', '0222', null, 'fp3'); tok := r->>'token';
+  r := t_lookup('BK-DEMO-1002', '0222', null, 'fp3'); tok := r->>'token';
   r := fn_guest_access_code(tok);
   perform t_record('T12/T13 code denied when identity/payment not satisfied', (r->>'allowed')::boolean = false and r->>'code' is null, r::text);
 end $$;
@@ -321,10 +326,10 @@ end $$;
 -- T16: guest sees the code only for its own reservation, and gets exactly the rotated code
 set role anon;
 do $$ declare r jsonb; tok text; begin
-  r := fn_guest_lookup('BK-DEMO-1002','0222',null,'fp9'); tok := r->>'token';
+  r := t_lookup('BK-DEMO-1002','0222',null,'fp9'); tok := r->>'token';
   r := fn_guest_access_code(tok);
   perform t_record('T16a guest receives code for own reservation after delivery', (r->>'allowed')::boolean and r->>'code' = '4321', r::text);
-  r := fn_guest_lookup('BK-DEMO-1003','0333',null,'fp9'); tok := r->>'token';
+  r := t_lookup('BK-DEMO-1003','0333',null,'fp9'); tok := r->>'token';
   r := fn_guest_access_code(tok);
   perform t_record('T16b other guest cannot get that code', (r->>'allowed')::boolean = false and r->>'code' is null, r::text);
 end $$;
@@ -364,7 +369,7 @@ end $$;
 -- =====================================================================
 set role anon;
 do $$ declare r jsonb; tok text; s jsonb; begin
-  r := fn_guest_lookup('BK-DEMO-1003','0333',null,'fpA'); tok := r->>'token';
+  r := t_lookup('BK-DEMO-1003','0333',null,'fpA'); tok := r->>'token';
   begin
     r := fn_guest_submit(tok, '00000000-0000-0000-0000-000000000403', '{"full_name":"فهد ناصر","identity_type":"national_id","identity_number":"1012345678","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}');
     perform t_record('T10a two-part name rejected', false);

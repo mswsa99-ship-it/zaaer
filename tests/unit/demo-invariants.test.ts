@@ -2290,4 +2290,20 @@ describe("Permissions matrix in the demo (0043)", () => {
     await login(EMAIL.finance); expect((await mine()).allowed).not.toContain("maintenance.create");
     expect(await fails(rpc("fn_staff_create_maintenance", { p_room: (await all("rooms"))[0]?.id ?? uid(), p_title: "عطل", p_description: null }))).toBe("FORBIDDEN: maintenance.create");
   });
+
+  it("MX09 no one gives what they do not hold (0046): a supervisor ticked for «دعوة موظف وتعديله» cannot invite a manager (a second account of their own), make housekeeping a manager or stop the manager; inviting housekeeping works; an address that already has a profile is not invited again", async () => {
+    await login(EMAIL.supervisor);
+    await setCells([{ code: "staff.manage", role: "supervisor", allowed: true }], "supervisor");
+    const BEYOND = "FORBIDDEN: a role beyond your own";
+    expect(await fails(rpc("fn_staff_invite", { p_email: "second-acct@demo.sa", p_full_name: "حساب ثان", p_role: "manager", p_branch_ids: [A] }))).toBe(BEYOND);
+    expect(await fails(rpc("fn_admin_update_staff", { p: { staff_id: HK, role: "manager", reason: "ترقية" } }))).toBe(BEYOND);
+    expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: MANAGER, p_active: false, p_reason: "إيقاف المدير" }))).toBe(BEYOND);
+    expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-hk@demo.sa", p_full_name: "عامل نظافة جديد", p_role: "housekeeping", p_branch_ids: [A] })).ok).toBe(true);
+    expect(await fails(rpc("fn_staff_invite", { p_email: "MX09-HK@demo.sa", p_full_name: "مرة أخرى", p_role: "housekeeping", p_branch_ids: [A] }))).toBe("DUPLICATE_EMAIL");
+    expect(await fails(rpc("fn_staff_invite", { p_email: EMAIL.supervisor, p_full_name: "المشرف مرة أخرى", p_role: "supervisor", p_branch_ids: [A] }))).toBe("DUPLICATE_EMAIL");
+    expect((await all("staff_profiles")).some((x) => x.email === "second-acct@demo.sa")).toBe(false);
+    // the owner gives any role
+    await login(EMAIL.owner);
+    expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-mgr@demo.sa", p_full_name: "مدير جديد", p_role: "manager", p_branch_ids: [A] })).ok).toBe(true);
+  });
 });

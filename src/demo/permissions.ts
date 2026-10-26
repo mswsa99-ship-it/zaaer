@@ -33,6 +33,8 @@ export interface Permissions {
   requireAnyCap: (codes: string[]) => void;
   seesMoney: () => boolean;
   requireMoney: () => void;
+  /** 0046: the owner gives any role; anyone else only a role whose every cell they hold (a full cell only if they hold it full) */
+  roleWithinMine: (role: string) => boolean;
 }
 
 const ALL_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"];
@@ -63,7 +65,22 @@ export function makePermissions(c: Pick<PermissionsCtx, "T" | "me">): Permission
   const requireAnyCap = (codes: string[]) => { if (!codes.some((x) => can(x))) throw new Error(`FORBIDDEN: ${codes.join(" / ")}`); };
   const seesMoney = () => me()?.role === "owner" || MONEY_PERMISSIONS.some((x) => can(x));
   const requireMoney = () => { if (!seesMoney()) throw new Error("FORBIDDEN: money"); };
-  return { can, capFull, requireCap, requireCapFull, requireAnyCap, seesMoney, requireMoney };
+  /** fn_role_allows: what the matrix lets a role do in the organisation */
+  const roleAllows = (org: string, role: string, code: string): boolean => {
+    const row = permissionRow(code); if (!row) return false;
+    if (role === "owner") return true;
+    if (row.locked) return false;
+    const cell = stored(org, role, code);
+    return cell ? !!cell.allowed : (row.defaultRoles as readonly string[]).includes(role);
+  };
+  const roleWithinMine = (role: string): boolean => {
+    const m = me(); if (!m) return false;
+    if (m.role === "owner") return true;
+    if (role === "owner") return false;
+    return PERMISSION_CATALOG.every((row) => !roleAllows(m.organization_id, role, row.code)
+      || (can(row.code) && (!(row.fullRoles == null || (row.fullRoles as readonly string[]).includes(role)) || capFull(row.code))));
+  };
+  return { can, capFull, requireCap, requireCapFull, requireAnyCap, seesMoney, requireMoney, roleWithinMine };
 }
 
 export function permissionRpcs(c: PermissionsCtx, p: Permissions): Record<string, (a: any) => any> {
