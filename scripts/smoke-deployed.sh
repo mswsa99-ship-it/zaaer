@@ -42,8 +42,9 @@ done
 branch=$(curl -s "$api/rest/v1/branches?select=id&is_active=eq.true&limit=1" -H "apikey: $key" -H "Authorization: Bearer $key" | grep -o '"id":"[0-9a-f-]\{36\}"' | head -1 | cut -d'"' -f4)
 if [[ -z "$branch" ]]; then branch="${VITE_DEFAULT_BRANCH_ID:-}"; fi
 if [[ -n "$branch" ]]; then
-  code=$(curl -s -o /tmp/kb.json -w "%{http_code}" "$api/rest/v1/rpc/fn_public_knowledge" -X POST -H "apikey: $key" -H "Authorization: Bearer $key" -H "Content-Type: application/json" -d "{\"p_branch\":\"$branch\"}")
-  [[ "$code" == "200" ]] && ok "fn_public_knowledge → 200 ($(grep -o '"question"' /tmp/kb.json | wc -l) entries)" || bad "fn_public_knowledge → $code"
+  # 0045: the knowledge base is read by the reception assistant on the server (service key); a visitor is refused
+  code=$(curl -s -o /dev/null -w "%{http_code}" "$api/rest/v1/rpc/fn_public_knowledge" -X POST -H "apikey: $key" -H "Authorization: Bearer $key" -H "Content-Type: application/json" -d "{\"p_branch\":\"$branch\"}")
+  [[ "$code" == "401" || "$code" == "403" ]] && ok "fn_public_knowledge closed to visitors → $code" || bad "fn_public_knowledge open to visitors → $code"
 fi
 
 # 5. the AI reception edge function answers (deterministic path works without any model key)
