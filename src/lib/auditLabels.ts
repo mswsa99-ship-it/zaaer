@@ -153,6 +153,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   conversation_taken: "استلام المحادثة من المساعد",
   conversation_returned_to_assistant: "إعادة المحادثة إلى المساعد",
   whatsapp_channel_updated: "تعديل إعداد واتساب الفرع",
+  // the permissions matrix and the organisation (0043, 0044)
+  "permissions.updated": "تعديل مصفوفة الصلاحيات",
+  "permissions.reset": "إعادة مصفوفة الصلاحيات إلى المعتمدة",
+  "organization.updated": "تعديل بيانات المنشأة",
 };
 
 /** Entity names as the log shows them. */
@@ -165,6 +169,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   pos_settlement: "تسوية شبكة", platform_payout: "إيداع منصة", review_item: "بند مراجعة", maintenance_ticket: "بلاغ صيانة",
   whatsapp_channel: "واتساب الفرع", organization: "المنشأة", data_purge: "تفريغ بيانات", rate_calendar: "تقويم الأسعار",
   inventory_period: "فترة توفر", release_rule: "قاعدة توفر", released_slot: "توفر",
+  role_permissions: "مصفوفة الصلاحيات",
 };
 
 const VERB_LABELS: Record<string, string> = {

@@ -112,6 +112,15 @@ describe("non-negotiable source rules", () => {
     expect(paste.match(/^commit;$/gm)?.length).toBe(1);
   });
 
+  it("the owner's paste file for the permissions matrix carries 0044 verbatim, recorded in the history, in one transaction", () => {
+    // 0044 spells the word in the «حذف تعريف» labels it moves into their own functions (STAGING.md §0-ب)
+    const paste = read("supabase/paste/owner-paste-0044.sql");
+    expect(paste.includes(read("supabase/migrations/20261029030000_0044_permissions_paste.sql"))).toBe(true);
+    expect(paste).toContain("values ('20261029030000', '0044_permissions_paste') on conflict (version) do nothing;");
+    expect(paste.match(/^begin;$/gm)?.length).toBe(1);
+    expect(paste.match(/^commit;$/gm)?.length).toBe(1);
+  });
+
   it("no native confirm()/alert()/prompt() dialogs in the UI (embedded viewers swallow them)", () => {
     const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
     const offenders = uiFiles.filter((p) => /(^|[^.\w])(window\.)?(confirm|alert|prompt)\(/.test(stripComments(read(p))));

@@ -2052,7 +2052,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
     expect(row("reservations.create").by.human).toBe(row("reservations.create").window_count); expect(row("reservations.create").by.assistant).toBe(0);
     expect(row("screens.reports").status).toBe("unmeasured"); expect(row("admin.facilities")).toMatchObject({ core: true, status: "used" });   // the seed archived a facility 20 days ago
     expect(row("housekeeping.maintenance")).toMatchObject({ status: "idle", last_success_at: null, window_count: 0 }); expect(row("stay.summary")).toMatchObject({ status: "undetermined", coverage: "partial" });
-    expect(r.rows.map((x: any) => x.code).sort()).toEqual([...new Set(r.rows.map((x: any) => x.code))].sort()); expect(r.rows.length).toBe(50);
+    expect(r.rows.map((x: any) => x.code).sort()).toEqual([...new Set(r.rows.map((x: any) => x.code))].sort()); expect(r.rows.length).toBe(51);   // 50 in 0041, and «مصفوفة الصلاحيات» since 0044
     expect(r.rows.every((x: any, i: number) => i === 0 || r.rows[i - 1].area.localeCompare(x.area) <= 0)).toBe(true);
     const r5 = await rpc<any>("fn_reports_capability_usage", { p: { weeks: 5 } });
     expect(r5.log_covers_window).toBe(false); expect(r5.rows.some((x: any) => x.status === "idle")).toBe(false); expect(row("housekeeping.maintenance", r5).status).toBe("undetermined"); expect(row("reservations.create", r5).status).toBe("used");

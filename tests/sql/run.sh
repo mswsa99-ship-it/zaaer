@@ -48,5 +48,7 @@ echo "== running guest and platform tests (0038–0039: two paths for guest data
 psql -d "$DB" -f tests/sql/guests_platforms_tests.sql
 echo "== running lists, calendar, log, exports, report filters, task times, staff editor, forced sign-out and capability usage tests (0040–0041, Phase 6)"
 psql -d "$DB" -f tests/sql/lists_reports_tests.sql
+echo "== running permissions matrix tests (0043: the owner's editable matrix, decision 71; self-escalation, decision 44)"
+psql -d "$DB" -f tests/sql/permissions_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
