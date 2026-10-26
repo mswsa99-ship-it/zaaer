@@ -50,5 +50,7 @@ echo "== running lists, calendar, log, exports, report filters, task times, staf
 psql -d "$DB" -f tests/sql/lists_reports_tests.sql
 echo "== running permissions matrix tests (0043: the owner's editable matrix, decision 71; self-escalation, decision 44)"
 psql -d "$DB" -f tests/sql/permissions_tests.sql
+echo "== running Phase 7 acceptance tests (decisions 37, 38, 44, 53: branch isolation X04, G20 with manual payments, no self-escalation, D05)"
+psql -d "$DB" -f tests/sql/acceptance_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
