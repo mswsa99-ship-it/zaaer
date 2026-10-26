@@ -18,8 +18,9 @@
 import { uid, nowISO, addDays, ORG, type Row } from "./data";
 import { auditActionLabel, auditEntityLabel } from "../lib/auditLabels";
 import { CAPABILITY_CATALOG } from "../lib/capabilityCatalog";
+import type { Permissions } from "./permissions";
 
-export interface Phase6Ctx {
+export interface Phase6Ctx extends Permissions {
   T: (t: string) => Row[];
   byId: (t: string, id: string | null | undefined) => Row | undefined;
   me: () => Row | null;
@@ -39,7 +40,6 @@ export interface Phase6Ctx {
   banMatches: (resId: string) => Row[];
 }
 
-const MONEY_ROLES = ["owner", "manager", "supervisor", "finance"];
 const STAFF_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"];
 const OPEN_STATUSES = ["pending_verification", "confirmed", "checked_in"];
 const SCREENS = ["reservations", "vouchers", "audit"];
@@ -65,7 +65,7 @@ const sameSet = (a: string[], b: string[]) => a.length === new Set(a).size && b.
 const reasonOf = (details: unknown): string | null => { const v = details && typeof details === "object" ? (details as Row).reason : null; return v == null ? null : typeof v === "string" ? v : JSON.stringify(v); };
 
 export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
-  const { T, byId, me, myBranches, hasRole, requireRole, requireBranch, staffId, staffName, audit, emit, branchToday, roomNo, guestName, isMember, banMatches } = c;
+  const { T, byId, me, myBranches, hasRole, requireBranch, staffId, staffName, audit, emit, branchToday, roomNo, guestName, isMember, banMatches, can, capFull, requireCap, requireMoney, seesMoney } = c;
   /** `coalesce(j->>'k', '')`: the text of a filter, '' when missing or null */
   const arg = (j: Row, k: string) => (j[k] == null ? "" : String(j[k]));
   const branchTz = (b: string | null | undefined) => (b ? byId("branches", b)?.timezone || "Asia/Riyadh" : "Asia/Riyadh");
@@ -104,7 +104,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     // ---- the reservations list (decision 14, 10.1; X09b) ----
     fn_reservation_list: ({ p_branch, p_filters, p_limit, p_offset }) => {
       if (!p_branch || !myBranches().includes(p_branch)) return { total: 0, rows: [] };
-      const f: Row = p_filters ?? {}; const tz = branchTz(p_branch); const money = hasRole(...MONEY_ROLES); const a = (k: string) => arg(f, k);
+      const f: Row = p_filters ?? {}; const tz = branchTz(p_branch); const money = seesMoney(); const a = (k: string) => arg(f, k);
       const statuses = a("status") ? a("status").split(",") : null; const q = a("q"); const pc = a("platform_collects"); const guests = T("reservation_guests");
       const base = T("reservations").filter((r) => r.branch_id === p_branch
         && (!statuses || statuses.includes(String(r.status)))
@@ -147,7 +147,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     fn_reservation_calendar: ({ p_branch, p_from, p_to }) => {
       if (!p_branch || !myBranches().includes(p_branch)) throw new Error("FORBIDDEN: branch not permitted");
       if (!p_from || !p_to || p_to < p_from || daysBetween(p_from, p_to) > 62) throw new Error("VALIDATION: range");
-      const money = hasRole(...MONEY_ROLES); const end = addDays(p_to, 1);
+      const money = seesMoney(); const end = addDays(p_to, 1);
       const floorOrder = (r: Row) => (r.floor_id ? byId("floors", r.floor_id)?.sort_order ?? null : null);
       const units = T("rooms").filter((r) => r.branch_id === p_branch && !r.archived_at)
         .sort((x, y) => { const fx = floorOrder(x), fy = floorOrder(y); if (fx == null && fy != null) return 1; if (fy == null && fx != null) return -1; return cmp(fx, fy) || cmp(x.room_number, y.room_number); })
@@ -163,7 +163,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
 
     // ---- the log (decision 14, 10.3; X09c): readable names, filters, pages; the same rows for the export ----
     fn_audit_list: ({ p }) => {
-      requireRole("owner", "manager", "supervisor"); const q: Row = p ?? {}; const a = (k: string) => arg(q, k); const isOwner = hasRole("owner"), isMgmt = hasRole("owner", "manager");
+      requireCap("audit.log"); const q: Row = p ?? {}; const a = (k: string) => arg(q, k); const isOwner = hasRole("owner"), isMgmt = capFull("audit.log");
       const vBranch = a("branch_id") || null; if (vBranch) requireBranch(vBranch);
       const tz = vBranch ? branchTz(vBranch) : T("branches").filter((b) => b.organization_id === ORG).sort((x, y) => cmp(ms(x.created_at), ms(y.created_at)))[0]?.timezone || "Asia/Riyadh";
       const from = a("from") || null, to = a("to") || null; if (from && to && to < from) throw new Error("VALIDATION: period");
@@ -171,7 +171,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       const cat = a("category") || null, result = a("result") || null, source = a("source") || null, search = a("q").trim() || null;
       const lim = clamp(intArg(q.limit, 50), 1, 500), off = Math.max(intArg(q.offset, 0), 0); const mine = myBranches();
       const all = T("audit_events").filter((e) => e.organization_id === ORG
-        && ((e.category ?? "business") !== "security" || isOwner)
+        && ((e.category ?? "business") !== "security" || can("security"))
         && (isOwner || e.branch_id == null || mine.includes(e.branch_id))
         && (!vBranch || e.branch_id === vBranch)
         && (!from || dayIn(e.created_at, tz) >= from) && (!to || dayIn(e.created_at, tz) <= to)
@@ -191,7 +191,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
 
     // ---- the ledger (decision 14, 10.4; X09a): filters, pages, and totals over the whole filtered set ----
     fn_voucher_list: ({ p }) => {
-      requireRole("owner", "manager", "supervisor", "finance"); const q: Row = p ?? {}; const a = (k: string) => arg(q, k);
+      requireMoney(); const q: Row = p ?? {}; const a = (k: string) => arg(q, k);
       const vBranch = a("branch_id") || null; if (!vBranch) throw new Error("VALIDATION: branch_id"); requireBranch(vBranch); const tz = branchTz(vBranch);
       const from = a("from") || null, to = a("to") || null; if (from && to && to < from) throw new Error("VALIDATION: period");
       const kind = a("kind") || null, method = a("method") || null, account = a("account_id") || null, status = a("status") || "approved"; const accNone = account === "none", acc = account && !accNone ? account : null;
@@ -254,7 +254,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
 
     // ---- staff: the list, the editor, activation and «تسجيل خروج إجباري» (decisions 34, 35) ----
     fn_admin_staff_list: () => {
-      if (!hasRole("owner", "manager")) return []; const owner = hasRole("owner"); const mine = staffId();
+      if (!(can("staff.manage") || can("staff.force_logout"))) return []; const owner = can("staff.manage"); const mine = staffId();
       return orgStaff().sort((x, y) => Number(!!y.is_active) - Number(!!x.is_active) || text(x.full_name, y.full_name)).map((s) => ({
         id: s.id, full_name: s.full_name, email: s.email, phone: owner ? s.phone ?? null : null, role: s.role, is_active: !!s.is_active, linked: s.auth_user_id != null, created_at: s.created_at,
         sessions_ended_at: s.sessions_ended_at ?? null, updated_at: s.updated_at ?? null, branch_ids: liveBranches(s.id), is_me: s.id === mine }));
@@ -262,8 +262,10 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     // «تعديل موظف»: the owner, with a reason; name, phone, role and branches. Never the email, never oneself's role or
     // branches, never the last owner's role. One audit row with before and after (the phone masked).
     fn_admin_update_staff: ({ p }) => {
-      requireRole("owner"); const q: Row = p ?? {}; const mine = staffId(); const reason = requireReason(q.reason); const has = (k: string) => q[k] !== undefined;
+      requireCap("staff.manage"); const q: Row = p ?? {}; const mine = staffId(); const reason = requireReason(q.reason); const has = (k: string) => q[k] !== undefined;
       const sp = orgStaffRow(q.staff_id);
+      // decision 44 (0043): no one but the owner edits an owner or makes someone an owner
+      if ((sp.role === "owner" || (q.role == null ? "" : String(q.role)) === "owner") && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");
       if (has("email") && (q.email == null ? null : String(q.email).trim().toLowerCase()) !== (sp.email ?? null)) throw new Error("EMAIL_NOT_EDITABLE");
       const vName: string | null = has("full_name") ? String(q.full_name ?? "").trim() || null : sp.full_name; if (!vName) throw new Error("VALIDATION: full_name");
       const vPhone: string | null = has("phone") ? String(q.phone ?? "").replace(/[^0-9+]/g, "") || null : sp.phone ?? null;
@@ -288,7 +290,8 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     },
     // activation (owner): a reason, never oneself; deactivation ends every session (decision 34)
     fn_admin_set_staff_active: ({ p_staff, p_active, p_reason }) => {
-      requireRole("owner"); const reason = requireReason(p_reason); const sp = orgStaffRow(p_staff); if (sp.id === staffId()) throw new Error("SELF_NOT_ALLOWED");
+      requireCap("staff.manage"); const reason = requireReason(p_reason); const sp = orgStaffRow(p_staff); if (sp.id === staffId()) throw new Error("SELF_NOT_ALLOWED");
+      if (sp.role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
       const active = p_active == null ? !!sp.is_active : !!p_active; if (!!sp.is_active === active) return { ok: true, unchanged: true };
       const before = { role: sp.role, is_active: !!sp.is_active };
       Object.assign(sp, { is_active: active, updated_at: nowISO(), sessions_ended_at: active ? sp.sessions_ended_at ?? null : nowISO() });
@@ -299,9 +302,9 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     // «تسجيل خروج إجباري» (decision 34): owner or manager, with a reason; the manager never signs out an owner or another
     // manager; never oneself. Every session ends now (the token in hand is refused on its next request); the account stays active.
     fn_admin_force_logout: ({ p_staff, p_reason }) => {
-      requireRole("owner", "manager"); const reason = requireReason(p_reason); const m = me()!; const sp = orgStaffRow(p_staff);
+      requireCap("staff.force_logout"); const reason = requireReason(p_reason); const m = me()!; const sp = orgStaffRow(p_staff);
       if (sp.id === m.id) throw new Error("SELF_NOT_ALLOWED");
-      if (m.role === "manager" && ["owner", "manager"].includes(sp.role)) throw new Error("FORBIDDEN: a manager signs out neither an owner nor a manager");
+      if (!capFull("staff.force_logout") && ["owner", "manager"].includes(sp.role)) throw new Error("FORBIDDEN: a manager signs out neither an owner nor a manager");
       const n = sp.auth_user_id ? 1 : 0; sp.sessions_ended_at = nowISO(); emit("staff_profiles");
       audit(null, "staff.signed_out", "staff_profile", sp.id, { reason, sessions_ended: n, role: sp.role, linked: sp.auth_user_id != null });
       return { ok: true, sessions_ended: n };
@@ -309,7 +312,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
 
     // ---- «استعمال القدرات» (decision 55; control G26, test D04): from the audit log alone ----
     fn_reports_capability_usage: ({ p }) => {
-      requireRole("owner"); const q: Row = p ?? {}; const weeks = clamp(intArg(q.weeks, 4), 1, 26); const now = Date.now(); const winStart = now - weeks * 7 * 86400000; const weekStart = now - 7 * 86400000;
+      requireCap("reports.identities_usage"); const q: Row = p ?? {}; const weeks = clamp(intArg(q.weeks, 4), 1, 26); const now = Date.now(); const winStart = now - weeks * 7 * 86400000; const weekStart = now - 7 * 86400000;
       const yearBefore = new Date(winStart); yearBefore.setUTCFullYear(yearBefore.getUTCFullYear() - 1);
       const org = T("audit_events").filter((e) => e.organization_id === ORG);
       const horizon = org.reduce<number | null>((h, e) => { const t = ms(e.created_at); return h == null || t < h ? t : h; }, null);

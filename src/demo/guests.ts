@@ -12,8 +12,9 @@
  * A document's fingerprint here is a plain hash of the number (the demo keeps no secret); the number itself is never stored.
  */
 import { uid, nowISO, ORG, type Row } from "./data";
+import type { Permissions } from "./permissions";
 
-export interface GuestCtx {
+export interface GuestCtx extends Permissions {
   T: (t: string) => Row[];
   byId: (t: string, id: string | null | undefined) => Row | undefined;
   myBranches: () => string[];
@@ -86,7 +87,7 @@ function b64ToBytes(b64: string): Uint8Array {
 }
 
 export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
-  const { T, byId, myBranches, hasRole, requireRole, requireBranch, staffId, staffName, audit, addReview, emit, normPhone, financeOf, branchToday, roomNo } = c;
+  const { T, byId, myBranches, hasRole, requireRole, requireBranch, staffId, staffName, audit, addReview, emit, normPhone, financeOf, branchToday, roomNo, requireCap, requireMoney, seesMoney } = c;
   const res = (id: string) => { const r = byId("reservations", id); if (!r) throw new Error("RESERVATION_NOT_FOUND"); return r; };
   const guestsOf = (resId: string) => T("reservation_guests").filter((g) => g.reservation_id === resId);
   const primary = (resId: string) => guestsOf(resId).find((g) => g.is_primary) ?? null;
@@ -184,7 +185,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
   return {
     // ---- the office path (decision 2) ----
     fn_staff_enter_guest: ({ p }) => c.atomically(() => {
-      requireRole("owner", "manager", "supervisor");
+      requireCap("guest.enter");
       const r = res(p.reservation_id); requireBranch(r.branch_id);
       if (["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(r.status)) throw new Error("RESERVATION_NOT_EDITABLE");
       if (p.document_matched !== true) throw new Error("VALIDATION: document_matched");
@@ -218,7 +219,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       return { ok: true, guest_id: target.id, identity_status: st };
     }),
     fn_staff_approve_identity: ({ p_guest_id, p_approve, p_reason }) => {
-      requireRole("owner", "manager", "supervisor"); const g = byId("reservation_guests", p_guest_id); if (!g) throw new Error("GUEST_NOT_FOUND");
+      requireCap("identity.approve"); const g = byId("reservation_guests", p_guest_id); if (!g) throw new Error("GUEST_NOT_FOUND");
       const r = res(g.reservation_id); requireBranch(r.branch_id); if (!g.data_submitted) throw new Error("GUEST_DATA_NOT_SUBMITTED");
       if (!p_approve && !String(p_reason ?? "").trim()) throw new Error("REASON_REQUIRED");
       Object.assign(g, { verification_status: p_approve ? "verified" : "rejected", verified_by: p_approve ? staffId() : null, verified_at: p_approve ? nowISO() : null });
@@ -252,7 +253,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
         duplicates: duplicatesOf(gp), can_ban: hasRole("owner", "manager") };
     },
     fn_guest_rate: ({ p }) => {
-      requireRole("owner", "manager", "supervisor"); const rating = p.rating == null || p.rating === "" ? null : Number(p.rating);
+      requireCap("guest.rate"); const rating = p.rating == null || p.rating === "" ? null : Number(p.rating);
       if (rating != null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) throw new Error("VALIDATION: rating");
       const note = String(p.note ?? "").trim() || null; if (note && note.length > 500) throw new Error("VALIDATION: note");
       const gp = byId("guest_profiles", p.profile_id); if (!gp || !profileVisible(gp)) throw new Error("NOT_FOUND");
@@ -262,7 +263,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       return { ok: true, rating };
     },
     fn_guest_ban: ({ p }) => {
-      requireRole("owner", "manager"); const ban = p.ban; if (ban == null) throw new Error("VALIDATION: ban"); const reason = String(p.reason ?? "").trim(); if (!reason) throw new Error("VALIDATION: reason");
+      requireCap("guest.ban"); const ban = p.ban; if (ban == null) throw new Error("VALIDATION: ban"); const reason = String(p.reason ?? "").trim(); if (!reason) throw new Error("VALIDATION: reason");
       let b: Row | undefined; let gp: Row | undefined;
       if (!ban && p.ban_id) { b = T("guest_bans").find((x) => x.id === p.ban_id && !x.lifted_at); if (!b) throw new Error("NOT_FOUND"); gp = byId("guest_profiles", b.guest_profile_id); }
       else { gp = byId("guest_profiles", p.profile_id); if (!gp || !profileVisible(gp)) throw new Error("NOT_FOUND"); }
@@ -286,7 +287,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       return { ok: true, duplicate: false, ban_id: b.id };
     },
     fn_staff_set_hold: ({ p }) => {
-      const hold = p.hold; if (hold == null) throw new Error("VALIDATION: hold"); if (hold) requireRole("owner", "manager", "supervisor"); else requireRole("owner", "manager");
+      const hold = p.hold; if (hold == null) throw new Error("VALIDATION: hold"); if (hold) requireCap("hold.set"); else requireCap("hold.lift");
       const reason = String(p.reason ?? "").trim(); if (!reason) throw new Error("VALIDATION: reason");
       const r = res(p.reservation_id); requireBranch(r.branch_id); if (!!r.security_hold === !!hold) return { ok: true, duplicate: true };
       const before = { security_hold: !!r.security_hold, reason: r.security_hold_reason ?? null };
@@ -297,7 +298,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     },
     fn_reservation_ban_matches: ({ p_reservation }) => banMatches(p_reservation),
     fn_reservation_flags: ({ p_branch }) => {
-      requireRole("owner", "manager", "supervisor", "finance"); requireBranch(p_branch); const out: Row = {};
+      requireMoney(); requireBranch(p_branch); const out: Row = {};
       for (const r of T("reservations").filter((x) => x.branch_id === p_branch && ["draft", "pending_verification", "confirmed", "checked_in"].includes(x.status))) {
         const ban = banMatches(r.id).length > 0; const pg = primary(r.id); const rating = pg?.guest_profile_id ? byId("guest_profiles", pg.guest_profile_id)?.rating ?? null : null;
         if (ban || r.security_hold || rating != null) out[r.id] = { ban, hold: !!r.security_hold, rating };
@@ -334,7 +335,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     },
     // decision 36 (0040): by the staff member who verified (p_filters.staff_id); the filters echoed back with the path
     fn_reports_identities: ({ p_branch, p_from, p_to, p_path, p_filters }) => {
-      requireRole("owner"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || Math.round((Date.parse(p_to) - Date.parse(p_from)) / 86400000) > 366) throw new Error("VALIDATION: period"); const path = p_path || "office"; if (!["office", "guest", "all"].includes(path)) throw new Error("VALIDATION: path");
+      requireCap("reports.identities_usage"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from || Math.round((Date.parse(p_to) - Date.parse(p_from)) / 86400000) > 366) throw new Error("VALIDATION: period"); const path = p_path || "office"; if (!["office", "guest", "all"].includes(path)) throw new Error("VALIDATION: path");
       const fStaff: string | null = (p_filters ?? {}).staff_id || null; const filters: Row = { path }; if (fStaff) filters.staff_id = fStaff;
       const rows = T("reservation_guests").map((g) => ({ g, r: byId("reservations", g.reservation_id)! })).filter(({ g, r }) => r && r.branch_id === p_branch && g.verification_status === "verified" && g.verified_at && localDay(g.verified_at) >= p_from && localDay(g.verified_at) <= p_to && (path === "all" || (g.entry_path ?? "guest") === path) && (!fStaff || g.verified_by === fStaff))
         .sort((a, b) => (a.g.verified_at < b.g.verified_at ? 1 : -1)).map(({ g, r }) => ({ guest_id: g.id, reservation_id: r.id, internal_ref: r.internal_ref, full_name: g.full_name, is_primary: g.is_primary, identity_type: g.identity_type, identity_last4: g.identity_number_last4, entry_path: g.entry_path ?? null, entered_by: staffName(g.entered_by), entered_at: g.entered_at ?? null, verified_by: staffName(g.verified_by), verified_at: g.verified_at }));
@@ -345,7 +346,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     // ---- the group's page (decision 69) ----
     fn_reservation_group_summary: ({ p_reservation }) => {
       requireRole("owner", "manager", "supervisor", "finance", "housekeeping"); const r = res(p_reservation); if (!myBranches().includes(r.branch_id)) throw new Error("RESERVATION_NOT_FOUND"); if (!r.group_ref) return null;
-      const m = hasRole("owner", "manager", "supervisor", "finance"); const units = T("reservations").filter((s) => s.group_ref === r.group_ref).sort((a, b) => a.internal_ref.localeCompare(b.internal_ref));
+      const m = seesMoney(); const units = T("reservations").filter((s) => s.group_ref === r.group_ref).sort((a, b) => a.internal_ref.localeCompare(b.internal_ref));
       const sum = (k: string) => units.reduce((a, s) => a + Number(s[k] ?? 0), 0);
       return { group_ref: r.group_ref, external_ref: r.external_ref, source_name: byId("booking_sources", r.source_id)?.name ?? null,
         units: units.map((s) => ({ id: s.id, internal_ref: s.internal_ref, status: s.status, check_in: s.check_in, check_out: s.check_out, adults: s.adults, companions: s.companions, room_number: roomNo(s.room_id), category_name: byId("room_categories", s.room_category_id)?.name_ar ?? null, total_halalas: m ? s.total_halalas : null, paid_halalas: m ? s.paid_halalas : null, balance_due_halalas: m ? s.balance_due_halalas : null, deposit_balance_halalas: m ? s.deposit_balance_halalas : null })),
@@ -353,9 +354,9 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     },
 
     // ---- «ملخص الإقامة» (decision 19) ----
-    fn_stay_summary: ({ p_reservation }) => { requireRole("owner", "manager", "supervisor", "finance"); const r = res(p_reservation); requireBranch(r.branch_id); return { ...summaryOf(r), acknowledgements: ackList(r.id) }; },
+    fn_stay_summary: ({ p_reservation }) => { requireMoney(); const r = res(p_reservation); requireBranch(r.branch_id); return { ...summaryOf(r), acknowledgements: ackList(r.id) }; },
     fn_staff_record_paper_ack: ({ p }) => {
-      requireRole("owner", "manager", "supervisor"); const r = res(p.reservation_id); requireBranch(r.branch_id); if (["cancelled", "rejected", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
+      requireCap("checkin"); const r = res(p.reservation_id); requireBranch(r.branch_id); if (["cancelled", "rejected", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
       const out = recordAck(r, primary(r.id)?.id ?? null, "paper", String(p.text_hash ?? ""), staffId());
       if (!out.duplicate) audit(r.branch_id, "reservation.summary_signed", "reservation", r.id, { after: { method: "paper", text_hash: p.text_hash } });
       return out;
@@ -373,7 +374,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
 
     // ---- the branch's media and public card (decision 31) ----
     fn_admin_set_branch_media: ({ p }) => {
-      requireRole("owner", "manager"); requireBranch(p.branch_id); const kind = p.kind; if (!["logo", "image"].includes(kind)) throw new Error("VALIDATION: kind");
+      requireCap("branch.settings"); requireBranch(p.branch_id); const kind = p.kind; if (!["logo", "image"].includes(kind)) throw new Error("VALIDATION: kind");
       const raw = String(p.data_base64 ?? "").replace(/^data:[^,]*,/, ""); const cur = T("branch_media").find((m) => m.branch_id === p.branch_id && m.kind === kind);
       const before = cur?.data_url ? { mime: cur.mime, size_bytes: cur.size_bytes, sha256: cur.sha256 } : null;
       if (!raw) { if (!cur) return { ok: true, changed: false }; Object.assign(cur, { mime: null, data_url: null, size_bytes: 0, sha256: null, updated_at: nowISO(), updated_by: staffId() }); emit("branch_media"); audit(p.branch_id, `branch.${kind}_changed`, "branch", p.branch_id, { before, after: null }); return { ok: true, changed: true, media: null }; }
@@ -391,9 +392,9 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       const b = byId("branches", p_branch); if (!b || !(b.is_active || myBranches().includes(b.id))) return null; const ver = (k: string) => { const m = T("branch_media").find((x) => x.branch_id === b.id && x.kind === k && x.data_url); return m ? String(m.sha256).slice(0, 12) : null; };
       return { id: b.id, name_ar: b.name_ar, name_en: b.name_en, city: b.city, address: b.address, phone: b.phone, map_url: b.map_url ?? null, booking_platform_url: b.booking_platform_url ?? null, default_language: b.default_language ?? "ar", country_code: b.country_code ?? "SA", check_in_time: String(b.check_in_time ?? "16:00").slice(0, 5), check_out_time: String(b.check_out_time ?? "12:00").slice(0, 5), logo_version: ver("logo"), image_version: ver("image") };
     },
-    fn_admin_branch_media_info: ({ p_branch }) => { requireRole("owner", "manager"); requireBranch(p_branch); const out: Row = {}; for (const m of T("branch_media").filter((x) => x.branch_id === p_branch && x.data_url)) out[m.kind] = { mime: m.mime, size_bytes: m.size_bytes, updated_at: m.updated_at, updated_by: staffName(m.updated_by) }; return out; },
+    fn_admin_branch_media_info: ({ p_branch }) => { requireCap("branch.settings"); requireBranch(p_branch); const out: Row = {}; for (const m of T("branch_media").filter((x) => x.branch_id === p_branch && x.data_url)) out[m.kind] = { mime: m.mime, size_bytes: m.size_bytes, updated_at: m.updated_at, updated_by: staffName(m.updated_by) }; return out; },
     fn_admin_set_source_active: ({ p }) => {
-      requireRole("owner", "manager"); if (p.is_active == null) throw new Error("VALIDATION: is_active"); const s = byId("booking_sources", p.id); if (!s) throw new Error("NOT_FOUND");
+      requireCap("definitions"); if (p.is_active == null) throw new Error("VALIDATION: is_active"); const s = byId("booking_sources", p.id); if (!s) throw new Error("NOT_FOUND");
       if (!!s.is_active === !!p.is_active) return { ok: true, changed: false };
       const was = !!s.is_active; s.is_active = !!p.is_active; emit("booking_sources");
       audit(null, s.is_active ? "source.enabled" : "source.disabled", "booking_source", s.id, { before: { code: s.code, is_active: was }, after: { code: s.code, is_active: s.is_active }, reason: String(p.reason ?? "").trim() || null });
@@ -404,8 +405,8 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
 
 /** What the server adds to fn_reservation_detail in phase 5 (bans, the profile's rating, the hold, the platform fields, the acknowledgements). */
 export function detailExtras(c: GuestCtx, rpcs: Record<string, (a: any) => any>, r: Row) {
-  const { T, byId, hasRole, staffName } = c;
-  const staffy = hasRole("owner", "manager", "supervisor"); const money = hasRole("owner", "manager", "supervisor", "finance");
+  const { T, byId, hasRole, staffName, seesMoney } = c;
+  const staffy = hasRole("owner", "manager", "supervisor"); const money = seesMoney();
   const pg = T("reservation_guests").find((g) => g.reservation_id === r.id && g.is_primary); const gp = pg?.guest_profile_id ? byId("guest_profiles", pg.guest_profile_id) : undefined;
   const src = byId("booking_sources", r.source_id);
   return {

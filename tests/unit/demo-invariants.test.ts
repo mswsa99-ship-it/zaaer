@@ -2083,3 +2083,211 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
     expect((await all("audit_events")).length).toBe(n);
   });
 });
+
+describe("Permissions matrix in the demo (0043)", () => {
+  const A = "00000000-0000-0000-0000-000000000010";   // the seeded branch every staff member works in
+  const OWNER = "00000000-0000-0000-0000-000000000001", MANAGER = "00000000-0000-0000-0000-000000000008", HK = "00000000-0000-0000-0000-000000000003";
+  const RECEPTION = "00000000-0000-0000-0000-000000000021", STUDIO = "00000000-0000-0000-0000-000000000030";
+  const EMAIL: Record<string, string> = { owner: "owner@demo.sa", manager: "manager@demo.sa", supervisor: "reception@demo.sa", finance: "finance@demo.sa", housekeeping: "housekeeping@demo.sa" };
+  const ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"] as const;
+  const fails = async (p: Promise<unknown>) => { try { await p; return ""; } catch (e) { return (e as Error).message; } };
+  const all = async (table: string) => (await client.from(table).select("*")).data as any[];
+  const day = (n: number) => { const d = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" }) + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const book = (from: number) => rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: STUDIO, source_id: RECEPTION, check_in: day(from), check_out: day(from + 1), guest_name: "ضيف المصفوفة", guest_phone: "0500000000", adults: 1, companions: 0 } });
+  const receipt = (resId: string, amount = 1000) => rpc<any>("fn_create_voucher", { p: { reservation_id: resId, kind: "receipt", amount_halalas: amount, method: "cash", idempotency_key: uid() } });
+  /** the owner sets cells (signed in as the owner), then the session returns to `back` */
+  const setCells = async (changes: Array<{ code: string; role: string; allowed: boolean }>, back: string) => {
+    await login(EMAIL.owner); const r = await rpc<any>("fn_admin_set_permissions", { p: { changes, reason: "اختبار المصفوفة" } }); await login(EMAIL[back]); return r;
+  };
+  const mine = () => rpc<any>("fn_my_permissions", {});
+  const lastPermAudit = async () => { await login(EMAIL.owner); return (await all("audit_events")).filter((e) => String(e.action).startsWith("permissions.")).sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0)); };
+  let CATALOG: typeof import("../../src/lib/permissionCatalog");
+  beforeAll(async () => { CATALOG = await import("../../src/lib/permissionCatalog"); });
+
+  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 55 rows, five columns, the owner's always allowed, nothing changed yet", async () => {
+    const { PERMISSION_CATALOG } = CATALOG;
+    for (const role of ROLES) {
+      await login(EMAIL[role]); const m = await mine();
+      expect(m.role).toBe(role);
+      const allowed = PERMISSION_CATALOG.filter((r) => role === "owner" || (r.defaultRoles.includes(role) && !r.locked)).map((r) => r.code);
+      expect(m.allowed, role).toEqual(allowed);
+      expect(m.full, role).toEqual(PERMISSION_CATALOG.filter((r) => allowed.includes(r.code) && (role === "owner" || r.fullRoles == null || r.fullRoles.includes(role))).map((r) => r.code));
+      expect(m.sees_money, role).toBe(role !== "housekeeping");
+    }
+    await client.auth.signOut();
+    expect(await mine()).toEqual({ role: null, allowed: [], full: [], sees_money: false });
+    await login(EMAIL.owner);
+    const mx = await rpc<any>("fn_permissions_matrix", {});
+    expect(mx.roles).toEqual([...ROLES]); expect(mx.editable_roles).toEqual(["manager", "supervisor", "finance", "housekeeping"]);
+    expect(mx.rows).toHaveLength(55); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
+    expect(mx.rows.every((r: any) => r.cells.owner.allowed === true && Object.keys(r.cells).length === 5)).toBe(true);
+    const row = (code: string) => mx.rows.find((r: any) => r.code === code);
+    expect(row("voucher.correct")).toMatchObject({ limit_note: "سنداته خلال 24 ساعة", full_roles: ["owner", "manager"], locked: false });
+    expect(row("voucher.correct").cells.supervisor).toEqual({ allowed: true, default: true, limited: true });
+    expect(row("voucher.correct").cells.manager).toEqual({ allowed: true, default: true, limited: false });
+    expect(row("res.create").cells.finance).toEqual({ allowed: false, default: false, limited: true });
+    expect(row("admin.permissions")).toMatchObject({ locked: true }); expect(row("admin.permissions").cells.manager.allowed).toBe(false);
+    expect((await all("role_permissions")).length).toBe(0);
+  });
+
+  it("MX02 the owner unticks «إنشاء حجز» for the supervisor: the supervisor's next booking is refused; ticked again, the next one goes through", async () => {
+    await login(EMAIL.supervisor);
+    expect((await book(300)).ok).toBe(true);
+    expect(await setCells([{ code: "res.create", role: "supervisor", allowed: false }], "supervisor")).toEqual({ ok: true, changed: 1 });
+    expect(await fails(book(302))).toBe("FORBIDDEN: res.create");
+    expect((await mine()).allowed).not.toContain("res.create");
+    await setCells([{ code: "res.create", role: "supervisor", allowed: true }], "supervisor");
+    expect((await book(304)).ok).toBe(true);
+    // the manager was never touched
+    await login(EMAIL.manager); expect((await book(306)).ok).toBe(true);
+  });
+
+  it("MX03 ticking «سند قبض» for housekeeping: they issue a receipt on their next request, and from then on see money (the voucher reads back through the table's own rule)", async () => {
+    const res = await book(310);
+    await login(EMAIL.housekeeping);
+    expect((await mine()).sees_money).toBe(false);
+    expect(await all("financial_vouchers")).toHaveLength(0);
+    expect(await fails(receipt(res.id))).toBe("FORBIDDEN: voucher.receipt");
+    await setCells([{ code: "voucher.receipt", role: "housekeeping", allowed: true }], "housekeeping");
+    expect((await mine()).sees_money).toBe(true);
+    const v = await receipt(res.id);
+    expect(v.ok).toBe(true);
+    expect((await all("financial_vouchers")).some((x) => x.id === v.voucher_id)).toBe(true);
+    expect((await rpc<any>("fn_reservation_finance", { p_reservation: res.id })).received).toBeGreaterThanOrEqual(1000);
+    // the other money operations stay closed: only the cell that was ticked opened
+    expect(await fails(rpc("fn_refund", { p: { reservation_id: res.id, kind: "refund", amount_halalas: 100, method: "cash", idempotency_key: uid(), reason: "x" } }))).toBe("FORBIDDEN: voucher.refund");
+  });
+
+  it("MX04 every money cell unticked for the supervisor: the vouchers table shows them nothing, the ledger and the stay's finance are refused — money follows the matrix, not the role name; «سجل الإجراءات» unticked for the manager closes the log and the table", async () => {
+    const res = await book(320); await receipt(res.id);
+    await login(EMAIL.supervisor);
+    expect((await all("financial_vouchers")).length).toBeGreaterThan(0);
+    const money = ["voucher.receipt", "deposit.refund", "deposit.apply", "voucher.correct", "pos.settle", "invoice.issue", "invoice.edit", "reports.finance"];
+    expect((await setCells(money.map((code) => ({ code, role: "supervisor", allowed: false })), "supervisor")).changed).toBe(8);
+    expect((await mine()).sees_money).toBe(false);
+    expect(await all("financial_vouchers")).toHaveLength(0);
+    expect(await all("reservation_charges")).toHaveLength(0);
+    expect(await fails(rpc("fn_voucher_list", { p: { branch_id: A } }))).toBe("FORBIDDEN: money");
+    expect(await rpc("fn_reservation_finance", { p_reservation: res.id })).toBeNull();
+    const detail = await rpc<any>("fn_reservation_detail", { p_reservation: res.id });
+    expect(detail.vouchers).toBeNull(); expect(detail.finance).toBeNull(); expect(detail.reservation.total_halalas).toBeUndefined();
+    expect(await fails(rpc("fn_stay_summary", { p_reservation: res.id }))).toBe("FORBIDDEN: money");
+    // the log
+    await login(EMAIL.manager);
+    expect((await all("audit_events")).length).toBeGreaterThan(0);
+    await setCells([{ code: "audit.log", role: "manager", allowed: false }], "manager");
+    expect(await fails(rpc("fn_audit_list", { p: {} }))).toBe("FORBIDDEN: audit.log");
+    expect(await all("audit_events")).toHaveLength(0);
+  });
+
+  it("MX05 a ticked cell that has a condition keeps it: finance ticked for «تصحيح سند» corrects only its own vouchers; housekeeping ticked for the finance reports gets the discounts summary only; finance cancels no confirmed payout; the discount cells decide the allowance", async () => {
+    const res = await book(330); const v = await receipt(res.id, 1500);   // the owner's voucher
+    await login(EMAIL.finance);
+    const correct = () => rpc("fn_staff_correct_voucher", { p: { voucher_id: v.voucher_id, amount_halalas: 1400, reason: "تصحيح", idempotency_key: uid() } });
+    expect(await fails(correct())).toBe("FORBIDDEN: voucher.correct");
+    await setCells([{ code: "voucher.correct", role: "finance", allowed: true }], "finance");
+    expect(await fails(correct())).toBe("FORBIDDEN: a supervisor corrects only the vouchers they issued");
+    // a condition with the approved defaults too
+    expect(await fails(rpc("fn_platform_unsettled", { p_branch: A }))).toBe("");
+    expect(await fails(rpc("fn_platform_payout_cancel", { p_payout: uid(), p_reason: "سبب" }))).toBe("FORBIDDEN: platform.payouts (limited)");
+    // housekeeping and the finance reports
+    await login(EMAIL.housekeeping);
+    await setCells([{ code: "reports.finance", role: "housekeeping", allowed: true }], "housekeeping");
+    const rep = await rpc<any>("fn_reports_discounts", { p_branch: A, p_from: day(-30), p_to: day(0), p_filters: {} });
+    expect(rep).toHaveProperty("by_staff"); expect(rep.rows).toBeNull();
+    expect(await fails(rpc("fn_reports_finance", { p_branch: A, p_from: null, p_to: null, p_filters: {} }))).toBe("FORBIDDEN: reports.finance (limited)");
+    // discounts: without «خصم قبل الوصول» no discount at all; with «خصم بعد الوصول» the allowance is unlimited
+    await login(EMAIL.supervisor);
+    expect((await rpc<any>("fn_discount_allowance", { p_reservation: res.id })).unlimited).toBe(false);
+    await setCells([{ code: "disc.before", role: "supervisor", allowed: false }], "supervisor");
+    expect(await fails(rpc("fn_discount_allowance", { p_reservation: res.id }))).toBe("FORBIDDEN: disc.before / disc.after");
+    await setCells([{ code: "disc.before", role: "supervisor", allowed: true }, { code: "disc.after", role: "supervisor", allowed: true }], "supervisor");
+    expect((await rpc<any>("fn_discount_allowance", { p_reservation: res.id })).unlimited).toBe(true);
+  });
+
+  it("MX06 no one but the owner touches an owner: a manager ticked for «دعوة موظف وتعديله» invites a supervisor but cannot invite, edit, promote to or deactivate an owner; a supervisor ticked for «خروج إجباري» signs out housekeeping, never a manager or the owner", async () => {
+    await login(EMAIL.manager);
+    expect(await fails(rpc("fn_staff_invite", { p_email: "dp06-sup@demo.sa", p_full_name: "مشرف المصفوفة", p_role: "supervisor", p_branch_ids: [A] }))).toBe("FORBIDDEN: staff.manage");
+    expect((await rpc<any[]>("fn_admin_staff_list", {})).every((s) => s.phone === null)).toBe(true);   // «خروج إجباري» lists the staff, without phones
+    await setCells([{ code: "staff.manage", role: "manager", allowed: true }], "manager");
+    const inv = await rpc<any>("fn_staff_invite", { p_email: "dp06-sup@demo.sa", p_full_name: "مشرف المصفوفة", p_role: "supervisor", p_branch_ids: [A] });
+    expect(inv.ok).toBe(true);
+    const OWNER_GUARD = "FORBIDDEN: only the owner changes an owner";
+    expect(await fails(rpc("fn_staff_invite", { p_email: "dp06-owner@demo.sa", p_full_name: "مالك ثان", p_role: "owner", p_branch_ids: [] }))).toBe(OWNER_GUARD);
+    expect(await fails(rpc("fn_admin_update_staff", { p: { staff_id: OWNER, full_name: "اسم آخر", reason: "سبب" } }))).toBe(OWNER_GUARD);
+    expect(await fails(rpc("fn_admin_update_staff", { p: { staff_id: inv.staff_id, role: "owner", reason: "سبب" } }))).toBe(OWNER_GUARD);
+    expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: OWNER, p_active: false, p_reason: "سبب" }))).toBe(OWNER_GUARD);
+    expect((await rpc<any>("fn_admin_set_staff_active", { p_staff: inv.staff_id, p_active: false, p_reason: "لم يعد يعمل" })).ok).toBe(true);
+    expect((await rpc<any[]>("fn_admin_staff_list", {})).find((s) => s.id === inv.staff_id).is_active).toBe(false);
+    // forced sign-out ticked for the supervisor: under its condition
+    await login(EMAIL.supervisor);
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: HK, p_reason: "سبب" }))).toBe("FORBIDDEN: staff.force_logout");
+    await setCells([{ code: "staff.force_logout", role: "supervisor", allowed: true }], "supervisor");
+    const MGR_GUARD = "FORBIDDEN: a manager signs out neither an owner nor a manager";
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: MANAGER, p_reason: "سبب" }))).toBe(MGR_GUARD);
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: OWNER, p_reason: "سبب" }))).toBe(MGR_GUARD);
+    expect((await rpc<any>("fn_admin_force_logout", { p_staff: HK, p_reason: "اختبار المصفوفة" })).ok).toBe(true);
+    // with the approved defaults the manager signs out housekeeping but not another manager (unchanged)
+    await login(EMAIL.manager);
+    expect(await fails(rpc("fn_admin_force_logout", { p_staff: OWNER, p_reason: "سبب" }))).toBe(MGR_GUARD);
+  });
+
+  it("MX07 the guards: the owner's column, the locked row, a reason, a known operation, a yes/no value and a list of changes; a refused list changes nothing; the matrix is the owner's alone (read, save, reset, the table itself)", async () => {
+    const set = (p: unknown) => rpc("fn_admin_set_permissions", { p });
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "res.create", role: "owner", allowed: false }] }))).toBe("VALIDATION: role");
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "res.create", role: "guest", allowed: true }] }))).toBe("VALIDATION: role");
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "admin.permissions", role: "manager", allowed: true }] }))).toBe("PERMISSION_LOCKED: admin.permissions");
+    expect(await fails(set({ reason: " ", changes: [{ code: "res.create", role: "finance", allowed: true }] }))).toBe("VALIDATION: reason");
+    expect(await fails(set({ changes: [{ code: "res.create", role: "finance", allowed: true }] }))).toBe("VALIDATION: reason");
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "no.such", role: "finance", allowed: true }] }))).toBe("UNKNOWN_PERMISSION: no.such");
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "res.create", role: "finance", allowed: "yes" }] }))).toBe("VALIDATION: allowed");
+    expect(await fails(set({ reason: "سبب", changes: { code: "res.create", role: "finance", allowed: true } }))).toBe("VALIDATION: changes");
+    // all or nothing: a good cell before a refused one is not kept
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "res.create", role: "finance", allowed: true }, { code: "no.such", role: "finance", allowed: true }] }))).toBe("UNKNOWN_PERMISSION: no.such");
+    expect((await rpc<any>("fn_permissions_matrix", {})).changed).toBe(0);
+    expect(await all("role_permissions")).toHaveLength(0);
+    expect(await fails(rpc("fn_admin_reset_permissions", { p_reason: "  " }))).toBe("VALIDATION: reason");
+    // a manager with every other administration cell ticked still cannot read, change or reset the matrix
+    await setCells([{ code: "staff.manage", role: "manager", allowed: true }, { code: "security", role: "manager", allowed: true }], "manager");
+    expect(await fails(rpc("fn_permissions_matrix", {}))).toBe("FORBIDDEN: admin.permissions");
+    expect(await fails(set({ reason: "سبب", changes: [{ code: "res.create", role: "finance", allowed: true }] }))).toBe("FORBIDDEN: admin.permissions");
+    expect(await fails(rpc("fn_admin_reset_permissions", { p_reason: "سبب" }))).toBe("FORBIDDEN: admin.permissions");
+    const m = await mine(); expect(m.allowed).not.toContain("admin.permissions"); expect(m.allowed).toContain("security");
+    expect(await all("role_permissions")).toHaveLength(0);   // the table is the owner's to read
+    const ins = await client.from("role_permissions").insert({ organization_id: OWNER, capability: "admin.permissions", role: "manager", allowed: true });
+    expect(ins.error?.message).toMatch(/row-level security/);
+    await login(EMAIL.owner);
+    expect((await all("role_permissions")).map((r) => `${r.capability}:${r.role}:${r.allowed}`).sort()).toEqual(["security:manager:true", "staff.manage:manager:true"]);
+  });
+
+  it("MX08 one audit row per change set in the security category (each changed cell before and after, the reason); a cell already so is not listed and nothing changed writes nothing; the reset returns every cell to the approved matrix with its own row; the matrix shows the last change", async () => {
+    const r = await rpc<any>("fn_admin_set_permissions", { p: { reason: "المالية تتابع البلاغات", changes: [{ code: "maintenance.create", role: "finance", allowed: true }, { code: "res.create", role: "manager", allowed: true }] } });
+    expect(r).toEqual({ ok: true, changed: 1 });
+    let rows = await lastPermAudit();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ action: "permissions.updated", entity_type: "role_permissions", entity_id: null, category: "security", actor_id: OWNER });
+    expect(rows[0].details).toEqual({ reason: "المالية تتابع البلاغات", changes: [{ code: "maintenance.create", label: "البلاغات: إنشاء", role: "finance", before: false, after: true }] });
+    expect(await rpc("fn_admin_set_permissions", { p: { reason: "لا شيء", changes: [{ code: "maintenance.create", role: "finance", allowed: true }] } })).toEqual({ ok: true, unchanged: true });
+    expect(await rpc("fn_admin_set_permissions", { p: { reason: "لا شيء", changes: [] } })).toEqual({ ok: true, unchanged: true });
+    expect(await lastPermAudit()).toHaveLength(1);
+    let mx = await rpc<any>("fn_permissions_matrix", {});
+    expect(mx.changed).toBe(1); expect(mx.last_change).toMatchObject({ by: "عبدالله المالك", reason: "المالية تتابع البلاغات" });
+    expect(mx.rows.find((x: any) => x.code === "maintenance.create").cells.finance).toEqual({ allowed: true, default: false, limited: false });
+    await login(EMAIL.finance); expect((await mine()).allowed).toContain("maintenance.create");
+    // the manager's log never shows the security row
+    await login(EMAIL.manager); expect((await all("audit_events")).some((e) => String(e.action).startsWith("permissions."))).toBe(false);
+    await login(EMAIL.owner);
+    const back = await rpc<any>("fn_admin_reset_permissions", { p_reason: "العودة إلى المصفوفة المعتمدة" });
+    expect(back).toEqual({ ok: true, changed: 1 });
+    rows = await lastPermAudit();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ action: "permissions.reset", category: "security" });
+    expect(rows[0].details).toEqual({ reason: "العودة إلى المصفوفة المعتمدة", changes: [{ code: "maintenance.create", label: "البلاغات: إنشاء", role: "finance", before: true, after: false }] });
+    mx = await rpc<any>("fn_permissions_matrix", {});
+    expect(mx.changed).toBe(0); expect(mx.last_change.reason).toBe("العودة إلى المصفوفة المعتمدة");
+    expect(await rpc("fn_admin_reset_permissions", { p_reason: "مرة أخرى" })).toEqual({ ok: true, unchanged: true });
+    expect(await lastPermAudit()).toHaveLength(2);
+    await login(EMAIL.finance); expect((await mine()).allowed).not.toContain("maintenance.create");
+    expect(await fails(rpc("fn_staff_create_maintenance", { p_room: (await all("rooms"))[0]?.id ?? uid(), p_title: "عطل", p_description: null }))).toBe("FORBIDDEN: maintenance.create");
+  });
+});

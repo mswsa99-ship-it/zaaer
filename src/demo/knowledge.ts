@@ -8,6 +8,7 @@
  */
 import { normalizeArabic } from "../../supabase/functions/_shared/guardrails";
 import { uid, nowISO, ORG, BRANCH_A, type Row } from "./data";
+import type { Permissions } from "./permissions";
 
 export const DEMO_ZERO_BRANCH = "00000000-0000-0000-0000-000000000000";
 
@@ -39,7 +40,7 @@ export function seedKnowledge(T: (t: string) => Row[], staffId: string) {
 }
 
 /** Returns the RPC implementations; `ctx` gives access to the store and the auth helpers of client.ts. */
-export function knowledgeRpcs(ctx: {
+export function knowledgeRpcs(ctx: Permissions & {
   T: (t: string) => Row[];
   byId: (t: string, id: string) => Row | undefined;
   me: () => Row | null;
@@ -52,7 +53,7 @@ export function knowledgeRpcs(ctx: {
   emit: (t: string) => void;
   staffId: () => string | null;
 }): Record<string, (a: any) => any> {
-  const { T, byId, me, myBranches, hasRole, requireRole, requireBranch, checkVersion, audit, emit, staffId } = ctx;
+  const { T, byId, me, myBranches, hasRole, requireCap, requireBranch, checkVersion, audit, emit, staffId } = ctx;
   const publicRows = (branch: string) => T("knowledge_entries").filter((k) => k.organization_id === byId("branches", branch)?.organization_id && k.is_public && k.is_active && !k.archived_at && (k.branch_id == null || k.branch_id === branch))
     .sort((a, b) => b.priority - a.priority || b.used_count - a.used_count || String(a.created_at).localeCompare(String(b.created_at)));
   const pick = (k: Row) => ({ id: k.id, category: k.category, question: k.question, keywords: k.keywords, answer: k.answer, priority: k.priority });
@@ -60,7 +61,7 @@ export function knowledgeRpcs(ctx: {
     fn_public_knowledge: ({ p_branch }) => publicRows(p_branch).map(pick),
     fn_staff_knowledge: ({ p_branch }) => { const m = me(); if (!m || !myBranches().includes(p_branch)) return []; return T("knowledge_entries").filter((k) => k.organization_id === m.organization_id && k.is_active && !k.archived_at && (k.branch_id == null || k.branch_id === p_branch)).map((k) => ({ ...pick(k), is_public: k.is_public })); },
     fn_admin_upsert_knowledge: ({ p }) => {
-      requireRole("owner", "manager", "supervisor");
+      requireCap("knowledge");
       const m = me()!; const branch = p.branch_id || null;
       if (branch) requireBranch(branch); else if (!hasRole("owner", "manager")) throw new Error("FORBIDDEN: org-wide entries require manager");
       const q = String(p.question ?? "").trim(), a = String(p.answer ?? "").trim();
@@ -85,7 +86,7 @@ export function knowledgeRpcs(ctx: {
       return { ok: true, id: k.id, version: k.version };
     },
     fn_admin_archive_knowledge: ({ p_id, p_reason, p_archive = true }) => {
-      requireRole("owner", "manager", "supervisor");
+      requireCap("knowledge");
       const k = byId("knowledge_entries", p_id); if (!k || k.organization_id !== me()!.organization_id) throw new Error("NOT_FOUND");
       if (k.branch_id) requireBranch(k.branch_id);
       if (p_archive) { if (!String(p_reason ?? "").trim()) throw new Error("VALIDATION: reason"); Object.assign(k, { archived_at: nowISO(), archived_by: staffId(), archive_reason: p_reason, is_active: false, version: k.version + 1, updated_at: nowISO() }); }
@@ -94,7 +95,7 @@ export function knowledgeRpcs(ctx: {
       emit("knowledge_entries"); return { ok: true };
     },
     fn_admin_resolve_unanswered: ({ p_id, p_status, p_note }) => {
-      requireRole("owner", "manager", "supervisor");
+      requireCap("knowledge");
       if (!["open", "ignored"].includes(p_status)) throw new Error("VALIDATION: status");
       const u = byId("unanswered_questions", p_id); if (!u || u.organization_id !== me()!.organization_id) throw new Error("NOT_FOUND");
       if (u.branch_id) requireBranch(u.branch_id);
