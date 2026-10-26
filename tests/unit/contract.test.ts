@@ -126,4 +126,10 @@ describe("non-negotiable source rules", () => {
     const offenders = uiFiles.filter((p) => /(^|[^.\w])(window\.)?(confirm|alert|prompt)\(/.test(stripComments(read(p))));
     expect(offenders).toEqual([]);
   });
+
+  it("a shared hook opens its realtime channel under a name of its own per use (one page may use the hook twice: the realtime client throws on a reused, already subscribed channel and the page goes blank)", () => {
+    const src = read("src/lib/hooks.ts");
+    expect(src).not.toMatch(/\.channel\(\s*["'][^"'`]*["']\s*\)/);
+    expect(src).toMatch(/\.channel\(`reservations-realtime-\$\{channelName\}`\)/);
+  });
 });

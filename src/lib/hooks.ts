@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { supabase } from "./supabase";
 import { useBranchQuery, must } from "./useBranchQuery";
 import { todayISO } from "./utils";
@@ -67,14 +67,17 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
   }, [statusKey, todayOnly], NO_CARDS);
   const reload = q.reload;
 
-  // Realtime: any reservation change reloads the active branch's list.
+  // Realtime: any reservation change reloads the active branch's list. Each use of this hook has its own channel:
+  // a page that lists reservations twice (the operations board: today's arrivals and all) must not reuse one channel
+  // name — the realtime client refuses callbacks on a channel already subscribed and the page goes blank.
+  const channelName = useId();
   useEffect(() => {
     const channel = supabase
-      .channel("reservations-realtime")
+      .channel(`reservations-realtime-${channelName}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => reload())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [reload]);
+  }, [reload, channelName]);
 
   return { data: q.data, loading: q.loading, error: q.error, reload };
 }
