@@ -9,6 +9,8 @@
 --     The prefix is left out.
 --   * fn_admin_delete_definition (0015) was applied by hand from the SQL Editor, which re-indented it (STAGING.md §1):
 --     its body is compared without whitespace.
+--   * Everything pasted into the SQL Editor from a Windows machine arrives with CRLF line ends (the owner's paste of
+--     0022, 0031, 0034, 0039 and 0041, 26 Oct 2026): every body is compared with carriage returns removed.
 --   * Test helpers t_* exist only in the test database.
 -- 25 Oct 2026 this caught 0033's skipped column grant on the hosted project (fixed by 0035).
 with fn as (
@@ -18,7 +20,7 @@ with fn as (
     and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
 ), objs as (
   select 'function' as kind, f.name,
-         md5(case when p.proname = 'fn_admin_delete_definition' then regexp_replace(p.prosrc, '\s+', '', 'g') else p.prosrc end
+         md5(case when p.proname = 'fn_admin_delete_definition' then regexp_replace(p.prosrc, '\s+', '', 'g') else replace(p.prosrc, E'\r', '') end
              || '|' || coalesce(array_to_string(p.proconfig, ','), '') || '|' || p.prosecdef::text || '|' || p.provolatile::text) as fp
   from fn f join pg_proc p on p.oid = f.oid
   union all
