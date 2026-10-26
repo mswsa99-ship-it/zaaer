@@ -380,7 +380,7 @@ export function matchKnowledge(raw: string, entries: KnowledgeEntry[] | undefine
   return best;
 }
 
-export const PROPERTY_NAME_DEFAULT = "منازل الراحة";
+export const PROPERTY_NAME_DEFAULT = "فايف اورز";
 
 const POLICY_TOPICS: Array<[RegExp, string, string]> = [
   // [pattern on the normalized message, policy topic, what to call it when no policy text exists]

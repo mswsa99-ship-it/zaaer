@@ -31,7 +31,7 @@ export default function StaffLayout() {
             <Hotel className="h-5 w-5" />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-ink-800">منازل الراحة</p>
+            <p className="text-sm font-semibold text-ink-800">فايف اورز</p>
             <p className="text-[11px] text-ink-400">مركز العمليات</p>
           </div>
         </div>

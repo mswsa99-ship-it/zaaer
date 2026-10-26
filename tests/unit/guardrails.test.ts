@@ -186,14 +186,14 @@ describe("scripted fallback", () => {
     expect(r.text).toContain("حي العليا");
   });
   it("explains scope on off-topic", () => {
-    expect(scriptedReply("x", "منازل الراحة", "off_scope").text).toMatch(/خارج نطاق/);
-    expect(scriptedReply("x", "منازل الراحة", "injection").text).toMatch(/لا أستطيع تنفيذ/);
+    expect(scriptedReply("x", "فايف اورز", "off_scope").text).toMatch(/خارج نطاق/);
+    expect(scriptedReply("x", "فايف اورز", "injection").text).toMatch(/لا أستطيع تنفيذ/);
   });
 });
 
 describe("system prompt", () => {
   it("contains the hard rules and session state", () => {
-    const p = buildSystemPrompt({ propertyName: "منازل الراحة", verified: false, today: "2026-10-21" });
+    const p = buildSystemPrompt({ propertyName: "فايف اورز", verified: false, today: "2026-10-21" });
     expect(p).toContain("لا تذكر أبدًا أي رمز لصندوق مفتاح");
     expect(p).toContain("النزيل غير متحقق");
     expect(buildSystemPrompt({ propertyName: "x", verified: true, today: "2026-10-21" })).toContain("متحقق من ملكية حجزه");

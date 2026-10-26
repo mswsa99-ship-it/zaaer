@@ -3,7 +3,7 @@ export default function Privacy() {
     <div className="mx-auto max-w-2xl px-4 py-8 lg:py-12">
       <h1 className="text-2xl font-bold text-ink-800">سياسة الخصوصية</h1>
       <div className="prose mt-6 max-w-none text-sm leading-relaxed text-ink-600">
-        <p>تلتزم "منازل الراحة" بحماية بياناتك الشخصية وفق نظام حماية البيانات الشخصية السعودي (PDPL).</p>
+        <p>تلتزم "فايف اورز" بحماية بياناتك الشخصية وفق نظام حماية البيانات الشخصية السعودي (PDPL).</p>
         <h2 className="mt-6 text-base font-semibold text-ink-800">البيانات التي نجمعها</h2>
         <ul className="mt-2 list-disc space-y-1 pr-5">
           <li>الاسم الثلاثي ونوع ورقم الوثيقة الرسمية (مشفر على الخادم).</li>

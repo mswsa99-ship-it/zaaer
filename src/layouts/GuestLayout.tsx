@@ -13,7 +13,7 @@ export default function GuestLayout() {
               <Hotel className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <p className="text-sm font-semibold text-ink-800">منازل الراحة</p>
+              <p className="text-sm font-semibold text-ink-800">فايف اورز</p>
               <p className="text-[11px] text-ink-400">مساعد الاستقبال الذكي</p>
             </div>
           </Link>
@@ -27,7 +27,7 @@ export default function GuestLayout() {
         <Outlet />
       </main>
       <footer className="border-t border-ink-100 bg-white/60 py-4 text-center text-xs text-ink-400">
-        منازل الراحة © {new Date().getFullYear()} — جميع الحقوق محفوظة ·{" "}
+        فايف اورز © {new Date().getFullYear()} — جميع الحقوق محفوظة ·{" "}
         <Link to="/privacy" className="hover:text-ink-600">سياسة الخصوصية</Link> ·{" "}
         <Link to="/terms" className="hover:text-ink-600">شروط الاستخدام</Link> ·{" "}
         <Link to="/staff/login" className="hover:text-ink-600">بوابة الموظفين والإدارة</Link>

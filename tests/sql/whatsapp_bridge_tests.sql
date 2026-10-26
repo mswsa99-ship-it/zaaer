@@ -74,7 +74,7 @@ do $$ declare a jsonb; b jsonb; begin
     (a->>'branch_id')::uuid = t_bb() and (a->>'auto_reply')::boolean and (a->>'enabled')::boolean
     and fn_wa_bridge_auth('zb_' || repeat('0', 64)) is null and fn_wa_bridge_auth('x') is null and fn_wa_bridge_auth(null) is null, a::text);
 
-  b := fn_wa_bridge_beat(t_bb(), 'connected', '+966 55 999 8877', 'منازل الراحة', '1.0.0');
+  b := fn_wa_bridge_beat(t_bb(), 'connected', '+966 55 999 8877', 'فايف اورز', '1.0.0');
   perform t_record('WB08 "connected" makes the channel active and records the linked number',
     t_row(t_bb())->>'status' = 'active' and t_row(t_bb())->>'bridge_phone' = '966559998877' and (b->>'enabled')::boolean, t_row(t_bb())::text);
   perform fn_wa_bridge_beat(t_bb(), 'disconnected', null, null, null, 'LOGOUT');

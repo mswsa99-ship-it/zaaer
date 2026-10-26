@@ -33,7 +33,7 @@ export default function AdminLayout() {
             <Hotel className="h-5 w-5" />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-ink-800">منازل الراحة</p>
+            <p className="text-sm font-semibold text-ink-800">فايف اورز</p>
             <p className="text-[11px] text-ink-400">لوحة الإدارة</p>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default function AdminLayout() {
         <DemoBanner />
         <div className="sticky top-0 z-10">
           <header className="border-b border-ink-100 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-            <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة — منازل الراحة</Link>
+            <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة — فايف اورز</Link>
           </header>
           <KeyboxAlertBanner alerts={codeAlerts} />
         </div>

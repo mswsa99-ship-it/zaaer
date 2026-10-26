@@ -63,7 +63,7 @@ describe("scriptedReply with a knowledge base", () => {
   const knowledge: PropertyKnowledge = { branchName: "فرع الرياض", checkInTime: "16:00", checkOutTime: "12:00", policies: [{ topic: "parking", title: "المواقف", content: "مواقف مجانية." }], entries };
 
   it("answers from the entry and reports the entry id for usage analytics", () => {
-    const r = scriptedReply("هل يوجد مسبح؟", "منازل الراحة", undefined, knowledge);
+    const r = scriptedReply("هل يوجد مسبح؟", "فايف اورز", undefined, knowledge);
     expect(r.intent).toBe("knowledge");
     expect(r.text).toBe("نعم، يوجد مسبح خارجي مشترك.");
     expect(r.knowledgeId).toBe("pool");

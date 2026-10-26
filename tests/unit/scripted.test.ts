@@ -12,7 +12,7 @@ const k: PropertyKnowledge = {
 
 describe("deterministic reception — property facts", () => {
   it("answers check-in/out times from the branch record", () => {
-    const r = scriptedReply("ما هي مواعيد الوصول والمغادرة؟", "منازل الراحة", undefined, k);
+    const r = scriptedReply("ما هي مواعيد الوصول والمغادرة؟", "فايف اورز", undefined, k);
     expect(r.intent).toBe("policy");
     expect(r.text).toContain("16:00");
     expect(r.text).toContain("12:00");
