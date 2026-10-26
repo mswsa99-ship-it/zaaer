@@ -22,9 +22,9 @@ const localNow = () => { const d = new Date(); d.setSeconds(0, 0); const p = (n:
 const toIso = (local: string) => new Date(local).toISOString();
 
 export default function Housekeeping() {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const role = profile?.role;
-  const canManage = role === "owner" || role === "manager" || role === "supervisor";
+  const canManage = can("task.manage");
 
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);

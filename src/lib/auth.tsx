@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { defaultPermissions, type Permissions } from "./permissionCatalog";
+export { defaultPermissions, type Permissions };
 
 export interface StaffProfile {
   id: string;
@@ -17,6 +19,12 @@ interface AuthContextValue {
   session: Session | null;
   profile: StaffProfile | null;
   loading: boolean;
+  /** the person's permissions (the owner: everything) */
+  permissions: Permissions;
+  /** may the person do this operation of the matrix? */
+  can: (code: string) => boolean;
+  /** …without the cell's condition? */
+  canFull: (code: string) => boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   /** needsConfirmation: the account exists but the email must be confirmed (link sent) before the first sign-in */
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation?: boolean }>;
@@ -37,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [permissions, setPermissions] = useState<Permissions>(defaultPermissions(null));
   /** auth user id whose profile lookup has completed (found or not) — see onAuthStateChange. */
   const profileUserRef = useRef<string | null>(null);
   const profileReqRef = useRef(0);
@@ -64,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profileReqRef.current++; // drop any in-flight lookup
         profileUserRef.current = null;
         setProfile(null);
+        setPermissions(defaultPermissions(null));
         setLoading(false);
       }
     });
@@ -93,16 +103,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle());
     }
     if (token !== profileReqRef.current) return; // a later sign-in/out superseded this lookup
+    const prof = data as StaffProfile | null;
+    const perms = prof ? await loadPermissions(prof.role) : defaultPermissions(null);
+    if (token !== profileReqRef.current) return;
     profileUserRef.current = authUserId;
-    setProfile(data as StaffProfile | null);
+    setPermissions(perms);
+    setProfile(prof);
     setLoading(false);
+  }
+
+  /** the matrix as the server applies it to this person; the approved defaults if the server cannot say */
+  async function loadPermissions(role: string): Promise<Permissions> {
+    try {
+      const { data, error } = await supabase.rpc("fn_my_permissions", {});
+      const d = data as { allowed?: string[]; full?: string[]; sees_money?: boolean } | null;
+      if (error || !d || !Array.isArray(d.allowed)) return defaultPermissions(role);
+      return { allowed: new Set(d.allowed), full: new Set(d.full ?? []), seesMoney: !!d.sees_money };
+    } catch { return defaultPermissions(role); }
   }
 
   // decision 34: a session the owner or a manager ended (or an account deactivated) is refused by the server on its next
   // request; the browser notices on a refusal, when the tab comes back, and every minute, and signs out with a word for
   // the login page — it never keeps showing a screen the server would no longer serve.
   const hadProfileRef = useRef(false);
-  useEffect(() => { hadProfileRef.current = !!profile; }, [profile]);
+  const profileRoleRef = useRef<string | null>(null);
+  useEffect(() => { hadProfileRef.current = !!profile; profileRoleRef.current = profile?.role ?? null; }, [profile]);
   useEffect(() => {
     let checking = false;
     const recheck = async () => {
@@ -115,6 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try { sessionStorage.setItem(SIGNOUT_REASON_KEY, "revoked"); } catch { /* the notice is a convenience */ }
           await supabase.auth.signOut();
           setProfile(null);
+        } else if (!error && data && profileUserRef.current === uid) {
+          // the owner may have changed the matrix: the screens follow on the next check (the server already does)
+          const role = profileRoleRef.current;
+          if (role) {
+            const next = await loadPermissions(role);
+            setPermissions((cur) => (samePermissions(cur, next) ? cur : next));
+          }
         }
       } finally { checking = false; }
     };
@@ -149,13 +181,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     await supabase.auth.signOut();
     setProfile(null);
+    setPermissions(defaultPermissions(null));
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
+}
+
+function samePermissions(a: Permissions, b: Permissions) {
+  return a.seesMoney === b.seesMoney && a.allowed.size === b.allowed.size && a.full.size === b.full.size
+    && [...a.allowed].every((c) => b.allowed.has(c)) && [...a.full].every((c) => b.full.has(c));
 }
 
 export function useAuth() {

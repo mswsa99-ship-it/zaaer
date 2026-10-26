@@ -15,7 +15,7 @@ const EMPTY: Partial<Branch> = { name_ar: "", name_en: "", city: "", address: ""
 const taxText = (b: Pick<Branch, "tax_rate_bp" | "prices_include_tax">) => b.tax_rate_bp === 0 ? "بلا ضريبة" : `ضريبة ${(b.tax_rate_bp / 100).toFixed(2)}% ${b.prices_include_tax ? "(شاملة)" : "(غير شاملة)"}`;
 
 export default function AdminBranches() {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const isOwner = profile?.role === "owner";
   const [rows, setRows] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
@@ -83,8 +83,8 @@ export default function AdminBranches() {
               </Field>
             </div>
             {/* decision 68: the tax policy is the owner's alone (the server refuses anyone else's change too) */}
-            <fieldset className="mt-4 rounded-xl border border-ink-100 p-3" disabled={!isOwner} data-testid="branch-tax">
-              <legend className="px-1 text-xs font-semibold text-ink-600">الضريبة {isOwner ? "" : "— يعدّلها المالك فقط"}</legend>
+            <fieldset className="mt-4 rounded-xl border border-ink-100 p-3" disabled={!can("branch.tax")} data-testid="branch-tax">
+              <legend className="px-1 text-xs font-semibold text-ink-600">الضريبة {can("branch.tax") ? "" : "— يعدّلها المالك فقط"}</legend>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="نسبة الضريبة %" hint="صفر يعني لا ضريبة على الحجوزات الجديدة؛ أي تغيير يسري على الحجوزات الجديدة فقط، ويُسجَّل."><input type="number" step="0.01" min={0} max={100} className="input" dir="ltr" aria-label="نسبة الضريبة" value={((draft.tax_rate_bp ?? 0) / 100).toString()} onChange={(e) => setDraft({ ...draft, tax_rate_bp: Math.round(Number(e.target.value) * 100) })} /></Field>
                 <Field label="الرقم الضريبي"><input className="input" dir="ltr" value={draft.tax_number ?? ""} onChange={(e) => setDraft({ ...draft, tax_number: e.target.value })} /></Field>

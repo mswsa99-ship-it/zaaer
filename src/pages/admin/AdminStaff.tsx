@@ -18,9 +18,12 @@ import { formatDateTime } from "../../lib/utils";
 const INVITE_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"] as const;
 
 export default function AdminStaff() {
-  const { profile } = useAuth();
+  const { profile, can, canFull } = useAuth();
   const isOwner = profile?.role === "owner";
-  const isManager = profile?.role === "manager";
+  // the permissions matrix decides (decision 71): «دعوة موظف وتعديله…» and «خروج إجباري»; no one but the owner touches an owner (decision 44)
+  const canManage = can("staff.manage");
+  const touches = (s: StaffListRow) => isOwner || s.role !== "owner";
+  const roleChoices = INVITE_ROLES.filter((r) => isOwner || r !== "owner");
   const { branches } = useBranch();
   const [staff, setStaff] = useState<StaffListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +63,7 @@ export default function AdminStaff() {
   }
 
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name_ar ?? "فرع آخر";
-  const canSignOut = (s: StaffListRow) => !s.is_me && s.is_active && (isOwner || (isManager && !["owner", "manager"].includes(s.role)));
+  const canSignOut = (s: StaffListRow) => !s.is_me && s.is_active && can("staff.force_logout") && (canFull("staff.force_logout") || !["owner", "manager"].includes(s.role));
 
   if (loading) return <LoadingScreen />;
   if (error && staff.length === 0) return <div><SectionTitle title="الموظفون" /><LoadErrorCard message={error} onRetry={() => { setLoading(true); load(); }} /></div>;
@@ -71,7 +74,7 @@ export default function AdminStaff() {
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" data-testid="staff-notice">{notice}</div>}
 
-      {isOwner && (
+      {canManage && (
         <Card className="mb-5">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-700"><UserPlus className="h-4 w-4 text-brand-600" /> دعوة موظف</h3>
           <p className="mb-3 text-xs text-ink-400">يُنشأ ملف الموظف الآن ويرتبط تلقائيًا بحسابه عند أول تسجيل دخول بنفس البريد. لا يمكن للموظف اختيار دوره بنفسه.</p>
@@ -81,7 +84,7 @@ export default function AdminStaff() {
             <div>
               <label className="label">الدور</label>
               <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-                {INVITE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
             <div>
@@ -124,8 +127,8 @@ export default function AdminStaff() {
                 <Badge className="bg-brand-50 text-brand-700">{ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role}</Badge>
                 <Badge className={s.is_active ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-400"}>{s.is_active ? "نشط" : "موقوف"}</Badge>
                 <div className="mt-1 flex flex-wrap justify-end gap-1">
-                  {isOwner && <button onClick={() => setEdit({ s, full_name: s.full_name, phone: s.phone ?? "", role: s.role, branch_ids: s.branch_ids, reason: "" })} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-edit"><Pencil className="h-3 w-3" /> تعديل</button>}
-                  {isOwner && !s.is_me && <button onClick={() => setActivate({ s, reason: "" })} className={`btn-ghost px-2 py-1 text-xs ${s.is_active ? "text-danger-600" : "text-success-600"}`} data-testid="staff-toggle-active"><Power className="h-3 w-3" /> {s.is_active ? "إيقاف" : "تفعيل"}</button>}
+                  {canManage && touches(s) && <button onClick={() => setEdit({ s, full_name: s.full_name, phone: s.phone ?? "", role: s.role, branch_ids: s.branch_ids, reason: "" })} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-edit"><Pencil className="h-3 w-3" /> تعديل</button>}
+                  {canManage && touches(s) && !s.is_me && <button onClick={() => setActivate({ s, reason: "" })} className={`btn-ghost px-2 py-1 text-xs ${s.is_active ? "text-danger-600" : "text-success-600"}`} data-testid="staff-toggle-active"><Power className="h-3 w-3" /> {s.is_active ? "إيقاف" : "تفعيل"}</button>}
                   {canSignOut(s) && <button onClick={() => setSignOut({ s, reason: "" })} className="btn-ghost px-2 py-1 text-xs text-warning-600" data-testid="staff-force-logout"><LogOut className="h-3 w-3" /> تسجيل خروج إجباري</button>}
                 </div>
               </div>
@@ -149,7 +152,7 @@ export default function AdminStaff() {
                 <Field label="الهاتف"><input className="input" dir="ltr" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="05xxxxxxxx" data-testid="edit-phone" /></Field>
               </div>
               <Field label="الدور" hint={edit.s.is_me ? "لا يغيّر أحد دوره بنفسه." : undefined}>
-                <select className="input" value={edit.role} disabled={edit.s.is_me} onChange={(e) => setEdit({ ...edit, role: e.target.value })} data-testid="edit-role">{INVITE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+                <select className="input" value={edit.role} disabled={edit.s.is_me} onChange={(e) => setEdit({ ...edit, role: e.target.value })} data-testid="edit-role">{roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
               </Field>
               {edit.role !== "owner" && (
                 <Field label="الفروع" hint={edit.s.is_me ? "لا يغيّر أحد فروعه بنفسه." : "إزالة فرع تسري من العملية التالية للموظف؛ تاريخ عضويته يبقى."}>

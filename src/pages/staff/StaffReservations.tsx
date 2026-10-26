@@ -64,7 +64,6 @@ const COLUMNS: Col[] = [
   { key: "created_at", label: "أُنشئ", cell: (r) => <span className="text-xs">{formatDateTime(r.created_at)}{r.created_by_name && <span className="text-ink-400"> · {r.created_by_name}</span>}</span>, out: (r) => `${formatDateTime(r.created_at)}${r.created_by_name ? ` · ${r.created_by_name}` : ""}` },
 ];
 const DEFAULT_COLUMNS = ["internal_ref", "guest_name", "room_number", "status", "check_in", "check_out", "total_halalas", "balance_due_halalas", "deposit_balance_halalas"];
-const MONEY_ROLES = ["owner", "manager", "supervisor", "finance"];
 
 type Filters = ReservationListFilters;
 const DEFAULT_FILTERS: Filters = { open_only: true };
@@ -97,9 +96,9 @@ export function filterWords(f: Filters, opts?: ReportFilterOptions | null): stri
 }
 
 export default function StaffReservations() {
-  const { profile } = useAuth();
+  const { profile, permissions } = useAuth();
   const { branch } = useBranch();
-  const moneyRole = MONEY_ROLES.includes(profile?.role ?? "");
+  const moneyRole = permissions.seesMoney;
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(0);
   const [advanced, setAdvanced] = useState(false);

@@ -74,3 +74,14 @@ export const EDITABLE_ROLES: readonly StaffRole[] = ["manager", "supervisor", "f
 /** the money operations: a person sees money when any of them is allowed (fn_sees_money) */
 export const MONEY_PERMISSIONS: readonly string[] = ["voucher.receipt", "voucher.refund", "deposit.refund", "deposit.apply", "voucher.correct", "voucher.cancel", "pos.settle", "platform.payouts", "invoice.issue", "invoice.edit", "reports.finance"];
 export const permissionRow = (code: string) => PERMISSION_CATALOG.find((r) => r.code === code);
+
+/** What the person may do (decision 71): the server's fn_my_permissions(); the server decides every operation anyway. */
+export interface Permissions { allowed: ReadonlySet<string>; full: ReadonlySet<string>; seesMoney: boolean }
+
+/** The approved matrix for a role — used until the server has answered, or when it cannot (an older server). */
+export function defaultPermissions(role: string | null | undefined): Permissions {
+  if (!role || role === "guest") return { allowed: new Set(), full: new Set(), seesMoney: false };
+  const allowed = new Set(PERMISSION_CATALOG.filter((r) => role === "owner" || (!r.locked && (r.defaultRoles as readonly string[]).includes(role))).map((r) => r.code));
+  const full = new Set([...allowed].filter((c) => { const r = PERMISSION_CATALOG.find((x) => x.code === c)!; return role === "owner" || !r.fullRoles || (r.fullRoles as readonly string[]).includes(role); }));
+  return { allowed, full, seesMoney: role === "owner" || MONEY_PERMISSIONS.some((c) => allowed.has(c)) };
+}

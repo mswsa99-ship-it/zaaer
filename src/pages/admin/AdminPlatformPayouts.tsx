@@ -26,8 +26,8 @@ const monthOf = (iso: string) => isoDateIn(new Date(iso)).slice(0, 7);
 const monthName = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "long", year: "numeric", timeZone: "UTC" });
 
 export default function AdminPlatformPayouts() {
-  const { profile } = useAuth();
-  const canCancel = profile?.role === "owner" || profile?.role === "manager";
+  const { canFull } = useAuth();
+  const canCancel = canFull("platform.payouts");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [cancelFor, setCancelFor] = useState<Payout | null>(null);

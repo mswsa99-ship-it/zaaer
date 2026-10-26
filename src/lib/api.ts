@@ -3,6 +3,7 @@
  * and the AI Edge Function. Pages must use these instead of writing to tables:
  * the database rejects direct writes for operational roles.
  */
+import { permissionRow } from "./permissionCatalog";
 import { supabase } from "./supabase";
 import { clientSource, errorCode, newTraceId, normalizeTrace } from "./trace";
 
@@ -185,6 +186,7 @@ const VALIDATION_AR: Record<string, string> = {
   confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
   // the lists, the staff editor and the task's schedule (0040)
   schedule: "نهاية المهمة لا تسبق بدايتها.", schedule_start: "بداية المهمة مطلوبة.",
+  allowed: "اختر مسموحًا أو غير مسموح.", changes: "لا تغييرات للحفظ.",
   branch_id: "اختر الفرع.", status: "الحالة غير صحيحة.", screen: "الشاشة غير معروفة.", full_name: "الاسم مطلوب.", email_and_name: "البريد والاسم مطلوبان.",
 };
 
@@ -196,12 +198,26 @@ const FORBIDDEN_AR: Array<[RegExp, string]> = [
   [/tax settings are the owner/, "إعدادات الضريبة للمالك وحده."],
   [/supervisor corrects only the vouchers they issued/, "يصحح المشرف السندات التي أصدرها هو فقط؛ غيرها يصححه المالك أو المدير."],
   [/after 24 hours a voucher is corrected by a manager/, "مضت 24 ساعة على السند؛ يصححه الآن المالك أو المدير."],
-  [/a manager signs out neither an owner nor a manager/, "المدير لا يُخرج المالك ولا مديرًا آخر؛ يفعل ذلك المالك."],
+  [/a manager signs out neither an owner nor a manager/, "لا يُخرج المالكَ أو مديرًا إلا المالك."],
+  [/only the owner changes an owner/, "حساب المالك ودور المالك لا يغيّرهما إلا المالك."],
+  [/PERMISSION_LOCKED/, "تعديل مصفوفة الصلاحيات للمالك وحده، ولا يُمنح لدور آخر."],
+  [/UNKNOWN_PERMISSION/, "عملية غير معروفة في مصفوفة الصلاحيات."],
 ];
+/** a refusal by the permissions matrix (0043): «FORBIDDEN: <code>», «FORBIDDEN: <code> (limited)», money, discounts */
+function matrixRefusal(msg: string): string | null {
+  if (/FORBIDDEN: money\b/.test(msg)) return "لا تسمح مصفوفة الصلاحيات لدورك برؤية المبالغ.";
+  if (/FORBIDDEN: disc\.before \/ disc\.after/.test(msg)) return "لا تسمح مصفوفة الصلاحيات لدورك بالخصم.";
+  const m = msg.match(/FORBIDDEN: ([a-z_]+(?:\.[a-z_]+)?)( \(limited\))?/);
+  const row = m ? permissionRow(m[1]) : undefined;
+  if (!m || !row) return null;
+  return m[2] ? `دورك يملك «${row.label}» بقيدها فقط: ${row.limitNote ?? ""}.` : `لا تسمح مصفوفة الصلاحيات لدورك بـ«${row.label}». يغيّر ذلك المالك من «مصفوفة الصلاحيات».`;
+}
 function arabicMessage(msg: string): string {
   const v = msg.match(/VALIDATION:\s*([a-z_0-9]+)/i);
   if (v) return VALIDATION_AR[v[1]] ?? "بيانات غير صالحة: " + v[1];
   for (const [re, ar] of FORBIDDEN_AR) if (re.test(msg)) return ar;
+  const matrix = matrixRefusal(msg);
+  if (matrix) return matrix;
   for (const k of Object.keys(ERROR_AR)) if (msg.includes(k)) return ERROR_AR[k];
   if (/permission denied|row-level security/i.test(msg)) return ERROR_AR.FORBIDDEN;
   return "تعذّر تنفيذ العملية: " + msg.slice(0, 120);
@@ -879,6 +895,22 @@ export interface CapabilityUsage { weeks: number; window_start: string; generate
 /** «استعمال القدرات» (decision 55): the owner's report from the audit log itself. */
 export const usageApi = {
   capabilities: (weeks = 4) => rpc<CapabilityUsage>("fn_reports_capability_usage", { p: { weeks } }),
+};
+
+/** «مصفوفة الصلاحيات» (decision 71, migration 0043): what a person may do, and the owner's editor. */
+export interface MyPermissions { role: string | null; allowed: string[]; full: string[]; sees_money: boolean }
+export interface PermissionCell { allowed: boolean; default: boolean; limited: boolean }
+export interface PermissionMatrixRow { code: string; label: string; area: string; locked: boolean; limit_note: string | null; full_roles: string[] | null; cells: Record<string, PermissionCell> }
+export interface PermissionMatrix {
+  roles: string[]; editable_roles: string[]; rows: PermissionMatrixRow[]; changed: number;
+  last_change: { at: string; by: string | null; reason: string | null } | null;
+}
+export interface PermissionChange { code: string; role: string; allowed: boolean }
+export const permissionsApi = {
+  mine: () => rpc<MyPermissions>("fn_my_permissions", {}),
+  matrix: () => rpc<PermissionMatrix>("fn_permissions_matrix", {}),
+  save: (changes: PermissionChange[], reason: string) => rpc<{ ok: boolean; changed?: number; unchanged?: boolean }>("fn_admin_set_permissions", { p: { changes, reason } }),
+  reset: (reason: string) => rpc<{ ok: boolean; changed?: number; unchanged?: boolean }>("fn_admin_reset_permissions", { p_reason: reason }),
 };
 
 /**

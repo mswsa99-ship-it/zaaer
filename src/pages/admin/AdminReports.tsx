@@ -356,8 +356,8 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
 
 /** «الهويات المعتمدة من المكتب» (decision 2): identities the office entered from the document, with who and when (the owner). Filter: staff (who verified). */
 function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to: string; filters: ReportFilters; statementFor: StatementFor }) {
-  const { profile } = useAuth();
-  const allowed = profile?.role === "owner";
+  const { can } = useAuth();
+  const allowed = can("reports.identities_usage");
   const [path, setPath] = useState<"office" | "guest" | "all">("office");
   const f = useMemo(() => ({ staff_id: filters.staff_id }), [filters.staff_id]);
   const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.identities>> | null>((branchId) => (allowed ? guestReportsApi.identities(branchId, from, to, path, f) : Promise.resolve(null)), [from, to, path, allowed, f], null);

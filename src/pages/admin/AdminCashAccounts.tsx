@@ -20,8 +20,8 @@ const KIND_LABEL = { cash_box: "صندوق نقد", bank_account: "حساب بن
 type Draft = Partial<CashAccount> & { kind: CashAccount["kind"]; name: string };
 
 export default function AdminCashAccounts() {
-  const { profile } = useAuth();
-  const canEdit = profile?.role === "owner" || profile?.role === "manager";
+  const { can } = useAuth();
+  const canEdit = can("cash_accounts");
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lifecycle, setLifecycle] = useState<{ a: CashAccount; archive: boolean } | null>(null);

@@ -19,8 +19,8 @@ const EMPTY: Draft = { topic: "checkin", title: "", content_ar: "", is_public: t
 const NO_POLICIES: PolicyRow[] = [];
 
 export default function AdminPolicies() {
-  const { profile } = useAuth();
-  const canEdit = profile?.role === "owner" || profile?.role === "manager";
+  const { profile, can } = useAuth();
+  const canEdit = can("policies");
   const { branches, setBranchId } = useBranch();
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);

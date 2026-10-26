@@ -22,10 +22,11 @@ const addDays = (d: string, n: number) => { const x = new Date(d + "T00:00:00Z")
 
 export default function StaffReservationNew() {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
+  // a rate below the quote stays the owner's and the manager's (0030); the discount follows the matrix (decision 71)
   const isMgr = profile?.role === "owner" || profile?.role === "manager";
   // decision 9: the supervisor discounts too, within the branch's percentage and the type's minimum (the quote says how much)
-  const canDiscount = isMgr || profile?.role === "supervisor";
+  const canDiscount = can("disc.before") || can("disc.after");
   // G24 (decision 40): the unit types of the ACTIVE branch; booking sources are organisation-wide
   const opts = useBranchQuery<Options>(async (branchId) => {
     const [c, s] = await Promise.all([

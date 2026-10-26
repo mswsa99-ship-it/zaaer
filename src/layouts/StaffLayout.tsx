@@ -10,11 +10,12 @@ import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 
 export default function StaffLayout() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, can, canFull } = useAuth();
+  const allows = { can, canFull };
   const navigate = useNavigate();
   // Links come from the role table in lib/nav.ts (the route guard uses the same table): a role never sees a link it cannot open.
-  const nav = staffNav(profile?.role).map((p) => ({ to: p.path, label: p.label, icon: p.icon }));
-  const adminHome = firstAdminPath(profile?.role);
+  const nav = staffNav(profile?.role, allows).map((p) => ({ to: p.path, label: p.label, icon: p.icon }));
+  const adminHome = firstAdminPath(profile?.role, allows);
   // «الرموز»: units whose key-box code must still change after a guest left — red on every page until changed
   const codeAlerts = useKeyboxAlerts();
 

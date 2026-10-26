@@ -56,8 +56,8 @@ function parseModelList(text: string): string[] {
 }
 
 export default function AdminAiSettings() {
-  const { profile } = useAuth();
-  const isOwner = profile?.role === "owner";
+  const { can } = useAuth();
+  const isOwner = can("security");
   const [form, setForm] = useState<AiSettings>(DEFAULTS);
   const [usage, setUsage] = useState<UsageRow[]>([]);
   const [guards, setGuards] = useState<GuardEvent[]>([]);

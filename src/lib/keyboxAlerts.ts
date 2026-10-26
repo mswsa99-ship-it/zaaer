@@ -8,7 +8,6 @@ import { supabase } from "./supabase";
 import { useAuth } from "./auth";
 import { useBranch } from "./branch";
 import { codesApi, type KeyboxAlerts } from "./api";
-import { CODES_ROLES } from "./nav";
 
 const CHANGED = "zaaer:keybox-changed";
 
@@ -18,9 +17,9 @@ export function notifyKeyboxChanged() {
 }
 
 export function useKeyboxAlerts(): KeyboxAlerts | null {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const { branchId } = useBranch();
-  const allowed = !!profile && (CODES_ROLES as readonly string[]).includes(profile.role);
+  const allowed = !!profile && can("keybox.code");
   const [alerts, setAlerts] = useState<KeyboxAlerts | null>(null);
 
   useEffect(() => {

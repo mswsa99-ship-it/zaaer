@@ -27,7 +27,7 @@ const PAGE = 50;
 const EMPTY: AuditList = { total: 0, rows: [], limit: PAGE, offset: 0, tz: "Asia/Riyadh" };
 
 export default function AdminAuditLogs() {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const { branches } = useBranch();
   const isOwner = profile?.role === "owner";
   const canLookup = isOwner || profile?.role === "manager";
@@ -88,7 +88,7 @@ export default function AdminAuditLogs() {
           <select className="input w-auto py-1 text-xs" value={f.branch_id ?? ""} onChange={(e) => set("branch_id", e.target.value)} aria-label="الفرع"><option value="">كل الفروع المخوّلة</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}</select>
           <select className="input w-auto max-w-[16rem] py-1 text-xs" value={f.action_prefix ? "" : f.action ?? ""} onChange={(e) => { set("action_prefix", undefined); set("action", e.target.value); }} aria-label="الإجراء"><option value="">كل الإجراءات</option>{actionOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <select className="input w-auto py-1 text-xs" value={f.entity_type ?? ""} onChange={(e) => set("entity_type", e.target.value)} aria-label="الكيان"><option value="">كل الكيانات</option>{entityOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-          {isOwner && <select className="input w-auto py-1 text-xs" value={f.category ?? ""} onChange={(e) => set("category", e.target.value)} aria-label="الفئة"><option value="">تشغيلي وأمني</option><option value="business">تشغيلي</option><option value="security">أمني</option></select>}
+          {can("security") && <select className="input w-auto py-1 text-xs" value={f.category ?? ""} onChange={(e) => set("category", e.target.value)} aria-label="الفئة"><option value="">تشغيلي وأمني</option><option value="business">تشغيلي</option><option value="security">أمني</option></select>}
           <select className="input w-auto py-1 text-xs" value={f.result ?? ""} onChange={(e) => set("result", e.target.value)} aria-label="النتيجة"><option value="">كل النتائج</option><option value="success">ناجح</option><option value="rejected">مرفوض</option></select>
           <select className="input w-auto py-1 text-xs" value={f.source ?? ""} onChange={(e) => set("source", e.target.value)} aria-label="المصدر"><option value="">كل المصادر</option>{Object.entries(SOURCE_AR).filter(([k]) => k !== "ai_ops").map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <div className="relative"><Search className="pointer-events-none absolute right-2.5 top-2 h-3.5 w-3.5 text-ink-400" /><input className="input w-52 py-1 pr-8 text-xs" placeholder="اسم الإجراء / رمز التتبع / المعرّف" value={f.q ?? ""} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>

@@ -87,7 +87,7 @@ function GuestList() {
 
 function GuestProfilePage({ id }: { id: string }) {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { can } = useAuth();
   const [d, setD] = useState<GuestProfileDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<null | "ban" | "unban" | "rate">(null);
@@ -96,7 +96,7 @@ function GuestProfilePage({ id }: { id: string }) {
   if (error && !d) return <ErrorBanner message={error} />;
   if (!d) return <LoadingScreen />;
   const p = d.profile;
-  const canRate = ["owner", "manager", "supervisor"].includes(profile?.role ?? "");
+  const canRate = can("guest.rate");
   return (
     <div>
       <button onClick={() => navigate("/admin/guests")} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> النزلاء</button>

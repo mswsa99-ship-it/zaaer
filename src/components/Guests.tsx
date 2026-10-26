@@ -24,10 +24,10 @@ type Guest = ReservationDetail["guests"][number];
 
 /** The red alert of a ban, the hold, and the main guest's rating (decision 21) — above everything else on the booking page. */
 export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged: () => void }) {
-  const { profile } = useAuth();
-  const role = profile?.role ?? "guest";
-  const canHold = ["owner", "manager", "supervisor"].includes(role);
-  const canLift = ["owner", "manager"].includes(role);
+  const { can } = useAuth();
+  const canHold = can("hold.set");
+  const canLift = can("hold.lift");
+  const canRate = can("guest.rate");
   const [dialog, setDialog] = useState<null | "hold" | "lift" | "rate">(null);
   const bans = d.bans ?? [];
   const gp = d.guest_profile;
@@ -64,10 +64,10 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
           </div>
         </div>
       )}
-      {(canHold || gp) && open && (
+      {(canHold || (gp && canRate)) && open && (
         <div className="flex flex-wrap gap-2">
           {canHold && !d.hold && <button onClick={() => setDialog("hold")} className="btn-ghost text-xs text-danger-600"><ShieldAlert className="h-3.5 w-3.5" /> وضع حظر على الحجز</button>}
-          {gp && canHold && <button onClick={() => setDialog("rate")} className="btn-ghost text-xs"><Star className="h-3.5 w-3.5" /> {gp.rating != null ? "تعديل تقييم الضيف" : "تقييم الضيف"}</button>}
+          {gp && canRate && <button onClick={() => setDialog("rate")} className="btn-ghost text-xs"><Star className="h-3.5 w-3.5" /> {gp.rating != null ? "تعديل تقييم الضيف" : "تقييم الضيف"}</button>}
         </div>
       )}
       <HoldDialog open={dialog === "hold" || dialog === "lift"} hold={dialog === "hold"} reservationId={d.reservation.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onChanged(); }} />

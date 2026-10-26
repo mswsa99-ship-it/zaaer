@@ -19,8 +19,8 @@ export default function StaffDashboard() {
   const sumQ = useBranchQuery<DailySummary | null>((branchId) => opsApi.dailySummary(branchId), [all.length], null);
   const sum = sumQ.data;
   // 0033: what waits for a decision today (the money roles; the server refuses the others)
-  const { profile } = useAuth();
-  const followRole = ["owner", "manager", "supervisor", "finance"].includes(profile?.role ?? "");
+  const { permissions } = useAuth();
+  const followRole = permissions.seesMoney;
   const fuQ = useBranchQuery<StayFollowups | null>((branchId) => (followRole ? stayApi.followups(branchId) : Promise.resolve(null)), [all.length, followRole], null);
   const fu = fuQ.data;
   const review = useReviewSummary(true);   // the owner: what waits for review, and the monitors when due (decision 54)

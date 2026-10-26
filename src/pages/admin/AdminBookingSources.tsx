@@ -13,8 +13,8 @@ interface SourceRow { id: string; name: string; code: string; kind: string; exte
  * source stays readable: old bookings keep showing it.
  */
 export default function AdminBookingSources() {
-  const { profile } = useAuth();
-  const canToggle = profile?.role === "owner" || profile?.role === "manager";
+  const { can } = useAuth();
+  const canToggle = can("definitions");
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);

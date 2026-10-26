@@ -12,11 +12,12 @@ import { useReviewSummary } from "../lib/reviewAlerts";
 import { ReviewNavCount } from "../components/ReviewBanner";
 
 export default function AdminLayout() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, can, canFull } = useAuth();
+  const allows = { can, canFull };
   const navigate = useNavigate();
   // Groups/links come from the role table in lib/nav.ts (the route guard uses the same table); empty groups are hidden.
-  const groups = adminNav(profile?.role).map((g) => ({ title: g.title, items: g.items.map((p) => ({ to: p.path, label: p.label, icon: p.icon })) }));
-  const adminHome = firstAdminPath(profile?.role) ?? "/staff/dashboard";
+  const groups = adminNav(profile?.role, allows).map((g) => ({ title: g.title, items: g.items.map((p) => ({ to: p.path, label: p.label, icon: p.icon })) }));
+  const adminHome = firstAdminPath(profile?.role, allows) ?? "/staff/dashboard";
   const codeAlerts = useKeyboxAlerts();   // «الرموز»: red until the codes of the units left by guests are changed
   const review = useReviewSummary();       // the owner's «بحاجة لمراجعة وتدقيق»: its count on the link
 

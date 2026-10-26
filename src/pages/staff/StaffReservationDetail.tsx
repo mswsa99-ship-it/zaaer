@@ -54,10 +54,10 @@ const RESERVATION_SELECT = `
 export default function StaffReservationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, can, permissions } = useAuth();
   const role = profile?.role;
-  // money is shown only to money roles (the server strips it in fn_reservation_detail; the legacy row read is gated here too)
-  const canMoney = role === "owner" || role === "manager" || role === "supervisor" || role === "finance";
+  // money is shown to whoever the permissions matrix gives money (the server strips it in fn_reservation_detail too)
+  const canMoney = permissions.seesMoney;
 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [guests, setGuests] = useState<GuestDetail[]>([]);
@@ -78,7 +78,7 @@ export default function StaffReservationDetail() {
   const [extra, setExtra] = useState<ReservationDetail | null>(null);
   const [officeGuest, setOfficeGuest] = useState<{ open: boolean; guest: GuestDetail | null }>({ open: false, guest: null });
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const canOffice = role === "owner" || role === "manager" || role === "supervisor";
+  const canOffice = can("guest.enter");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -274,7 +274,7 @@ export default function StaffReservationDetail() {
           </p>
         </Card>
 
-        {extra?.platform && <PlatformPanel d={extra} canCheck={canOffice} onChanged={load} />}
+        {extra?.platform && <PlatformPanel d={extra} canCheck={role === "owner" || role === "manager" || role === "supervisor"} onChanged={load} />}
         {group && group.units.length > 1 && <div className="lg:col-span-2"><GroupPanel current={detail.id} group={group} /></div>}
 
         {/* Payment & Status */}
@@ -321,7 +321,7 @@ export default function StaffReservationDetail() {
         </div>
 
         <OfficeGuestDialog open={officeGuest.open} reservationId={detail.id} guest={officeGuest.guest} onClose={() => setOfficeGuest({ open: false, guest: null })} onDone={async () => { setOfficeGuest({ open: false, guest: null }); await load(); }} />
-        <StaySummaryDialog open={summaryOpen} reservationId={detail.id} canRecord={canOffice} onClose={() => setSummaryOpen(false)} onChanged={load} />
+        <StaySummaryDialog open={summaryOpen} reservationId={detail.id} canRecord={can("checkin")} onClose={() => setSummaryOpen(false)} onChanged={load} />
 
         {/* The stay cycle (0033): Shomoos, the arrival, the code, the nights, the departure, the inspection, «مغلق» */}
         <div className="lg:col-span-2">

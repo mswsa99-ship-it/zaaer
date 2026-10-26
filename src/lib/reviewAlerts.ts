@@ -16,9 +16,11 @@ export function notifyReviewChanged() {
 }
 
 export function useReviewSummary(runMonitors = false): ReviewSummary | null {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const { branchId } = useBranch();
-  const owner = profile?.role === "owner";
+  // the list follows the permissions matrix («قائمة بحاجة لمراجعة», decision 71); the monitors stay the owner's
+  const owner = can("review.list");
+  const runsMonitors = runMonitors && profile?.role === "owner";
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
 
   useEffect(() => {
@@ -32,9 +34,9 @@ export function useReviewSummary(runMonitors = false): ReviewSummary | null {
       const n = ++seq;
       reviewApi.monitorsIfDue(branchId).then((x) => { if (alive && n === seq) setSummary(x.summary); }).catch(() => load());
     };
-    if (runMonitors) monitors(); else load();
+    if (runsMonitors) monitors(); else load();
     const minute = window.setInterval(load, 60_000);
-    const checks = runMonitors ? window.setInterval(monitors, 10 * 60_000) : null;
+    const checks = runsMonitors ? window.setInterval(monitors, 10 * 60_000) : null;
     window.addEventListener("focus", load);
     window.addEventListener(CHANGED, load);
     return () => {
@@ -44,7 +46,7 @@ export function useReviewSummary(runMonitors = false): ReviewSummary | null {
       window.removeEventListener("focus", load);
       window.removeEventListener(CHANGED, load);
     };
-  }, [owner, branchId, runMonitors]);
+  }, [owner, branchId, runsMonitors]);
 
   return summary;
 }

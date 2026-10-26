@@ -21,17 +21,15 @@ const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
 /** the hour of an instant at the property (decision 47: the property's clock, whatever the browser's) */
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Riyadh" });
 const when = (iso: string | null | undefined) => (iso ? formatDateTime(iso) : "—");
-const ACT_ROLES = ["owner", "manager", "supervisor"];
-const MONEY_ROLES = ["owner", "manager", "supervisor", "finance"];
 type Done = (message?: string | null) => Promise<void>;
 
 export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { reservationId: string; branchId: string; refreshKey?: unknown; onChanged: () => void }) {
-  const { profile } = useAuth();
-  const role = profile?.role ?? "guest";
-  const canAct = ACT_ROLES.includes(role);                    // arrival, Shomoos, code, departure, overdue reason
-  const canInspect = canAct || role === "housekeeping";       // decision 5: the supervisor or housekeeping inspects
-  const money = MONEY_ROLES.includes(role);
-  const isMgr = role === "owner" || role === "manager";        // corrections (decision 10)
+  const { can, permissions } = useAuth();
+  // the permissions matrix decides (decision 71); with the approved matrix: the supervisor, manager and owner act
+  const canArrive = can("checkin"), canShomoos = can("shomoos");
+  const canAct = canArrive || can("code.deliver") || can("checkout");   // in house: the code, the overdue reason, departure
+  const canInspect = can("inspection");                                  // decision 5: the supervisor or housekeeping inspects
+  const money = permissions.seesMoney;
 
   const [s, setS] = useState<StayStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -60,11 +58,11 @@ export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { 
       {error && <ErrorBanner message={error} />}
       {notice && <div className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" role="status" data-testid="stay-notice">{notice}</div>}
       {reasons && <Reasons title="تعذّر تنفيذ الإجراء للأسباب التالية:" items={reasons} />}
-      {(["pending_verification", "confirmed", "checked_in"].includes(s.status) || s.shomoos.registered) && <ShomoosCard {...common} canAct={canAct} money={money} />}
-      {before && s.checkin && <ArrivalCard {...common} branchId={branchId} canAct={canAct} money={money} />}
-      {s.status === "checked_in" && <InHouseCard {...common} canAct={canAct} canInspect={canInspect} money={money} isMgr={isMgr} onReveal={setRevealed} />}
-      {departed && <DepartedCard {...common} canInspect={canInspect} money={money} isMgr={isMgr} />}
-      {s.status === "cancelled" && isMgr && s.corrections.undo_cancel_until && <UndoCancel {...common} until={s.corrections.undo_cancel_until} />}
+      {(["pending_verification", "confirmed", "checked_in"].includes(s.status) || s.shomoos.registered) && <ShomoosCard {...common} canAct={canShomoos} money={money} />}
+      {before && s.checkin && <ArrivalCard {...common} branchId={branchId} canAct={canArrive} money={money} />}
+      {s.status === "checked_in" && <InHouseCard {...common} canAct={canAct} canInspect={canInspect} money={money} isMgr={can("checkin.undo")} onReveal={setRevealed} />}
+      {departed && <DepartedCard {...common} canInspect={canInspect} money={money} isMgr={can("stay.reopen")} />}
+      {s.status === "cancelled" && can("res.undo_cancel") && s.corrections.undo_cancel_until && <UndoCancel {...common} until={s.corrections.undo_cancel_until} />}
       {revealed && <CodeReveal code={revealed} onClose={() => setRevealed(null)} />}
     </div>
   );

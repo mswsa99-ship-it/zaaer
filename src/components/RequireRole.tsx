@@ -11,12 +11,12 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { ShieldAlert, Building2, UserX, RefreshCw } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useBranch, NO_BRANCH_MESSAGE } from "../lib/branch";
-import { pageFor } from "../lib/nav";
+import { pageFor, pageAllowed } from "../lib/nav";
 import { ROLE_LABELS } from "../lib/types";
 import { Card, LoadingScreen } from "./ui";
 
 export function RequireRole({ children }: { children?: ReactNode }) {
-  const { profile, loading } = useAuth();
+  const { profile, loading, can, canFull } = useAuth();
   const { pathname } = useLocation();
   const { branches, loading: branchLoading, error: branchError, reload } = useBranch();
 
@@ -29,7 +29,7 @@ export function RequireRole({ children }: { children?: ReactNode }) {
   }
 
   const page = pageFor(pathname);
-  if (!page || !(page.roles as readonly string[]).includes(profile.role)) {
+  if (!page || !pageAllowed(page, profile.role, { can, canFull })) {
     return (
       <GuardCard
         icon={<ShieldAlert className="h-6 w-6" />}

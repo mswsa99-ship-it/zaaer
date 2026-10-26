@@ -23,9 +23,9 @@ const NO_KB: KbData = { rows: [], open: [] };
 const EMPTY = (branchId: string | null): KnowledgeDraft => ({ branch_id: branchId, category: "general", question: "", keywords: [], answer: "", is_public: true, is_active: true, priority: 0 });
 
 export default function AdminKnowledge() {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const role = profile?.role ?? "";
-  const canEdit = ["owner", "manager", "supervisor"].includes(role);
+  const canEdit = can("knowledge");
   const canOrgWide = ["owner", "manager"].includes(role);
 
   const [tab, setTab] = useState<Tab>("entries");

@@ -24,14 +24,11 @@ type Voucher = NonNullable<ReservationDetail["vouchers"]>[number];
 const DAY_MS = 24 * 3_600_000;
 
 export function ReservationOperations({ reservationId, refreshKey, onChanged }: { reservationId: string; refreshKey?: unknown; onChanged: () => void }) {
-  const { profile } = useAuth();
-  const role = profile?.role ?? "guest";
-  const canMoney = ["owner", "manager", "supervisor", "finance"].includes(role);
-  // the stay's own money is refunded by the owner, a manager or finance; the deposit also by the supervisor (decision 5)
-  const canRefund = ["owner", "manager", "finance"].includes(role);
-  const canDeposit = canMoney;
-  const canManage = ["owner", "manager", "supervisor"].includes(role);
-  const isMgr = ["owner", "manager"].includes(role);
+  const { profile, can, canFull, permissions } = useAuth();
+  // the permissions matrix decides (decision 71); with the approved matrix these are the roles of §16
+  const canMoney = permissions.seesMoney;
+  const canRefund = can("voucher.refund");
+  const isMgr = canFull("voucher.correct");
 
   const [d, setD] = useState<ReservationDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +63,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   const uninvoiced = d.invoicing?.uninvoiced_halalas ?? 0;
   // «تصحيح سند» (decision 11, §16): the owner and a manager any voucher; the supervisor the vouchers they issued, within 24 hours.
   // A voucher in a platform payout is corrected by cancelling the payout first.
-  const canCorrect = (v: Voucher) => v.status === "approved" && !v.payout_id && (isMgr || (role === "supervisor" && !!profile && v.created_by === profile.id && Date.parse(v.created_at ?? v.occurred_at) > Date.now() - DAY_MS));
+  const canCorrect = (v: Voucher) => v.status === "approved" && !v.payout_id && (isMgr || (can("voucher.correct") && !!profile && v.created_by === profile.id && Date.parse(v.created_at ?? v.occurred_at) > Date.now() - DAY_MS));
 
   return (
     <div className="space-y-4">
@@ -80,23 +77,23 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
         {canMoney && f ? <FinanceGrid f={f} /> : <p className="text-xs text-ink-400">البيانات المالية متاحة لأدوار الاستقبال والمالية والإدارة فقط.</p>}
         {tab === "ledger" && canMoney && (
           <div className="mt-4 flex flex-wrap gap-2 border-t border-ink-50 pt-3">
-            {open && <button onClick={() => setDialog("receipt")} className="btn-accent text-xs"><Receipt className="h-3.5 w-3.5" /> سند قبض إقامة</button>}
-            {open && <button onClick={() => setDialog("deposit")} className="btn-outline text-xs"><Receipt className="h-3.5 w-3.5" /> قبض تأمين</button>}
+            {open && can("voucher.receipt") && <button onClick={() => setDialog("receipt")} className="btn-accent text-xs"><Receipt className="h-3.5 w-3.5" /> سند قبض إقامة</button>}
+            {open && can("voucher.receipt") && <button onClick={() => setDialog("deposit")} className="btn-outline text-xs"><Receipt className="h-3.5 w-3.5" /> قبض تأمين</button>}
             {canRefund && f.received - f.refunded > 0 && <button onClick={() => setDialog("refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> استرداد إقامة</button>}
-            {canDeposit && f.deposit_balance > 0 && <button onClick={() => setDialog("deposit_refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> رد تأمين</button>}
-            {canDeposit && f.deposit_balance > 0 && f.balance_due > 0 && <button onClick={() => setDialog("deposit_apply")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تغطية رسوم من التأمين</button>}
-            {canManage && ["checked_in", "checked_out", "closed"].includes(r.status) && <button onClick={() => setDialog("damage")} className="btn-outline text-xs"><Hammer className="h-3.5 w-3.5" /> رسم ضرر</button>}
-            {canManage && open && <button onClick={() => setDialog("service")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> إضافة خدمة</button>}
-            {canManage && open && <button onClick={() => setDialog("adjust")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> خصم / تسوية / غرامة</button>}
-            {uninvoiced > 0 && <button onClick={() => setDialog("invoice")} className="btn-outline text-xs"><FileText className="h-3.5 w-3.5" /> إنشاء فاتورة</button>}
+            {can("deposit.refund") && f.deposit_balance > 0 && <button onClick={() => setDialog("deposit_refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> رد تأمين</button>}
+            {can("deposit.apply") && f.deposit_balance > 0 && f.balance_due > 0 && <button onClick={() => setDialog("deposit_apply")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تغطية رسوم من التأمين</button>}
+            {can("damage.charge") && ["checked_in", "checked_out", "closed"].includes(r.status) && <button onClick={() => setDialog("damage")} className="btn-outline text-xs"><Hammer className="h-3.5 w-3.5" /> رسم ضرر</button>}
+            {can("charges.add") && open && <button onClick={() => setDialog("service")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> إضافة خدمة</button>}
+            {(can("charges.add") || can("disc.before") || can("price.adjust")) && open && <button onClick={() => setDialog("adjust")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> خصم / تسوية / غرامة</button>}
+            {uninvoiced > 0 && can("invoice.issue") && <button onClick={() => setDialog("invoice")} className="btn-outline text-xs"><FileText className="h-3.5 w-3.5" /> إنشاء فاتورة</button>}
           </div>
         )}
-        {tab === "stay" && canManage && (
+        {tab === "stay" && (can("stay.extend") || can("room.assign") || can("res.cancel")) && (
           <div className="mt-4 flex flex-wrap gap-2 border-t border-ink-50 pt-3">
-            {["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("extend")} className="btn-outline text-xs"><CalendarRange className="h-3.5 w-3.5" /> تغيير المغادرة / تمديد</button>}
-            {["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("switch")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تبديل الوحدة</button>}
-            {["confirmed", "pending_verification", "draft"].includes(r.status) && <button onClick={() => setDialog("cancel")} className="btn-ghost text-xs text-danger-600"><Ban className="h-3.5 w-3.5" /> إلغاء الحجز</button>}
-            {["confirmed", "pending_verification"].includes(r.status) && r.check_in <= todayISO() && <button onClick={() => setDialog("no_show")} className="btn-ghost text-xs text-danger-600"><UserX className="h-3.5 w-3.5" /> عدم حضور</button>}
+            {can("stay.extend") && ["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("extend")} className="btn-outline text-xs"><CalendarRange className="h-3.5 w-3.5" /> تغيير المغادرة / تمديد</button>}
+            {can("room.assign") && ["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("switch")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تبديل الوحدة</button>}
+            {can("res.cancel") && ["confirmed", "pending_verification", "draft"].includes(r.status) && <button onClick={() => setDialog("cancel")} className="btn-ghost text-xs text-danger-600"><Ban className="h-3.5 w-3.5" /> إلغاء الحجز</button>}
+            {can("res.cancel") && ["confirmed", "pending_verification"].includes(r.status) && r.check_in <= todayISO() && <button onClick={() => setDialog("no_show")} className="btn-ghost text-xs text-danger-600"><UserX className="h-3.5 w-3.5" /> عدم حضور</button>}
           </div>
         )}
       </Card>
@@ -117,13 +114,13 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
               v.status === "cancelled" ? <Badge key="s" className="bg-danger-500/10 text-danger-600" >ملغى</Badge> : (
                 <div key="a" className="flex flex-col items-end gap-0.5">
                   {canCorrect(v) && <button onClick={() => setCorrecting(v)} className="btn-ghost px-2 py-1 text-[11px]"><PencilLine className="h-3 w-3" /> تصحيح</button>}
-                  {isMgr && !v.payout_id && <CancelVoucherButton id={v.id} onDone={done} />}
+                  {can("voucher.cancel") && !v.payout_id && <CancelVoucherButton id={v.id} onDone={done} />}
                   {v.payout_id && <span className="text-[10px] text-ink-400">ضمن مطابقة منصة</span>}
                 </div>)])} empty="لا سندات" />
           </Card>
           {canMoney && ((d.invoices ?? []).length > 0 || uninvoiced !== 0) && (
             <Card className="lg:col-span-2">
-              <InvoiceList d={d} canEdit={canMoney} canCancel={isMgr} onDone={done} />
+              <InvoiceList d={d} canEdit={can("invoice.edit")} canCancel={profile?.role === "owner" || profile?.role === "manager"} onDone={done} />
             </Card>
           )}
         </div>
@@ -158,7 +155,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
       <VoucherDialog open={dialog === "receipt" || dialog === "deposit"} kind={dialog === "deposit" ? "deposit" : "receipt"} reservationId={reservationId} accounts={accounts.active} suggested={dialog === "deposit" ? depositDefault : f.balance_due} onClose={() => setDialog(null)} onDone={done} />
       <RefundDialog open={dialog === "refund" || dialog === "deposit_refund" || dialog === "deposit_apply"} kind={(dialog as "refund" | "deposit_refund" | "deposit_apply") ?? "refund"} reservationId={reservationId} accounts={accounts.active} available={dialog === "refund" ? f.received - f.refunded : dialog === "deposit_apply" ? Math.min(f.deposit_balance, f.balance_due) : f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
       <DamageDialog open={dialog === "damage"} reservationId={reservationId} depositBalance={f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
-      <AdjustDialog open={dialog === "adjust"} reservationId={reservationId} version={r.version} isMgr={isMgr} onClose={() => setDialog(null)} onDone={done} />
+      <AdjustDialog open={dialog === "adjust"} reservationId={reservationId} version={r.version} isMgr={can("price.adjust")} onClose={() => setDialog(null)} onDone={done} />
       <ServiceDialog open={dialog === "service"} reservationId={reservationId} branchId={r.branch_id} onClose={() => setDialog(null)} onDone={done} />
       <ExtendDialog open={dialog === "extend"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <SwitchDialog open={dialog === "switch"} d={d} onClose={() => setDialog(null)} onDone={done} />
