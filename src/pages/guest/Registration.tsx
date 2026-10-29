@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, UserPlus, CheckCircle2, AlertCircle, IdCard } from "lucide-react";
-import { guestApi, toArabicError, type GuestSession, type GuestStaySummary } from "../../lib/api";
+import { guestApi, toArabicError, VALIDATION_AR, type GuestSession, type GuestStaySummary } from "../../lib/api";
 import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { IDENTITY_TYPE_LABELS, GUEST_VERIFICATION_LABELS, type IdentityType, type GuestVerificationStatus } from "../../lib/types";
 import { gregorianToHijri, hijriToGregorian, maskId, todayISO } from "../../lib/utils";
+import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../../lib/validation";
 
 type GuestRow = GuestSession["guests"][number];
 
@@ -136,6 +137,13 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
     if (fullName.trim().split(/\s+/).length < 3) { setFormError("الاسم الثلاثي مطلوب كما في الوثيقة."); return; }
     if (!identityNumber.trim()) { setFormError("رقم الوثيقة مطلوب."); return; }
     if (!birthDate) { setFormError("تاريخ الميلاد مطلوب."); return; }
+    // 0047: letters-only name, the number's shape, the phone's shape, 15 or older — the same rules as the server
+    const ruleError = fieldError(() => {
+      checkPersonName(fullName);
+      checkIdentityNumber(identityType, latinDigits(identityNumber).replace(/\s/g, ""));
+      checkPhone(phone, false);
+    }, VALIDATION_AR);
+    if (ruleError) { setFormError(ruleError); return; }
     if (!consent) { setFormError("يجب الإقرار بصحة البيانات."); return; }
     if (needsAck && !ack) { setFormError("يجب الإقرار بملخص الإقامة."); return; }
 
@@ -145,6 +153,8 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
       const g = hijriToGregorian(y, m, d);
       finalBirthDate = `${g.year}-${String(g.month).padStart(2, "0")}-${String(g.day).padStart(2, "0")}`;
     }
+    const ageError = fieldError(() => checkMinAge(finalBirthDate, todayISO()), VALIDATION_AR);
+    if (ageError) { setFormError(ageError); return; }
     setSaving(true);
     try {
       await guestApi.submit(token, guest?.id ?? null, {
@@ -204,13 +214,13 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
               </div>
             </div>
             {birthCalendar === "gregorian" ? (
-              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" max={todayISO()} />
+              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" max={maxBirthDate(todayISO())} />
             ) : (
               <input value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="input" dir="ltr" placeholder="1410-05-15 (سنة-شهر-يوم هجري)" pattern="\d{4}-\d{2}-\d{2}" />
             )}
             {hijriHint && <p className="mt-1 text-xs text-ink-400">{hijriHint}</p>}
           </div>
-          <div><label className="label">رقم الجوال {isPrimary ? "(مطلوب)" : "(اختياري)"}</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" placeholder={isPrimary ? "يُترك فارغًا للإبقاء على الرقم المسجل" : "+9665XXXXXXXX"} /></div>
+          <div><label className="label">رقم الجوال {isPrimary ? "(مطلوب)" : "(اختياري)"}</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder={isPrimary ? "يُترك فارغًا للإبقاء على الرقم المسجل" : "05XXXXXXXX"} /></div>
 
           {formError && <ErrorBanner message={formError} />}
 

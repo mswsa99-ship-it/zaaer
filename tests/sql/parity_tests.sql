@@ -40,7 +40,7 @@ do $$ declare r jsonb; begin
   r := fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-04","check_out":"2031-05-05","guest_name":"وقت وصول","guest_phone":"0500001112","source_id":"00000000-0000-0000-0000-000000000021","arrival_time":"21:15","departure_time":"10:00"}'::jsonb);
   perform t_record('P02 explicit arrival/departure times are stored', exists (select 1 from reservations where id = (r->>'id')::uuid and expected_arrival_time = '21:15' and expected_departure_time = '10:00'));
   begin
-    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-06","check_out":"2031-05-07","guest_name":"وقت خاطئ","source_id":"00000000-0000-0000-0000-000000000021","arrival_time":"25:99"}'::jsonb);
+    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-06","check_out":"2031-05-07","guest_phone":"0551000022","guest_name":"وقت خاطئ","source_id":"00000000-0000-0000-0000-000000000021","arrival_time":"25:99"}'::jsonb);
     perform t_record('P02b malformed time is rejected', false);
   exception when others then
     perform t_record('P02b malformed time is rejected', sqlerrm like 'VALIDATION: times%', sqlerrm);
@@ -55,13 +55,13 @@ do $$ declare r jsonb; rid uuid; begin
     t_companions(rid) = 1 and exists (select 1 from reservations where id = rid and companions = 1)
     and exists (select 1 from reservation_guests where reservation_id = rid and not is_primary and relationship = 'ابن' and verification_status = 'not_started' and not data_submitted), r::text);
   begin
-    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-10","check_out":"2031-05-11","guest_name":"فوق السعة","source_id":"00000000-0000-0000-0000-000000000021","adults":2,"companions_details":[{"full_name":"أ"},{"full_name":"ب"},{"full_name":"ج"},{"full_name":"د"},{"full_name":"هـ"},{"full_name":"و"},{"full_name":"ز"}]}'::jsonb);
+    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-10","check_out":"2031-05-11","guest_phone":"0551000023","guest_name":"فوق السعة","source_id":"00000000-0000-0000-0000-000000000021","adults":2,"companions_details":[{"full_name":"مرافق أ"},{"full_name":"مرافق ب"},{"full_name":"مرافق ج"},{"full_name":"مرافق د"},{"full_name":"مرافق هـ"},{"full_name":"مرافق و"},{"full_name":"مرافق ز"}]}'::jsonb);
     perform t_record('P03b capacity is checked against adults + companion rows', false);
   exception when others then
     perform t_record('P03b capacity is checked against adults + companion rows', sqlerrm like 'CAPACITY_EXCEEDED%', sqlerrm);
   end;
   begin
-    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-12","check_out":"2031-05-13","guest_name":"مرافق بلا اسم","source_id":"00000000-0000-0000-0000-000000000021","companions_details":[{"relationship":"ابن"}]}'::jsonb);
+    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-12","check_out":"2031-05-13","guest_phone":"0551000024","guest_name":"مرافق بلا اسم","source_id":"00000000-0000-0000-0000-000000000021","companions_details":[{"relationship":"ابن"}]}'::jsonb);
     perform t_record('P03c a companion without a name is rejected', false);
   exception when others then
     perform t_record('P03c a companion without a name is rejected', sqlerrm like 'VALIDATION: companion_name%', sqlerrm);
@@ -84,7 +84,7 @@ do $$ declare r jsonb; before int; begin
   r := fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","room_id":"00000000-0000-0000-0000-000000000197","check_in":"2031-07-01","check_out":"2031-07-04","guest_name":"الحاجز الأول","guest_phone":"0500001115","source_id":"00000000-0000-0000-0000-000000000021"}'::jsonb);
   before := t_res_count_by_guest('مجموعة فاشلة');
   begin
-    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-07-02","check_out":"2031-07-03","guest_name":"مجموعة فاشلة","source_id":"00000000-0000-0000-0000-000000000021","units":[{"category_id":"00000000-0000-0000-0000-000000000030","adults":1},{"category_id":"00000000-0000-0000-0000-000000000030","adults":1,"room_id":"00000000-0000-0000-0000-000000000197"}]}'::jsonb);
+    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-07-02","check_out":"2031-07-03","guest_phone":"0551000025","guest_name":"مجموعة فاشلة","source_id":"00000000-0000-0000-0000-000000000021","units":[{"category_id":"00000000-0000-0000-0000-000000000030","adults":1},{"category_id":"00000000-0000-0000-0000-000000000030","adults":1,"room_id":"00000000-0000-0000-0000-000000000197"}]}'::jsonb);
     perform t_record('P05 group booking with an unavailable unit is rejected as a whole', false, 'no error raised');
   exception when others then
     perform t_record('P05 group booking with an unavailable unit is rejected as a whole', sqlerrm like 'ROOM_NOT_AVAILABLE%' or sqlerrm like 'ALLOCATION_CONFLICT%', sqlerrm);
@@ -98,7 +98,7 @@ select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
 set role authenticated;
 do $$ begin
   begin
-    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-08-01","check_out":"2031-08-02","guest_name":"نظافة","source_id":"00000000-0000-0000-0000-000000000021","units":[{"category_id":"00000000-0000-0000-0000-000000000030"}]}'::jsonb);
+    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-08-01","check_out":"2031-08-02","guest_phone":"0551000026","guest_name":"نظافة","source_id":"00000000-0000-0000-0000-000000000021","units":[{"category_id":"00000000-0000-0000-0000-000000000030"}]}'::jsonb);
     perform t_record('P06 housekeeping cannot create (group) reservations', false);
   exception when others then
     perform t_record('P06 housekeeping cannot create (group) reservations', sqlerrm like 'FORBIDDEN%', sqlerrm);

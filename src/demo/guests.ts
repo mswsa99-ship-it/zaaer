@@ -13,6 +13,7 @@
  */
 import { uid, nowISO, ORG, type Row } from "./data";
 import type { Permissions } from "./permissions";
+import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, latinDigits } from "../lib/validation";
 
 export interface GuestCtx extends Permissions {
   T: (t: string) => Row[];
@@ -48,10 +49,9 @@ export function fingerprint(type: string | null | undefined, number: string | nu
   return `fp_${space}_${h.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
 }
 
+/** the server's fn_check_identity (0047: a national ID starts 1, an iqama 2) */
 export function checkIdentity(type: string, number: string) {
-  if (["national_id", "iqama"].includes(type) && !/^[12]\d{9}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
-  if (type === "gcc_id" && !/^[A-Za-z0-9]{6,15}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
-  if (type === "passport" && !/^[A-Za-z0-9]{5,12}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
+  checkIdentityNumber(type, number);
 }
 
 /** the branch's calendar day of a moment (the demo's branches keep Riyadh time, like todayISO) */
@@ -189,9 +189,9 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       const r = res(p.reservation_id); requireBranch(r.branch_id);
       if (["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(r.status)) throw new Error("RESERVATION_NOT_EDITABLE");
       if (p.document_matched !== true) throw new Error("VALIDATION: document_matched");
-      const name = String(p.full_name ?? "").trim(); if (name.split(/\s+/).length < 3) throw new Error("VALIDATION: full_name_three_parts");
+      const name = String(p.full_name ?? "").trim(); if (name.split(/\s+/).length < 3) throw new Error("VALIDATION: full_name_three_parts"); checkPersonName(name);
       const type = String(p.identity_type ?? ""); if (!["national_id", "iqama", "passport", "gcc_id"].includes(type)) throw new Error("VALIDATION: identity_type");
-      const number = String(p.identity_number ?? "").replace(/\s/g, ""); const g = p.guest_id ? byId("reservation_guests", p.guest_id) : null;
+      const number = latinDigits(String(p.identity_number ?? "")).replace(/\s/g, ""); const g = p.guest_id ? byId("reservation_guests", p.guest_id) : null;
       if (p.guest_id && (!g || g.reservation_id !== r.id)) throw new Error("GUEST_NOT_FOUND");
       const correcting = !!g?.data_submitted; let fp: string | null;
       if (!number) { if (!correcting || !g!.identity_fingerprint || type !== g!.identity_type) throw new Error("VALIDATION: identity_number_format"); fp = g!.identity_fingerprint; }
@@ -199,9 +199,10 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       const nat = String(p.nationality ?? "").trim(); if (!nat) throw new Error("VALIDATION: nationality");
       const birth = String(p.birth_date ?? ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(birth) || Number.isNaN(Date.parse(birth))) throw new Error("VALIDATION: birth_date");
       const today = branchToday(r.branch_id); if (birth > today || Number(birth.slice(0, 4)) < Number(today.slice(0, 4)) - 120) throw new Error("VALIDATION: birth_date_range");
+      checkMinAge(birth, today);
       const reason = String(p.reason ?? "").trim() || null; if (correcting && !reason) throw new Error("VALIDATION: reason");
       if (guestsOf(r.id).some((x) => x.identity_fingerprint === fp && x.id !== g?.id)) throw new Error("DUPLICATE_GUEST");
-      const phone = String(p.phone ?? "").replace(/[^0-9+]/g, "") || null; const issue = String(p.identity_issue_number ?? "").trim() || null; const rel = String(p.relationship ?? "").trim() || null;
+      const phone = checkPhone(p.phone, false); const issue = String(p.identity_issue_number ?? "").trim() || null; const rel = String(p.relationship ?? "").trim() || null;
       const before = masked(g ?? undefined); let target: Row;
       if (g) {
         Object.assign(g, { full_name: name, identity_type: type, identity_number_last4: number ? number.slice(-4) : g.identity_number_last4, identity_issue_number: issue, identity_fingerprint: fp, nationality: nat, birth_date: birth,

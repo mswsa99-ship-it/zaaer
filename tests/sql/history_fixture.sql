@@ -25,13 +25,13 @@ declare r jsonb; v jsonb; svc jsonb; t jsonb; rid uuid; room uuid; tt uuid;
 begin
   -- a future stay with a discount line
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (current_date + 30)::text,
-         'check_out', (current_date + 33)::text, 'guest_name', 'ضيف سجل أول', 'source_id', src));
+         'check_out', (current_date + 33)::text, 'guest_phone', '0551000014', 'guest_name', 'ضيف سجل أول', 'source_id', src));
   rid := (r->>'id')::uuid; insert into _hist_ids values ('r1', rid);
   perform fn_staff_adjust_price(rid, 'discount', 1000, 'خصم سجل', 'اختبار', (select version from reservations where id = rid));
 
   -- money of every kind and method, one voucher cancelled, an invoice
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (current_date + 5)::text,
-         'check_out', (current_date + 7)::text, 'guest_name', 'ضيف سجل ثان', 'source_id', src));
+         'check_out', (current_date + 7)::text, 'guest_phone', '0551000015', 'guest_name', 'ضيف سجل ثان', 'source_id', src));
   rid := (r->>'id')::uuid; insert into _hist_ids values ('r2', rid);
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'hist-r2-rcp'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'deposit', 'amount_halalas', 5000, 'method', 'pos', 'reference', 'POS-1', 'idempotency_key', 'hist-r2-dep'));
@@ -46,13 +46,13 @@ begin
 
   -- a cancelled stay
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (current_date + 10)::text,
-         'check_out', (current_date + 12)::text, 'guest_name', 'ضيف سجل ثالث', 'source_id', src));
+         'check_out', (current_date + 12)::text, 'guest_phone', '0551000016', 'guest_name', 'ضيف سجل ثالث', 'source_id', src));
   rid := (r->>'id')::uuid; insert into _hist_ids values ('r3', rid);
   perform fn_staff_cancel_reservation(rid, 'إلغاء الضيف');
 
   -- a stay that will be written as already ended (below, as history)
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (current_date + 50)::text,
-         'check_out', (current_date + 52)::text, 'guest_name', 'ضيف سجل رابع', 'source_id', src));
+         'check_out', (current_date + 52)::text, 'guest_phone', '0551000017', 'guest_name', 'ضيف سجل رابع', 'source_id', src));
   insert into _hist_ids values ('r4', (r->>'id')::uuid);
 
   -- a completed cleaning task, an archived service

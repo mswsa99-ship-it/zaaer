@@ -31,7 +31,7 @@ select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-         'check_in', (current_date + 40)::text, 'check_out', (current_date + 42)::text, 'guest_name', 'ضيف التدقيق', 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'check_in', (current_date + 40)::text, 'check_out', (current_date + 42)::text, 'guest_phone', '0551000001', 'guest_name', 'ضيف التدقيق', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res', (r->>'id')::uuid);
   r := fn_admin_upsert_room(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030','room_number','AT-1'));
   insert into ids values ('room', (r->>'id')::uuid);

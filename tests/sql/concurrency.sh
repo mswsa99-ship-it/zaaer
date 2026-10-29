@@ -30,7 +30,7 @@ call_res() { # $1 = guest label, $2 = sleep before commit
   psql -d "$DB" -At <<EOF 2>&1 | grep -E "ERROR|^t$|^true$|^false$|^none$" | head -1
 $login
 begin;
-select coalesce((fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","room_id":"00000000-0000-0000-0000-000000000198","check_in":"2030-02-01","check_out":"2030-02-04","guest_name":"$1","guest_phone":"05000$RANDOM","source_id":"00000000-0000-0000-0000-000000000021"}'))->>'ok', 'none');
+select coalesce((fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","room_id":"00000000-0000-0000-0000-000000000198","check_in":"2030-02-01","check_out":"2030-02-04","guest_name":"$1","guest_phone":"0550$(printf %06d $RANDOM)","source_id":"00000000-0000-0000-0000-000000000021"}'))->>'ok', 'none');
 select pg_sleep($2);
 commit;
 EOF
@@ -139,7 +139,7 @@ q() { psql -d "$DB" -At -c "$login $1" | tail -1; }
 qs() { psql -d "$DB" -At -c "$1" | tail -1; }
 booking() { # $1 room (or empty for a type-level stay), $2 from, $3 to, $4 category (default the studio)
   local room=""; [[ -n "$1" ]] && room="'room_id','$1',"
-  echo "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','${4:-$CAT}',${room}'check_in','$2','check_out','$3','guest_name','سباق','source_id','$SRC'))->>'ok'"
+  echo "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','${4:-$CAT}',${room}'check_in','$2','check_out','$3','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق','source_id','$SRC'))->>'ok'"
 }
 sess() { # $1 expression returning text, $2 seconds to hold the transaction
   psql -d "$DB" -At <<SQL 2>&1 | grep -E "ERROR|^R:" | head -1
@@ -164,7 +164,7 @@ TODAY=$(qs "select fn_branch_today('$BR')")
 D2=$(qs "select fn_branch_today('$BR') + 2"); D3=$(qs "select fn_branch_today('$BR') + 3")
 # a stay in house today on $1, its nights paid, no deposit (with the reason)
 in_house() {
-  local res; res=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','$1','check_in','$TODAY','check_out','$D2','guest_name','سباق مقيم','source_id','$SRC')))->>'id';")
+  local res; res=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','$1','check_in','$TODAY','check_out','$D2','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق مقيم','source_id','$SRC')))->>'id';")
   qs "select t_race_ready('$res');" >/dev/null
   q "select fn_staff_check_in(jsonb_build_object('reservation_id','$res','deposit_reason','سباق',
        'rent', jsonb_build_object('amount_halalas', (fn_reservation_finance('$res')->>'balance_due')::bigint, 'method','cash','idempotency_key','race-rent-$res')))->>'ok';" >/dev/null
@@ -172,7 +172,7 @@ in_house() {
 }
 
 # ---------- X01b (decision 45): extending a stay against a new booking of the added nights ----------
-R1=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','00000000-0000-0000-0000-000000000170','check_in','2031-01-01','check_out','2031-01-03','guest_name','سباق تمديد','source_id','$SRC')))->>'id';")
+R1=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','00000000-0000-0000-0000-000000000170','check_in','2031-01-01','check_out','2031-01-03','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق تمديد','source_id','$SRC')))->>'id';")
 V1=$(qs "select version from reservations where id = '$R1'")
 race "fn_staff_amend_stay('$R1', '2031-01-05', 'keep_rate', 'سباق', $V1)->>'ok'" "$(booking 00000000-0000-0000-0000-000000000170 2031-01-03 2031-01-05)"
 N=$(qs "select count(*) from reservation_allocations where room_id = '00000000-0000-0000-0000-000000000170' and status = 'active'")
@@ -182,7 +182,7 @@ echo "X01b A=$RA B=$RB active=$N stays=$M check_out=$CO"
 conflict "$RB" && [[ "$RA" == "R:true" && "$N" == "1" && "$M" == "1" && "$CO" == "2031-01-05" ]] && rc=0 || rc=1; check "X01b extend vs new booking → the extension holds the added nights, exactly one active allocation, the booking gets a clear conflict" $rc "A=$RA B=$RB"
 
 # ---------- X01c (decision 45): switching a stay's unit against a new booking of that unit ----------
-R2=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','00000000-0000-0000-0000-000000000171','check_in','2031-02-01','check_out','2031-02-03','guest_name','سباق تبديل','source_id','$SRC')))->>'id';")
+R2=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','00000000-0000-0000-0000-000000000171','check_in','2031-02-01','check_out','2031-02-03','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق تبديل','source_id','$SRC')))->>'id';")
 V2=$(qs "select version from reservations where id = '$R2'")
 race "fn_staff_switch_room('$R2', '00000000-0000-0000-0000-000000000172', null, 'سباق', $V2)->>'ok'" "$(booking 00000000-0000-0000-0000-000000000172 2031-02-01 2031-02-03)"
 N=$(qs "select count(*) from reservation_allocations where room_id = '00000000-0000-0000-0000-000000000172' and status = 'active'")
@@ -192,7 +192,7 @@ conflict "$RB" && [[ "$RA" == "R:true" && "$N" == "1" && "$M" == "1" ]] && rc=0 
 
 # ---------- X01d (decision 45): a single booking against a booking of several units, one of them the same ----------
 race "$(booking 00000000-0000-0000-0000-000000000174 2031-03-01 2031-03-03)" \
-     "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-03-01','check_out','2031-03-03','guest_name','سباق جماعي','source_id','$SRC','units', jsonb_build_array(jsonb_build_object('room_id','00000000-0000-0000-0000-000000000173'), jsonb_build_object('room_id','00000000-0000-0000-0000-000000000174'))))->>'ok'"
+     "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-03-01','check_out','2031-03-03','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق جماعي','source_id','$SRC','units', jsonb_build_array(jsonb_build_object('room_id','00000000-0000-0000-0000-000000000173'), jsonb_build_object('room_id','00000000-0000-0000-0000-000000000174'))))->>'ok'"
 N=$(qs "select count(*) from reservation_allocations where room_id = '00000000-0000-0000-0000-000000000174' and status = 'active'")
 P=$(qs "select count(*) from reservations where room_id = '00000000-0000-0000-0000-000000000173'")
 echo "X01d A=$RA B=$RB active=$N partial=$P"
@@ -247,7 +247,7 @@ echo "X05e A=$RA B=$RB state=$ST"
 
 # ---------- IR01–IR03 (decisions 11, 27): invoices and voucher corrections at the same time ----------
 # two partial invoices of one stay for overlapping nights: one invoice, the other refused with the overlap
-R7=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-06-01','check_out','2031-06-05','guest_name','سباق فاتورة','source_id','$SRC')))->>'id';")
+R7=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-06-01','check_out','2031-06-05','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق فاتورة','source_id','$SRC')))->>'id';")
 race "fn_staff_issue_invoice(jsonb_build_object('reservation_id','$R7','from','2031-06-01','to','2031-06-04'))->>'ok'" \
      "fn_staff_issue_invoice(jsonb_build_object('reservation_id','$R7','from','2031-06-02','to','2031-06-05'))->>'ok'"
 ST=$(qs "select count(*) from invoices where reservation_id = '$R7' and status = 'issued'")
@@ -272,7 +272,7 @@ echo "IR03 A=$RA B=$RB state=$ST"
 # ---------- PX01–PX03 (decisions 4, 21, 69): platform numbers, cancellation numbers and bans at the same time ----------
 OTA=$(qs "select id from booking_sources where organization_id = '00000000-0000-0000-0000-000000000001' and code = 'booking_com'")
 ota() { # $1 platform number, $2 from, $3 to
-  echo "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','$2','check_out','$3','guest_name','سباق منصة','source_id','$OTA','external_ref','$1','platform_collects',false,'platform_booked_on','$TODAY'))->>'ok'"
+  echo "fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','$2','check_out','$3','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق منصة','source_id','$OTA','external_ref','$1','platform_collects',false,'platform_booked_on','$TODAY'))->>'ok'"
 }
 # one platform number on two new bookings at once: one is made, the other is refused (the constraint, not the pre-check)
 P1=$(qs "select fn_branch_today('$BR') + 300"); P2=$(qs "select fn_branch_today('$BR') + 301"); P3=$(qs "select fn_branch_today('$BR') + 305"); P4=$(qs "select fn_branch_today('$BR') + 306")
@@ -281,7 +281,7 @@ ST=$(qs "select count(*) from reservations where external_ref = 'PX-RACE-1'")
 echo "PX01 A=$RA B=$RB bookings=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"DUPLICATE_EXTERNAL_REF"* && "$ST" == "1" ]] && rc=0 || rc=1; check "PX01 one platform number on two new bookings at once → one booking; the other is refused as a duplicate" $rc "A=$RA B=$RB $ST"
 # one platform cancellation number entered twice at once: cancelled once, the second is told it was already done
-R10=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','$P3','check_out','$P4','guest_name','سباق إلغاء','source_id','$OTA','external_ref','PX-RACE-2','platform_collects',false,'platform_booked_on','$TODAY')))->>'id';")
+R10=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','$P3','check_out','$P4','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق إلغاء','source_id','$OTA','external_ref','PX-RACE-2','platform_collects',false,'platform_booked_on','$TODAY')))->>'id';")
 race "fn_staff_cancel(jsonb_build_object('reservation_id','$R10','reason','سباق','cancel_number','PX-CXL-2'))->>'cancelled'" \
      "fn_staff_cancel(jsonb_build_object('reservation_id','$R10','reason','سباق','cancel_number','PX-CXL-2'))->>'duplicate'"
 ST=$(qs "select status || ' ' || (select count(*) from audit_events where entity_id = r.id and action = 'reservation.cancelled') from reservations r where id = '$R10'")
@@ -296,5 +296,15 @@ race "fn_guest_ban(jsonb_build_object('profile_id','$P11','ban',true,'reason','�
 ST=$(qs "select r.status || ' ' || (select count(*) from guest_bans b where b.guest_profile_id = '$P11' and b.lifted_at is null) || ' ' || ('الضيف محظور من الإدارة' = any(fn_code_blockers(r.id))) from reservations r where r.id = '$R11'")
 echo "PX03 A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && ( ( "$RB" == "R:true" && "$ST" == "checked_in 1 true" ) || ( "$RB" == "R:false" && "$ST" == "confirmed 1 false" ) ) ]] && rc=0 || rc=1; check "PX03 a ban against the guest's arrival → one valid order: in and banned with the code held back, or banned and not in" $rc "A=$RA B=$RB $ST"
+
+# ---------- VD08 (0047, the owner's note 14): two units of one branch given the same new code at once ----------
+psql -d "$DB" -q -c "insert into rooms(id, branch_id, organization_id, category_id, room_number, is_active, status) values
+ ('00000000-0000-0000-0000-000000000190','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-KC1', true, 'available'),
+ ('00000000-0000-0000-0000-000000000191','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-KC2', true, 'available')" > /dev/null
+race "fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000190', '739146', true)->>'ok'" \
+     "fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000191', '739146', true)->>'ok'"
+ST=$(qs "select count(*) from keyboxes where room_id in ('00000000-0000-0000-0000-000000000190', '00000000-0000-0000-0000-000000000191')")
+echo "VD08 A=$RA B=$RB boxes=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"CODE_IN_USE"* && "$ST" == "1" ]] && rc=0 || rc=1; check "VD08 one new code saved for two units of a branch at once → one box takes it; the other is refused as in use" $rc "A=$RA B=$RB $ST"
 
 exit $fail

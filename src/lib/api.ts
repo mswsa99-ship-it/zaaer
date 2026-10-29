@@ -34,6 +34,7 @@ const ERROR_AR: Record<string, string> = {
   NOT_CHECKED_IN: "الحجز ليس في حالة دخول.",
   NOT_IN_DELIVERED_STATE: "لم يتم تسليم الرمز لهذا الحجز.",
   CODE_MUST_DIFFER_FROM_PREVIOUS: "هذا هو الرمز الحالي نفسه — لا يُقبل. اضبط رمزًا جديدًا على الصندوق ثم احفظه.",
+  CODE_IN_USE: "هذا الرمز مستخدم في صندوق وحدة أخرى بهذا الفرع. اضبط على الصندوق رمزًا مختلفًا ثم احفظه.",
   GUEST_IN_HOUSE: "في الوحدة نزيل مقيم؛ رمزها لا يُعرض ولا يُغيَّر من حساب خدمة الغرف.",
   NO_KEYBOX_CODE: "لا يوجد رمز مسجّل لهذه الوحدة بعد.",
   CODE_NEEDS_CHANGE: "الرمز الحالي يجب تغييره أولًا؛ التجربة تكون للرمز الجديد.",
@@ -94,7 +95,7 @@ const ERROR_AR: Record<string, string> = {
   CATEGORY_ARCHIVED: "نوع الوحدة مؤرشف ولا يقبل حجوزات جديدة.",
 };
 
-const VALIDATION_AR: Record<string, string> = {
+export const VALIDATION_AR: Record<string, string> = {
   // guests, platforms and the branch (0038)
   document_matched: "أكّد «طابقتُ الوثيقة الأصلية» قبل الحفظ.",
   acknowledgement_required: "يجب الإقرار بملخص الإقامة أولًا.",
@@ -159,12 +160,17 @@ const VALIDATION_AR: Record<string, string> = {
   tax_rate: "نسبة الضريبة بين 0 و100%.",
   full_name_three_parts: "الاسم الثلاثي مطلوب كما في الوثيقة.",
   identity_type: "نوع الوثيقة غير صحيح.",
-  identity_number_format: "شكل رقم الوثيقة غير صحيح لهذا النوع.",
+  identity_number_format: "رقم الوثيقة غير صحيح: الهوية الوطنية 10 أرقام تبدأ بـ 1، والإقامة 10 أرقام تبدأ بـ 2.",
   nationality: "الجنسية مطلوبة.",
   birth_date: "تاريخ الميلاد غير صالح.",
   birth_date_range: "تاريخ الميلاد خارج النطاق المنطقي.",
   consent_required: "يجب الإقرار بصحة البيانات.",
   phone_required_primary: "رقم الجوال مطلوب للنزيل الرئيسي.",
+  // data validity (0047)
+  name_letters_only: "الاسم حروف فقط (عربية أو إنجليزية)، بلا أرقام أو رموز.",
+  phone_required: "رقم جوال الضيف الرئيسي مطلوب.",
+  phone_format: "رقم الجوال: سعودي يبدأ بـ 05 ويتكون من 10 أرقام، أو دولي يبدأ بـ + ثم رمز الدولة.",
+  minimum_age_15: "لا يُسجَّل من عمره أقل من 15 سنة.",
   amount: "المبلغ غير صحيح.",
   reference_required: "رقم المرجع أو رقم العملية مطلوب.",
   idempotency_key: "مفتاح العملية مفقود.",

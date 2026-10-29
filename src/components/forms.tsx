@@ -26,12 +26,12 @@ export function Modal({ open, title, onClose, children, wide }: { open: boolean;
   );
 }
 
-export function Field({ label, children, hint, className }: { label: string; children: ReactNode; hint?: string; className?: string }) {
+export function Field({ label, children, hint, className, error }: { label: string; children: ReactNode; hint?: string; className?: string; error?: string | null }) {
   return (
     <div className={className}>
       <label className="label">{label}</label>
       {children}
-      {hint && <p className="mt-1 text-xs text-ink-400">{hint}</p>}
+      {error ? <p className="mt-1 text-xs text-danger-600" role="alert">{error}</p> : hint && <p className="mt-1 text-xs text-ink-400">{hint}</p>}
     </div>
   );
 }

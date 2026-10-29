@@ -490,13 +490,13 @@ do $$ declare r jsonb; cat2 uuid; res uuid; m text; v int; begin
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'name_ar', 'نوع للأرشفة', 'base_price_halalas', 9000));
   cat2 := (r->>'id')::uuid;
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', cat2, 'check_in', t_today() + 40, 'check_out', t_today() + 41,
-         'guest_name', 'ضيف بلا وحدة', 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'guest_phone', '0551000033', 'guest_name', 'ضيف بلا وحدة', 'source_id', '00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   m := m || ' ' || t_fails(format('select fn_admin_archive_definition(%L, %L, %L)', 'room_category', cat2, 'إيقاف'), 'HAS_OPEN_COMMITMENTS%');
   perform fn_staff_cancel_reservation(res, 'اختبار', 'staff');
   perform fn_admin_archive_definition('room_category', cat2, 'إيقاف');
   m := m || ' ' || t_fails(format('select fn_staff_create_reservation(%L)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', cat2,
-         'check_in', t_today() + 42, 'check_out', t_today() + 43, 'guest_name', 'ضيف', 'source_id', '00000000-0000-0000-0000-000000000021')), '%');
+         'check_in', t_today() + 42, 'check_out', t_today() + 43, 'guest_phone', '0551000034', 'guest_name', 'ضيف', 'source_id', '00000000-0000-0000-0000-000000000021')), '%');
   perform t_record('SC17 a unit with a guest in house is not deactivated or archived; a type with an open stay is not archived; an archived type takes no booking',
     m = 'ok ok ok ok' and (t_unit(t_id('k1'))).is_active, m);
 exception when others then perform t_record('SC17 a unit with a guest in house is not deactivated or archived; a type with an open stay is not archived; an archived type takes no booking', false, sqlerrm); end $$;

@@ -237,7 +237,7 @@ do $$ declare r jsonb; begin
   exception when others then perform t_record('R12 duplicate (source, external_ref) rejected', sqlerrm like '%DUPLICATE_EXTERNAL_REF%', sqlerrm); end;
   begin
     r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000031',
-          'check_in',(current_date + 20)::text,'check_out',(current_date + 22)::text,'guest_name','ضيف','source_id','00000000-0000-0000-0000-000000000020'));
+          'check_in',(current_date + 20)::text,'check_out',(current_date + 22)::text,'guest_phone', '0551000002', 'guest_name','ضيف','source_id','00000000-0000-0000-0000-000000000020'));
     perform t_record('R12b external source without external_ref rejected', false, 'accepted');
   exception when others then perform t_record('R12b external source without external_ref rejected', sqlerrm like '%external_ref_required%', sqlerrm); end;
 end $$;
@@ -352,7 +352,7 @@ end $$;
 do $$ declare q jsonb; r jsonb; res uuid; f jsonb; begin
   q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 30, current_date + 33, 10005, 10);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-        'check_in',(current_date + 30)::text,'check_out',(current_date + 33)::text,'guest_name','ضيف التقريب','source_id','00000000-0000-0000-0000-000000000021',
+        'check_in',(current_date + 30)::text,'check_out',(current_date + 33)::text,'guest_phone', '0551000003', 'guest_name','ضيف التقريب','source_id','00000000-0000-0000-0000-000000000021',
         'nightly_rate_halalas', 10005, 'discount_halalas', 10, 'discount_reason', 'خصم ثابت للاختبار'));
   res := (r->>'id')::uuid; insert into ids values ('resX07', res);
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10001, 'method','cash','idempotency_key','kX07-1'));
@@ -378,7 +378,7 @@ do $$ declare v int; q jsonb; r jsonb; res uuid; f jsonb; begin
           'version', v, 'tax_rate_bp', 1500, 'prices_include_tax', false));
   q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 40, current_date + 43, 10005, 10);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-        'check_in',(current_date + 40)::text,'check_out',(current_date + 43)::text,'guest_name','ضيف الضريبة','source_id','00000000-0000-0000-0000-000000000021',
+        'check_in',(current_date + 40)::text,'check_out',(current_date + 43)::text,'guest_phone', '0551000004', 'guest_name','ضيف الضريبة','source_id','00000000-0000-0000-0000-000000000021',
         'nightly_rate_halalas', 10005, 'discount_halalas', 10, 'discount_reason', 'خصم ثابت للاختبار'));
   res := (r->>'id')::uuid; insert into ids values ('resX07b', res);
   f := t_fin(res);
@@ -638,7 +638,7 @@ do $$ declare r jsonb; b uuid; cat uuid; rm uuid; res uuid; begin
   perform t_record('RV04a new branch gets room_cleaning system task type', (select count(*) from task_types where branch_id = b and code = 'room_cleaning') = 1);
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar','ق','base_price_halalas', 10000)); cat := (r->>'id')::uuid;
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number','RV-1')); rm := (r->>'id')::uuid;
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', (current_date - 1)::text, 'check_out', (current_date + 1)::text, 'guest_name','ضيف RV','source_id','00000000-0000-0000-0000-000000000021'));
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', (current_date - 1)::text, 'check_out', (current_date + 1)::text, 'guest_phone', '0551000005', 'guest_name','ضيف RV','source_id','00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   reset role; update reservations set status = 'checked_in', actual_check_in = now() where id = res; update rooms set status = 'occupied' where id = rm;
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
@@ -660,7 +660,7 @@ do $$ declare r jsonb; res uuid; rm uuid; rm2 uuid; cat uuid; b uuid := (select 
   select id into cat from room_categories where branch_id = b limit 1;
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number','RV-2')); rm := (r->>'id')::uuid;
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number','RV-3')); rm2 := (r->>'id')::uuid;
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', (current_date - 1)::text, 'check_out', (current_date + 5)::text, 'guest_name','مقيم RV','source_id','00000000-0000-0000-0000-000000000021'));
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', (current_date - 1)::text, 'check_out', (current_date + 5)::text, 'guest_phone', '0551000006', 'guest_name','مقيم RV','source_id','00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   reset role; update reservations set status = 'checked_in', actual_check_in = now() where id = res; update rooms set status = 'occupied' where id = rm;
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
@@ -692,19 +692,19 @@ do $$ declare r jsonb; res_today uuid; res_future uuid; rm uuid; cat uuid; b uui
   -- RV09: cancelling a FUTURE reservation must not touch the room flag held by today's reservation on the same room
   select id into cat from room_categories where branch_id = b limit 1;
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number','RV-9')); rm := (r->>'id')::uuid;
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', current_date::text, 'check_out', (current_date + 2)::text, 'guest_name','اليوم','source_id','00000000-0000-0000-0000-000000000021')); res_today := (r->>'id')::uuid;
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', (current_date + 10)::text, 'check_out', (current_date + 12)::text, 'guest_name','مستقبل','source_id','00000000-0000-0000-0000-000000000021')); res_future := (r->>'id')::uuid;
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', current_date::text, 'check_out', (current_date + 2)::text, 'guest_phone', '0551000007', 'guest_name','اليوم','source_id','00000000-0000-0000-0000-000000000021')); res_today := (r->>'id')::uuid;
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', rm, 'check_in', (current_date + 10)::text, 'check_out', (current_date + 12)::text, 'guest_phone', '0551000008', 'guest_name','مستقبل','source_id','00000000-0000-0000-0000-000000000021')); res_future := (r->>'id')::uuid;
   perform fn_staff_cancel_reservation(res_future, 'إلغاء');
   perform t_record('RV09 cancelling a future allocation leaves today''s reserved flag intact', (t_room(rm)).status = 'reserved', (t_room(rm)).status::text);
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ begin
-  perform fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030','check_in',(current_date + 40)::text,'check_out',(current_date + 41)::text,'guest_name','رخيص','source_id','00000000-0000-0000-0000-000000000021','nightly_rate_halalas', 0));
+  perform fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030','check_in',(current_date + 40)::text,'check_out',(current_date + 41)::text,'guest_phone', '0551000009', 'guest_name','رخيص','source_id','00000000-0000-0000-0000-000000000021','nightly_rate_halalas', 0));
   perform t_record('RV10 supervisor cannot undercut the base price via nightly override', false, 'accepted');
 exception when others then perform t_record('RV10 supervisor cannot undercut the base price via nightly override', sqlerrm like '%FORBIDDEN%', sqlerrm); end $$;
 select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
 do $$ declare r jsonb; res uuid; begin
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000031','check_in',(current_date - 2)::text,'check_out',(current_date + 1)::text,'guest_name','غائب','source_id','00000000-0000-0000-0000-000000000021'));
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000031','check_in',(current_date - 2)::text,'check_out',(current_date + 1)::text,'guest_phone', '0551000010', 'guest_name','غائب','source_id','00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   perform fn_staff_no_show(res, 'لم يحضر');
   r := fn_staff_cancel_reservation(res, 'إلغاء لاحق');

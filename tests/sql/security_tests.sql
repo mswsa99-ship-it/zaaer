@@ -394,11 +394,11 @@ do $$ declare r jsonb; tok text; s jsonb; begin
      (s->'reservation'->>'summary_accepted')::boolean and (fn_guest_stay_summary(tok)->>'accepted_at') is not null and (fn_guest_stay_summary(tok)->>'current')::boolean, s->'reservation'->>'summary_accepted');
   perform t_record('T9 primary guest data accepted, only last4 exposed, status data_submitted (1 of 2)',
      (r->>'ok')::boolean and s->'guests'->0->>'identity_number_last4' = '5678' and (s::text not like '%1012345678%') and s->'reservation'->>'identity_status' = 'data_submitted', s::text);
-  r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"2015-01-01","relationship":"child","consent":"true"}');
+  r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"1995-01-01","relationship":"child","consent":"true"}');
   s := fn_guest_session(tok);
   perform t_record('T9 second person completes → pending_supervisor, supervisor notified', s->'reservation'->>'identity_status' = 'pending_supervisor', s->'reservation'->>'identity_status');
   begin
-    r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"2015-01-01","relationship":"child","consent":"true"}');
+    r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"1995-01-01","relationship":"child","consent":"true"}');
     perform t_record('T9 companion beyond adults+companions limit rejected', false);
   exception when others then perform t_record('T9 companion beyond adults+companions limit rejected', sqlerrm like '%GUEST_LIMIT%', sqlerrm); end;
   -- duplicate document guard: raise limit then re-add same person
@@ -406,7 +406,7 @@ do $$ declare r jsonb; tok text; s jsonb; begin
   update reservations set companions = 1 where id = '00000000-0000-0000-0000-000000000202';
   set role anon;
   begin
-    r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"2015-01-01","relationship":"child","consent":"true"}');
+    r := fn_guest_submit(tok, null, '{"full_name":"سعد فهد الدوسري","identity_type":"national_id","identity_number":"1099999999","nationality":"سعودي","birth_date":"1995-01-01","relationship":"child","consent":"true"}');
     perform t_record('T9 duplicate document in same reservation rejected', false);
   exception when others then perform t_record('T9 duplicate document in same reservation rejected', sqlerrm like '%DUPLICATE_GUEST%', sqlerrm); end;
 end $$;

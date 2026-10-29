@@ -59,7 +59,7 @@ end $$;
 create or replace function t_ota(p_from date, p_to date, p_ref text, p_collects boolean, p_booked date, p_extra jsonb default '{}'::jsonb) returns jsonb language plpgsql as $$
 begin
   return fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', p_from, 'check_out', p_to, 'guest_name', 'ضيف منصة ' || p_ref, 'guest_phone', '0500006' || lpad((floor(random() * 1000))::int::text, 3, '0'),
+         'check_in', p_from, 'check_out', p_to, 'guest_name', 'ضيف منصة', 'guest_phone', '0500006' || lpad((floor(random() * 1000))::int::text, 3, '0'),
          'source_id', t_id('src_booking'), 'external_ref', p_ref, 'platform_collects', p_collects, 'platform_booked_on', p_booked) || p_extra);
 end $$;
 create or replace function t_doc(p_res uuid, p_guest uuid, p_name text, p_number text, p_extra jsonb default '{}'::jsonb) returns jsonb language plpgsql as $$
@@ -321,11 +321,11 @@ end $$;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare r jsonb; a text; b text; c text; res uuid; f jsonb; begin
   a := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', t_today() + 80, 'check_out', t_today() + 82, 'guest_name', 'ضيف منصة', 'source_id', t_id('src_booking'), 'external_ref', 'PF-0', 'platform_booked_on', t_today())), '%platform_collects%');
+         'check_in', t_today() + 80, 'check_out', t_today() + 82, 'guest_phone', '0551000011', 'guest_name', 'ضيف منصة', 'source_id', t_id('src_booking'), 'external_ref', 'PF-0', 'platform_booked_on', t_today())), '%platform_collects%');
   b := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', t_today() + 80, 'check_out', t_today() + 82, 'guest_name', 'ضيف منصة', 'source_id', t_id('src_booking'), 'external_ref', 'PF-0', 'platform_collects', false)), '%platform_booked_on%');
+         'check_in', t_today() + 80, 'check_out', t_today() + 82, 'guest_phone', '0551000012', 'guest_name', 'ضيف منصة', 'source_id', t_id('src_booking'), 'external_ref', 'PF-0', 'platform_collects', false)), '%platform_booked_on%');
   c := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', t_today() + 80, 'check_out', t_today() + 82, 'guest_name', 'ضيف منصة', 'source_id', t_id('src_booking'), 'external_ref', 'PF-0', 'platform_collects', false,
+         'check_in', t_today() + 80, 'check_out', t_today() + 82, 'guest_phone', '0551000013', 'guest_name', 'ضيف منصة', 'source_id', t_id('src_booking'), 'external_ref', 'PF-0', 'platform_collects', false,
          'platform_booked_on', t_today() + 1)), '%platform_booked_on%');
   perform t_record('PF01 a platform''s booking says who collects and the day it was booked there (not a day still to come)', a = 'ok' and b = 'ok' and c = 'ok', a || ' / ' || b || ' / ' || c);
   r := t_ota(t_today() + 80, t_today() + 82, 'PF-1', true, t_today());
@@ -538,10 +538,61 @@ end $$;
 -- RESULTS
 -- =====================================================================
 reset role;
+-- ---------------------------------------------------------------- VD01–VD05: data that enters right (0047; notes 1 and 4, decisions 2 and 6)
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare b jsonb; e text; ok int := 0; msgs text := ''; r jsonb; res uuid; begin
+  b := jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'check_in', t_today() + 150, 'check_out', t_today() + 151,
+       'source_id', '00000000-0000-0000-0000-000000000021');
+  -- VD01: the main guest's phone is required and must be a Saudi mobile or an international number
+  for e in select unnest(array['', '12345', '0412345678', '05123456', '+966412345678']) loop
+    begin perform fn_staff_create_reservation(b || jsonb_build_object('guest_name', 'ضيف الاختبار', 'guest_phone', e));
+          msgs := msgs || e || ' accepted; ';
+    exception when others then if sqlerrm in ('VALIDATION: phone_required', 'VALIDATION: phone_format') then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  end loop;
+  perform t_record('VD01 no booking without a valid phone for the main guest (empty, short, landline, foreign-length)', ok = 5, ok || ' / ' || msgs);
+  -- VD02: written forms of one Saudi mobile are kept as 05…; an international number keeps its +
+  r := fn_staff_create_reservation(b || jsonb_build_object('guest_name', 'ضيف الأرقام', 'guest_phone', '+966 ٥٥ ١٢٣ ٤٥٦٧'));
+  res := (r->>'id')::uuid;
+  r := fn_staff_create_reservation(b || jsonb_build_object('check_in', t_today() + 152, 'check_out', t_today() + 153, 'guest_name', 'John Smith', 'guest_phone', '00447700900123', 'new_profile', true));
+  perform t_record('VD02 a Saudi mobile written +966/Arabic digits is kept as 05XXXXXXXX; an international one as +<digits>',
+    (t_guest(t_primary(res))).phone = '0551234567' and (t_guest(t_primary((r->>'id')::uuid))).phone = '+447700900123',
+    (t_guest(t_primary(res))).phone || ' / ' || (t_guest(t_primary((r->>'id')::uuid))).phone);
+  -- VD03: names are letters only, for the main guest and a companion
+  ok := 0; msgs := '';
+  begin perform fn_staff_create_reservation(b || jsonb_build_object('guest_name', 'محمد 123', 'guest_phone', '0551234568')); msgs := msgs || 'digits accepted; ';
+  exception when others then if sqlerrm = 'VALIDATION: name_letters_only' then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  begin perform fn_staff_create_reservation(b || jsonb_build_object('guest_name', 'محمد علي', 'guest_phone', '0551234569', 'companions', 1,
+          'companions_details', jsonb_build_array(jsonb_build_object('full_name', 'R2-D2')))); msgs := msgs || 'companion accepted; ';
+  exception when others then if sqlerrm = 'VALIDATION: name_letters_only' then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  perform t_record('VD03 a name with digits or symbols is refused for the main guest and a companion', ok = 2, ok || ' / ' || msgs);
+  -- VD04: no guest under 15, main or companion, from the office
+  ok := 0; msgs := '';
+  begin perform t_doc(res, t_primary(res), 'ضيف الأرقام الصغير', '1056789012', jsonb_build_object('birth_date', (t_today() - interval '14 years')::date));
+        msgs := msgs || 'main accepted; ';
+  exception when others then if sqlerrm = 'VALIDATION: minimum_age_15' then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  update reservations set companions = 1 where id = res;
+  begin perform t_doc(res, null, 'طفل المرافق الصغير', '1056789013', jsonb_build_object('birth_date', (t_today() - interval '10 years')::date, 'relationship', 'child'));
+        msgs := msgs || 'companion accepted; ';
+  exception when others then if sqlerrm = 'VALIDATION: minimum_age_15' then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  r := t_doc(res, t_primary(res), 'ضيف الأرقام الكبير', '١٠٥٦٧٨٩٠١٢', jsonb_build_object('birth_date', (t_today() - interval '15 years')::date));
+  perform t_record('VD04 a guest under 15 (main or companion) is refused; 15 on the day is accepted, Arabic digits read',
+    ok = 2 and (r->>'ok')::boolean, ok || ' / ' || msgs || coalesce(r::text, ''));
+  -- VD05: a national ID starts with 1 and an iqama with 2
+  ok := 0; msgs := '';
+  begin perform t_doc(res, t_primary(res), 'ضيف الأرقام الكبير', '2056789012', jsonb_build_object('reason', 'تصحيح')); msgs := msgs || 'iqama number as ID accepted; ';
+  exception when others then if sqlerrm = 'VALIDATION: identity_number_format' then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  begin perform t_doc(res, t_primary(res), 'ضيف الأرقام الكبير', '1056789012', jsonb_build_object('identity_type', 'iqama', 'reason', 'تصحيح')); msgs := msgs || 'ID number as iqama accepted; ';
+  exception when others then if sqlerrm = 'VALIDATION: identity_number_format' then ok := ok + 1; else msgs := msgs || sqlerrm || '; '; end if; end;
+  perform t_record('VD05 a national ID must start with 1 and an iqama with 2', ok = 2, ok || ' / ' || msgs);
+exception when others then perform t_record('VD01–VD05 data validity', false, sqlerrm);
+end $$;
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),150) as detail from test_results order by ok, name;
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 50 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 50 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 55 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 55 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'GUEST AND PLATFORM TESTS FAILED'; end if;
 end $$;

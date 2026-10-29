@@ -12,12 +12,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ShieldAlert, ShieldBan, Star, IdCard, Printer, Link2, CheckCircle2, Users, Ban, FileSignature } from "lucide-react";
-import { opsApi, guestApi, guestProfileApi, toArabicError, type ReservationDetail, type GroupSummary, type StaySummary, type Acknowledgement } from "../lib/api";
+import { opsApi, guestApi, guestProfileApi, toArabicError, VALIDATION_AR, type ReservationDetail, type GroupSummary, type StaySummary, type Acknowledgement } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput, Toggle } from "./forms";
 import { IDENTITY_TYPE_LABELS, type IdentityType } from "../lib/types";
 import { formatCurrency, formatDateTime, todayISO, maskId } from "../lib/utils";
+import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../lib/validation";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
 type Guest = ReservationDetail["guests"][number];
@@ -121,6 +122,14 @@ export function OfficeGuestDialog({ open, reservationId, guest, onClose, onDone 
   useEffect(() => {
     if (open) setF({ full_name: guest?.full_name ?? "", identity_type: (guest?.identity_type as IdentityType) ?? "national_id", identity_number: "", identity_issue_number: "", nationality: guest?.nationality ?? "سعودي", birth_date: guest?.birth_date ?? "", phone: "", relationship: guest?.relationship && guest.relationship !== "self" ? guest.relationship : "other", matched: false, reason: "" });
   }, [open, guest]);
+  // 0047: the rules the server applies, said while typing
+  const idNumber = latinDigits(f.identity_number).replace(/\s/g, "");
+  const errs = {
+    name: fieldError(() => checkPersonName(f.full_name), VALIDATION_AR),
+    number: idNumber ? fieldError(() => checkIdentityNumber(f.identity_type, idNumber), VALIDATION_AR) : null,
+    birth: f.birth_date ? fieldError(() => checkMinAge(f.birth_date, todayISO()), VALIDATION_AR) : null,
+    phone: f.phone.trim() ? fieldError(() => checkPhone(f.phone, false), VALIDATION_AR) : null,
+  };
   return (
     <Modal open={open} title={guest ? (correcting ? `تصحيح بيانات ${guest.full_name}` : `إدخال بيانات ${guest.full_name} من الوثيقة`) : "إضافة مرافق من الوثيقة"} onClose={onClose} wide>
       <ActionForm onSubmit={async () => {
@@ -130,13 +139,13 @@ export function OfficeGuestDialog({ open, reservationId, guest, onClose, onDone 
       }}>
         <p className="mb-3 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-500">الإدخال من الوثيقة الأصلية يعتمد الهوية فورًا باسمك؛ رقم الوثيقة يُشفَّر ولا يُعرض كاملًا بعد الحفظ.{correcting ? " التصحيح يُسجَّل بسبب، بالقيم قبله وبعده مقنَّعة، ويُدرَج في قائمة المراجعة." : ""}</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="الاسم الثلاثي (كما في الوثيقة)" className="sm:col-span-2"><input className="input" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} aria-label="الاسم الثلاثي" /></Field>
+          <Field label="الاسم الثلاثي (كما في الوثيقة)" className="sm:col-span-2" error={errs.name}><input className="input" value={f.full_name} aria-invalid={!!errs.name} onChange={(e) => setF({ ...f, full_name: e.target.value })} aria-label="الاسم الثلاثي" /></Field>
           <Field label="نوع الوثيقة"><select className="input" value={f.identity_type} onChange={(e) => setF({ ...f, identity_type: e.target.value as IdentityType })} aria-label="نوع الوثيقة">{Object.entries(IDENTITY_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-          <Field label={correcting ? "رقم الوثيقة (فارغ = الرقم المحفوظ)" : "رقم الوثيقة"} hint={guest?.identity_number_last4 ? `المحفوظ: ${maskId(guest.identity_number_last4)}` : undefined}><input className="input" dir="ltr" inputMode="numeric" autoComplete="off" value={f.identity_number} onChange={(e) => setF({ ...f, identity_number: e.target.value })} aria-label="رقم الوثيقة" /></Field>
+          <Field label={correcting ? "رقم الوثيقة (فارغ = الرقم المحفوظ)" : "رقم الوثيقة"} error={errs.number} hint={guest?.identity_number_last4 ? `المحفوظ: ${maskId(guest.identity_number_last4)}` : undefined}><input className="input" dir="ltr" inputMode="numeric" autoComplete="off" value={f.identity_number} onChange={(e) => setF({ ...f, identity_number: e.target.value })} aria-label="رقم الوثيقة" /></Field>
           <Field label="رقم الإصدار (إن وجد)"><input className="input" dir="ltr" value={f.identity_issue_number} onChange={(e) => setF({ ...f, identity_issue_number: e.target.value })} /></Field>
           <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} aria-label="الجنسية" /></Field>
-          <Field label="تاريخ الميلاد (ميلادي)"><input type="date" className="input" dir="ltr" max={todayISO()} value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} aria-label="تاريخ الميلاد" /></Field>
-          <Field label={`الجوال ${guest?.is_primary ? "(فارغ = الرقم المسجل)" : "(اختياري)"}`}><input className="input" dir="ltr" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+          <Field label="تاريخ الميلاد (ميلادي)" error={errs.birth}><input type="date" className="input" dir="ltr" max={maxBirthDate(todayISO())} value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} aria-label="تاريخ الميلاد" /></Field>
+          <Field label={`الجوال ${guest?.is_primary ? "(فارغ = الرقم المسجل)" : "(اختياري)"}`} error={errs.phone}><input className="input" dir="ltr" inputMode="tel" placeholder="05xxxxxxxx" aria-invalid={!!errs.phone} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
           {!guest?.is_primary && <Field label="صلة القرابة"><select className="input" value={f.relationship} onChange={(e) => setF({ ...f, relationship: e.target.value })}><option value="spouse">زوج/زوجة</option><option value="child">ابن/ابنة</option><option value="parent">والد/والدة</option><option value="sibling">أخ/أخت</option><option value="other">أخرى</option></select></Field>}
           {correcting && <Field label="سبب التصحيح (إلزامي)" className="sm:col-span-2"><input className="input" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} aria-label="سبب التصحيح" /></Field>}
         </div>

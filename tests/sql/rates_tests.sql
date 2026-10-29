@@ -91,7 +91,7 @@ do $$ declare w jsonb; m jsonb; r jsonb; rid uuid; n_rent bigint; begin
   w := t_quote(t_id('cat'), t_day('D') + 10, t_day('D') + 17, '00000000-0000-0000-0000-000000000021');
   m := t_quote(t_id('cat'), t_day('D') + 100, t_day('D') + 130, '00000000-0000-0000-0000-000000000021');
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', t_day('D') + 10, 'check_out', t_day('D') + 17, 'guest_name', 'ضيف أسبوعي', 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'check_in', t_day('D') + 10, 'check_out', t_day('D') + 17, 'guest_phone', '0551000027', 'guest_name', 'ضيف أسبوعي', 'source_id', '00000000-0000-0000-0000-000000000021'));
   rid := (r->>'id')::uuid; insert into ids values ('resWeek', rid);
   -- a later change of the weekly price and the calendar never touches the stay
   perform fn_rate_calendar_set(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'price_halalas', 40000,
@@ -151,7 +151,7 @@ exception when others then perform t_record('PR05 a group edit (from–to × typ
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare q jsonb; ok jsonb; r1 text; r2 text; r3 text; r4 text; r5 text; base jsonb; begin
   base := jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'check_in', t_day('D') + 60, 'check_out', t_day('D') + 63,
-            'guest_name', 'ضيف الخصم', 'source_id', '00000000-0000-0000-0000-000000000021');
+            'guest_phone', '0551000099', 'guest_name', 'ضيف الخصم', 'source_id', '00000000-0000-0000-0000-000000000021');
   -- 3 nights × 200.00 = 600.00: 10% is 60.00, and the minimum (3 × 150.00) leaves room for 150.00
   q := t_quote(t_id('cat'), t_day('D') + 60, t_day('D') + 63, '00000000-0000-0000-0000-000000000021');
   ok := fn_staff_create_reservation(base || jsonb_build_object('discount_halalas', 6000, 'discount_reason', 'ضيف دائم'));
@@ -162,7 +162,7 @@ do $$ declare q jsonb; ok jsonb; r1 text; r2 text; r3 text; r4 text; r5 text; ba
   -- on an existing stay: the discounts add up against the same limit
   r4 := t_fails(format('select fn_staff_adjust_price(%L, %L, %s, %L, %L, %s)', (ok->>'id'), 'discount', 100, 'خصم', 'إضافي', (t_res((ok->>'id')::uuid)).version), 'VALIDATION: discount_percent%');
   -- a raised manual price is fine for the supervisor
-  r5 := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', base || jsonb_build_object('nightly_rate_halalas', 21000, 'guest_name', 'سعر أعلى')), 'never');
+  r5 := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', base || jsonb_build_object('nightly_rate_halalas', 21000, 'guest_phone', '0551000028', 'guest_name', 'سعر أعلى')), 'never');
   perform t_record('PR06 the supervisor discounts with a reason within the percentage; more, no reason, or a lower manual price are refused',
     (q->>'discount_max')::bigint = 6000 and (q->>'supervisor_discount_max')::bigint = 6000 and (t_res((ok->>'id')::uuid)).discount_halalas = 6000
     and r1 = 'ok' and r2 = 'ok' and r3 = 'ok' and r4 = 'ok' and r5 = 'accepted', q::text || ' / ' || r1 || ' / ' || r2 || ' / ' || r3 || ' / ' || r4 || ' / ' || r5);
@@ -177,7 +177,7 @@ select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare r1 text; q jsonb; begin
   q := t_quote(t_id('cat'), t_day('D') + 64, t_day('D') + 67, '00000000-0000-0000-0000-000000000021');
   r1 := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-          'check_in', t_day('D') + 64, 'check_out', t_day('D') + 67, 'guest_name', 'تحت الأدنى', 'source_id', '00000000-0000-0000-0000-000000000021',
+          'check_in', t_day('D') + 64, 'check_out', t_day('D') + 67, 'guest_phone', '0551000029', 'guest_name', 'تحت الأدنى', 'source_id', '00000000-0000-0000-0000-000000000021',
           'discount_halalas', 20000, 'discount_reason', 'كثير')), 'VALIDATION: discount_minimum%');
   perform t_record('PR06b the supervisor never takes a night under the type''s minimum; the window shows the smaller of the two limits',
     r1 = 'ok' and (q->>'discount_max')::bigint = 15000, r1 || ' / ' || q::text);
@@ -185,7 +185,7 @@ end $$;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', t_day('D') + 64, 'check_out', t_day('D') + 67, 'guest_name', 'خصم المدير', 'source_id', '00000000-0000-0000-0000-000000000021',
+         'check_in', t_day('D') + 64, 'check_out', t_day('D') + 67, 'guest_phone', '0551000030', 'guest_name', 'خصم المدير', 'source_id', '00000000-0000-0000-0000-000000000021',
          'discount_halalas', 20000, 'discount_reason', 'تعويض'));
   perform t_record('PR06c beyond both limits the discount is the owner''s or a manager''s', (t_res((r->>'id')::uuid)).discount_halalas = 20000, r::text);
 exception when others then perform t_record('PR06c beyond both limits the discount is the owner''s or a manager''s', false, sqlerrm); end $$;
@@ -200,7 +200,7 @@ do $$ declare r jsonb; rid uuid; total0 bigint; total1 bigint; total2 bigint; to
             'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', t_day('D') + 75))));
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', t_day('D') + 70, 'check_out', t_day('D') + 73, 'guest_name', 'ضيف التعديل', 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'check_in', t_day('D') + 70, 'check_out', t_day('D') + 73, 'guest_phone', '0551000031', 'guest_name', 'ضيف التعديل', 'source_id', '00000000-0000-0000-0000-000000000021'));
   rid := (r->>'id')::uuid; insert into ids values ('resAmend', rid);
   total0 := (t_res(rid)).total_halalas;                                                   -- 200 + 250 + 200 = 650.00
   perform fn_staff_amend_stay(rid, t_day('D') + 72, 'keep_rate', 'خروج مبكر', (t_res(rid)).version);
@@ -244,7 +244,7 @@ exception when others then perform t_record('PR08 the discount report shows who,
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 do $$ declare r jsonb; impact jsonb; c room_categories%rowtype; up jsonb; cal jsonb; d0 jsonb; d1 jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room1'),
-         'check_in', t_day('D') + 1, 'check_out', t_day('D') + 2, 'guest_name', 'ثلاثة', 'adults', 2, 'companions', 1, 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'check_in', t_day('D') + 1, 'check_out', t_day('D') + 2, 'guest_phone', '0551000032', 'guest_name', 'ثلاثة', 'adults', 2, 'companions', 1, 'source_id', '00000000-0000-0000-0000-000000000021'));
   impact := fn_category_capacity_impact(t_id('cat'), 2);
   select * into c from room_categories where id = t_id('cat');
   up := fn_admin_upsert_room_category(jsonb_build_object('id', c.id, 'name_ar', c.name_ar, 'version', c.version, 'max_capacity', 2));

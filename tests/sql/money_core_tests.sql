@@ -45,14 +45,14 @@ select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-         'check_in', (current_date + 60)::text, 'check_out', (current_date + 63)::text, 'guest_name', 'ضيف المال', 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'check_in', (current_date + 60)::text, 'check_out', (current_date + 63)::text, 'guest_phone', '0551000019', 'guest_name', 'ضيف المال', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res', (r->>'id')::uuid);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-         'check_in', (current_date + 64)::text, 'check_out', (current_date + 66)::text, 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
+         'check_in', (current_date + 64)::text, 'check_out', (current_date + 66)::text, 'guest_phone', '0551000020', 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
          'external_ref', 'BK-MC-1', 'platform_collects', false, 'platform_booked_on', current_date::text));
   insert into ids values ('resOTA1', (r->>'id')::uuid);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-         'check_in', (current_date + 67)::text, 'check_out', (current_date + 69)::text, 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
+         'check_in', (current_date + 67)::text, 'check_out', (current_date + 69)::text, 'guest_phone', '0551000021', 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
          'external_ref', 'BK-MC-2', 'platform_collects', false, 'platform_booked_on', current_date::text));
   insert into ids values ('resOTA2', (r->>'id')::uuid);
 end $$;

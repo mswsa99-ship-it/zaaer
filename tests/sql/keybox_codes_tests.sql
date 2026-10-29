@@ -52,7 +52,7 @@ do $$ declare r jsonb; b uuid; b2 uuid; cat uuid; cat2 uuid; begin
   perform fn_staff_rotate_keybox_code(t_id('k2'), '1357', true);
   perform fn_staff_rotate_keybox_code(t_id('x1'), '9753', true);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_id', t_id('k2'), 'check_in', (current_date - 1)::text,
-         'check_out', (current_date + 1)::text, 'guest_name', 'ضيف الرموز', 'source_id', '00000000-0000-0000-0000-000000000021'));
+         'check_out', (current_date + 1)::text, 'guest_phone', '0551000018', 'guest_name', 'ضيف الرموز', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res', (r->>'id')::uuid);
 end $$;
 reset role;
@@ -223,6 +223,22 @@ do $$ declare s2 timestamptz := (t_kb(t_id('k1'))).needs_change_since; msg text 
 exception when others then perform t_record('KC15 the waiting time is kept from the first moment (a second mark keeps it), a test of the old code is refused, and a new code clears it', false, sqlerrm); end $$;
 reset role;
 
+-- ---------------------------------------------------------------- VD06: no two boxes of one branch with the same code (0047; note 14)
+create or replace function t_code(p_room uuid) returns text language sql security definer as $$
+  select pgp_sym_decrypt(code_encrypted, fn_secret('keybox_key')) from keyboxes where room_id = p_room
+$$;
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare taken text := t_code(t_id('k2')); msg text := 'accepted'; other text := 'refused'; begin
+  begin perform fn_staff_rotate_keybox_code(t_id('k1'), taken, true); exception when others then msg := sqlerrm; end;
+  -- the same code in a box of another branch is that branch's business
+  begin perform fn_staff_rotate_keybox_code(t_id('x1'), taken, true); other := 'ok'; exception when others then other := sqlerrm; end;
+  perform t_record('VD06 a code already in another box of the branch is refused without naming the unit; another branch may use it',
+    msg = 'CODE_IN_USE' and t_code(t_id('k1')) <> taken and other = 'ok', msg || ' / ' || other);
+exception when others then perform t_record('VD06 a code already in another box of the branch is refused without naming the unit; another branch may use it', false, sqlerrm);
+end $$;
+reset role;
+
 -- a check that comes out NULL counts as a failure here
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),140) as detail from test_results order by ok nulls first, name;
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
@@ -230,5 +246,5 @@ select count(*) filter (where ok) as passed, count(*) filter (where ok is not tr
 do $$ begin
   if exists (select 1 from test_results where ok is not true) then raise exception 'KEY-BOX CODE TESTS FAILED'; end if;
   -- a statement that errors before recording its check would otherwise just be missing
-  if (select count(*) from test_results) < 15 then raise exception 'KEY-BOX CODE TESTS INCOMPLETE: % of 15 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 16 then raise exception 'KEY-BOX CODE TESTS INCOMPLETE: % of 16 checks ran', (select count(*) from test_results); end if;
 end $$;

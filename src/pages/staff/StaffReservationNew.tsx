@@ -10,6 +10,8 @@ import { Card, SectionTitle, ErrorBanner, Spinner, LoadErrorCard } from "../../c
 import { Field, MoneyInput, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO } from "../../lib/utils";
+import { checkPersonName, checkPhone, fieldError } from "../../lib/validation";
+import { VALIDATION_AR } from "../../lib/api";
 import { CLEANLINESS_LABELS } from "../../lib/types";
 
 interface Cat { id: string; name_ar: string; base_capacity: number; max_capacity: number; base_price_halalas: number }
@@ -104,6 +106,11 @@ export default function StaffReservationNew() {
   }
 
   const namedCompanions = companionRows.filter((c) => c.full_name.trim()).length;
+  // 0047: the server refuses these too; the form says so while typing (an untouched empty phone is not shouted at)
+  const nameErr = fieldError(() => checkPersonName(f.guest_name), VALIDATION_AR);
+  const phoneErr = f.guest_phone.trim() ? fieldError(() => checkPhone(f.guest_phone, false), VALIDATION_AR) : null;
+  const companionErr = companionRows.map((c) => fieldError(() => checkPersonName(c.full_name), VALIDATION_AR));
+  const guestDataOk = !nameErr && !phoneErr && companionErr.every((x) => !x) && (!!guest || !!f.guest_phone.trim());
   const capacityOk = (cat ? f.adults + Math.max(f.companions, namedCompanions) <= cat.max_capacity : true)
     && extraUnits.every((u) => { const c = cats.find((x) => x.id === u.category_id); return !c || u.adults + u.companions <= c.max_capacity; });
   return (
@@ -166,8 +173,8 @@ export default function StaffReservationNew() {
               )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="الاسم (مطلوب)"><input className="input" value={f.guest_name} onChange={(e) => setF({ ...f, guest_name: e.target.value })} /></Field>
-              <Field label="الجوال" hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف الضيف بالجوال نفسه ما لم تُعلّم «ضيف جديد»"}><input className="input" dir="ltr" value={f.guest_phone} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
+              <Field label="الاسم (مطلوب)" error={nameErr}><input className="input" value={f.guest_name} aria-invalid={!!nameErr} onChange={(e) => setF({ ...f, guest_name: e.target.value })} /></Field>
+              <Field label={guest ? "الجوال" : "الجوال (مطلوب)"} error={phoneErr} hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف الضيف بالجوال نفسه ما لم تُعلّم «ضيف جديد»"}><input className="input" dir="ltr" inputMode="tel" autoComplete="tel" value={f.guest_phone} aria-invalid={!!phoneErr} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
               <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="بالغون"><input type="number" min={1} className="input" dir="ltr" value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></Field>
@@ -177,9 +184,10 @@ export default function StaffReservationNew() {
               <div className="space-y-2 sm:col-span-2">
                 {companionRows.map((c, i) => (
                   <div key={i} className="grid grid-cols-[1fr_9rem_auto] items-center gap-2">
-                    <input className="input" placeholder={`اسم المرافق ${i + 1}`} value={c.full_name} onChange={(e) => setCompanionRows(companionRows.map((x, j) => (j === i ? { ...x, full_name: e.target.value } : x)))} />
+                    <input className="input" placeholder={`اسم المرافق ${i + 1}`} value={c.full_name} aria-invalid={!!companionErr[i]} aria-label={`اسم المرافق ${i + 1}`} onChange={(e) => setCompanionRows(companionRows.map((x, j) => (j === i ? { ...x, full_name: e.target.value } : x)))} />
                     <input className="input" placeholder="صلة القرابة" value={c.relationship} onChange={(e) => setCompanionRows(companionRows.map((x, j) => (j === i ? { ...x, relationship: e.target.value } : x)))} />
                     <button type="button" onClick={() => setCompanionRows(companionRows.filter((_, j) => j !== i))} className="btn-ghost p-2 text-ink-400" aria-label="إزالة المرافق"><X className="h-4 w-4" /></button>
+                    {companionErr[i] && <p className="col-span-3 text-xs text-danger-600" role="alert">{companionErr[i]}</p>}
                   </div>
                 ))}
                 <button type="button" onClick={() => setCompanionRows([...companionRows, { full_name: "", relationship: "" }])} className="btn-ghost text-xs text-brand-700"><Users className="h-3.5 w-3.5" /> تسجيل اسم مرافق (اختياري)</button>
@@ -233,7 +241,7 @@ export default function StaffReservationNew() {
           <Card>
             <Toggle checked={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} label="تأكيد الحجز مباشرة" />
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
-            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !capacityOk || nights <= 0 || (source?.kind === "external" && f.platform_collects == null)} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
+            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !guestDataOk || !capacityOk || nights <= 0 || (source?.kind === "external" && f.platform_collects == null)} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
           </Card>
         </div>
       </form>
