@@ -22,6 +22,7 @@ async function startBooking(page: Page, type: RegExp, from: string, to: string, 
   await page.locator("input[type=date]").nth(1).fill(to);
   await expect(page.getByTestId("quote-runs")).toBeVisible();
 }
+const totalText = (page: Page) => page.locator('div:has(> :is(p, span):text-is("الإجمالي")) > :is(p, span)[dir=ltr]').first().innerText();
 const rentOf = async (page: Page) => parseSar(await page.locator("div.flex.justify-between", { hasText: /^الإيجار \(/ }).locator("span[dir=ltr]").first().innerText());
 
 test.describe("rates (phase 2)", () => {
@@ -35,7 +36,7 @@ test.describe("rates (phase 2)", () => {
     await expect(page.getByText("3 خانة محددة")).toBeVisible();
     await page.getByRole("button", { name: "تعديل المحدد" }).click();
     const dlg = page.getByRole("dialog");
-    await dlg.locator("input[type=number]").first().fill("650");
+    await dlg.locator("input[data-money]").first().fill("650");
     await dlg.getByRole("button", { name: "حفظ" }).click();
     await expect(dlg).toBeHidden();
     await expect(page.getByText("حُدِّثت 3 خانة.")).toBeVisible();
@@ -44,7 +45,7 @@ test.describe("rates (phase 2)", () => {
     // a price under the type's minimum (480.00) is refused, with the reason
     await page.getByRole("button", { name: `شقة بغرفتين السعر ${plus(t, 14)}` }).click();
     await page.getByRole("button", { name: "تعديل المحدد" }).click();
-    await dlg.locator("input[type=number]").first().fill("300");
+    await dlg.locator("input[data-money]").first().fill("300");
     await dlg.getByRole("button", { name: "حفظ" }).click();
     await expect(dlg.getByText("السعر أقل من الحد الأدنى لليلة في هذا النوع.")).toBeVisible();
     await dlg.getByRole("button", { name: "إغلاق" }).click();
@@ -69,7 +70,7 @@ test.describe("rates (phase 2)", () => {
     await startBooking(page, /استوديو مريح/, plus(t, 90), plus(t, 93), "ضيف الخصم");
     // 3 nights × 250.00 = 750.00; branch A lets the supervisor give 10%: 75.00
     await expect(page.getByText(/المسموح لك حتى/)).toBeVisible();
-    const discount = page.locator("div:has(> label:has-text('خصم (إجمالي)')) input[type=number]");
+    const discount = page.locator("div:has(> label:has-text('خصم (إجمالي)')) input[data-money]");
     await discount.fill("100");
     await page.getByLabel("سبب الخصم").fill("ضيف دائم");
     await page.getByRole("button", { name: "إنشاء الحجز" }).click();
@@ -78,7 +79,29 @@ test.describe("rates (phase 2)", () => {
     await page.getByRole("button", { name: "إنشاء الحجز" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "الملخص المالي" })).toBeVisible();
-    await expect.poll(async () => parseSar(await page.locator('div:has(> p:text-is("الإجمالي")) > p[dir=ltr]').first().innerText())).toBe(700);
+    await expect.poll(async () => parseSar(await page.locator('div:has(> :is(p, span):text-is("الإجمالي")) > :is(p, span)[dir=ltr]').first().innerText())).toBe(700);
+  });
+
+  test("PR14 before arrival a switch to a unit of another type shows the new price first, then re-prices the stay by it (0048)", async ({ page, loginAs }) => {
+    const t = riyadhToday();
+    await loginAs("supervisor");
+    await startBooking(page, /استوديو مريح/, plus(t, 120), plus(t, 122), "ضيف التبديل");
+    await page.getByRole("button", { name: "إنشاء الحجز" }).click();
+    await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
+    const total = async () => parseSar(await totalText(page));
+    await expect.poll(total).toBe(500);                                                       // 2 nights × 250.00
+    await page.getByRole("button", { name: "الإقامة", exact: true }).click();
+    await page.getByRole("button", { name: "تبديل الوحدة" }).click();
+    const dlg = page.getByRole("dialog");
+    const unit = dlg.locator("select").last();
+    const value = await unit.locator("option", { hasText: "شقة بغرفة نوم" }).first().getAttribute("value");
+    await unit.selectOption(value!);
+    await expect(dlg.getByTestId("switch-reprice")).toContainText("يُعاد تسعير الليالي");
+    await expect.poll(async () => parseSar(await dlg.getByTestId("switch-price-delta").locator("[dir=ltr]").innerText())).toBe(300); // 2 × 400.00 − 2 × 250.00
+    await dlg.locator("textarea").fill("طلب الضيف وحدة أكبر");
+    await dlg.getByRole("button", { name: "تبديل", exact: true }).click();
+    await expect(dlg).toBeHidden();
+    await expect.poll(total).toBe(800);
   });
 
   test("PR09 lowering a type's capacity first lists the coming stays that would no longer fit", async ({ page, loginAs, go }) => {

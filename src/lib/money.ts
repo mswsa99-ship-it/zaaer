@@ -1,0 +1,26 @@
+/** The money field's text rules (the owner's note 2; task B2): pure functions, shared by the field and its tests. */
+import { latinDigits } from "./validation";
+
+/** Riyals as typed: empty for nothing (or 0), «250» for a whole amount, «250.50» only when it has halalas. */
+export function formatMoneyInput(h: number | null | undefined): string {
+  if (h == null || h === 0) return "";
+  return h % 100 === 0 ? String(h / 100) : (h / 100).toFixed(2);
+}
+
+/**
+ * What the field accepts while typing (the owner's note 2): riyals; halalas only after the point, two at most;
+ * Arabic-Indic digits and the Arabic decimal mark are read; a minus only where the field allows a negative.
+ * Returns null when the keystroke would make the text invalid (the field keeps its previous text).
+ */
+export function sanitizeMoneyText(raw: string, allowNegative: boolean): string | null {
+  let t = latinDigits(raw).replace(/[٫]/g, ".").replace(/[,٬\s]/g, "");
+  if (allowNegative && t.startsWith("-")) t = "-" + t.slice(1).replace(/-/g, ""); else t = t.replace(/-/g, "");
+  if (!/^-?\d*(\.\d{0,2})?$/.test(t)) return null;
+  return t;
+}
+
+export function moneyTextToHalalas(t: string): number | null {
+  if (t === "" || t === "-" || t === "." || t === "-.") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}

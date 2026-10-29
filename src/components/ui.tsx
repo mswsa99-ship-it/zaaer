@@ -85,3 +85,21 @@ export function ErrorBanner({ message }: { message: string }) {
     </div>
   );
 }
+
+/**
+ * The amount box of the design system («AmountBox», the owner's note 7): a label above a value in its own box.
+ * Boxes wrap to a new line instead of overlapping; values never break inside a number.
+ */
+export function AmountBox({ label, value, tone = "text-ink-900", testId }: { label: string; value: ReactNode; tone?: string; testId?: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-ink-100 bg-white px-3 py-2.5" data-testid={testId}>
+      <span className="text-[13px] font-medium leading-5 text-ink-500">{label}</span>
+      <span className={`whitespace-nowrap text-lg font-bold leading-7 tabular-nums ${tone}`} dir="ltr">{value}</span>
+    </div>
+  );
+}
+
+/** A grid of amount boxes: as many per row as fit at 9rem each, wrapping on a phone. */
+export function AmountGrid({ children, className, testId }: { children: ReactNode; className?: string; testId?: string }) {
+  return <div className={`grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3 ${className ?? ""}`} data-testid={testId}>{children}</div>;
+}

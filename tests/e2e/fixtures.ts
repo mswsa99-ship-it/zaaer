@@ -112,7 +112,8 @@ export function parseSar(text: string): number {
 
 /** Reads one cell of the finance grid (label → SAR amount as a number). */
 export async function financeCell(page: Page, label: string): Promise<number> {
-  const el = page.locator(`div:has(> p:text-is("${label}")) > p[dir=ltr]`).first();
+  // an amount box (AmountBox, B6): the label above, the value below in its own ltr line
+  const el = page.locator(`div:has(> :is(p, span):text-is("${label}")) > :is(p, span)[dir=ltr]`).first();
   await expect(el).toBeVisible();
   return parseSar(await el.innerText());
 }

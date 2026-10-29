@@ -19,6 +19,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "reservation.no_show": "تسجيل عدم حضور",
   "reservation.departure_changed": "تغيير موعد المغادرة",
   "reservation.room_switched": "تبديل الوحدة",
+  "reservation.platform_updated": "تصحيح بيانات المنصة",
   "reservation.service_added": "إضافة خدمة إلى الحجز",
   "reservation.total_changed": "تعديل إجمالي الحجز",
   "reservation.payment_exception": "مهلة سداد استثنائية",

@@ -25,7 +25,7 @@ test.describe("core money (phase 1)", () => {
     await expect(dlg.getByLabel("الصندوق")).toContainText("صندوق الاستقبال");
     await dlg.getByRole("radio", { name: "شبكة" }).click();
     await expect(dlg.getByLabel("الحساب البنكي")).toContainText("حساب الشبكة والتحويل");
-    await dlg.locator("input[type=number]").first().fill("120");
+    await dlg.locator("input[data-money]").first().fill("120");
     await dlg.getByRole("button", { name: "حفظ السند" }).click();
     await expect(dlg.getByText("رقم المرجع أو رقم العملية مطلوب.")).toBeVisible();
     await dlg.getByLabel("رقم العملية").fill("TRX-445566");
@@ -38,7 +38,7 @@ test.describe("core money (phase 1)", () => {
     const dep = page.getByRole("dialog");
     await expect(dep.getByRole("radio")).toHaveCount(3);
     await expect(dep.getByRole("radio", { name: "آجل عبر المنصة" })).toHaveCount(0);
-    await expect(dep.locator("input[type=number]").first()).toHaveValue("50.00");
+    await expect(dep.locator("input[data-money]").first()).toHaveValue("50");   // whole riyals show without .00 (note 2)
   });
 
   test("MC07b the manager adds a bank account and makes it the default; archiving needs a reason; a supervisor cannot open the page", async ({ page, loginAs, go }) => {
@@ -85,7 +85,7 @@ test.describe("core money (phase 1)", () => {
     await go("/staff/pos-settlement");
     const total = parseSar(await page.getByTestId("pos-system-total").innerText());
     expect(Number.isFinite(total)).toBe(true);
-    const terminal = page.locator("form input[type=number]").first();
+    const terminal = page.locator("form input[data-money]").first();
 
     await terminal.fill((total - 5).toFixed(2));
     await expect(page.getByTestId("pos-diff")).toContainText("الفرق");
@@ -116,7 +116,7 @@ test.describe("core money (phase 1)", () => {
     await page.getByRole("button", { name: "تحديد الكل" }).first().click();
     await page.getByRole("button", { name: "تأكيد إيداع المنصة" }).click();
     const dlg = page.getByRole("dialog");
-    const received = dlg.locator("input[type=number]").first();
+    const received = dlg.locator("input[data-money]").first();
     const expected = Number(await received.inputValue());
     expect(expected).toBeGreaterThan(0);
     await received.fill((expected - 25).toFixed(2));

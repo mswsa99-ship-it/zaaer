@@ -33,12 +33,12 @@ test.describe("the stay cycle (phase 3)", () => {
     await expect(arrival).toContainText("الشروط الثابتة مكتملة");
     const deposit = arrival.locator("fieldset").filter({ hasText: "سند قبض التأمين" });
     // no deposit and no reason: the server refuses, and nothing is recorded
-    await deposit.locator("input[type=number]").fill("0");
+    await deposit.locator("input[data-money]").fill("0");
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
     await expect(page.getByTestId("reasons").first()).toContainText("التأمين لم يُستلم كاملًا");
     await expect(arrival).toBeVisible();
     // the branch's deposit, on its own voucher
-    await deposit.locator("input[type=number]").fill("50");
+    await deposit.locator("input[data-money]").fill("50");
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
     await expect(page.getByTestId("stay-notice")).toContainText("سُجِّل الوصول");
     await expect.poll(() => financeCell(page, "رصيد التأمين")).toBe(50);
@@ -123,7 +123,7 @@ test.describe("the stay cycle (phase 3)", () => {
     const dlg = page.getByRole("dialog");
     await dlg.getByRole("radio", { name: "بملاحظات" }).click();
     await dlg.locator("textarea").fill("كسر في مقبض الخزانة");
-    await dlg.locator("input[type=number]").fill("20");
+    await dlg.locator("input[data-money]").fill("20");
     await dlg.getByRole("button", { name: "حفظ الفحص" }).click();
     await expect(dlg).toBeHidden();
     await expect(page.locator(".card").filter({ hasText: "وحدة 206" }).first()).toContainText("فُحصت المغادرة: بملاحظات");

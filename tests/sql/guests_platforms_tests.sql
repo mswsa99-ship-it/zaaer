@@ -535,6 +535,45 @@ do $$ declare a text; b text; begin
 end $$;
 
 -- =====================================================================
+-- PF09: the platform's fields corrected before arrival (0048, B4; the owner's note 5)
+-- =====================================================================
+reset role;
+select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
+set role authenticated;
+do $$ declare r jsonb; res uuid; dup text; u jsonb; begin
+  r := t_ota(t_today() + 120, t_today() + 122, 'PF-FIX-1', false, t_today()); res := (r->>'id')::uuid; insert into ids values ('resFix', res);
+  perform t_ota(t_today() + 125, t_today() + 126, 'PF-FIX-OTHER', false, t_today());
+  dup := t_fails(format('select fn_staff_update_platform(%L, %L::jsonb, %L, %s)', res, jsonb_build_object('external_ref', 'PF-FIX-OTHER'), 'خطأ إدخال', (t_res(res)).version), '%DUPLICATE_EXTERNAL_REF%');
+  u := fn_staff_update_platform(res, jsonb_build_object('external_ref', 'PF-FIX-2', 'platform_booked_on', t_today() - 3), 'خطأ في رقم المنصة', (t_res(res)).version);
+  perform t_record('PF09 the supervisor corrects the platform''s number and booking day before arrival, with a reason; a number of another booking is refused',
+    dup = 'ok' and (u->>'units')::int = 1 and (t_res(res)).external_ref = 'PF-FIX-2' and (t_res(res)).platform_booked_on = t_today() - 3
+    and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''reservation.platform_updated''', res)) = 1, dup || ' / ' || u::text);
+exception when others then perform t_record('PF09 the supervisor corrects the platform''s number and booking day before arrival, with a reason; a number of another booking is refused', false, sqlerrm); end $$;
+
+do $$ declare res uuid := t_id('resFix'); u jsonb; f jsonb; forb text; begin
+  -- the property → the platform: the deferred receipt is issued for what is owed
+  u := fn_staff_update_platform(res, jsonb_build_object('platform_collects', true), 'المنصة قبضت المبلغ', (t_res(res)).version);
+  f := t_fin(res);
+  -- the platform → the property again: cancelling that receipt is «إلغاء سند», the owner's or a manager's
+  forb := t_fails(format('select fn_staff_update_platform(%L, %L::jsonb, %L, %s)', res, jsonb_build_object('platform_collects', false), 'رجوع', (t_res(res)).version), '%FORBIDDEN%');
+  perform t_record('PF09b who collects moves to the platform → its receipt «آجل عبر المنصات» for what is owed; moving back needs «إلغاء سند»',
+    jsonb_array_length(u->'vouchers') = 1 and (f->>'net_collected')::bigint = (f->>'total')::bigint and (f->>'total')::bigint > 0 and (t_res(res)).platform_collects
+    and forb = 'ok' and (t_res(res)).platform_collects, u::text || ' / ' || forb);
+exception when others then perform t_record('PF09b who collects moves to the platform → its receipt «آجل عبر المنصات» for what is owed; moving back needs «إلغاء سند»', false, sqlerrm); end $$;
+
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+do $$ declare res uuid := t_id('resFix'); u jsonb; f jsonb; ver text; begin
+  u := fn_staff_update_platform(res, jsonb_build_object('platform_collects', false), 'المنشأة تقبض عند الوصول', (t_res(res)).version);
+  f := t_fin(res);
+  perform fn_platform_mark_checked(jsonb_build_object('reservation_id', res, 'checked', true));
+  ver := t_fails(format('select fn_staff_update_platform(%L, %L::jsonb, %L, %s)', res, jsonb_build_object('external_ref', 'PF-FIX-3'), 'بعد المطابقة', (t_res(res)).version), '%PLATFORM_VERIFIED%');
+  perform t_record('PF09c moving back to the property cancels the deferred receipt (to the review list); after «طابقتُ مع المنصة» the fields are fixed',
+    (f->>'net_collected')::bigint = 0 and not (t_res(res)).platform_collects
+    and t_count(format('select count(*) from financial_vouchers where reservation_id = %L and method = ''ota_deferred'' and status = ''cancelled''', res)) = 1
+    and ver = 'ok', u::text || ' / ' || ver);
+exception when others then perform t_record('PF09c moving back to the property cancels the deferred receipt (to the review list); after «طابقتُ مع المنصة» the fields are fixed', false, sqlerrm); end $$;
+
+-- =====================================================================
 -- RESULTS
 -- =====================================================================
 reset role;
@@ -593,6 +632,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 55 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 55 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 58 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 58 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'GUEST AND PLATFORM TESTS FAILED'; end if;
 end $$;

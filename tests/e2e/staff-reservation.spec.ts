@@ -21,7 +21,7 @@ test.describe("staff reservation lifecycle", () => {
     const dueBefore = await financeCell(page, "المتبقي");
     await page.getByRole("button", { name: "قبض تأمين" }).click();
     const dlg = page.getByRole("dialog");
-    await dlg.locator("input[type=number]").first().fill("200");
+    await dlg.locator("input[data-money]").first().fill("200");
     await dlg.getByRole("button", { name: "حفظ السند" }).click();
     await expect(dlg).toBeHidden();
     await expect.poll(() => financeCell(page, "رصيد التأمين")).toBe(200);
@@ -30,7 +30,7 @@ test.describe("staff reservation lifecycle", () => {
     // partial receipt → status must read "دفع جزئي", never "مدفوع"
     await page.getByRole("button", { name: "سند قبض إقامة" }).click();
     const dlg2 = page.getByRole("dialog");
-    await dlg2.locator("input[type=number]").first().fill(String(Math.max(1, Math.floor(dueBefore / 2))));
+    await dlg2.locator("input[data-money]").first().fill(String(Math.max(1, Math.floor(dueBefore / 2))));
     await dlg2.getByRole("button", { name: "حفظ السند" }).click();
     await expect(dlg2).toBeHidden();
     await expect.poll(() => financeCell(page, "المتبقي")).toBeLessThan(dueBefore);
@@ -77,7 +77,7 @@ test.describe("staff reservation lifecycle", () => {
     await createReservation(page, "ضيف الاسترداد", "0501110003");
     await page.getByRole("button", { name: "سند قبض إقامة" }).click();
     let dlg = page.getByRole("dialog");
-    await dlg.locator("input[type=number]").first().fill("100");
+    await dlg.locator("input[data-money]").first().fill("100");
     await dlg.getByRole("button", { name: "حفظ السند" }).click();
     await expect(dlg).toBeHidden();
     await expect.poll(() => financeCell(page, "المحصل")).toBe(100);
@@ -85,7 +85,7 @@ test.describe("staff reservation lifecycle", () => {
     // refund 150 against 100 received → rejected server-side (no fake success)
     await page.getByRole("button", { name: "استرداد إقامة" }).click();
     dlg = page.getByRole("dialog");
-    await dlg.locator("input[type=number]").first().fill("150");
+    await dlg.locator("input[data-money]").first().fill("150");
     await dlg.locator("textarea").fill("اختبار تجاوز المبلغ");
     await dlg.getByRole("button", { name: "تنفيذ" }).click();
     await expect(dlg.getByText("المبلغ يتجاوز الرصيد القابل للاسترداد.")).toBeVisible();

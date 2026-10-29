@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ShieldAlert, ShieldBan, Star, IdCard, Printer, Link2, CheckCircle2, Users, Ban, FileSignature } from "lucide-react";
+import { ShieldAlert, ShieldBan, Star, IdCard, Printer, Link2, CheckCircle2, Users, Ban, FileSignature, PencilLine } from "lucide-react";
 import { opsApi, guestApi, guestProfileApi, toArabicError, VALIDATION_AR, type ReservationDetail, type GroupSummary, type StaySummary, type Acknowledgement } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
@@ -205,8 +205,11 @@ export function CancelDialog({ open, d, group, onClose, onDone }: { open: boolea
 /** The platform's fields (decision 4) and «طابقتُ مع المنصة». */
 export function PlatformPanel({ d, canCheck, onChanged }: { d: ReservationDetail; canCheck: boolean; onChanged: () => void }) {
   const p = d.platform;
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const { can } = useAuth();
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null); const [editing, setEditing] = useState(false);
   if (!p) return null;
+  // B4 (0048): correctable before arrival and before «طابقتُ مع المنصة»
+  const canEdit = can("res.create") && ["confirmed", "pending_verification"].includes(d.reservation.status) && !p.verified_at;
   const toggle = async () => { setBusy(true); setErr(null); try { await opsApi.platformMarkChecked(d.reservation.id, !p.verified_at); onChanged(); } catch (e) { setErr(toArabicError(e)); } finally { setBusy(false); } };
   return (
     <Card data-testid="platform-panel">
@@ -219,10 +222,51 @@ export function PlatformPanel({ d, canCheck, onChanged }: { d: ReservationDetail
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-50 pt-3">
         {p.verified_at ? <Badge className="bg-success-500/10 text-success-600"><CheckCircle2 className="h-3 w-3" /> طُوبق مع المنصة{p.verified_by ? ` — ${p.verified_by}` : ""} · {formatDateTime(p.verified_at)}</Badge> : <Badge className="bg-ink-100 text-ink-500">لم يُطابَق مع المنصة بعد</Badge>}
+        {canEdit && <button onClick={() => setEditing(true)} className="btn-outline text-xs" data-testid="platform-edit"><PencilLine className="h-3 w-3" /> تصحيح بيانات المنصة</button>}
         {canCheck && !["cancelled", "rejected", "no_show", "closed"].includes(d.reservation.status) && <button onClick={toggle} disabled={busy} className="btn-outline text-xs" data-testid="platform-check">{busy ? <Spinner className="h-3 w-3" /> : null} {p.verified_at ? "إلغاء المطابقة" : "طابقتُ مع المنصة"}</button>}
       </div>
       {err && <div className="mt-2"><ErrorBanner message={err} /></div>}
+      {editing && <PlatformEditDialog d={d} onClose={() => setEditing(false)} onDone={() => { setEditing(false); onChanged(); }} />}
     </Card>
+  );
+}
+
+/** B4 (0048): correct the platform's number, the day it was booked there and who collects; the reason is recorded. */
+function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onClose: () => void; onDone: () => void }) {
+  const p = d.platform!;
+  const [ext, setExt] = useState(d.reservation.external_ref ?? ""); const [booked, setBooked] = useState(p.booked_on ?? "");
+  const [collects, setCollects] = useState<boolean>(!!p.collects); const [reason, setReason] = useState("");
+  const changedCollects = collects !== !!p.collects;
+  const { can } = useAuth();
+  const needsCancel = changedCollects && !collects && !can("voucher.cancel");   // cancelling the deferred receipt is «إلغاء سند»
+  return (
+    <Modal open title="تصحيح بيانات المنصة" onClose={onClose}>
+      <ActionForm onSubmit={async () => {
+        if (needsCancel) throw new Error("FORBIDDEN: voucher.cancel");
+        if (!reason.trim()) throw new Error("VALIDATION: reason");
+        await opsApi.platformUpdate(d.reservation.id, { external_ref: ext.trim(), platform_booked_on: booked || null, platform_collects: collects }, reason.trim(), d.reservation.version);
+        onDone();
+      }}>
+        <div className="space-y-3">
+          <Field label="رقم الحجز في المنصة"><input className="input" dir="ltr" value={ext} onChange={(e) => setExt(e.target.value)} aria-label="رقم الحجز في المنصة" /></Field>
+          <Field label="تاريخ الحجز في المنصة"><input type="date" className="input" dir="ltr" max={todayISO()} value={booked} onChange={(e) => setBooked(e.target.value)} aria-label="تاريخ الحجز في المنصة" /></Field>
+          <Field label="من يقبض">
+            <select className="input" value={collects ? "platform" : "property"} onChange={(e) => setCollects(e.target.value === "platform")} aria-label="من يقبض">
+              <option value="property">المنشأة عند الوصول</option>
+              <option value="platform">المنصة (آجل عبر المنصات)</option>
+            </select>
+          </Field>
+          {changedCollects && (
+            <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="platform-collects-note">
+              {needsCancel ? "إرجاع القبض إلى المنشأة يلغي سند «آجل عبر المنصات»، وإلغاء السند للمالك أو المدير." : collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من الضيف عند الوصول."}
+            </p>
+          )}
+          {d.reservation.group_ref ? <p className="text-xs text-ink-500">يسري التصحيح على كل وحدات المجموعة.</p> : null}
+          <ReasonInput value={reason} onChange={setReason} />
+        </div>
+        <Submit label="حفظ التصحيح" onCancel={onClose} />
+      </ActionForm>
+    </Modal>
   );
 }
 

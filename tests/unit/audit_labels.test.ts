@@ -6,7 +6,7 @@
  * capability catalogue has a TypeScript copy too (src/lib/capabilityCatalog.ts, read by the demo): AB07 diffs it.
  * Since the owner's paste 0044 the removal family lives in two small functions of its own (fn_audit_removal_label,
  * fn_capability_removal_actions), so the dictionary and the catalogue carry no refused word and later additions are
- * ordinary migrations (AB08). The current dictionary is 0044's; 0040 and 0041 are checked as the history they are.
+ * ordinary migrations (AB08). The current dictionary is 0048's (0044 plus the platform correction); 0040, 0041 and 0044 are checked as the history they are.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -19,6 +19,7 @@ const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 const m40 = read("supabase/migrations/20261028010000_0040_lists_reports_staff.sql");
 const m41 = read("supabase/migrations/20261028020000_0041_phase6_paste.sql");
 const m44 = read("supabase/migrations/20261029030000_0044_permissions_paste.sql");
+const m48 = read("supabase/migrations/20261030020000_0048_switch_reprice.sql");
 
 /** The body of one function, from its `create or replace` to its closing `$$;`. */
 function fnBody(sql: string, fn: string): string {
@@ -58,11 +59,13 @@ function catalog(sql: string): Array<{ code: string; coverage: string; core: boo
   return rows;
 }
 /** The dictionary in force after 0044: the core function's arms and the removal family's. */
-const current = () => ({ ...caseArms(m44, "fn_audit_action_label"), ...caseArms(m44, "fn_audit_removal_label") });
+const current = () => ({ ...caseArms(m48, "fn_audit_action_label"), ...caseArms(m44, "fn_audit_removal_label") });
 
 const removalFamily = (k: string) => /\.deleted$/.test(k);
-/** codes the dictionary gained after 0041 (0042–0044) */
-const LATER_ACTIONS = ["permissions.updated", "permissions.reset", "organization.updated"];
+/** codes the dictionary gained after 0044 (0048: the platform correction) */
+const AFTER_44 = ["reservation.platform_updated"];
+/** codes the dictionary gained after 0041 (0042–0044, and 0048's) */
+const LATER_ACTIONS = ["permissions.updated", "permissions.reset", "organization.updated", ...AFTER_44];
 const LATER_ENTITIES = ["role_permissions"];
 const without = (o: Record<string, string>, keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 const tsActions = AUDIT_ACTION_LABELS;
@@ -71,6 +74,7 @@ const tsEntities = AUDIT_ENTITY_LABELS;
 describe("audit labels — one dictionary in three places", () => {
   it("AB01 the dictionary in force (0044: the core function and the removal family) is src/lib/auditLabels.ts, actions and entities alike", () => {
     expect(current()).toEqual(tsActions);
+    expect({ ...caseArms(m44, "fn_audit_action_label"), ...caseArms(m44, "fn_audit_removal_label") }).toEqual(without(tsActions, AFTER_44));
     expect(caseArms(m44, "fn_audit_entity_label")).toEqual(tsEntities);
     for (const k of LATER_ACTIONS) expect(tsActions[k], k).toBeTruthy();
   });

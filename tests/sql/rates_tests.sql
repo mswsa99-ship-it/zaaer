@@ -2,7 +2,7 @@
 -- Rates (Phase 2, migration 0030): decisions 9, 15, 32, 33 and the rounding rule of 47.
 -- PR01–PR12: the price calendar (base fallback, platform row, group edits, past nights, the minimum, audit),
 -- weekly and monthly prices spread over the nights with the remainder on the last night, the per-night snapshot
--- used when extending and shortening, the supervisor's discount limits and the discount report, the capacity
+-- used when extending and shortening, a switch to another type before arrival (PR13, 0048), the supervisor's discount limits and the discount report, the capacity
 -- impact of a unit type, and the calendar's available-of-total row.
 -- Runs after core_tests.sql on the same database (uses its synthetic organisation, branch 010 and staff).
 -- =====================================================================
@@ -291,6 +291,60 @@ do $$ declare r jsonb; c2 uuid; res jsonb; begin
     res->>'error' = 'HAS_DEPENDENCIES' and (res->'dependencies'->>'rate_calendar')::int = 1, res::text);
 exception when others then perform t_record('PR12 a unit type with calendar prices is not removed: the answer lists them and the archive is offered', false, sqlerrm); end $$;
 
+
+-- ---------------------------------------------------------------- PR13: a switch to another type before arrival re-prices (0048, B5)
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+do $$ declare r jsonb; c2 uuid; rid uuid; t0 bigint; sw jsonb; removed int; adj bigint; begin
+  r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'name_ar', 'نوع أغلى', 'base_capacity', 2, 'max_capacity', 3, 'base_price_halalas', 30000));
+  c2 := (r->>'id')::uuid; insert into ids values ('cat2', c2);
+  r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', c2, 'room_number', 'PR-X1')); insert into ids values ('roomX1', (r->>'id')::uuid);
+  r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', c2, 'room_number', 'PR-X2')); insert into ids values ('roomX2', (r->>'id')::uuid);
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room1'),
+         'check_in', t_day('D') + 90, 'check_out', t_day('D') + 93, 'guest_phone', '0551000040', 'guest_name', 'ضيف تبديل', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  rid := (r->>'id')::uuid; t0 := (t_res(rid)).total_halalas;
+  sw := fn_staff_switch_room(rid, t_id('roomX1'), null, 'طلب وحدة أكبر', (t_res(rid)).version);
+  select count(*) into removed from reservation_nights where reservation_id = rid and status = 'removed';
+  select sum(total_halalas) into adj from reservation_charges where reservation_id = rid and kind = 'adjustment';
+  perform t_record('PR13 before arrival a unit of another type re-prices the nights by the new type; the old nights stay, removed and refunded',
+    (sw->>'repriced')::boolean and (sw->>'price_delta_halalas')::bigint = 30000 and t_nights(rid) = '30000:base,30000:base,30000:base'
+    and removed = 3 and adj = -60000 and (t_res(rid)).total_halalas = t0 + 30000 and (t_res(rid)).room_category_id = c2 and (t_res(rid)).nightly_rate_halalas = 30000,
+    sw::text || ' nights=' || coalesce(t_nights(rid), '') || ' removed=' || removed || ' adj=' || coalesce(adj::text, '') || ' t0=' || t0 || ' t1=' || (t_res(rid)).total_halalas);
+exception when others then perform t_record('PR13 before arrival a unit of another type re-prices the nights by the new type; the old nights stay, removed and refunded', false, sqlerrm); end $$;
+
+do $$ declare r jsonb; rid uuid; rid2 uuid; t0 bigint; t2 bigint; sw jsonb; sw2 jsonb; begin
+  -- the platform collected this stay: its amount does not change with the unit
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room2'),
+         'check_in', t_day('D') + 90, 'check_out', t_day('D') + 92, 'guest_phone', '0551000041', 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
+         'external_ref', 'PRSW1', 'platform_collects', true, 'platform_booked_on', fn_branch_today('00000000-0000-0000-0000-000000000010')));
+  rid := (r->>'id')::uuid; t0 := (t_res(rid)).total_halalas;
+  sw := fn_staff_switch_room(rid, t_id('roomX2'), null, 'صيانة', (t_res(rid)).version);
+  -- within the same type nothing is re-priced
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room1'),
+         'check_in', t_day('D') + 95, 'check_out', t_day('D') + 97, 'guest_phone', '0551000042', 'guest_name', 'ضيف النوع نفسه', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  rid2 := (r->>'id')::uuid; t2 := (t_res(rid2)).total_halalas;
+  sw2 := fn_staff_switch_room(rid2, t_id('room2'), null, 'تبديل داخل النوع', (t_res(rid2)).version);
+  perform t_record('PR13b a stay the platform collected, and a switch within the same type, keep their price; the answer says why',
+    not (sw->>'repriced')::boolean and sw->>'price_kept_reason' = 'platform_collects' and (t_res(rid)).total_halalas = t0
+    and not (sw2->>'repriced')::boolean and sw2->>'price_kept_reason' = 'same_type' and (t_res(rid2)).total_halalas = t2
+    and not exists (select 1 from reservation_nights where reservation_id in (rid, rid2) and status = 'removed'),
+    sw::text || ' / ' || sw2::text);
+exception when others then perform t_record('PR13b a stay the platform collected, and a switch within the same type, keep their price; the answer says why', false, sqlerrm); end $$;
+
+do $$ declare r jsonb; rid uuid; t0 bigint; sw jsonb; begin
+  -- a resident's switch keeps the price (a difference is an explicit adjustment)
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room1'),
+         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010'), 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 2,
+         'guest_phone', '0551000043', 'guest_name', 'ضيف مقيم', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  rid := (r->>'id')::uuid;
+  reset role; update reservations set status = 'checked_in', actual_check_in = now() where id = rid; update rooms set status = 'occupied' where id = t_id('room1');
+  update rooms set cleanliness = 'clean' where id = t_id('roomX1');
+  set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+  t0 := (t_res(rid)).total_halalas;
+  sw := fn_staff_switch_room(rid, t_id('roomX1'), fn_branch_today('00000000-0000-0000-0000-000000000010'), 'عطل', (t_res(rid)).version);
+  perform t_record('PR13c a resident''s switch to another type keeps the price',
+    not (sw->>'repriced')::boolean and sw->>'price_kept_reason' = 'in_house' and (t_res(rid)).total_halalas = t0, sw::text);
+exception when others then perform t_record('PR13c a resident''s switch to another type keeps the price', false, sqlerrm); end $$;
+
 -- =====================================================================
 -- RESULTS
 -- =====================================================================
@@ -299,6 +353,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 15 then raise exception 'RATES TESTS INCOMPLETE: % of 15 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 18 then raise exception 'RATES TESTS INCOMPLETE: % of 18 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'RATES TESTS FAILED'; end if;
 end $$;

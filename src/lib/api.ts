@@ -34,6 +34,8 @@ const ERROR_AR: Record<string, string> = {
   NOT_CHECKED_IN: "الحجز ليس في حالة دخول.",
   NOT_IN_DELIVERED_STATE: "لم يتم تسليم الرمز لهذا الحجز.",
   CODE_MUST_DIFFER_FROM_PREVIOUS: "هذا هو الرمز الحالي نفسه — لا يُقبل. اضبط رمزًا جديدًا على الصندوق ثم احفظه.",
+  PLATFORM_VERIFIED: "طُوبق الحجز مع المنصة؛ تُلغى المطابقة أولًا ثم تُصحَّح بيانات المنصة.",
+  GROUP_UNIT_IN_HOUSE: "إحدى وحدات المجموعة سُجِّل وصولها؛ لا تُصحَّح بيانات المنصة بعد الوصول.",
   CODE_IN_USE: "هذا الرمز مستخدم في صندوق وحدة أخرى بهذا الفرع. اضبط على الصندوق رمزًا مختلفًا ثم احفظه.",
   GUEST_IN_HOUSE: "في الوحدة نزيل مقيم؛ رمزها لا يُعرض ولا يُغيَّر من حساب خدمة الغرف.",
   NO_KEYBOX_CODE: "لا يوجد رمز مسجّل لهذه الوحدة بعد.",
@@ -651,6 +653,9 @@ export const opsApi = {
   recordPaperAck: (reservationId: string, textHash: string) => rpc<{ ok: boolean; duplicate: boolean; accepted_at: string }>("fn_staff_record_paper_ack", { p: { reservation_id: reservationId, text_hash: textHash } }),
   /** the platforms' daily list (decision 4): today's and tomorrow's arrivals, matched against the platform */
   platformCheckList: (branchId: string, date?: string | null) => rpc<{ date: string; rows: PlatformCheckRow[] }>("fn_platform_check_list", { p_branch: branchId, p_date: date ?? null }),
+  /** B4 (0048): the platform's number, booking day and who collects, corrected before arrival (the group's units together) */
+  platformUpdate: (reservationId: string, p: { external_ref?: string | null; platform_booked_on?: string | null; platform_collects?: boolean }, reason: string, version?: number) =>
+    rpc<{ ok: boolean; units: number; vouchers: string[] }>("fn_staff_update_platform", { p_reservation: reservationId, p, p_reason: reason, p_expected_version: version ?? null }),
   platformMarkChecked: (reservationId: string, checked = true) => rpc<{ ok: boolean; units: number }>("fn_platform_mark_checked", { p: { reservation_id: reservationId, checked } }),
   /** the group's page (decision 69): every unit with its money, and the totals */
   groupSummary: (reservationId: string) => rpc<GroupSummary | null>("fn_reservation_group_summary", { p_reservation: reservationId }),

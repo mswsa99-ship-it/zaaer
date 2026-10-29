@@ -13,7 +13,7 @@ import { staffApi, stayApi, toArabicError, newIdempotencyKey, type StayStatus, t
 import { useCashAccounts } from "../lib/useCashAccounts";
 import { METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, RESERVATION_STATUS_LABELS, type PaymentMethod, type ReservationStatus } from "../lib/types";
 import { formatCurrency, formatDateTime } from "../lib/utils";
-import { Card, Badge, ErrorBanner, Spinner } from "./ui";
+import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
 import { PaymentFields } from "./ReservationOperations";
 
@@ -149,12 +149,12 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
       <p className="mb-3 text-xs text-ink-500">شروط الوصول واحدة في كل الفروع ولا تجاوز لها. رمز الصندوق يُسلَّم بعد تسجيل الوصول، كخطوة مستقلة.</p>
       {core.length > 0 ? <Reasons title="شروط لم تكتمل بعد:" items={core} /> : <Ok>الشروط الثابتة مكتملة: الحجز مؤكد، والنزلاء مسجلون ومطابقون، وشموس مقبول، والوحدة نظيفة ومتاحة.</Ok>}
       {money && (
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          <Cell label="الليلة الأولى" value={sar(c.first_night)} />
-          <Cell label="المحصّل" value={sar(c.collected)} tone={(c.first_night_short ?? 0) > 0 ? "text-warning-600" : "text-success-600"} />
-          <Cell label="تأمين الفرع" value={sar(c.deposit_required)} />
-          <Cell label="التأمين المستلم" value={sar(c.deposit_balance)} tone={(c.deposit_short ?? 0) > 0 ? "text-warning-600" : "text-success-600"} />
-        </div>
+        <AmountGrid className="mt-3">
+          <AmountBox label="الليلة الأولى" value={sar(c.first_night)} />
+          <AmountBox label="المحصّل" value={sar(c.collected)} tone={(c.first_night_short ?? 0) > 0 ? "text-warning-600" : "text-success-600"} />
+          <AmountBox label="تأمين الفرع" value={sar(c.deposit_required)} />
+          <AmountBox label="التأمين المستلم" value={sar(c.deposit_balance)} tone={(c.deposit_short ?? 0) > 0 ? "text-warning-600" : "text-success-600"} />
+        </AmountGrid>
       )}
       {canAct && core.length === 0 && (
         <ActionForm onSubmit={submit}>
@@ -234,12 +234,12 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
 
       {money && d && (
         <Section icon={Moon} title="الدفع ليلة بليلة" testId="nights-due">
-          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <Cell label="ليالٍ مدفوعة" value={`${d.nights_covered} من ${d.nights}`} />
-            <Cell label="المستحق حتى الآن" value={sar(d.due_now)} />
-            <Cell label="المحصّل" value={sar(d.collected)} tone="text-success-600" />
-            <Cell label="المتبقي على الإقامة" value={sar(d.balance_due)} tone={d.balance_due > 0 ? "text-warning-600" : "text-success-600"} />
-          </div>
+          <AmountGrid>
+            <AmountBox label="ليالٍ مدفوعة" value={`${d.nights_covered} من ${d.nights}`} />
+            <AmountBox label="المستحق حتى الآن" value={sar(d.due_now)} />
+            <AmountBox label="المحصّل" value={sar(d.collected)} tone="text-success-600" />
+            <AmountBox label="المتبقي على الإقامة" value={sar(d.balance_due)} tone={d.balance_due > 0 ? "text-warning-600" : "text-success-600"} />
+          </AmountGrid>
           {d.overdue ? (
             <div className="mt-3 rounded-xl border border-danger-500/30 bg-danger-500/10 p-3 text-sm text-danger-600" role="alert" data-testid="overdue">
               <p className="font-medium">ليلة غير مدفوعة بعد موعدها{d.overdue_since ? ` منذ ${formatDateTime(d.overdue_since)}` : ""} — المتأخر <span dir="ltr">{sar(d.overdue_amount)}</span></p>
@@ -374,9 +374,6 @@ function Step({ ok, label, detail }: { ok: boolean; label: string; detail: strin
       <div><p className="font-medium">{label}</p><p className="mt-0.5 text-[11px] opacity-80">{detail}</p></div>
     </div>
   );
-}
-function Cell({ label, value, tone = "text-ink-800" }: { label: string; value: string; tone?: string }) {
-  return <div><p className="text-[11px] text-ink-400">{label}</p><p className={`font-medium ${tone}`} dir="ltr">{value}</p></div>;
 }
 function Reasons({ title, items, tone = "warning" }: { title: string; items: string[]; tone?: "warning" | "info" }) {
   const cls = tone === "warning" ? "border-warning-500/30 bg-warning-500/10 text-warning-600" : "border-ink-100 bg-ink-50 text-ink-600";

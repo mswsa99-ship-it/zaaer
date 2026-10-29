@@ -34,7 +34,7 @@ async function newReceipt(page: Page, vouchers: Locator): Promise<{ row: Locator
   const before = await numbers(vouchers);
   await page.getByRole("button", { name: "سند قبض إقامة" }).click();
   const dlg = page.getByRole("dialog");
-  await dlg.locator("input[type=number]").fill("100");
+  await dlg.locator("input[data-money]").fill("100");
   await dlg.getByRole("button", { name: "حفظ السند" }).click();
   await expect(dlg).toBeHidden();
   await expect.poll(async () => (await numbers(vouchers)).length).toBe(before.length + 1);
@@ -124,7 +124,7 @@ test.describe("invoices, voucher correction and the review list (phase 4)", () =
     const { row: issued, number: original } = await newReceipt(page, vouchers);
     await issued.getByRole("button", { name: "تصحيح" }).click();
     const dlg = page.getByRole("dialog");
-    await dlg.locator("input[type=number]").fill("80");
+    await dlg.locator("input[data-money]").fill("80");
     await dlg.locator("textarea").fill("المقبوض 80 لا 100");
     await dlg.getByRole("button", { name: "تصحيح السند" }).click();
     await expect(dlg).toBeHidden();
@@ -142,7 +142,7 @@ test.describe("invoices, voucher correction and the review list (phase 4)", () =
     const { row } = await newReceipt(page, vouchers);
     await row.getByRole("button", { name: "تصحيح" }).click();
     const dlg = page.getByRole("dialog");
-    await dlg.locator("input[type=number]").fill("90");
+    await dlg.locator("input[data-money]").fill("90");
     await dlg.locator("textarea").fill("خطأ في المبلغ");
     await dlg.getByRole("button", { name: "تصحيح السند" }).click();
     await expect(dlg).toBeHidden();

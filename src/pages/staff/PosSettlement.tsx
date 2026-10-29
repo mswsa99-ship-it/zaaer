@@ -10,7 +10,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { moneyApi, toArabicError, type CashAccount, type PosDay, type PosSettlement as Settlement } from "../../lib/api";
 import { accountLabel } from "../../lib/useCashAccounts";
-import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, Spinner, EmptyState } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, Spinner, EmptyState, AmountBox, AmountGrid } from "../../components/ui";
 import { Field, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { VOUCHER_KIND_LABELS, type VoucherKind } from "../../lib/types";
@@ -120,12 +120,12 @@ function DayCard({ branchId, accountId, date, onSaved }: { branchId: string; acc
 
   return (
     <Card>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="pos-day">
-        <div><p className="text-[11px] text-ink-400">قُبض بالشبكة</p><p className="font-medium" dir="ltr">{sar(day.in_halalas)}</p></div>
-        <div><p className="text-[11px] text-ink-400">رُدّ بالشبكة</p><p className="font-medium" dir="ltr">{sar(day.out_halalas)}</p></div>
-        <div><p className="text-[11px] text-ink-400">صافي السندات</p><p className="font-semibold text-ink-800" dir="ltr" data-testid="pos-system-total">{sar(day.system_total_halalas)}</p></div>
-        <div><p className="text-[11px] text-ink-400">عدد السندات</p><p className="font-medium">{day.voucher_count}</p></div>
-      </div>
+      <AmountGrid testId="pos-day">
+        <AmountBox label="قُبض بالشبكة" value={sar(day.in_halalas)} />
+        <AmountBox label="رُدّ بالشبكة" value={sar(day.out_halalas)} />
+        <AmountBox label="صافي السندات" value={<span data-testid="pos-system-total">{sar(day.system_total_halalas)}</span>} />
+        <AmountBox label="عدد السندات" value={day.voucher_count} />
+      </AmountGrid>
       {day.vouchers.length > 0 && (
         <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-ink-50 text-xs">
           {day.vouchers.map((v) => (

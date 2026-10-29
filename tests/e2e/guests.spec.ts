@@ -241,6 +241,28 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(page.locator("table tbody tr")).toHaveCount(2);
   });
 
+  test("GE11 the platform's fields are corrected before arrival with a reason; the platform collecting issues its receipt; moving it back is the manager's (0048)", async ({ page, loginAs }) => {
+    await loginAs("supervisor");
+    await createPlatformReservation(page, { guest: "ضيف تصحيح", phone: "0509004004", ref: "FIX-E2E-1", collects: "property" });
+    await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
+    const panel = page.getByTestId("platform-panel");
+    await panel.getByTestId("platform-edit").click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByLabel("رقم الحجز في المنصة").fill("FIX-E2E-2");
+    await dlg.getByLabel("من يقبض").selectOption("platform");
+    await expect(dlg.getByTestId("platform-collects-note")).toContainText("يصدر سند «آجل عبر المنصات»");
+    await dlg.locator("textarea").fill("رقم المنصة أُدخل خطأ");
+    await dlg.getByRole("button", { name: "حفظ التصحيح" }).click();
+    await expect(dlg).toBeHidden();
+    await expect(panel).toContainText("FIX-E2E-2");
+    await expect(panel).toContainText("المنصة (آجل عبر المنصات)");
+    await expect.poll(() => financeCell(page, "المتبقي")).toBe(0);                            // the deferred receipt covers the stay
+    // back to the property cancels that receipt: «إلغاء سند» is the owner's or a manager's
+    await panel.getByTestId("platform-edit").click();
+    await dlg.getByLabel("من يقبض").selectOption("property");
+    await expect(dlg.getByTestId("platform-collects-note")).toContainText("للمالك أو المدير");
+  });
+
   test("GE06 «ملخص الإقامة»: printed from the booking with the branch's policies; the paper signature is recorded against its text; the guest sees it accepted on their page", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await openByRoom(page, go, "203", "confirmed");                 // تركي المطيري, R-26A0008
@@ -297,7 +319,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await openByRef(page, go, "R-26A0010");
     await page.getByRole("button", { name: "سند قبض إقامة" }).click();
     const v = page.getByRole("dialog");
-    await v.locator("input[type=number]").first().fill("100");
+    await v.locator("input[data-money]").first().fill("100");
     await v.getByRole("button", { name: "حفظ السند" }).click();
     await expect(v).toBeHidden();
     await signOut(page);

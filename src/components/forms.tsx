@@ -1,8 +1,9 @@
-import { useEffect, useState, createContext, useContext, type ReactNode, type FormEvent } from "react";
+import { useEffect, useRef, useState, createContext, useContext, type ReactNode, type FormEvent } from "react";
 import { X, Archive, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
 import { cn } from "../lib/utils";
 import { ErrorBanner, Spinner } from "./ui";
 import { opsApi, toArabicError, type DefinitionEntity } from "../lib/api";
+import { formatMoneyInput, moneyTextToHalalas, sanitizeMoneyText } from "../lib/money";
 
 /** Modal that never closes on its own after a failed save — the form keeps its values. */
 export function Modal({ open, title, onClose, children, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
@@ -37,15 +38,20 @@ export function Field({ label, children, hint, className, error }: { label: stri
 }
 
 /** SAR input that yields integer halalas. */
-export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placeholder }: { valueHalalas: number | null; onChange: (h: number | null) => void; min?: number; disabled?: boolean; placeholder?: string }) {
-  const [text, setText] = useState(valueHalalas == null ? "" : (valueHalalas / 100).toFixed(2));
-  useEffect(() => { setText(valueHalalas == null ? "" : (valueHalalas / 100).toFixed(2)); }, [valueHalalas]);
+/** The one money field of the system (design system «AmountInput»): starts empty, never rewrites what the user is typing. */
+export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placeholder, label }: { valueHalalas: number | null; onChange: (h: number | null) => void; min?: number; disabled?: boolean; placeholder?: string; label?: string }) {
+  const [text, setText] = useState(formatMoneyInput(valueHalalas));
+  const focused = useRef(false);
+  // a value set from outside (a suggestion, a reset) shows when the user is not typing in the field
+  useEffect(() => { if (!focused.current) setText(formatMoneyInput(valueHalalas)); }, [valueHalalas]);
   return (
     <div className="relative">
-      <input type="number" inputMode="decimal" step="0.01" min={min / 100} value={text} disabled={disabled} placeholder={placeholder}
-        onChange={(e) => { setText(e.target.value); const n = Number(e.target.value); onChange(e.target.value === "" || !Number.isFinite(n) ? null : Math.round(n * 100)); }}
-        className="input pl-12" dir="ltr" />
-      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-400">ر.س</span>
+      <input type="text" inputMode="decimal" autoComplete="off" data-money="" value={text} disabled={disabled} placeholder={placeholder ?? "0"} aria-label={label}
+        onFocus={() => { focused.current = true; }}
+        onBlur={() => { focused.current = false; setText(formatMoneyInput(moneyTextToHalalas(text))); }}
+        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) return; setText(t); onChange(moneyTextToHalalas(t)); }}
+        className="input pl-12 tabular-nums" dir="ltr" />
+      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-500">ر.س</span>
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { InvoiceDialog, InvoiceList } from "./Invoices";
 import { CancelDialog } from "./Guests";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
-import { Card, Badge, ErrorBanner, Spinner } from "./ui";
+import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, ACTIVE_PAYMENT_METHODS, METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
 import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
@@ -168,12 +168,12 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
 }
 
 function FinanceGrid({ f }: { f: Finance }) {
-  const cell = (l: string, v: number, cls = "text-ink-800") => <div><p className="text-[11px] text-ink-400">{l}</p><p className={`font-medium ${cls}`} dir="ltr">{sar(v)}</p></div>;
+  const cell = (l: string, v: number, cls = "text-ink-900") => <AmountBox key={l} label={l} value={sar(v)} tone={cls} />;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+    <AmountGrid testId="finance-grid">
       {cell("الإجمالي", f.total)}{cell("المحصل", f.net_collected, "text-success-600")}{cell("المتبقي", f.balance_due, f.balance_due > 0 ? "text-warning-600" : "text-success-600")}{cell("رصيد للضيف", f.credit, "text-brand-700")}
-      {cell("تأمين مقبوض", f.deposit_received)}{cell("تأمين مسترد", f.deposit_refunded)}{cell("رصيد التأمين", f.deposit_balance, "text-brand-700")}{f.tax !== 0 && cell("الضريبة", f.tax, "text-ink-500")}
-    </div>
+      {cell("تأمين مقبوض", f.deposit_received)}{cell("تأمين مسترد", f.deposit_refunded)}{cell("رصيد التأمين", f.deposit_balance, "text-brand-700")}{f.tax !== 0 && cell("الضريبة", f.tax, "text-ink-600")}
+    </AmountGrid>
   );
 }
 
@@ -453,8 +453,21 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
   const r = d.reservation;
   const today = todayISO();
   const [effective, setEffective] = useState(today > r.check_in ? today : r.check_in); const [room, setRoom] = useState(""); const [reason, setReason] = useState("");
-  const [rooms, setRooms] = useState<Array<{ room_id: string; room_number: string; category_name: string; cleanliness: string; status: string }>>([]);
+  const [rooms, setRooms] = useState<Array<{ room_id: string; room_number: string; category_id: string; category_name: string; cleanliness: string; status: string }>>([]);
   useEffect(() => { if (!open) return; opsApi.availableRooms(r.branch_id, effective, r.check_out, null, r.id).then((x) => setRooms(x.filter((y) => y.room_id !== r.room_id))).catch(() => setRooms([])); }, [open, effective, r.branch_id, r.check_out, r.id, r.room_id]);
+  // B5 (0048): before check-in, a unit of another type re-prices the nights from the effective day (not a stay the platform collected)
+  const chosen = rooms.find((x) => x.room_id === room);
+  const beforeArrival = r.status === "confirmed" || r.status === "pending_verification";
+  const otherType = !!chosen && chosen.category_id !== r.room_category_id;
+  const reprices = beforeArrival && otherType && r.platform_collects !== true;
+  const [price, setPrice] = useState<{ old: number; next: number } | null>(null);
+  useEffect(() => {
+    setPrice(null); if (!open || !reprices || !chosen) return; let live = true;
+    Promise.all([ratesApi.nights(r.id), opsApi.quote(r.branch_id, chosen.category_id, effective, r.check_out, null, 0, (r.source_id as string | null) ?? null)])
+      .then(([nights, q]) => { if (!live) return; const old = (nights ?? []).filter((n) => n.status === "active" && n.night >= effective && n.night < r.check_out).reduce((s, n) => s + n.price, 0); setPrice({ old, next: q.rent_gross ?? q.rent }); })
+      .catch(() => live && setPrice(null));
+    return () => { live = false; };
+  }, [open, reprices, chosen, effective, r.id, r.branch_id, r.check_out, r.source_id]);
   return (
     <Modal open={open} title="تبديل الوحدة" onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!room) throw new Error("ROOM_NOT_FOUND"); await opsApi.switchRoom(r.id, room, effective, reason.trim(), r.version); await onDone(); }}>
@@ -463,7 +476,20 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <Field label="تاريخ السريان"><input type="date" className="input" dir="ltr" min={r.check_in} max={r.check_out} value={effective} onChange={(e) => setEffective(e.target.value)} /></Field>
           <Field label="الوحدة الجديدة (متاحة لبقية الفترة)"><select className="input" value={room} onChange={(e) => setRoom(e.target.value)}><option value="">اختر</option>{rooms.map((x) => <option key={x.room_id} value={x.room_id}>{x.room_number} · {x.category_name} · {CLEANLINESS_LABELS[x.cleanliness]}</option>)}</select></Field>
           <ReasonInput value={reason} onChange={setReason} />
-          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">يُغلق تخصيص الوحدة القديمة عند تاريخ السريان ويُفتح تخصيص جديد (التاريخ محفوظ). أثناء الإقامة: تتحول القديمة إلى «تحتاج تنظيفًا» ويتغير رمزها، ويُسلَّم رمز الجديدة خطوةً مستقلة إن كان لها صندوق، أو مفتاحها في الاستقبال. فرق السعر عند تغيير النوع يُضاف كتسوية منفصلة.</div>
+          {reprices && (
+            <div className="space-y-2 rounded-xl border border-warning-500/30 bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="switch-reprice">
+              <p>الوحدة من نوع آخر ({chosen?.category_name}): يُعاد تسعير الليالي من {effective} بأسعار النوع الجديد، ويظهر الفرق في بنود الحجز.</p>
+              {price && (
+                <AmountGrid>
+                  <AmountBox label="سعر الليالي الحالي" value={sar(price.old)} />
+                  <AmountBox label="بسعر النوع الجديد" value={sar(price.next)} />
+                  <AmountBox label="الفرق" value={(price.next - price.old > 0 ? "+" : "") + sar(price.next - price.old)} tone={price.next > price.old ? "text-danger-600" : price.next < price.old ? "text-success-600" : undefined} testId="switch-price-delta" />
+                </AmountGrid>
+              )}
+            </div>
+          )}
+          {beforeArrival && otherType && r.platform_collects === true && <p className="rounded-xl bg-ink-50 p-3 text-sm text-ink-600" data-testid="switch-price-kept">المنصة تقبض مبلغ هذا الحجز، فيبقى السعر كما هو عند تبديل النوع.</p>}
+          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">يُغلق تخصيص الوحدة القديمة عند تاريخ السريان ويُفتح تخصيص جديد (التاريخ محفوظ). أثناء الإقامة: تتحول القديمة إلى «تحتاج تنظيفًا» ويتغير رمزها، ويُسلَّم رمز الجديدة خطوةً مستقلة إن كان لها صندوق، أو مفتاحها في الاستقبال، وفرق السعر عند تغيير النوع يُضاف كتسوية منفصلة.</div>
         </div>
         <Submit label="تبديل" onCancel={onClose} />
       </ActionForm>
