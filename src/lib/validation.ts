@@ -12,8 +12,8 @@ export function latinDigits(s: string): string {
   return s.replace(/[٠-٩۰-۹]/g, (c) => String(ARABIC_DIGITS.includes(c) ? ARABIC_DIGITS.indexOf(c) : PERSIAN_DIGITS.indexOf(c)));
 }
 
-const NAME_ALLOWED = /^[A-Za-zÀ-ɏء-غـ-ْٰ-ۓ '’.-]+$/;
-const NAME_LETTER = /[A-Za-zÀ-ɏء-غف-يٱ-ۓ]/g;
+const NAME_ALLOWED = /^[A-Za-zÀ-ÖØ-öø-ɏء-غـ-ْٰ-ۓ '’.-]+$/;
+const NAME_LETTER = /[A-Za-zÀ-ÖØ-öø-ɏء-غف-يٱ-ۓ]/g;
 
 /** A person's name: letters (Arabic or Latin), spaces, hyphen, apostrophe, dot; at least two letters. Empty is left to «required». */
 export function checkPersonName(name: string | null | undefined): void {

@@ -23,6 +23,10 @@ create or replace function t_record(p_name text, p_ok boolean, p_detail text def
 $$;
 create or replace function t_id(p_k text) returns uuid language sql security definer as $$ select v from ids where k = p_k $$;
 create or replace function t_set(p_k text, p_v uuid) returns void language sql security definer as $$ insert into ids values (p_k, p_v) on conflict (k) do update set v = excluded.v $$;
+create or replace function t_primary_of(p uuid) returns uuid language sql security definer as $$ select id from reservation_guests where reservation_id = p and is_primary limit 1 $$;
+create or replace function t_any_room() returns uuid language sql security definer as $$
+  select id from rooms where branch_id = '00000000-0000-0000-0000-000000000010' and is_active order by room_number limit 1
+$$;
 create or replace function t_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
 create or replace function t_today() returns date language sql security definer as $$ select fn_branch_today('00000000-0000-0000-0000-000000000010') $$;
 create or replace function t_fails(p_sql text, p_like text) returns text language plpgsql as $$
@@ -116,6 +120,20 @@ do $$ declare a text; b text; c uuid; begin
   perform t_record('PM04 the owner unticks «إنشاء حجز» for the supervisor: the supervisor''s next booking is refused; ticked again, the next one goes through',
     c is not null and a = 'ok' and b = 'ok', a || ' / ' || b);
 exception when others then perform t_record('PM04 the owner unticks «إنشاء حجز» for the supervisor: the supervisor''s next booking is refused; ticked again, the next one goes through', false, sqlerrm); end $$;
+
+-- VD09 (0047 keeps the matrix): the guest entry and the key-box code follow the owner's ticks, as they did before 0047
+do $$ declare a text; b text; c text; d text; begin
+  perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
+  perform t_set_cells('[{"code": "guest.enter", "role": "supervisor", "allowed": false}, {"code": "keybox.code", "role": "supervisor", "allowed": false}]');
+  a := t_fails(format('select fn_staff_enter_guest(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res_pm'), 'guest_id', t_primary_of(t_id('res_pm')), 'full_name', 'ضيف المصفوفة الثلاثي',
+         'identity_type', 'national_id', 'identity_number', '1078901234', 'nationality', 'سعودي', 'birth_date', '1990-01-01', 'document_matched', true)), 'FORBIDDEN: guest.enter%');
+  b := t_fails(format('select fn_staff_rotate_keybox_code(%L, %L, true)', t_any_room(), '864209'), 'FORBIDDEN: keybox.code%');
+  perform t_set_cells('[{"code": "guest.enter", "role": "supervisor", "allowed": true}, {"code": "keybox.code", "role": "supervisor", "allowed": true}]');
+  c := t_fails(format('select fn_staff_enter_guest(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res_pm'), 'guest_id', t_primary_of(t_id('res_pm')), 'full_name', 'ضيف المصفوفة الثلاثي',
+         'identity_type', 'national_id', 'identity_number', '1078901234', 'nationality', 'سعودي', 'birth_date', '1990-01-01', 'document_matched', true)), 'FORBIDDEN%');
+  perform t_record('VD09 «إدخال بيانات النزيل» and «رموز الصناديق» still follow the owner''s matrix after 0047: unticked refused, ticked accepted',
+    a = 'ok' and b = 'ok' and c = 'accepted', a || ' / ' || b || ' / ' || c);
+exception when others then perform t_record('VD09 «إدخال بيانات النزيل» and «رموز الصناديق» still follow the owner''s matrix after 0047: unticked refused, ticked accepted', false, sqlerrm); end $$;
 
 do $$ declare r jsonb; v jsonb; before_money boolean; after_money boolean; seen bigint; begin
   perform t_login('a0000000-0000-0000-0000-000000000003', 'hk@test.local');
@@ -293,6 +311,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 19 then raise exception 'PERMISSIONS TESTS INCOMPLETE: % of 19 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 20 then raise exception 'PERMISSIONS TESTS INCOMPLETE: % of 20 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'PERMISSIONS TESTS FAILED'; end if;
 end $$;

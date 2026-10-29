@@ -129,6 +129,10 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const isPrimary = !!guest?.is_primary;
+  // 0047: each field says its rule while typing (the server refuses the same)
+  const nameErr = fieldError(() => checkPersonName(fullName), VALIDATION_AR);
+  const numberErr = identityNumber.trim() ? fieldError(() => checkIdentityNumber(identityType, latinDigits(identityNumber).replace(/\s/g, "")), VALIDATION_AR) : null;
+  const phoneErr = phone.trim() ? fieldError(() => checkPhone(phone, false), VALIDATION_AR) : null;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -185,14 +189,14 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
           <button onClick={onClose} className="text-ink-400 hover:text-ink-600" aria-label="إغلاق">✕</button>
         </div>
         <form onSubmit={save} className="space-y-4" autoComplete="off">
-          <div><label className="label">الاسم الثلاثي (كما في الوثيقة)</label><input value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" placeholder="الاسم الأول الأب الجد" /></div>
+          <div><label className="label">الاسم الثلاثي (كما في الوثيقة)</label><input value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" placeholder="الاسم الأول الأب الجد" aria-invalid={!!nameErr} />{nameErr && <p className="mt-1 text-xs text-danger-600" role="alert">{nameErr}</p>}</div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="label">نوع الوثيقة</label>
               <select value={identityType} onChange={(e) => setIdentityType(e.target.value as IdentityType)} className="input">
                 {Object.entries(IDENTITY_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
-            <div><label className="label">رقم الوثيقة</label><input value={identityNumber} onChange={(e) => setIdentityNumber(e.target.value)} className="input" dir="ltr" inputMode="numeric" placeholder={identityType === "national_id" || identityType === "iqama" ? "10 أرقام" : ""} /></div>
+            <div><label className="label">رقم الوثيقة</label><input value={identityNumber} onChange={(e) => setIdentityNumber(e.target.value)} className="input" dir="ltr" inputMode="numeric" placeholder={identityType === "national_id" || identityType === "iqama" ? "10 أرقام" : ""} />{numberErr && <p className="mt-1 text-xs text-danger-600" role="alert">{numberErr}</p>}</div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="label">رقم الإصدار (إن وجد)</label><input value={issueNumber} onChange={(e) => setIssueNumber(e.target.value)} className="input" dir="ltr" /></div>
@@ -220,7 +224,7 @@ function GuestForm({ token, guest, onClose, onSaved }: { token: string; guest: G
             )}
             {hijriHint && <p className="mt-1 text-xs text-ink-400">{hijriHint}</p>}
           </div>
-          <div><label className="label">رقم الجوال {isPrimary ? "(مطلوب)" : "(اختياري)"}</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder={isPrimary ? "يُترك فارغًا للإبقاء على الرقم المسجل" : "05XXXXXXXX"} /></div>
+          <div><label className="label">رقم الجوال {isPrimary ? "(مطلوب)" : "(اختياري)"}</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder={isPrimary ? "يُترك فارغًا للإبقاء على الرقم المسجل" : "05XXXXXXXX"} />{phoneErr && <p className="mt-1 text-xs text-danger-600" role="alert">{phoneErr}</p>}</div>
 
           {formError && <ErrorBanner message={formError} />}
 

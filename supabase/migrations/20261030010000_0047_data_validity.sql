@@ -22,8 +22,8 @@ create or replace function fn_check_person_name(p text) returns void
 language plpgsql immutable set search_path = public as $$
 begin
   if p is null or btrim(p) = '' then return; end if;
-  if p !~ '^[A-Za-z\u00C0-\u024F\u0621-\u063A\u0640-\u0652\u0670-\u06D3 ''’.-]+$'
-     or length(regexp_replace(p, '[^A-Za-z\u00C0-\u024F\u0621-\u063A\u0641-\u064A\u0671-\u06D3]', '', 'g')) < 2 then
+  if p !~ '^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F\u0621-\u063A\u0640-\u0652\u0670-\u06D3 ''’.-]+$'
+     or length(regexp_replace(p, '[^A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F\u0621-\u063A\u0641-\u064A\u0671-\u06D3]', '', 'g')) < 2 then
     raise exception 'VALIDATION: name_letters_only';
   end if;
 end $$;
@@ -68,8 +68,12 @@ begin
   if p_type = 'passport' and p_number !~ '^[A-Za-z0-9]{5,12}$' then raise exception 'VALIDATION: identity_number_format'; end if;
 end $$;
 
-create or replace function fn_staff_create_reservation_unit(p jsonb, p_group_ref text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+CREATE OR REPLACE FUNCTION public.fn_staff_create_reservation_unit(p jsonb, p_group_ref text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare v_branch uuid := (p->>'branch_id')::uuid; v_cat uuid := (p->>'category_id')::uuid; v_room uuid := (p->>'room_id')::uuid;
         ci date := (p->>'check_in')::date; co date := (p->>'check_out')::date; src booking_sources%rowtype; q jsonb; r reservations%rowtype; b branches%rowtype;
         gp guest_profiles%rowtype; v_phone text := nullif(trim(p->>'guest_phone'),''); v_name text := trim(p->>'guest_name'); v_status reservation_status; ext text := nullif(trim(p->>'external_ref'),'');
@@ -79,13 +83,13 @@ declare v_branch uuid := (p->>'branch_id')::uuid; v_cat uuid := (p->>'category_i
         v_profile uuid := nullif(p->>'guest_profile_id', '')::uuid; v_new_profile boolean := coalesce((p->>'new_profile')::boolean, false);
         v_collects boolean; v_booked date; platform boolean; f jsonb; vch jsonb; v_con text;
 begin
-  perform fn_require_role('owner','manager','supervisor');
+  perform fn_require_cap('res.create');
   perform fn_require_branch(v_branch);
   select * into b from branches where id = v_branch;
   if ci is null or co is null or co <= ci then raise exception 'VALIDATION: dates'; end if;
   if coalesce(v_name,'') = '' then raise exception 'VALIDATION: guest_name'; end if;
-  perform fn_check_person_name(v_name);                                   -- 0047: letters only
-  v_phone := fn_check_phone(v_phone, v_profile is null);                 -- 0047: the main guest's phone is required and well formed (a chosen profile lends its own)
+  perform fn_check_person_name(v_name);                                     -- 0047: letters only
+  v_phone := fn_check_phone(v_phone, v_profile is null);                   -- 0047: required and well formed (a chosen profile lends its own)
   if jsonb_typeof(v_details) <> 'array' then raise exception 'VALIDATION: companions_details'; end if;
   -- companions: the detailed list wins over a bare count (never fewer rows than people declared)
   if jsonb_array_length(v_details) > v_comp then v_comp := jsonb_array_length(v_details); end if;
@@ -134,7 +138,7 @@ begin
   if v_profile is not null then
     select * into gp from guest_profiles where id = v_profile and organization_id = fn_user_org_id();
     if not found then raise exception 'VALIDATION: guest_profile'; end if;
-    if v_phone is null then v_phone := fn_check_phone(gp.phone, true); end if;   -- 0047: the profile's phone, which must itself be valid
+    if v_phone is null then v_phone := fn_check_phone(gp.phone, true); end if;   -- 0047: the profile's phone, itself valid
   elsif not v_new_profile and v_phone is not null then
     select * into gp from guest_profiles where organization_id = fn_user_org_id()
        and (phone = v_phone or (fn_normalize_phone(v_phone) is not null and fn_normalize_phone(phone) = fn_normalize_phone(v_phone)))
@@ -182,18 +186,21 @@ exception when unique_violation or exclusion_violation then
   get stacked diagnostics v_con = constraint_name;
   if v_con in ('uniq_reservation_source_ref', 'excl_reservation_source_ref') then raise exception 'DUPLICATE_EXTERNAL_REF'; end if;
   raise;
-end $$;
+end $function$;
 
-
-create or replace function fn_staff_enter_guest(p jsonb)
-returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+CREATE OR REPLACE FUNCTION public.fn_staff_enter_guest(p jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
 declare r reservations%rowtype; g reservation_guests%rowtype; v_guest uuid := nullif(p->>'guest_id', '')::uuid;
         v_name text := trim(coalesce(p->>'full_name', '')); v_type identity_type; v_number text := regexp_replace(fn_latin_digits(coalesce(p->>'identity_number', '')), '\s', '', 'g');
         v_nat text := trim(coalesce(p->>'nationality', '')); v_birth date; v_phone text := fn_check_phone(nullif(trim(coalesce(p->>'phone', '')), ''), false);
         v_rel text := nullif(trim(coalesce(p->>'relationship', '')), ''); v_issue text := nullif(trim(coalesce(p->>'identity_issue_number', '')), '');
         v_reason text := nullif(trim(coalesce(p->>'reason', '')), ''); fp text; before jsonb; correcting boolean := false; cnt int; new_id uuid; st guest_verification_status;
 begin
-  perform fn_require_role('owner', 'manager', 'supervisor');
+  perform fn_require_cap('guest.enter');
   select * into r from reservations where id = (p->>'reservation_id')::uuid for update;
   if not found then raise exception 'RESERVATION_NOT_FOUND'; end if;
   perform fn_require_branch(r.branch_id);
@@ -255,8 +262,7 @@ begin
       jsonb_build_object('before', before, 'after', fn_guest_masked(new_id)));
   end if;
   return jsonb_build_object('ok', true, 'guest_id', new_id, 'identity_status', st);
-end $$;
-
+end $function$;
 
 create or replace function fn_guest_submit(p_token text, p_guest_id uuid, p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
@@ -337,13 +343,16 @@ begin
   return jsonb_build_object('ok', true, 'guest_id', new_id);
 end $$;
 
-
-create or replace function fn_staff_rotate_keybox_code(p_room uuid, p_new_code text, p_field_tested boolean) returns jsonb
-language plpgsql security definer set search_path = public, extensions as $$
+CREATE OR REPLACE FUNCTION public.fn_staff_rotate_keybox_code(p_room uuid, p_new_code text, p_field_tested boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
 declare kb keyboxes%rowtype; rm rooms%rowtype; st room_status; v_in_house boolean; v_tested boolean := coalesce(p_field_tested, false);
         v_before jsonb; v_version int;
 begin
-  perform fn_require_role('owner','manager','supervisor','housekeeping');
+  perform fn_require_cap('keybox.code');
   select * into rm from rooms where id = p_room;
   if not found then raise exception 'ROOM_NOT_FOUND'; end if;
   perform fn_require_branch(rm.branch_id);
@@ -384,5 +393,4 @@ begin
   perform fn_audit_change(rm.branch_id, 'rotate_keybox_code', 'room', p_room, v_before,
     jsonb_build_object('code_version', v_version, 'code_status', 'active', 'field_tested', v_tested, 'room_status', st, 'guest_in_house', v_in_house), null);
   return jsonb_build_object('ok', true, 'room_status', st, 'code_version', v_version);
-end $$;
-
+end $function$;

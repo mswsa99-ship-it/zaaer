@@ -21,7 +21,7 @@ describe("VD07 the forms apply the same data rules as the server (0047)", () => 
 
   it("accepts names in Arabic or Latin letters and refuses digits or symbols", () => {
     for (const v of ["محمد عبدالله الحربي", "John O'Neil", "عبد الرحمن آل سعود", "Anne-Marie Dupont"]) expect(() => checkPersonName(v)).not.toThrow();
-    for (const v of ["محمد 123", "R2-D2", "@@", "أ"]) expect(() => checkPersonName(v)).toThrow("VALIDATION: name_letters_only");
+    for (const v of ["محمد 123", "R2-D2", "@@", "أ", "Ali \u00d7 Bob", "أحمد \u00f7"]) expect(() => checkPersonName(v)).toThrow("VALIDATION: name_letters_only");
   });
 
   it("refuses anyone under 15 on the day; 15 exactly is accepted", () => {
