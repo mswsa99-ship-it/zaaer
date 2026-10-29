@@ -17,6 +17,14 @@ describe("AM01 the money field starts empty and takes riyals, halalas only after
     expect(moneyTextToHalalas(sanitizeMoneyText("1,200.75", false)!)).toBe(120075);
   });
 
+  it("a comma ending the number is its decimal point; thousands commas only in full groups; any other comma is refused", () => {
+    expect(moneyTextToHalalas(sanitizeMoneyText("12,50", false)!)).toBe(1250);
+    expect(moneyTextToHalalas(sanitizeMoneyText("12,5", false)!)).toBe(1250);
+    expect(moneyTextToHalalas(sanitizeMoneyText("1,250,000", false)!)).toBe(125000000);
+    expect(sanitizeMoneyText("12,5000", false)).toBeNull();
+    expect(sanitizeMoneyText("1,2,3", false)).toBeNull();
+  });
+
   it("refuses a third decimal, letters and a second point; a minus only where the field allows it", () => {
     expect(sanitizeMoneyText("2.505", false)).toBeNull();
     expect(sanitizeMoneyText("2a", false)).toBeNull();

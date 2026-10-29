@@ -459,15 +459,19 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
   const chosen = rooms.find((x) => x.room_id === room);
   const beforeArrival = r.status === "confirmed" || r.status === "pending_verification";
   const otherType = !!chosen && chosen.category_id !== r.room_category_id;
+  // who collects is hidden from a role without money: a platform booking is then «unknown» (the server decides)
+  const platformSource = d.source?.kind === "external";
+  const collectsUnknown = platformSource && r.platform_collects == null;
   const reprices = beforeArrival && otherType && r.platform_collects !== true;
   const [price, setPrice] = useState<{ old: number; next: number } | null>(null);
   useEffect(() => {
-    setPrice(null); if (!open || !reprices || !chosen) return; let live = true;
-    Promise.all([ratesApi.nights(r.id), opsApi.quote(r.branch_id, chosen.category_id, effective, r.check_out, null, 0, (r.source_id as string | null) ?? null)])
-      .then(([nights, q]) => { if (!live) return; const old = (nights ?? []).filter((n) => n.status === "active" && n.night >= effective && n.night < r.check_out).reduce((s, n) => s + n.price, 0); setPrice({ old, next: q.rent_gross ?? q.rent }); })
+    setPrice(null); if (!open || !reprices || collectsUnknown || !chosen) return; let live = true;
+    // a part of the stay is priced by the calendar only (no weekly or monthly price), exactly as the server books it
+    Promise.all([ratesApi.nights(r.id), opsApi.quote(r.branch_id, chosen.category_id, effective, r.check_out, null, 0, (r.source_id as string | null) ?? null, effective === r.check_in)])
+      .then(([nights, q]) => { if (!live || nights == null) return; const old = nights.filter((n) => n.status === "active" && n.night >= effective && n.night < r.check_out).reduce((s, n) => s + n.price, 0); setPrice({ old, next: q.rent_gross ?? q.rent }); })
       .catch(() => live && setPrice(null));
     return () => { live = false; };
-  }, [open, reprices, chosen, effective, r.id, r.branch_id, r.check_out, r.source_id]);
+  }, [open, reprices, collectsUnknown, chosen, effective, r.id, r.branch_id, r.check_out, r.check_in, r.source_id]);
   return (
     <Modal open={open} title="تبديل الوحدة" onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!room) throw new Error("ROOM_NOT_FOUND"); await opsApi.switchRoom(r.id, room, effective, reason.trim(), r.version); await onDone(); }}>
@@ -478,7 +482,7 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <ReasonInput value={reason} onChange={setReason} />
           {reprices && (
             <div className="space-y-2 rounded-xl border border-warning-500/30 bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="switch-reprice">
-              <p>الوحدة من نوع آخر ({chosen?.category_name}): يُعاد تسعير الليالي من {effective} بأسعار النوع الجديد، ويظهر الفرق في بنود الحجز.</p>
+              <p>الوحدة من نوع آخر ({chosen?.category_name}): يُعاد تسعير الليالي من {effective} بأسعار النوع الجديد، ويظهر الفرق في بنود الحجز{collectsUnknown ? "، ما لم تكن المنصة هي التي قبضت المبلغ" : ""}.</p>
               {price && (
                 <AmountGrid>
                   <AmountBox label="سعر الليالي الحالي" value={sar(price.old)} />

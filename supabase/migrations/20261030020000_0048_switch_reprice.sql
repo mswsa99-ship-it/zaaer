@@ -8,6 +8,7 @@
 --     (a difference is an explicit adjustment), and a switch within the same type.
 --   * The answer says whether the price changed and by how much; the audit keeps the old and new totals.
 --   * A platform booking's number, booking day and who collects can be corrected before arrival (fn_staff_update_platform).
+--   * fn_quote_stay takes 'periods': false (calendar prices only), so the switch dialog shows what will be booked.
 --   Changes no stored data.
 -- =====================================================================
 
@@ -73,11 +74,23 @@ begin
     where reservation_id = r.id and status = 'active' and night >= eff and night < r.check_out;
     update reservation_nights set status = 'removed', removed_at = now(), removed_by = fn_staff_id(), removed_reason = 'تبديل وحدة: ' || p_reason
     where reservation_id = r.id and status = 'active' and night >= eff and night < r.check_out;
-    perform fn_add_charge(r.id, 'adjustment', 'تبديل وحدة: إلغاء سعر النوع السابق', 1, -v_old_sum, true, p_reason, null, eff, r.check_out);
+    if v_old_sum <> 0 then
+      perform fn_add_charge(r.id, 'adjustment', 'تبديل وحدة: إلغاء سعر النوع السابق', 1, -v_old_sum, true, p_reason, null, eff, r.check_out);
+    end if;
     v_platform := exists (select 1 from booking_sources s where s.id = r.source_id and s.kind <> 'direct');
     v_runs := fn_stay_runs(new_rm.category_id, eff, r.check_out, v_platform, null, eff = r.check_in);
     v_new_sum := fn_book_nights(r.id, v_runs, 'تبديل وحدة', p_reason);
-    update reservations set nightly_rate_halalas = coalesce((select round(avg(price_halalas))::bigint from reservation_nights where reservation_id = r.id and status = 'active'), nightly_rate_halalas)
+    -- the stay's discounts never exceed its rent after a cheaper type (a discount is reviewed again, not carried below zero)
+    if coalesce((select sum(-total_halalas) from reservation_charges where reservation_id = r.id and kind = 'discount'), 0)
+       > (select coalesce(sum(price_halalas), 0) from reservation_nights where reservation_id = r.id and status = 'active') then
+      raise exception 'VALIDATION: discount_exceeds_rent';
+    end if;
+    -- a whole stay moved takes the basis its new nights carry (decision 15 reads it when the stay is shortened)
+    update reservations set nightly_rate_halalas = coalesce((select round(avg(price_halalas))::bigint from reservation_nights where reservation_id = r.id and status = 'active'), nightly_rate_halalas),
+           price_basis = case when eff = r.check_in and price_basis <> 'manual' then
+                           case when exists (select 1 from jsonb_array_elements(v_runs) x where x->>'basis' = 'monthly') then 'monthly'
+                                when exists (select 1 from jsonb_array_elements(v_runs) x where x->>'basis' = 'weekly') then 'weekly' else 'daily' end
+                         else price_basis end
     where id = r.id;
     perform fn_recompute_reservation_finance(r.id);
   end if;
@@ -134,16 +147,24 @@ begin
     raise exception 'DUPLICATE_EXTERNAL_REF';
   end if;
 
-  for u in select * from reservations where id = r.id or (r.group_ref is not null and group_ref = r.group_ref and branch_id = r.branch_id)
+  for u in select * from reservations where id = r.id or (r.group_ref is not null and group_ref = r.group_ref and organization_id = r.organization_id)
            order by id for update loop
+    perform fn_require_branch(u.branch_id);
     if u.id <> r.id and u.status not in ('confirmed', 'pending_verification', 'cancelled', 'no_show') then raise exception 'GROUP_UNIT_IN_HOUSE'; end if;
     if u.id <> r.id and u.status in ('cancelled', 'no_show') then
-      update reservations set external_ref = v_ext, updated_at = now() where id = u.id;   -- the group keeps one number
+      if u.external_ref is distinct from v_ext then                                        -- the group keeps one number
+        update reservations set external_ref = v_ext, version = version + 1, updated_at = now() where id = u.id;
+        perform fn_audit_change(u.branch_id, 'reservation.platform_updated', 'reservation', u.id, jsonb_build_object('external_ref', u.external_ref),
+          jsonb_build_object('external_ref', v_ext), p_reason);
+      end if;
       continue;
     end if;
-    -- who collects changed: the deferred receipt follows
+    -- who collects changed: the deferred receipt follows (money moves, so the caller must see money)
+    if coalesce(u.platform_collects, false) <> v_collects then perform fn_require_money(); end if;
     if coalesce(u.platform_collects, false) and not v_collects then
-      for vv in select id from financial_vouchers where reservation_id = u.id and kind = 'receipt' and method = 'ota_deferred' and status = 'approved' loop
+      -- the deferred refunds go first, so the receipt's cancellation never leaves the stay below zero
+      for vv in select id from financial_vouchers where reservation_id = u.id and kind in ('refund', 'receipt') and method = 'ota_deferred' and status = 'approved'
+                order by (kind = 'receipt'), created_at loop
         perform fn_cancel_voucher(vv.id, 'تغيير من يقبض: المنشأة عند الوصول — ' || p_reason);
       end loop;
     elsif not coalesce(u.platform_collects, false) and v_collects then
@@ -172,6 +193,54 @@ exception when unique_violation or exclusion_violation then
 end $$;
 revoke execute on function fn_staff_update_platform(uuid, jsonb, text, int) from public, anon;
 grant execute on function fn_staff_update_platform(uuid, jsonb, text, int) to authenticated;
+
+-- the quote can leave out the weekly and monthly prices: the switch dialog previews a part of a stay as 0048 books it
+CREATE OR REPLACE FUNCTION public.fn_quote_stay(p jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_branch uuid := (p->>'branch_id')::uuid; v_cat uuid := (p->>'category_id')::uuid; ci date := (p->>'check_in')::date; co date := (p->>'check_out')::date;
+        c room_categories%rowtype; b branches%rowtype; src booking_sources%rowtype; platform boolean := false;
+        ovr bigint := nullif(p->>'nightly_rate_halalas', '')::bigint; disc bigint := coalesce(nullif(p->>'discount_halalas', '')::bigint, 0);
+        runs jsonb; x jsonb; n int; rent_gross bigint := 0; rent_net bigint := 0; tax bigint := 0; net bigint; t bigint; disc_net bigint := 0; disc_tax bigint := 0;
+        computed bigint; min_total bigint; sup_max bigint; my_max bigint;
+begin
+  perform fn_require_branch(v_branch);
+  if ci is null or co is null or co <= ci then raise exception 'VALIDATION: dates'; end if;
+  if co - ci > 366 then raise exception 'VALIDATION: dates'; end if;
+  select * into c from room_categories where id = v_cat and branch_id = v_branch;
+  if not found then raise exception 'BRANCH_MISMATCH: category'; end if;
+  select * into b from branches where id = v_branch;
+  if nullif(p->>'source_id', '') is not null then
+    select * into src from booking_sources where id = (p->>'source_id')::uuid and organization_id = fn_user_org_id();
+    platform := found and src.kind <> 'direct';
+  end if;
+  if disc < 0 then raise exception 'VALIDATION: amount'; end if;
+  n := co - ci;
+  runs := fn_stay_runs(v_cat, ci, co, platform, ovr, coalesce((p->>'periods')::boolean, true));
+  for x in select * from jsonb_array_elements(runs) loop
+    rent_gross := rent_gross + (x->>'nights')::bigint * (x->>'price')::bigint;
+    select * into net, t from fn_apply_tax(v_branch, (x->>'nights')::bigint * (x->>'price')::bigint, true);
+    rent_net := rent_net + net; tax := tax + t;
+  end loop;
+  if disc > rent_gross then raise exception 'VALIDATION: discount_exceeds_rent'; end if;
+  if disc > 0 then select * into disc_net, disc_tax from fn_apply_tax(v_branch, -disc, true); end if;
+  computed := (select coalesce(sum(s.price_halalas), 0) from fn_stay_prices(v_cat, ci, co, platform, null, true) s);
+  min_total := c.min_nightly_halalas * n;
+  sup_max := greatest(0, least(floor(rent_gross::numeric * b.supervisor_max_discount_bp / 10000)::bigint, rent_gross - coalesce(min_total, 0)));
+  my_max := case when fn_can('disc.after') then rent_gross when fn_can('disc.before') then sup_max else 0 end;
+  return jsonb_build_object('nights', n, 'runs', runs, 'channel', case when platform then 'platform' else 'system' end,
+    'basis', case when ovr is not null then 'manual' when not coalesce((p->>'periods')::boolean, true) then 'daily' when n >= 30 and c.monthly_price_halalas is not null then 'monthly'
+                  when n >= 7 and c.weekly_price_halalas is not null then 'weekly' else 'daily' end,
+    'nightly_rate', round(rent_gross::numeric / n)::bigint, 'rent_gross', rent_gross, 'computed_rent', computed,
+    'rent', rent_net, 'discount', disc_net, 'tax', tax + disc_tax, 'total', rent_net + disc_net + tax + disc_tax,
+    'tax_rate_bp', b.tax_rate_bp, 'prices_include_tax', b.prices_include_tax,
+    'min_nightly', c.min_nightly_halalas, 'discount_max', my_max, 'supervisor_discount_max', sup_max,
+    'supervisor_max_discount_bp', b.supervisor_max_discount_bp);
+end $function$;
+
 
 -- the audit dictionary gains the platform correction (kept identical to src/lib/auditLabels.ts by tests/unit/audit_labels.test.ts)
 create or replace function fn_audit_action_label(p_action text) returns text

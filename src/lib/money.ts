@@ -13,7 +13,14 @@ export function formatMoneyInput(h: number | null | undefined): string {
  * Returns null when the keystroke would make the text invalid (the field keeps its previous text).
  */
 export function sanitizeMoneyText(raw: string, allowNegative: boolean): string | null {
-  let t = latinDigits(raw).replace(/[٫]/g, ".").replace(/[,٬\s]/g, "");
+  let t = latinDigits(raw).replace(/[٫]/g, ".").replace(/[٬\s]/g, "");
+  // a comma is the decimal point when it ends the number with two digits at most (a keyboard that shows «,» for the
+  // point); thousands commas are read only in full groups of three; any other comma is refused, never dropped
+  if (t.includes(",")) {
+    if (/^-?\d*,\d{0,2}$/.test(t)) t = t.replace(",", ".");
+    else if (/^-?\d{1,3}(,\d{3})+(\.\d{0,2})?$/.test(t)) t = t.replace(/,/g, "");
+    else return null;
+  }
   if (allowNegative && t.startsWith("-")) t = "-" + t.slice(1).replace(/-/g, ""); else t = t.replace(/-/g, "");
   if (!/^-?\d*(\.\d{0,2})?$/.test(t)) return null;
   return t;

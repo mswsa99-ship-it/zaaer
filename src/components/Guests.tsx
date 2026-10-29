@@ -235,8 +235,10 @@ export function PlatformPanel({ d, canCheck, onChanged }: { d: ReservationDetail
 function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onClose: () => void; onDone: () => void }) {
   const p = d.platform!;
   const [ext, setExt] = useState(d.reservation.external_ref ?? ""); const [booked, setBooked] = useState(p.booked_on ?? "");
+  // who collects is money: a role that does not see money gets it hidden (null) and never sends it
+  const knowsCollects = p.collects != null;
   const [collects, setCollects] = useState<boolean>(!!p.collects); const [reason, setReason] = useState("");
-  const changedCollects = collects !== !!p.collects;
+  const changedCollects = knowsCollects && collects !== !!p.collects;
   const { can } = useAuth();
   const needsCancel = changedCollects && !collects && !can("voucher.cancel");   // cancelling the deferred receipt is «إلغاء سند»
   return (
@@ -244,18 +246,18 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
       <ActionForm onSubmit={async () => {
         if (needsCancel) throw new Error("FORBIDDEN: voucher.cancel");
         if (!reason.trim()) throw new Error("VALIDATION: reason");
-        await opsApi.platformUpdate(d.reservation.id, { external_ref: ext.trim(), platform_booked_on: booked || null, platform_collects: collects }, reason.trim(), d.reservation.version);
+        await opsApi.platformUpdate(d.reservation.id, { external_ref: ext.trim(), platform_booked_on: booked || null, ...(changedCollects ? { platform_collects: collects } : {}) }, reason.trim(), d.reservation.version);
         onDone();
       }}>
         <div className="space-y-3">
           <Field label="رقم الحجز في المنصة"><input className="input" dir="ltr" value={ext} onChange={(e) => setExt(e.target.value)} aria-label="رقم الحجز في المنصة" /></Field>
           <Field label="تاريخ الحجز في المنصة"><input type="date" className="input" dir="ltr" max={todayISO()} value={booked} onChange={(e) => setBooked(e.target.value)} aria-label="تاريخ الحجز في المنصة" /></Field>
-          <Field label="من يقبض">
+          {knowsCollects && <Field label="من يقبض">
             <select className="input" value={collects ? "platform" : "property"} onChange={(e) => setCollects(e.target.value === "platform")} aria-label="من يقبض">
               <option value="property">المنشأة عند الوصول</option>
               <option value="platform">المنصة (آجل عبر المنصات)</option>
             </select>
-          </Field>
+          </Field>}
           {changedCollects && (
             <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="platform-collects-note">
               {needsCancel ? "إرجاع القبض إلى المنشأة يلغي سند «آجل عبر المنصات»، وإلغاء السند للمالك أو المدير." : collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من الضيف عند الوصول."}

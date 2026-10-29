@@ -345,6 +345,28 @@ do $$ declare r jsonb; rid uuid; t0 bigint; sw jsonb; begin
     not (sw->>'repriced')::boolean and sw->>'price_kept_reason' = 'in_house' and (t_res(rid)).total_halalas = t0, sw::text);
 exception when others then perform t_record('PR13c a resident''s switch to another type keeps the price', false, sqlerrm); end $$;
 
+do $$ declare r jsonb; c3 uuid; rid uuid; rid2 uuid; ex text; sw jsonb; q jsonb; begin
+  -- a cheaper type below the stay's discounts is refused; a whole stay moved takes the basis of its new nights
+  r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'name_ar', 'نوع أرخص', 'base_capacity', 2, 'max_capacity', 3, 'base_price_halalas', 10000));
+  c3 := (r->>'id')::uuid;
+  r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', c3, 'room_number', 'PR-C1')); insert into ids values ('roomC1', (r->>'id')::uuid);
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room2'),
+         'check_in', t_day('D') + 100, 'check_out', t_day('D') + 103, 'guest_phone', '0551000044', 'guest_name', 'ضيف الخصم الكبير', 'source_id', '00000000-0000-0000-0000-000000000021',
+         'discount_halalas', 35000, 'discount_reason', 'تعويض'));
+  rid := (r->>'id')::uuid;
+  ex := t_fails(format('select fn_staff_switch_room(%L, %L, null, %L, %s)', rid, t_id('roomC1'), 'وحدة أرخص', (t_res(rid)).version), 'VALIDATION: discount_exceeds_rent%');
+  -- 7 nights at the weekly price move whole to a type without one: the stay becomes daily
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room1'),
+         'check_in', t_day('D') + 110, 'check_out', t_day('D') + 117, 'guest_phone', '0551000045', 'guest_name', 'ضيف أسبوعي', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  rid2 := (r->>'id')::uuid;
+  sw := fn_staff_switch_room(rid2, t_id('roomX1'), null, 'وحدة أكبر', (t_res(rid2)).version);
+  q := fn_quote_stay(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'check_in', t_day('D') + 130, 'check_out', t_day('D') + 137,
+         'source_id', '00000000-0000-0000-0000-000000000021', 'periods', false));
+  perform t_record('PR13d a cheaper type under the stay''s discounts is refused; a whole stay moved takes its new basis; the quote can leave out the weekly price',
+    ex = 'ok' and (t_res(rid)).room_category_id = t_id('cat') and (t_res(rid2)).price_basis = 'daily' and (sw->>'repriced')::boolean
+    and q->>'basis' = 'daily' and (q->>'rent_gross')::bigint = 7 * 20000, ex || ' / ' || (t_res(rid2)).price_basis || ' / ' || q::text);
+exception when others then perform t_record('PR13d a cheaper type under the stay''s discounts is refused; a whole stay moved takes its new basis; the quote can leave out the weekly price', false, sqlerrm); end $$;
+
 -- =====================================================================
 -- RESULTS
 -- =====================================================================
@@ -353,6 +375,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 18 then raise exception 'RATES TESTS INCOMPLETE: % of 18 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 19 then raise exception 'RATES TESTS INCOMPLETE: % of 19 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'RATES TESTS FAILED'; end if;
 end $$;

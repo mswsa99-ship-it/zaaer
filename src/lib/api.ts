@@ -628,8 +628,8 @@ export const opsApi = {
 
   // reservations
   /** the stay's quote night by night (0030): the source decides the calendar row (system or platform) */
-  quote: (branchId: string, categoryId: string, checkIn: string, checkOut: string, nightlyOverride?: number | null, discount?: number, sourceId?: string | null) =>
-    rpc<Quote>("fn_quote_stay", { p: { branch_id: branchId, category_id: categoryId, check_in: checkIn, check_out: checkOut, source_id: sourceId ?? null, nightly_rate_halalas: nightlyOverride ?? null, discount_halalas: discount ?? 0 } }),
+  quote: (branchId: string, categoryId: string, checkIn: string, checkOut: string, nightlyOverride?: number | null, discount?: number, sourceId?: string | null, periods = true) =>
+    rpc<Quote>("fn_quote_stay", { p: { branch_id: branchId, category_id: categoryId, check_in: checkIn, check_out: checkOut, source_id: sourceId ?? null, nightly_rate_halalas: nightlyOverride ?? null, discount_halalas: discount ?? 0, ...(periods ? {} : { periods: false }) } }),
   availableRooms: (branchId: string, from: string, to: string, categoryId?: string | null, excludeReservation?: string | null) =>
     rpc<Array<{ room_id: string; room_number: string; category_id: string; category_name: string; status: string; cleanliness: string; block_name: string | null; floor_name: string | null }>>("fn_available_rooms", { p_branch: branchId, p_from: from, p_to: to, p_category: categoryId ?? null, p_exclude_reservation: excludeReservation ?? null }),
   createReservation: (p: Record<string, unknown>) => rpc<{ ok: boolean; id: string; internal_ref: string; quote: Quote }>("fn_staff_create_reservation", { p }),

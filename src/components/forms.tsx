@@ -41,15 +41,15 @@ export function Field({ label, children, hint, className, error }: { label: stri
 /** The one money field of the system (design system «AmountInput»): starts empty, never rewrites what the user is typing. */
 export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placeholder, label }: { valueHalalas: number | null; onChange: (h: number | null) => void; min?: number; disabled?: boolean; placeholder?: string; label?: string }) {
   const [text, setText] = useState(formatMoneyInput(valueHalalas));
-  const focused = useRef(false);
-  // a value set from outside (a suggestion, a reset) shows when the user is not typing in the field
-  useEffect(() => { if (!focused.current) setText(formatMoneyInput(valueHalalas)); }, [valueHalalas]);
+  // the last value this field sent up: a different value arriving is set from outside (a suggestion, a reset) and shows
+  // at once, even while the field has the focus; the field's own value never rewrites what the user is typing
+  const sent = useRef<number | null>(valueHalalas);
+  useEffect(() => { if (valueHalalas !== sent.current) { sent.current = valueHalalas; setText(formatMoneyInput(valueHalalas)); } }, [valueHalalas]);
   return (
     <div className="relative">
       <input type="text" inputMode="decimal" autoComplete="off" data-money="" value={text} disabled={disabled} placeholder={placeholder ?? "0"} aria-label={label}
-        onFocus={() => { focused.current = true; }}
-        onBlur={() => { focused.current = false; setText(formatMoneyInput(moneyTextToHalalas(text))); }}
-        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) return; setText(t); onChange(moneyTextToHalalas(t)); }}
+        onBlur={() => setText(formatMoneyInput(moneyTextToHalalas(text)))}
+        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) return; setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
         className="input pl-12 tabular-nums" dir="ltr" />
       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-500">ر.س</span>
     </div>
