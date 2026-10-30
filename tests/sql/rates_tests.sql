@@ -312,7 +312,7 @@ do $$ declare r jsonb; c2 uuid; rid uuid; t0 bigint; sw jsonb; removed int; adj 
 exception when others then perform t_record('PR13 before arrival a unit of another type re-prices the nights by the new type; the old nights stay, removed and refunded', false, sqlerrm); end $$;
 
 do $$ declare r jsonb; rid uuid; rid2 uuid; t0 bigint; t2 bigint; sw jsonb; sw2 jsonb; begin
-  -- the platform collected this stay: its amount does not change with the unit
+  -- the platform collected this stay: it is re-priced too (the owner's decision, 30 Oct); its deferred receipt stays
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room2'),
          'check_in', t_day('D') + 90, 'check_out', t_day('D') + 92, 'guest_phone', '0551000041', 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
          'external_ref', 'PRSW1', 'platform_collects', true, 'platform_booked_on', fn_branch_today('00000000-0000-0000-0000-000000000010')));
@@ -323,12 +323,13 @@ do $$ declare r jsonb; rid uuid; rid2 uuid; t0 bigint; t2 bigint; sw jsonb; sw2 
          'check_in', t_day('D') + 95, 'check_out', t_day('D') + 97, 'guest_phone', '0551000042', 'guest_name', 'ضيف النوع نفسه', 'source_id', '00000000-0000-0000-0000-000000000021'));
   rid2 := (r->>'id')::uuid; t2 := (t_res(rid2)).total_halalas;
   sw2 := fn_staff_switch_room(rid2, t_id('room2'), null, 'تبديل داخل النوع', (t_res(rid2)).version);
-  perform t_record('PR13b a stay the platform collected, and a switch within the same type, keep their price; the answer says why',
-    not (sw->>'repriced')::boolean and sw->>'price_kept_reason' = 'platform_collects' and (t_res(rid)).total_halalas = t0
+  perform t_record('PR13b a stay the platform collected is re-priced too, its receipt kept; a switch within the same type keeps its price',
+    (sw->>'repriced')::boolean and (t_res(rid)).total_halalas > t0
+    and t_count(format('select count(*) from financial_vouchers where reservation_id = %L and method = ''ota_deferred'' and status = ''approved''', rid)) = 1
     and not (sw2->>'repriced')::boolean and sw2->>'price_kept_reason' = 'same_type' and (t_res(rid2)).total_halalas = t2
-    and not exists (select 1 from reservation_nights where reservation_id in (rid, rid2) and status = 'removed'),
+    and not exists (select 1 from reservation_nights where reservation_id = rid2 and status = 'removed'),
     sw::text || ' / ' || sw2::text);
-exception when others then perform t_record('PR13b a stay the platform collected, and a switch within the same type, keep their price; the answer says why', false, sqlerrm); end $$;
+exception when others then perform t_record('PR13b a stay the platform collected is re-priced too, its receipt kept; a switch within the same type keeps its price', false, sqlerrm); end $$;
 
 do $$ declare r jsonb; rid uuid; t0 bigint; sw jsonb; begin
   -- a resident's switch keeps the price (a difference is an explicit adjustment)

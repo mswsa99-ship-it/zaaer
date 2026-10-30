@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { ShieldAlert, ShieldBan, Star, IdCard, Printer, Link2, CheckCircle2, Users, Ban, FileSignature, PencilLine } from "lucide-react";
 import { opsApi, guestApi, guestProfileApi, toArabicError, VALIDATION_AR, type ReservationDetail, type GroupSummary, type StaySummary, type Acknowledgement } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput, Toggle } from "./forms";
 import { IDENTITY_TYPE_LABELS, type IdentityType } from "../lib/types";
@@ -239,17 +240,33 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
   const knowsCollects = p.collects != null;
   const [collects, setCollects] = useState<boolean>(!!p.collects); const [reason, setReason] = useState("");
   const changedCollects = knowsCollects && collects !== !!p.collects;
-  const { can } = useAuth();
-  const needsCancel = changedCollects && !collects && !can("voucher.cancel");   // cancelling the deferred receipt is «إلغاء سند»
+  // the platform itself (the owner's decision, 30 Oct): another platform re-prices the stay by its prices
+  const currentSource = (d.reservation.source_id as string | null) ?? "";
+  const [source, setSource] = useState(currentSource);
+  const [platforms, setPlatforms] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    let live = true;
+    supabase.from("booking_sources").select("id, name, kind").eq("is_active", true).is("archived_at", null).eq("kind", "external").order("name")
+      .then(({ data }) => { if (live) setPlatforms(((data ?? []) as Array<{ id: string; name: string }>)); });
+    return () => { live = false; };
+  }, []);
+  const changedSource = !!source && source !== currentSource;
   return (
     <Modal open title="تصحيح بيانات المنصة" onClose={onClose}>
       <ActionForm onSubmit={async () => {
-        if (needsCancel) throw new Error("FORBIDDEN: voucher.cancel");
         if (!reason.trim()) throw new Error("VALIDATION: reason");
-        await opsApi.platformUpdate(d.reservation.id, { external_ref: ext.trim(), platform_booked_on: booked || null, ...(changedCollects ? { platform_collects: collects } : {}) }, reason.trim(), d.reservation.version);
+        await opsApi.platformUpdate(d.reservation.id, { external_ref: ext.trim(), platform_booked_on: booked || null, ...(changedCollects ? { platform_collects: collects } : {}), ...(changedSource ? { source_id: source } : {}) }, reason.trim(), d.reservation.version);
         onDone();
       }}>
         <div className="space-y-3">
+          {platforms.length > 1 && knowsCollects && (
+            <Field label="المنصة">
+              <select className="input" value={source} onChange={(e) => setSource(e.target.value)} aria-label="المنصة">
+                {platforms.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </Field>
+          )}
+          {changedSource && <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="platform-source-note">يُعاد تسعير الإقامة كلها بأسعار المنصة الجديدة، ويظهر الفرق في بنود الحجز مستحقًا على الضيف أو له.</p>}
           <Field label="رقم الحجز في المنصة"><input className="input" dir="ltr" value={ext} onChange={(e) => setExt(e.target.value)} aria-label="رقم الحجز في المنصة" /></Field>
           <Field label="تاريخ الحجز في المنصة"><input type="date" className="input" dir="ltr" max={todayISO()} value={booked} onChange={(e) => setBooked(e.target.value)} aria-label="تاريخ الحجز في المنصة" /></Field>
           {knowsCollects && <Field label="من يقبض">
@@ -260,7 +277,7 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
           </Field>}
           {changedCollects && (
             <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="platform-collects-note">
-              {needsCancel ? "إرجاع القبض إلى المنشأة يلغي سند «آجل عبر المنصات»، وإلغاء السند للمالك أو المدير." : collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من الضيف عند الوصول."}
+              {collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من الضيف عند الوصول."}
             </p>
           )}
           {d.reservation.group_ref ? <p className="text-xs text-ink-500">يسري التصحيح على كل وحدات المجموعة.</p> : null}

@@ -241,7 +241,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(page.locator("table tbody tr")).toHaveCount(2);
   });
 
-  test("GE11 the platform's fields are corrected before arrival with a reason; the platform collecting issues its receipt; moving it back is the manager's (0048)", async ({ page, loginAs }) => {
+  test("GE11 the platform's fields are corrected before arrival with a reason; who collects moves both ways; another platform re-prices (0048)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
     await createPlatformReservation(page, { guest: "ضيف تصحيح", phone: "0509004004", ref: "FIX-E2E-1", collects: "property" });
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
@@ -257,10 +257,18 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(panel).toContainText("FIX-E2E-2");
     await expect(panel).toContainText("المنصة (آجل عبر المنصات)");
     await expect.poll(() => financeCell(page, "المتبقي")).toBe(0);                            // the deferred receipt covers the stay
-    // back to the property cancels that receipt: «إلغاء سند» is the owner's or a manager's
+    // back to the property: the supervisor may (the owner's decision, 30 Oct); the receipt is cancelled for review
     await panel.getByTestId("platform-edit").click();
     await dlg.getByLabel("من يقبض").selectOption("property");
-    await expect(dlg.getByTestId("platform-collects-note")).toContainText("للمالك أو المدير");
+    await expect(dlg.getByTestId("platform-collects-note")).toContainText("يُلغى سند «آجل عبر المنصات»");
+    await dlg.locator("textarea").fill("المنشأة تقبض عند الوصول");
+    await dlg.getByRole("button", { name: "حفظ التصحيح" }).click();
+    await expect(dlg).toBeHidden();
+    await expect(panel).toContainText("المنشأة عند الوصول");
+    // another platform re-prices the stay: the dialog says so first
+    await panel.getByTestId("platform-edit").click();
+    await dlg.getByLabel("المنصة", { exact: true }).selectOption({ label: "Airbnb" });
+    await expect(dlg.getByTestId("platform-source-note")).toContainText("يُعاد تسعير الإقامة كلها");
   });
 
   test("GE06 «ملخص الإقامة»: printed from the booking with the branch's policies; the paper signature is recorded against its text; the guest sees it accepted on their page", async ({ page, loginAs, go }) => {

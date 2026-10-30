@@ -4,8 +4,8 @@
 --     day by the new type's prices (the calendar, the platform price for a platform booking, the weekly or monthly
 --     price when the whole stay moves). The old nights keep their rows marked removed and are refunded by one
 --     adjustment line; the new nights are booked as rent lines, so the change is visible line by line.
---   * Kept as before: a stay the platform collected (its amount does not change with the unit), a resident's switch
---     (a difference is an explicit adjustment), and a switch within the same type.
+--   * A stay the platform collected is re-priced too; its deferred receipt stays and the difference is owed either way.
+--   * Kept as before: a resident's switch (a difference is an explicit adjustment) and a switch within the same type.
 --   * The answer says whether the price changed and by how much; the audit keeps the old and new totals.
 --   * A platform booking's number, booking day and who collects can be corrected before arrival (fn_staff_update_platform).
 --   * fn_quote_stay takes 'periods': false (calendar prices only), so the switch dialog shows what will be booked.
@@ -62,10 +62,10 @@ begin
 
   -- B5 (the owner's decision): before check-in, a unit of another type re-prices the nights from the effective day by the
   -- new type (calendar, platform price for a platform booking). The old nights keep their rows, marked removed, and are
-  -- refunded by one adjustment; the new nights are booked as rent. A stay the platform collected keeps its price (the
-  -- platform's amount does not change with the unit), and a resident's switch keeps it too (an explicit adjustment).
-  v_reprice := r.status in ('confirmed','pending_verification') and r.room_category_id <> new_rm.category_id
-               and not coalesce(r.platform_collects, false);
+  -- refunded by one adjustment; the new nights are booked as rent. A stay the platform collected is re-priced too (the
+  -- owner's decision, 30 Oct): its deferred receipt stays, and the difference shows as owed by the guest or to them. A
+  -- resident's switch keeps the price (a difference is an explicit adjustment).
+  v_reprice := r.status in ('confirmed','pending_verification') and r.room_category_id <> new_rm.category_id;
   update reservations set room_category_id = new_rm.category_id where id = r.id and r.room_category_id <> new_rm.category_id;
   perform fn_allocate(r.id, p_room, eff, r.check_out, 'switch: ' || p_reason);
   if v_reprice then
@@ -107,21 +107,47 @@ begin
                             'entry_code_review_required', r.status = 'checked_in', 'code_delivery_required', r.status = 'checked_in' and new_kb,
                             'repriced', v_reprice, 'price_delta_halalas', v_new_sum - v_old_sum,
                             'price_kept_reason', case when v_reprice then null when r.room_category_id = new_rm.category_id then 'same_type'
-                                                      when r.status = 'checked_in' then 'in_house' else 'platform_collects' end);
+                                                      else 'in_house' end);
 end $function$;
 
 
 -- B4 (the owner's note 5): the platform's fields of a booking can be corrected before arrival and before «طابقتُ مع
 -- المنصة» — the platform's number (one per booking or group, decision 69), the day it was booked there, and who
 -- collects. A reason is required; the group's units change together; the audit keeps the before and after.
---   * who collects: the platform → the property cancels the deferred receipt «آجل عبر المنصات» (the voucher's own
---     cancellation, so it needs «إلغاء سند» and is refused once the receipt is in a platform payout); the property →
---     the platform issues that receipt for what is still owed.
---   * the source (the platform itself) is not changed here: that waits for the owner's decision on its price.
+--   * who collects: the platform → the property cancels the deferred receipt «آجل عبر المنصات» (the supervisor may,
+--     the owner's decision of 30 Oct; it goes to the review list, and is refused once the receipt is in a platform
+--     payout); the property → the platform issues that receipt for what is still owed.
+--   * the platform itself (source_id, another platform) can change: the stay is re-priced from its first night by the
+--     new platform's prices (the owner's decision of 30 Oct); vouchers stay and the difference is owed either way.
+
+-- the deferred receipt's cancellation inside the platform correction (the owner's decision, 30 Oct: the supervisor may
+-- do it there): the voucher rules of fn_cancel_voucher without its capability check; it still goes to the review list
+create or replace function fn_cancel_voucher_internal(p_voucher uuid, p_reason text) returns void
+language plpgsql security definer set search_path = public as $$
+declare v financial_vouchers%rowtype; f jsonb;
+begin
+  select * into v from financial_vouchers where id = p_voucher for update;
+  if not found then raise exception 'NOT_FOUND'; end if;
+  if v.status <> 'approved' then raise exception 'VOUCHER_STATUS_INVALID'; end if;
+  if v.payout_id is not null then raise exception 'VOUCHER_IN_PAYOUT'; end if;
+  update financial_vouchers set status = 'cancelled', cancelled_at = now(), cancelled_by = fn_staff_id(), cancel_reason = p_reason where id = v.id;
+  f := fn_reservation_finance_internal(v.reservation_id);
+  if (f->>'deposit_balance')::bigint < 0 or ((f->>'received')::bigint - (f->>'refunded')::bigint) < 0 then
+    raise exception 'CANCEL_WOULD_GO_NEGATIVE';
+  end if;
+  perform fn_recompute_reservation_finance(v.reservation_id);
+  perform fn_add_review_item(v.branch_id, 'voucher_cancelled', 'voucher', v.id, v.reservation_id, 'إلغاء السند ' || v.number, p_reason,
+    jsonb_build_object('number', v.number, 'kind', v.kind, 'amount_halalas', v.amount_halalas, 'method', v.method));
+  perform fn_audit_change(v.branch_id, 'voucher.cancelled', 'voucher', v.id, jsonb_build_object('status', 'approved'),
+    jsonb_build_object('status', 'cancelled', 'number', v.number, 'amount_halalas', v.amount_halalas), p_reason);
+end $$;
+revoke all on function fn_cancel_voucher_internal(uuid, text) from public, anon, authenticated;
+
 create or replace function fn_staff_update_platform(p_reservation uuid, p jsonb, p_reason text, p_expected_version int default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare r reservations%rowtype; u reservations%rowtype; src booking_sources%rowtype; f jsonb; vch jsonb;
+declare r reservations%rowtype; u reservations%rowtype; src booking_sources%rowtype; nsrc booking_sources%rowtype; f jsonb; vch jsonb;
         v_ext text; v_booked date; v_collects boolean; n int := 0; v_vouchers jsonb := '[]'::jsonb; owed bigint; vv record; v_con text;
+        v_src_changed boolean := false; v_runs jsonb; v_old_sum bigint; v_new_sum bigint; v_repriced jsonb := '[]'::jsonb;
 begin
   perform fn_require_cap('res.create');
   if coalesce(trim(p_reason), '') = '' then raise exception 'VALIDATION: reason'; end if;
@@ -134,15 +160,23 @@ begin
   if r.status not in ('confirmed', 'pending_verification') then raise exception 'RESERVATION_STATUS_INVALID'; end if;
   if r.platform_verified_at is not null then raise exception 'PLATFORM_VERIFIED'; end if;
 
+  -- the platform itself: another active platform of the organisation
+  nsrc := src;
+  if p ? 'source_id' and nullif(p->>'source_id', '') is not null and (p->>'source_id')::uuid <> r.source_id then
+    select * into nsrc from booking_sources where id = (p->>'source_id')::uuid and organization_id = r.organization_id and is_active;
+    if not found or nsrc.kind <> 'external' then raise exception 'VALIDATION: source'; end if;
+    v_src_changed := true;
+    perform fn_require_money();                                                    -- the stay is re-priced
+  end if;
   v_ext := case when p ? 'external_ref' then nullif(btrim(fn_latin_digits(p->>'external_ref')), '') else r.external_ref end;
-  if src.external_reference_required and v_ext is null then raise exception 'VALIDATION: external_ref_required'; end if;
+  if nsrc.external_reference_required and v_ext is null then raise exception 'VALIDATION: external_ref_required'; end if;
   begin v_booked := case when p ? 'platform_booked_on' then nullif(p->>'platform_booked_on', '')::date else r.platform_booked_on end;
   exception when others then raise exception 'VALIDATION: platform_booked_on'; end;
   if v_booked is null or v_booked > fn_branch_today(r.branch_id) or v_booked < r.check_in - 730 then raise exception 'VALIDATION: platform_booked_on'; end if;
   v_collects := case when p ? 'platform_collects' then (p->>'platform_collects')::boolean else r.platform_collects end;
   if v_collects is null then raise exception 'VALIDATION: platform_collects'; end if;
   -- decision 69: one platform number per booking or group
-  if v_ext is not null and exists (select 1 from reservations x where x.organization_id = r.organization_id and x.source_id = r.source_id and x.external_ref = v_ext
+  if v_ext is not null and exists (select 1 from reservations x where x.organization_id = r.organization_id and x.source_id = nsrc.id and x.external_ref = v_ext
                                      and coalesce(x.group_ref, x.id::text) <> coalesce(r.group_ref, r.id::text)) then
     raise exception 'DUPLICATE_EXTERNAL_REF';
   end if;
@@ -152,10 +186,10 @@ begin
     perform fn_require_branch(u.branch_id);
     if u.id <> r.id and u.status not in ('confirmed', 'pending_verification', 'cancelled', 'no_show') then raise exception 'GROUP_UNIT_IN_HOUSE'; end if;
     if u.id <> r.id and u.status in ('cancelled', 'no_show') then
-      if u.external_ref is distinct from v_ext then                                        -- the group keeps one number
-        update reservations set external_ref = v_ext, version = version + 1, updated_at = now() where id = u.id;
-        perform fn_audit_change(u.branch_id, 'reservation.platform_updated', 'reservation', u.id, jsonb_build_object('external_ref', u.external_ref),
-          jsonb_build_object('external_ref', v_ext), p_reason);
+      if u.external_ref is distinct from v_ext or u.source_id <> nsrc.id then             -- the group keeps one platform and number
+        update reservations set external_ref = v_ext, source_id = nsrc.id, version = version + 1, updated_at = now() where id = u.id;
+        perform fn_audit_change(u.branch_id, 'reservation.platform_updated', 'reservation', u.id, jsonb_build_object('external_ref', u.external_ref, 'source_id', u.source_id),
+          jsonb_build_object('external_ref', v_ext, 'source_id', nsrc.id), p_reason);
       end if;
       continue;
     end if;
@@ -165,7 +199,7 @@ begin
       -- the deferred refunds go first, so the receipt's cancellation never leaves the stay below zero
       for vv in select id from financial_vouchers where reservation_id = u.id and kind in ('refund', 'receipt') and method = 'ota_deferred' and status = 'approved'
                 order by (kind = 'receipt'), created_at loop
-        perform fn_cancel_voucher(vv.id, 'تغيير من يقبض: المنشأة عند الوصول — ' || p_reason);
+        perform fn_cancel_voucher_internal(vv.id, 'تغيير من يقبض: المنشأة عند الوصول — ' || p_reason);
       end loop;
     elsif not coalesce(u.platform_collects, false) and v_collects then
       f := fn_reservation_finance_internal(u.id);
@@ -177,15 +211,37 @@ begin
         v_vouchers := v_vouchers || jsonb_build_array(vch->>'number');
       end if;
     end if;
-    update reservations set external_ref = v_ext, platform_booked_on = v_booked, platform_collects = v_collects,
+    -- another platform: the whole stay (not begun) is re-priced by the new platform's prices
+    v_old_sum := null; v_new_sum := null;
+    if v_src_changed then
+      perform fn_ensure_nights(u.id);
+      select coalesce(sum(price_halalas), 0) into v_old_sum from reservation_nights where reservation_id = u.id and status = 'active';
+      update reservation_nights set status = 'removed', removed_at = now(), removed_by = fn_staff_id(), removed_reason = 'تغيير المنصة: ' || p_reason
+      where reservation_id = u.id and status = 'active';
+      if v_old_sum <> 0 then
+        perform fn_add_charge(u.id, 'adjustment', 'تغيير المنصة: إلغاء سعر المنصة السابقة', 1, -v_old_sum, true, p_reason, null, u.check_in, u.check_out);
+      end if;
+      v_runs := fn_stay_runs(u.room_category_id, u.check_in, u.check_out, true, null, true);
+      v_new_sum := fn_book_nights(u.id, v_runs, 'تغيير المنصة', p_reason);
+      if coalesce((select sum(-total_halalas) from reservation_charges where reservation_id = u.id and kind = 'discount'), 0) > v_new_sum then
+        raise exception 'VALIDATION: discount_exceeds_rent';
+      end if;
+      update reservations set nightly_rate_halalas = coalesce((select round(avg(price_halalas))::bigint from reservation_nights where reservation_id = u.id and status = 'active'), nightly_rate_halalas),
+             price_basis = case when exists (select 1 from jsonb_array_elements(v_runs) x where x->>'basis' = 'monthly') then 'monthly'
+                                when exists (select 1 from jsonb_array_elements(v_runs) x where x->>'basis' = 'weekly') then 'weekly' else 'daily' end
+      where id = u.id;
+      v_repriced := v_repriced || jsonb_build_array(jsonb_build_object('reservation_id', u.id, 'old_nights_halalas', v_old_sum, 'new_nights_halalas', v_new_sum));
+    end if;
+    update reservations set external_ref = v_ext, source_id = nsrc.id, platform_booked_on = v_booked, platform_collects = v_collects,
            version = version + 1, updated_at = now() where id = u.id;
     perform fn_recompute_reservation_finance(u.id);
     perform fn_audit_change(u.branch_id, 'reservation.platform_updated', 'reservation', u.id,
-      jsonb_build_object('external_ref', u.external_ref, 'platform_booked_on', u.platform_booked_on, 'platform_collects', u.platform_collects),
-      jsonb_build_object('external_ref', v_ext, 'platform_booked_on', v_booked, 'platform_collects', v_collects, 'vouchers', v_vouchers), p_reason);
+      jsonb_build_object('external_ref', u.external_ref, 'source_id', u.source_id, 'platform_booked_on', u.platform_booked_on, 'platform_collects', u.platform_collects, 'total_halalas', u.total_halalas),
+      jsonb_build_object('external_ref', v_ext, 'source_id', nsrc.id, 'platform_booked_on', v_booked, 'platform_collects', v_collects, 'vouchers', v_vouchers,
+                         'old_nights_halalas', v_old_sum, 'new_nights_halalas', v_new_sum, 'total_halalas', (select total_halalas from reservations where id = u.id)), p_reason);
     n := n + 1;
   end loop;
-  return jsonb_build_object('ok', true, 'units', n, 'vouchers', v_vouchers, 'finance', fn_reservation_finance_internal(r.id));
+  return jsonb_build_object('ok', true, 'units', n, 'vouchers', v_vouchers, 'repriced', v_repriced, 'finance', fn_reservation_finance_internal(r.id));
 exception when unique_violation or exclusion_violation then
   get stacked diagnostics v_con = constraint_name;
   if v_con in ('uniq_reservation_source_ref', 'excl_reservation_source_ref') then raise exception 'DUPLICATE_EXTERNAL_REF'; end if;

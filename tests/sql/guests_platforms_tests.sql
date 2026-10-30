@@ -550,28 +550,38 @@ do $$ declare r jsonb; res uuid; dup text; u jsonb; begin
     and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''reservation.platform_updated''', res)) = 1, dup || ' / ' || u::text);
 exception when others then perform t_record('PF09 the supervisor corrects the platform''s number and booking day before arrival, with a reason; a number of another booking is refused', false, sqlerrm); end $$;
 
-do $$ declare res uuid := t_id('resFix'); u jsonb; f jsonb; forb text; begin
+do $$ declare res uuid := t_id('resFix'); u jsonb; f jsonb; u2 jsonb; f2 jsonb; begin
   -- the property → the platform: the deferred receipt is issued for what is owed
   u := fn_staff_update_platform(res, jsonb_build_object('platform_collects', true), 'المنصة قبضت المبلغ', (t_res(res)).version);
   f := t_fin(res);
-  -- the platform → the property again: cancelling that receipt is «إلغاء سند», the owner's or a manager's
-  forb := t_fails(format('select fn_staff_update_platform(%L, %L::jsonb, %L, %s)', res, jsonb_build_object('platform_collects', false), 'رجوع', (t_res(res)).version), '%FORBIDDEN%');
-  perform t_record('PF09b who collects moves to the platform → its receipt «آجل عبر المنصات» for what is owed; moving back needs «إلغاء سند»',
-    jsonb_array_length(u->'vouchers') = 1 and (f->>'net_collected')::bigint = (f->>'total')::bigint and (f->>'total')::bigint > 0 and (t_res(res)).platform_collects
-    and forb = 'ok' and (t_res(res)).platform_collects, u::text || ' / ' || forb);
-exception when others then perform t_record('PF09b who collects moves to the platform → its receipt «آجل عبر المنصات» for what is owed; moving back needs «إلغاء سند»', false, sqlerrm); end $$;
-
-select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
-do $$ declare res uuid := t_id('resFix'); u jsonb; f jsonb; ver text; begin
-  u := fn_staff_update_platform(res, jsonb_build_object('platform_collects', false), 'المنشأة تقبض عند الوصول', (t_res(res)).version);
-  f := t_fin(res);
-  perform fn_platform_mark_checked(jsonb_build_object('reservation_id', res, 'checked', true));
-  ver := t_fails(format('select fn_staff_update_platform(%L, %L::jsonb, %L, %s)', res, jsonb_build_object('external_ref', 'PF-FIX-3'), 'بعد المطابقة', (t_res(res)).version), '%PLATFORM_VERIFIED%');
-  perform t_record('PF09c moving back to the property cancels the deferred receipt (to the review list); after «طابقتُ مع المنصة» the fields are fixed',
-    (f->>'net_collected')::bigint = 0 and not (t_res(res)).platform_collects
+  -- and back to the property: the supervisor may (the owner's decision, 30 Oct); the receipt is cancelled to the review list
+  u2 := fn_staff_update_platform(res, jsonb_build_object('platform_collects', false), 'المنشأة تقبض عند الوصول', (t_res(res)).version);
+  f2 := t_fin(res);
+  perform t_record('PF09b who collects moves to the platform → its receipt «آجل عبر المنصات» for what is owed; the supervisor moves it back, the receipt cancelled for review',
+    jsonb_array_length(u->'vouchers') = 1 and (f->>'net_collected')::bigint = (f->>'total')::bigint and (f->>'total')::bigint > 0
+    and (f2->>'net_collected')::bigint = 0 and not (t_res(res)).platform_collects
     and t_count(format('select count(*) from financial_vouchers where reservation_id = %L and method = ''ota_deferred'' and status = ''cancelled''', res)) = 1
-    and ver = 'ok', u::text || ' / ' || ver);
-exception when others then perform t_record('PF09c moving back to the property cancels the deferred receipt (to the review list); after «طابقتُ مع المنصة» the fields are fixed', false, sqlerrm); end $$;
+    and t_count(format('select count(*) from review_items where reservation_id = %L and kind = ''voucher_cancelled''', res)) = 1, u::text || ' / ' || u2::text);
+exception when others then perform t_record('PF09b who collects moves to the platform → its receipt «آجل عبر المنصات» for what is owed; the supervisor moves it back, the receipt cancelled for review', false, sqlerrm); end $$;
+
+do $$ declare res uuid := t_id('resFix'); u jsonb; t0 bigint; removed int; begin
+  -- another platform (the owner's decision, 30 Oct): the whole stay is re-priced by the new platform's prices
+  t0 := (t_res(res)).total_halalas;
+  u := fn_staff_update_platform(res, jsonb_build_object('source_id', t_id('src_airbnb'), 'external_ref', 'HMFIX1'), 'أُدخل على المنصة الخطأ', (t_res(res)).version);
+  select count(*) into removed from reservation_nights where reservation_id = res and status = 'removed';
+  perform t_record('PF09d another platform re-prices the stay from its first night; the old nights stay, removed and refunded',
+    (t_res(res)).source_id = t_id('src_airbnb') and (t_res(res)).external_ref = 'HMFIX1' and jsonb_array_length(u->'repriced') = 1
+    and removed = 2 and (t_res(res)).total_halalas = (u->'repriced'->0->>'new_nights_halalas')::bigint + t0 - (u->'repriced'->0->>'old_nights_halalas')::bigint, u::text);
+exception when others then perform t_record('PF09d another platform re-prices the stay from its first night; the old nights stay, removed and refunded', false, sqlerrm); end $$;
+
+reset role;
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare res uuid := t_id('resFix'); ver text; begin
+  perform fn_platform_mark_checked(jsonb_build_object('reservation_id', res, 'checked', true));
+  ver := t_fails(format('select fn_staff_update_platform(%L, %L::jsonb, %L, %s)', res, jsonb_build_object('external_ref', 'HMFIX2'), 'بعد المطابقة', (t_res(res)).version), '%PLATFORM_VERIFIED%');
+  perform t_record('PF09c after «طابقتُ مع المنصة» the platform''s fields are fixed', ver = 'ok', ver);
+exception when others then perform t_record('PF09c after «طابقتُ مع المنصة» the platform''s fields are fixed', false, sqlerrm); end $$;
 
 -- =====================================================================
 -- RESULTS
@@ -632,6 +642,6 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(d
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 58 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 58 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 59 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 59 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'GUEST AND PLATFORM TESTS FAILED'; end if;
 end $$;
