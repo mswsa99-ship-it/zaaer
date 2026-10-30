@@ -96,7 +96,7 @@ export default function AdminStaff() {
                     {b.name_ar}
                   </label>
                 ))}
-                {branches.length === 0 && <span className="text-xs text-ink-300">لا توجد فروع</span>}
+                {branches.length === 0 && <span className="text-xs text-ink-400">لا توجد فروع</span>}
               </div>
             </div>
           </div>
@@ -118,7 +118,7 @@ export default function AdminStaff() {
                 <p className="truncate text-xs text-ink-400" dir="ltr">{s.email}</p>
                 {s.phone && <p className="text-xs text-ink-500" dir="ltr">{s.phone}</p>}
                 <div className="mt-1 flex flex-wrap gap-1">
-                  <Badge className={s.linked ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-600"}>{s.linked ? "مرتبط" : "بانتظار تسجيل الدخول"}</Badge>
+                  <Badge className={s.linked ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{s.linked ? "مرتبط" : "بانتظار تسجيل الدخول"}</Badge>
                   {s.role === "owner" ? <Badge className="bg-ink-100 text-ink-600">كل الفروع</Badge> : s.branch_ids.length === 0 ? <Badge className="bg-danger-500/10 text-danger-600">بلا فرع</Badge> : s.branch_ids.map((b) => <Badge key={b} className="bg-ink-100 text-ink-600">{branchName(b)}</Badge>)}
                 </div>
                 {s.sessions_ended_at && <p className="mt-1 text-[11px] text-ink-400">أُنهيت جلساته {formatDateTime(s.sessions_ended_at)}</p>}
@@ -129,7 +129,7 @@ export default function AdminStaff() {
                 <div className="mt-1 flex flex-wrap justify-end gap-1">
                   {canManage && touches(s) && <button onClick={() => setEdit({ s, full_name: s.full_name, phone: s.phone ?? "", role: s.role, branch_ids: s.branch_ids, reason: "" })} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-edit"><Pencil className="h-3 w-3" /> تعديل</button>}
                   {canManage && touches(s) && !s.is_me && <button onClick={() => setActivate({ s, reason: "" })} className={`btn-ghost px-2 py-1 text-xs ${s.is_active ? "text-danger-600" : "text-success-600"}`} data-testid="staff-toggle-active"><Power className="h-3 w-3" /> {s.is_active ? "إيقاف" : "تفعيل"}</button>}
-                  {canSignOut(s) && <button onClick={() => setSignOut({ s, reason: "" })} className="btn-ghost px-2 py-1 text-xs text-warning-600" data-testid="staff-force-logout"><LogOut className="h-3 w-3" /> تسجيل خروج إجباري</button>}
+                  {canSignOut(s) && <button onClick={() => setSignOut({ s, reason: "" })} className="btn-ghost px-2 py-1 text-xs text-warning-700" data-testid="staff-force-logout"><LogOut className="h-3 w-3" /> تسجيل خروج إجباري</button>}
                 </div>
               </div>
             </Card>

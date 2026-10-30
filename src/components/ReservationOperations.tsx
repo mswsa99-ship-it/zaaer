@@ -16,7 +16,7 @@ import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./for
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, ACTIVE_PAYMENT_METHODS, METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
 import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
 import type { CashAccount } from "../lib/api";
-import { formatCurrency, formatDateTime, todayISO } from "../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, COUNT } from "../lib/utils";
 import { PrintButton, stayPrintContext } from "./PrintButton";
 import { buildVoucherPrint } from "../lib/printDocs";
 import { useBranches } from "../lib/branch";
@@ -183,7 +183,7 @@ function FinanceGrid({ f }: { f: Finance }) {
   const cell = (l: string, v: number, cls = "text-ink-900") => <AmountBox key={l} label={l} value={sar(v)} tone={cls} />;
   return (
     <AmountGrid testId="finance-grid">
-      {cell("الإجمالي", f.total)}{cell("المحصل", f.net_collected, "text-success-600")}{cell("المتبقي", f.balance_due, f.balance_due > 0 ? "text-warning-600" : "text-success-600")}{cell("رصيد للضيف", f.credit, "text-brand-700")}
+      {cell("الإجمالي", f.total)}{cell("المحصل", f.net_collected, "text-success-600")}{cell("المتبقي", f.balance_due, f.balance_due > 0 ? "text-warning-700" : "text-success-600")}{cell("رصيد للضيف", f.credit, "text-brand-700")}
       {cell("تأمين مقبوض", f.deposit_received)}{cell("تأمين مسترد", f.deposit_refunded)}{cell("رصيد التأمين", f.deposit_balance, "text-brand-700")}{f.tax !== 0 && cell("الضريبة", f.tax, "text-ink-600")}
     </AmountGrid>
   );
@@ -244,7 +244,7 @@ function ReasonDialog({ open, title, warning, onClose, onSubmit }: { open: boole
   return (
     <Modal open={open} title={title} onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!reason.trim()) throw new Error("VALIDATION: reason"); await onSubmit(reason.trim()); setReason(""); }}>
-        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />{warning}</div>
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />{warning}</div>
         <ReasonInput value={reason} onChange={setReason} />
         <Submit label="تأكيد" onCancel={onClose} danger />
       </ActionForm>
@@ -284,7 +284,7 @@ export function PaymentFields({ method, setMethod, accountId, setAccountId, refe
       {kind && (
         <Field label={kind === "cash_box" ? "الصندوق" : "الحساب البنكي"}>
           {options.length === 0
-            ? <p className="rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-600">لا يوجد {kind === "cash_box" ? "صندوق" : "حساب بنكي"} فعّال لهذا الفرع. يعرّفه المالك أو المدير من «الصناديق والحسابات».</p>
+            ? <p className="rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-700">لا يوجد {kind === "cash_box" ? "صندوق" : "حساب بنكي"} فعّال لهذا الفرع. يعرّفه المالك أو المدير من «الصناديق والحسابات».</p>
             : <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label={kind === "cash_box" ? "الصندوق" : "الحساب البنكي"}>{options.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}{a.is_default ? " (الافتراضي)" : ""}</option>)}</select>}
         </Field>
       )}
@@ -360,7 +360,7 @@ function StayNights({ reservationId, version }: { reservationId: string; version
       <div className="flex flex-wrap gap-1.5">
         {rows.map((n) => (
           <span key={n.night + n.status + (n.removed_at ?? "")} title={n.status === "removed" ? `أُزيلت: ${n.removed_reason ?? ""}` : NIGHT_BASIS_AR[n.basis] ?? n.basis}
-            className={`rounded-lg border px-2 py-1 text-[11px] ${n.status === "removed" ? "border-ink-100 text-ink-300 line-through" : "border-ink-100 text-ink-600"}`}>
+            className={`rounded-lg border px-2 py-1 text-[11px] ${n.status === "removed" ? "border-ink-100 text-ink-400 line-through" : "border-ink-100 text-ink-600"}`}>
             <span dir="ltr">{n.night.slice(8, 10)}/{n.night.slice(5, 7)}</span> · {sar(n.price)} <span className="text-ink-400">{NIGHT_BASIS_AR[n.basis] ?? ""}</span>
           </span>
         ))}
@@ -453,7 +453,7 @@ function ExtendDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-ink-400">المغادرة الحالية</p><p dir="ltr">{r.check_out}</p></div><Field label="المغادرة الجديدة"><input type="date" className="input" dir="ltr" min={r.check_in} value={date} onChange={(e) => setDate(e.target.value)} /></Field></div>
           <Field label="التسعير"><select className="input" value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}><option value="keep_rate">الإبقاء على سعر الليلة المتفق عليه ({sar(r.nightly_rate_halalas)})</option><option value="reprice">إعادة التسعير بالسعر الأساسي الحالي</option></select></Field>
           <ReasonInput value={reason} onChange={setReason} />
-          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">{delta > 0 ? `تمديد ${delta} ليلة: يُفحص تعارض الوحدة في الفترة المضافة أولًا، ثم يُضاف بند إيجار جديد ويُعاد حساب الإجمالي.` : delta < 0 ? `تقصير ${-delta} ليلة: تُضاف تسوية سالبة بقيمة الليالي المحذوفة.` : "لا تغيير."}</div>
+          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">{delta > 0 ? `تمديد ${COUNT.night(delta)}: يُفحص تعارض الوحدة في الفترة المضافة أولًا، ثم يُضاف بند إيجار جديد ويُعاد حساب الإجمالي.` : delta < 0 ? `تقصير ${COUNT.night(-delta)}: تُضاف تسوية سالبة بقيمة الليالي المحذوفة.` : "لا تغيير."}</div>
         </div>
         <Submit label="تطبيق" onCancel={onClose} />
       </ActionForm>
@@ -490,7 +490,7 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <Field label="الوحدة الجديدة (متاحة لبقية الفترة)"><select className="input" value={room} onChange={(e) => setRoom(e.target.value)}><option value="">اختر</option>{rooms.map((x) => <option key={x.room_id} value={x.room_id}>{x.room_number} · {x.category_name} · {CLEANLINESS_LABELS[x.cleanliness]}</option>)}</select></Field>
           <ReasonInput value={reason} onChange={setReason} />
           {reprices && (
-            <div className="space-y-2 rounded-xl border border-warning-500/30 bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="switch-reprice">
+            <div className="space-y-2 rounded-xl border border-warning-500/30 bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="switch-reprice">
               <p>الوحدة من نوع آخر ({chosen?.category_name}): يُعاد تسعير الليالي من {effective} بأسعار النوع الجديد، ويظهر الفرق في بنود الحجز{r.platform_collects === true ? "؛ قبضت المنصة المبلغ، فيبقى سندها ويظهر الفرق مستحقًا على الضيف أو له" : ""}.</p>
               {price && (
                 <AmountGrid>

@@ -69,7 +69,7 @@ export default function CheckIn() {
             <div className="my-6">
               <p className="text-xs text-ink-400">غرفة {code.room} — رمز الصندوق</p>
               <p className="mt-2 select-all text-4xl font-bold tracking-[0.5em] text-brand-700" dir="ltr">{code.code}</p>
-              <p className="mt-3 text-xs text-warning-600">لا تشارك الرمز مع أحد. سيُغيَّر بعد مغادرتك.</p>
+              <p className="mt-3 text-xs text-warning-700">لا تشارك الرمز مع أحد. سيُغيَّر بعد مغادرتك.</p>
               <button onClick={() => setCode(null)} className="btn-outline mt-4 text-xs"><EyeOff className="h-3.5 w-3.5" /> إخفاء</button>
             </div>
           ) : (

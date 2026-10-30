@@ -35,7 +35,7 @@ export default function StaffPayments() {
     <div>
       <SectionTitle title="المدفوعات" subtitle={`${open.length} غير مسدَّد أو مسدَّد جزئيًا`} />
       <ListFilterBar value={filter} onChange={setFilter} openLabel="غير المسدَّد" doneLabel="سُدِّد" openCount={open.length} doneCount={done.length} windowHours={WINDOW_HOURS} />
-      {windowError && filter !== "open" && <p className="mb-3 text-sm text-warning-600">تعذّر تحميل ما سُدِّد في آخر 48 ساعة؛ أعد تحميل الصفحة.</p>}
+      {windowError && filter !== "open" && <p className="mb-3 text-sm text-warning-700">تعذّر تحميل ما سُدِّد في آخر 48 ساعة؛ أعد تحميل الصفحة.</p>}
       {shown.length === 0 ? (
         <EmptyState icon={<CreditCard className="h-10 w-10" />} title={filter === "done" ? "لم يُسدَّد حجز في آخر 48 ساعة" : "لا توجد مدفوعات معلّقة"} />
       ) : (

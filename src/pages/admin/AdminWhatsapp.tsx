@@ -14,7 +14,7 @@ import { formatDateTime } from "../../lib/utils";
  */
 const STATUS: Record<WaChannelRow["status"], { label: string; cls: string }> = {
   not_configured: { label: "غير مكتمل", cls: "bg-ink-100 text-ink-500" },
-  configured: { label: "مكتمل — بانتظار اختبار الاتصال", cls: "bg-warning-500/10 text-warning-600" },
+  configured: { label: "مكتمل — بانتظار اختبار الاتصال", cls: "bg-warning-500/10 text-warning-700" },
   active: { label: "متصل", cls: "bg-success-500/10 text-success-600" },
   error: { label: "خطأ في الاتصال", cls: "bg-danger-500/10 text-danger-600" },
 };
@@ -53,15 +53,15 @@ function bridgeLine(live: WaChannelRow): { icon: JSX.Element; text: string; cls:
   if (!live.has_bridge_key) return { icon: <KeyRound className="h-4 w-4" />, text: "لم يُنشأ مفتاح الربط بعد.", cls: "bg-ink-50 text-ink-500" };
   if (!live.bridge_online) {
     return live.bridge_last_seen
-      ? { icon: <WifiOff className="h-4 w-4" />, text: `كمبيوتر الاستقبال غير متصل — آخر اتصال ${formatDateTime(live.bridge_last_seen)}. تأكد أنه يعمل وأن البرنامج مفتوح.`, cls: "bg-warning-500/10 text-warning-600" }
+      ? { icon: <WifiOff className="h-4 w-4" />, text: `كمبيوتر الاستقبال غير متصل — آخر اتصال ${formatDateTime(live.bridge_last_seen)}. تأكد أنه يعمل وأن البرنامج مفتوح.`, cls: "bg-warning-500/10 text-warning-700" }
       : { icon: <WifiOff className="h-4 w-4" />, text: "لم يتصل البرنامج بعد. شغّله على كمبيوتر الاستقبال بملف الإعداد الذي نزّلته.", cls: "bg-ink-50 text-ink-500" };
   }
   if (live.bridge_status === "connected") return { icon: <Wifi className="h-4 w-4" />, text: `متصل — ${live.bridge_phone ? `واتساب مربوط بالرقم +${live.bridge_phone}` : "واتساب الفرع مربوط"}${live.bridge_name ? ` (${live.bridge_name})` : ""}.`, cls: "bg-success-500/10 text-success-600" };
-  if (live.bridge_status === "qr") return { icon: <QrCode className="h-4 w-4" />, text: "البرنامج يعمل وينتظر مسح رمز QR من جوال الفرع: واتساب ← الأجهزة المرتبطة ← ربط جهاز.", cls: "bg-warning-500/10 text-warning-600" };
+  if (live.bridge_status === "qr") return { icon: <QrCode className="h-4 w-4" />, text: "البرنامج يعمل وينتظر مسح رمز QR من جوال الفرع: واتساب ← الأجهزة المرتبطة ← ربط جهاز.", cls: "bg-warning-500/10 text-warning-700" };
   if (live.bridge_status === "disconnected") {
     const why = live.last_error ?? "";
     if (why.startsWith("wrong_number")) return { icon: <AlertTriangle className="h-4 w-4" />, text: `المربوط في البرنامج جوال آخر غير رقم الفرع${live.bridge_phone ? ` (+${live.bridge_phone})` : ""} — البرنامج لا يرد على أي رسالة ولا ينقل شيئًا منه. من ذلك الجوال: واتساب ← الأجهزة المرتبطة ← تسجيل الخروج من هذا الكمبيوتر، ثم امسح الرمز من جوال الفرع. وإن كان رقم الفرع المكتوب هنا هو الخطأ فصحّحه.`, cls: "bg-danger-500/10 text-danger-600" };
-    if (why === "send_failed" || why === "health_check") return { icon: <AlertTriangle className="h-4 w-4" />, text: "واتساب ويب توقف عن الإرسال أو الاستجابة — البرنامج يعيد فتحه تلقائيًا. إن تكرر هذا فنزّل البرنامج من جديد من هذه الصفحة.", cls: "bg-warning-500/10 text-warning-600" };
+    if (why === "send_failed" || why === "health_check") return { icon: <AlertTriangle className="h-4 w-4" />, text: "واتساب ويب توقف عن الإرسال أو الاستجابة — البرنامج يعيد فتحه تلقائيًا. إن تكرر هذا فنزّل البرنامج من جديد من هذه الصفحة.", cls: "bg-warning-500/10 text-warning-700" };
     return { icon: <AlertTriangle className="h-4 w-4" />, text: `واتساب غير مربوط${why ? ` (${why})` : ""}. امسح الرمز من جديد في نافذة البرنامج.`, cls: "bg-danger-500/10 text-danger-600" };
   }
   return { icon: <Spinner className="h-4 w-4" />, text: "البرنامج يبدأ التشغيل…", cls: "bg-ink-50 text-ink-500" };
@@ -91,7 +91,7 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
   return (
     <div className="space-y-4">
       <p className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm ${line.cls}`} data-testid="bridge-status">{line.icon}<span>{line.text}</span></p>
-      {mismatch && <p className="flex items-start gap-1.5 rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-600"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> الرقم المربوط في البرنامج (+{live.bridge_phone}) يختلف عن رقم الفرع المكتوب هنا (+{row.display_phone}).</p>}
+      {mismatch && <p className="flex items-start gap-1.5 rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-700"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> الرقم المربوط في البرنامج (+{live.bridge_phone}) يختلف عن رقم الفرع المكتوب هنا (+{row.display_phone}).</p>}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block min-w-0"><span className="label">رقم واتساب الفرع (يراه النزلاء في رمز QR)</span>
@@ -261,7 +261,7 @@ function BranchChannel({ row, live, onSaved, flash, setFlash }: { row: WaChannel
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="bg-brand-50 text-brand-700">{modeLabel}</Badge>
           {row.mode === "web_bridge"
-            ? <Badge className={live.bridge_online && live.bridge_status === "connected" ? "bg-success-500/10 text-success-600" : row.status === "not_configured" ? "bg-ink-100 text-ink-500" : "bg-warning-500/10 text-warning-600"}>
+            ? <Badge className={live.bridge_online && live.bridge_status === "connected" ? "bg-success-500/10 text-success-600" : row.status === "not_configured" ? "bg-ink-100 text-ink-500" : "bg-warning-500/10 text-warning-700"}>
                 {row.status === "not_configured" ? "غير مكتمل" : live.bridge_online && live.bridge_status === "connected" ? "متصل" : live.bridge_online ? "بانتظار الربط" : "الكمبيوتر غير متصل"}
               </Badge>
             : <Badge className={st.cls}>{st.label}</Badge>}

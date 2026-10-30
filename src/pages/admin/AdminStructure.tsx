@@ -1,3 +1,4 @@
+import { COUNT } from "../../lib/utils";
 import { useState } from "react";
 import { Layers, Plus, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -55,15 +56,15 @@ export default function AdminStructure() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-semibold text-ink-800">{b.name}</h3>
                     <ArchivedBadge archivedAt={b.archived_at} />
-                    {!b.is_active && !b.archived_at && <span className="badge bg-warning-500/10 text-warning-600">معطل</span>}
+                    {!b.is_active && !b.archived_at && <span className="badge bg-warning-500/10 text-warning-700">معطل</span>}
                   </div>
                   {b.description && <p className="mt-0.5 text-sm text-ink-500">{b.description}</p>}
-                  <p className="mt-1 text-xs text-ink-400">{b.floors.filter((f) => !f.archived_at).length} طابق · {b.floors.reduce((a, f) => a + f.rooms, 0)} وحدة · {b.floors.reduce((a, f) => a + f.facilities, 0)} مرفق</p>
+                  <p className="mt-1 text-xs text-ink-400">{COUNT.floor(b.floors.filter((f) => !f.archived_at).length)} · {COUNT.unit(b.floors.reduce((a, f) => a + f.rooms, 0))} · {COUNT.facility(b.floors.reduce((a, f) => a + f.facilities, 0))}</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => setBlockDraft(b)} className="btn-outline text-xs"><Pencil className="h-3.5 w-3.5" /> تعديل</button>
                   <button onClick={() => setFloorDraft({ block_id: b.id, name: "", sort_order: b.floors.length + 1 })} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> طابق</button>
-                  <button onClick={() => setOpen((o) => ({ ...o, [b.id]: !o[b.id] }))} className="btn-ghost text-xs">{open[b.id] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
+                  <button onClick={() => setOpen((o) => ({ ...o, [b.id]: !o[b.id] }))} className="btn-ghost text-xs" aria-label={open[b.id] ? "طي الطوابق" : "عرض الطوابق"} aria-expanded={!!open[b.id]}>{open[b.id] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
                 </div>
               </div>
               {b.floors.length > 0 && (
@@ -74,8 +75,8 @@ export default function AdminStructure() {
                       {b.floors.filter((f) => showArchived || !f.archived_at).map((f) => (
                         <tr key={f.id} className="border-t border-ink-50">
                           <td className="py-2 font-medium text-ink-700">{f.name}</td><td>{f.sort_order}</td><td>{f.rooms}</td><td>{f.facilities}</td>
-                          <td>{f.archived_at ? <ArchivedBadge archivedAt={f.archived_at} /> : f.is_active ? <span className="badge bg-success-500/10 text-success-600">فعال</span> : <span className="badge bg-warning-500/10 text-warning-600">معطل</span>}</td>
-                          <td className="text-left"><button onClick={() => setFloorDraft(f)} className="btn-ghost text-xs"><Pencil className="h-3.5 w-3.5" /></button></td>
+                          <td>{f.archived_at ? <ArchivedBadge archivedAt={f.archived_at} /> : f.is_active ? <span className="badge bg-success-500/10 text-success-600">فعال</span> : <span className="badge bg-warning-500/10 text-warning-700">معطل</span>}</td>
+                          <td className="text-left"><button onClick={() => setFloorDraft(f)} className="btn-ghost text-xs" aria-label="تعديل الطابق" title="تعديل"><Pencil className="h-3.5 w-3.5" /></button></td>
                         </tr>
                       ))}
                     </tbody>

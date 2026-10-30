@@ -110,7 +110,7 @@ export default function AdminDataPurge() {
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 font-semibold text-ink-800"><k.icon className="h-4 w-4 text-ink-400" /> {k.title}</span>
                       <span className="mt-0.5 block text-xs text-ink-500">{k.desc}</span>
-                      {k.warn && <span className="mt-1 block text-xs text-warning-600">{k.warn}</span>}
+                      {k.warn && <span className="mt-1 block text-xs text-warning-700">{k.warn}</span>}
                     </span>
                   </label>
                 );

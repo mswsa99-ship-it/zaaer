@@ -29,7 +29,7 @@ interface MessageRow {
 const NO_CONVERSATIONS: ConversationRow[] = [];
 
 const STATUS_LABELS: Record<string, string> = { active: "نشطة", handed_off: "محوّلة", closed: "مغلقة" };
-const STATUS_COLORS: Record<string, string> = { active: "bg-success-500/10 text-success-600", handed_off: "bg-warning-500/10 text-warning-600", closed: "bg-ink-100 text-ink-400" };
+const STATUS_COLORS: Record<string, string> = { active: "bg-success-500/10 text-success-600", handed_off: "bg-warning-500/10 text-warning-700", closed: "bg-ink-100 text-ink-400" };
 
 function channelLabel(c: string) { return c === "whatsapp" ? "واتساب" : "شاشة (تجربة)"; }
 const DELIVERY: Record<string, string> = { queued: "بانتظار كمبيوتر الاستقبال", sent: "أُرسلت", failed: "لم تُرسل" };
@@ -151,7 +151,7 @@ export default function Inbox() {
                   </div>
                 </div>
                 <p className="mt-1 text-xs text-ink-400">{c.last_message_at ? formatDateTime(c.last_message_at) : formatDateTime(c.created_at)}</p>
-                {c.handoff_reason && <p className="mt-1 truncate text-xs text-warning-600">{c.handoff_reason}</p>}
+                {c.handoff_reason && <p className="mt-1 truncate text-xs text-warning-700">{c.handoff_reason}</p>}
               </button>
             ))}
           </div>
@@ -178,7 +178,7 @@ export default function Inbox() {
                     )}
                   </div>
                 </div>
-                {current.handoff_reason && <p className="mb-3 rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-600">سبب التحويل: {current.handoff_reason}</p>}
+                {current.handoff_reason && <p className="mb-3 rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-700">سبب التحويل: {current.handoff_reason}</p>}
                 {pausedUntil && <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-accent-500/10 px-3 py-2 text-xs text-accent-600" data-testid="assistant-paused"><PauseCircle className="h-3.5 w-3.5" /> المساعد صامت في هذه المحادثة حتى {formatDateTime(pausedUntil)} لأن موظفًا يرد. «إعادة للمساعد الذكي» تنهي ذلك الآن.</p>}
                 <div className="space-y-3 max-h-[55vh] overflow-y-auto scrollbar-thin">
                   {messages.map((m, i) => {

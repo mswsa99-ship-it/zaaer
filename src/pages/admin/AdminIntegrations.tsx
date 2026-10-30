@@ -73,7 +73,7 @@ export default function AdminIntegrations() {
             </div>
             {i.status === "checking" && <Spinner className="h-4 w-4" />}
             {i.status === "connected" && <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> متصل</Badge>}
-            {i.status === "awaiting" && <Badge className="bg-warning-500/10 text-warning-600"><Clock className="h-3 w-3" /> بانتظار الاعتماد</Badge>}
+            {i.status === "awaiting" && <Badge className="bg-warning-500/10 text-warning-700"><Clock className="h-3 w-3" /> بانتظار الاعتماد</Badge>}
             {i.status === "disabled" && <Badge className="bg-ink-100 text-ink-500"><AlertCircle className="h-3 w-3" /> معطّل</Badge>}
             {i.status === "error" && <Badge className="bg-danger-500/10 text-danger-600"><XCircle className="h-3 w-3" /> خطأ</Badge>}
             {i.status === "future" && <Badge className="bg-ink-100 text-ink-400"><AlertCircle className="h-3 w-3" /> مستقبلي</Badge>}

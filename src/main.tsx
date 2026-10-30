@@ -7,6 +7,7 @@ import { AuthProvider } from "./lib/auth";
 import { BranchProvider } from "./lib/branch";
 import App from "./App";
 import "./index.css";
+import { startLabelLinker } from "./lib/a11y";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,3 +35,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+startLabelLinker();

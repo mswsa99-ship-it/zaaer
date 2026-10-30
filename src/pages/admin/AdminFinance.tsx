@@ -12,7 +12,7 @@ import { ExportMenu } from "../../components/ExportMenu";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { BranchPicker } from "../../components/BranchPicker";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, type PaymentMethod, type VoucherKind } from "../../lib/types";
-import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import { useCashAccounts } from "../../lib/useCashAccounts";
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
@@ -58,13 +58,13 @@ export default function AdminFinance() {
     const all = scope.kind === "page" ? rows : (await fetchAllPages((limit, offset) => listsApi.vouchers({ ...f, branch_id: branchId!, limit, offset }), 500)).rows;
     const body = all.map(rowOut);
     // the totals line of the file is the server's, over the whole filtered set (the same figures as the screen)
-    const sumRow = scope.kind === "all" ? [[`الإجمالي (${all.length} سندًا): قبض ${sar(totals.receipts)} · استرداد ${sar(totals.refunds)} · تأمين ${sar(totals.deposits)} · رد تأمين ${sar(totals.deposit_refunds)} · تأمين مستخدم ${sar(totals.deposit_applied)}`]] : [];
+    const sumRow = scope.kind === "all" ? [[`الإجمالي (${COUNT.voucher(all.length)}): قبض ${sar(totals.receipts)} · استرداد ${sar(totals.refunds)} · تأمين ${sar(totals.deposits)} · رد تأمين ${sar(totals.deposit_refunds)} · تأمين مستخدم ${sar(totals.deposit_applied)}`]] : [];
     return { columns: COLS, rows: [...body, ...sumRow], count: body.length, widths: [16, 18, 14, 12, 12, 24, 14, 18, 16, 14, 30] };
   };
 
   return (
     <div>
-      <SectionTitle title="المالية — دفتر السندات" subtitle={`${total} سند مطابق · التأمين دفتر مستقل ولا يُحسب ضمن إيراد الإقامة`} action={<div className="flex flex-wrap items-center gap-2"><BranchPicker /><ExportMenu source={{ statement, table, pageCount: rows.length, total }} disabled={!branchId} /></div>} />
+      <SectionTitle title="المالية — دفتر السندات" subtitle={`السندات المطابقة: ${total} · التأمين دفتر مستقل ولا يُحسب ضمن إيراد الإقامة`} action={<div className="flex flex-wrap items-center gap-2"><BranchPicker /><ExportMenu source={{ statement, table, pageCount: rows.length, total }} disabled={!branchId} /></div>} />
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
         <label className="flex items-center gap-1.5 text-ink-600">من <input type="date" className="input w-auto py-1" dir="ltr" value={f.from ?? ""} onChange={(e) => set("from", e.target.value)} aria-label="من" /></label>
         <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={f.to ?? ""} onChange={(e) => set("to", e.target.value)} aria-label="إلى" /></label>
@@ -105,7 +105,7 @@ export default function AdminFinance() {
             </tbody>
           </table>
           <div className="flex items-center justify-between border-t border-ink-50 px-3 py-2 text-xs text-ink-500">
-            <span>صفحة {page + 1} من {pages} · {total} سند{ledger.refreshing && <Spinner className="mr-2 inline h-3 w-3" />}</span>
+            <span>صفحة {page + 1} من {pages} · {COUNT.voucher(total)}{ledger.refreshing && <Spinner className="mr-2 inline h-3 w-3" />}</span>
             <div className="flex gap-2"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn-ghost px-2 py-1 text-xs">السابق</button><button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} className="btn-ghost px-2 py-1 text-xs">التالي</button></div>
           </div>
         </Card>

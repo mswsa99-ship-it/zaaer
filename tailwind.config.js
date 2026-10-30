@@ -3,6 +3,12 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      // U1 note 05 / U2: Arabic needs taller lines than Latin — 1.6 for running text (Tailwind's default is 1.33–1.5)
+      fontSize: {
+        xs: ["0.75rem", { lineHeight: "1.2rem" }],
+        sm: ["0.875rem", { lineHeight: "1.4rem" }],
+        base: ["1rem", { lineHeight: "1.6rem" }],
+      },
       fontFamily: {
         sans: ['"IBM Plex Sans Arabic"', '"Noto Sans Arabic"', "system-ui", "sans-serif"],
       },

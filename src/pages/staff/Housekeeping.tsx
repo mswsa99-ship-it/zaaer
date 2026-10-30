@@ -68,7 +68,7 @@ export default function Housekeeping() {
   if (hk.error && tasks.length === 0 && rooms.length === 0) return <div><SectionTitle title="خدمة الغرف والمرافق" action={<BranchPicker />} /><LoadErrorCard message={hk.error} onRetry={reload} /></div>;
   return (
     <div>
-      <SectionTitle title="خدمة الغرف والمرافق" subtitle={`${openTasks.length} مهمة مفتوحة · ${rooms.filter((r) => r.cleanliness !== "clean").length} وحدة تحتاج تنظيفًا`} action={
+      <SectionTitle title="خدمة الغرف والمرافق" subtitle={`مهام مفتوحة: ${openTasks.length} · وحدات تحتاج تنظيفًا: ${rooms.filter((r) => r.cleanliness !== "clean").length}`} action={
         <div className="flex flex-wrap items-center gap-2"><BranchPicker /><button onClick={() => setCreate({ target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id, scheduled_start: localNow(), scheduled_end: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
       {(error || hk.error) && <div className="mb-4"><ErrorBanner message={(error ?? hk.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
@@ -85,8 +85,8 @@ export default function Housekeeping() {
                 <div>
                   <p className="text-sm font-medium text-ink-800">{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name ?? "مرفق"} <span className="font-normal text-ink-500">· {t.task_type_name_snapshot}</span></p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">
-                    <Badge className={t.priority === "high" ? "bg-danger-500/10 text-danger-600" : t.priority === "low" ? "bg-ink-100 text-ink-500" : "bg-warning-500/10 text-warning-600"}>{TASK_PRIORITY_LABELS[t.priority]}</Badge>
-                    <Badge className={t.status === "in_progress" ? "bg-warning-500/10 text-warning-600" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge>
+                    <Badge className={t.priority === "high" ? "bg-danger-500/10 text-danger-600" : t.priority === "low" ? "bg-ink-100 text-ink-500" : "bg-warning-500/10 text-warning-700"}>{TASK_PRIORITY_LABELS[t.priority]}</Badge>
+                    <Badge className={t.status === "in_progress" ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge>
                     {t.room && <Badge className={ROOM_STATUS_COLORS[t.room.status]}>{ROOM_STATUS_LABELS[t.room.status]}</Badge>}
                     <span>{t.assignee?.full_name ?? "غير مسندة"} · البداية {formatDateTime(t.scheduled_start)}{t.scheduled_end && <span data-testid="task-end"> · النهاية {formatDateTime(t.scheduled_end)}</span>}</span>
                   </p>
@@ -100,7 +100,7 @@ export default function Housekeeping() {
                 {t.room && <button onClick={() => { setMaintTarget({ id: t.room_id!, room_number: t.room!.room_number, status: t.room!.status, cleanliness: t.room!.cleanliness }); setMaintTitle(""); setMaintDesc(""); }} className="btn-outline text-xs"><Wrench className="h-3.5 w-3.5" /> بلاغ صيانة</button>}
                 {t.status === "pending" && mine(t) && <button onClick={() => act(t.id, async () => { await opsApi.startTask(t.id); })} disabled={acting === t.id} className="btn-outline text-xs"><Play className="h-3.5 w-3.5" /> بدء</button>}
                 {mine(t) && <button onClick={() => act(t.id, async () => { const r = await opsApi.completeTask(t.id, undefined, t.version); return r.room_status ? `تم الإتمام. حالة الوحدة الآن: ${ROOM_STATUS_LABELS[r.room_status as RoomStatus] ?? r.room_status} (الإشغال لا يتغير بالتنظيف)` : "تم الإتمام."; })} disabled={acting === t.id} className="btn-accent text-xs">{acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} إتمام</button>}
-                {canManage && <button onClick={() => { setCancelTask(t); setCancelReason(""); }} className="btn-ghost text-xs text-danger-600"><XCircle className="h-3.5 w-3.5" /></button>}
+                {canManage && <button onClick={() => { setCancelTask(t); setCancelReason(""); }} className="btn-ghost text-xs text-danger-600" aria-label="إلغاء المهمة" title="إلغاء المهمة"><XCircle className="h-3.5 w-3.5" /></button>}
               </div>
             </Card>
           ))}

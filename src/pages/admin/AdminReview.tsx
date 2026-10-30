@@ -56,7 +56,7 @@ function ItemRow({ item, selected, onToggle, onMark }: { item: ReviewItem; selec
       {open && <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={selected} onChange={onToggle} aria-label={`تحديد: ${item.summary}`} />}
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className={monitor ? "bg-warning-500/10 text-warning-600" : "bg-ink-100 text-ink-600"}>{monitor ? "مراقبة: " : ""}{KIND_AR[item.kind] ?? item.kind}</Badge>
+          <Badge className={monitor ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-600"}>{monitor ? "مراقبة: " : ""}{KIND_AR[item.kind] ?? item.kind}</Badge>
           <span className="text-sm font-medium text-ink-800">{item.summary}</span>
           {item.reservation_id && item.internal_ref && <Link to={`/staff/reservations/${item.reservation_id}`} className="text-xs text-brand-700 underline-offset-2 hover:underline" dir="ltr">{item.internal_ref}</Link>}
         </div>
@@ -118,7 +118,7 @@ export default function AdminReview() {
 
   return (
     <div>
-      <SectionTitle title="بحاجة لمراجعة وتدقيق" subtitle={`${openCount} بانتظار المراجعة — تصحيحات السندات، تعديلات الفواتير وإلغاؤها، تصحيحات الإقامات، وما وجدته المراقبة`} />
+      <SectionTitle title="بحاجة لمراجعة وتدقيق" subtitle={`بانتظار المراجعة: ${openCount} — تصحيحات السندات، تعديلات الفواتير وإلغاؤها، تصحيحات الإقامات، وما وجدته المراقبة`} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-xs" role="tablist" aria-label="الحالة">
           {([["open", "بانتظار المراجعة"], ["reviewed", "تمت مراجعتها"], ["all", "الكل"]] as const).map(([k, l]) => (

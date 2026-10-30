@@ -44,10 +44,10 @@ export default function AdminRooms() {
         <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button></div>} />
       {q.error && rooms.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <input className="input w-36" placeholder="بحث برقم الوحدة" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
-        <select className="input w-auto" value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })}><option value="all">كل الأنواع</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <select className="input w-auto" value={filter.block} onChange={(e) => setFilter({ ...filter, block: e.target.value })}><option value="all">كل البلوكات</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-        <select className="input w-auto" value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })}><option value="all">كل الحالات</option>{Object.entries(ROOM_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <input className="input w-36" aria-label="بحث برقم الوحدة" placeholder="بحث برقم الوحدة" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
+        <select className="input w-auto" value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} aria-label="النوع"><option value="all">كل الأنواع</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <select className="input w-auto" value={filter.block} onChange={(e) => setFilter({ ...filter, block: e.target.value })} aria-label="البلوك"><option value="all">كل البلوكات</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+        <select className="input w-auto" value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} aria-label="الحالة"><option value="all">كل الحالات</option>{Object.entries(ROOM_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <Toggle checked={filter.archived} onChange={(v) => setFilter({ ...filter, archived: v })} label="إظهار المؤرشف" />
       </div>
       {q.error && rooms.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<DoorClosed className="h-10 w-10" />} title="لا توجد وحدات مطابقة" /> : (
@@ -59,12 +59,12 @@ export default function AdminRooms() {
                   <p className="text-base font-semibold text-ink-800">{r.room_number}</p>
                   <p className="text-xs text-ink-400">{r.category?.name_ar} · {r.block?.name ?? "—"} / {r.floor?.name ?? "—"}</p>
                 </div>
-                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <Badge className={ROOM_STATUS_COLORS[r.status]}>{ROOM_STATUS_LABELS[r.status]}</Badge>
                 <Badge className={CLEANLINESS_COLORS[r.cleanliness]}>{CLEANLINESS_LABELS[r.cleanliness]}</Badge>
-                {!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-600">معطلة</Badge>}
+                {!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطلة</Badge>}
                 <ArchivedBadge archivedAt={r.archived_at} />
               </div>
             </Card>

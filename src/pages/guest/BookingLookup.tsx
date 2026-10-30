@@ -142,7 +142,7 @@ export default function BookingLookup() {
         <Card>
           <form onSubmit={submitRef} className="space-y-4">
             <div className="relative">
-              <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
+              <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
               <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="رقم الحجز" className="input text-center" dir="ltr" autoComplete="off" autoFocus aria-label="رقم الحجز" />
             </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>{loading ? <Spinner /> : "عرض حجوزاتي"}</button>
@@ -164,7 +164,7 @@ export default function BookingLookup() {
                 <p className="mt-1 text-sm text-ink-500" dir="ltr">{r.check_in} → {r.check_out}</p>
                 <p className="mt-0.5 text-xs text-ink-400">{r.nights} {r.nights === 1 ? "ليلة" : "ليالٍ"}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span dir="ltr">{r.ref}</span></p>
               </div>
-              <ChevronLeft className="h-5 w-5 shrink-0 text-ink-300" />
+              <ChevronLeft className="h-5 w-5 shrink-0 text-ink-400" />
             </button>
           ))}
           {list.length === 0 && <Link to="/booking/new" className="btn-primary w-full">احجز الآن</Link>}

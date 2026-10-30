@@ -53,7 +53,7 @@ export default function Kiosk() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-white">
       <WhatsAppEntry large />
-      <p className="mt-2 text-xs text-ink-300">تعود الشاشة للبداية تلقائيًا بعد دقيقة من الخمول.</p>
+      <p className="mt-2 text-xs text-ink-400">تعود الشاشة للبداية تلقائيًا بعد دقيقة من الخمول.</p>
     </div>
   );
 }

@@ -638,10 +638,39 @@ exception when others then perform t_record('VD01–VD05 data validity', false, 
 end $$;
 reset role;
 
+-- GD11 (0049): the guest list stays fast at the size of the Zaaer import (2,452 profiles took 113 s before), keeps its
+-- duplicate counts, and marks a profile without a phone or a document «يحتاج استكمال» (filter «incomplete»)
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+do $$ declare v_org uuid; t0 timestamptz; ms int; all_ jsonb; inc jsonb; dup jsonb; a uuid; b uuid; c uuid; begin
+  select organization_id into v_org from branches where id = '00000000-0000-0000-0000-000000000010';
+  insert into guest_profiles(organization_id, full_name, phone, identity_type, identity_last4, identity_fingerprint, notes)
+  select v_org, 'ضيف الحجم ' || i, case when i % 3 = 0 then null else '05' || lpad((70000000 + i)::text, 8, '0') end,
+         case when i % 2 = 0 then 'national_id'::identity_type end, case when i % 2 = 0 then right((1000000000 + i)::text, 4) end,
+         case when i % 2 = 0 then fn_identity_fingerprint('national_id', (1000000000 + i)::text) end, 'GD11-bulk'
+  from generate_series(1, 3000) i;
+  insert into guest_profiles(organization_id, full_name, phone, notes) values (v_org, 'ضيف الحجم مكرر', '0570000001', 'GD11-bulk') returning id into a;
+  select id into b from guest_profiles where notes = 'GD11-bulk' and phone = '0570000001' and id <> a;
+  select id into c from guest_profiles where notes = 'GD11-bulk' and full_name = 'ضيف الحجم 2';   -- a document and a phone: complete
+  t0 := clock_timestamp();
+  all_ := fn_guest_profiles('{"limit":100}');
+  inc := fn_guest_profiles('{"filter":"incomplete","q":"ضيف الحجم"}');
+  dup := fn_guest_profiles('{"filter":"duplicates","q":"ضيف الحجم"}');
+  ms := extract(epoch from clock_timestamp() - t0) * 1000;
+  perform t_record('GD11 the guest list answers within 3 s at 3,000 profiles; duplicates kept; no phone or no document = «يحتاج استكمال»',
+    ms < 3000 and (all_->>'total')::int >= 3001 and jsonb_array_length(all_->'rows') = 100
+    and (inc->>'total')::int = 2001       -- complete = even and not a multiple of 3 (1,000); the rest plus the extra profile
+    and exists (select 1 from jsonb_array_elements(dup->'rows') x where (x->>'id')::uuid = a and (x->>'duplicates')::int = 1)
+    and (dup->>'total')::int = 2
+    and not exists (select 1 from jsonb_array_elements(fn_guest_profiles('{"filter":"incomplete","q":"ضيف الحجم 2"}')->'rows') x where (x->>'id')::uuid = c),
+    format('%s ms, total %s, incomplete %s, duplicates %s', ms, all_->>'total', inc->>'total', dup->>'total'));
+  delete from guest_profiles where notes = 'GD11-bulk';
+exception when others then perform t_record('GD11 the guest list answers within 3 s at 3,000 profiles; duplicates kept; no phone or no document = «يحتاج استكمال»', false, sqlerrm); delete from guest_profiles where notes = 'GD11-bulk';
+end $$;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),150) as detail from test_results order by ok, name;
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from test_results) < 59 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 59 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 60 then raise exception 'GUEST AND PLATFORM TESTS INCOMPLETE: % of 60 checks ran', (select count(*) from test_results); end if;
   if exists (select 1 from test_results where ok is not true) then raise exception 'GUEST AND PLATFORM TESTS FAILED'; end if;
 end $$;

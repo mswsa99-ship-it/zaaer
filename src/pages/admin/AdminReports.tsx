@@ -12,7 +12,7 @@ import { BranchPicker } from "../../components/BranchPicker";
 import { ExportMenu } from "../../components/ExportMenu";
 import { BarChart3, Info, Filter, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from "recharts";
-import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { useBranch } from "../../lib/branch";
 import { opsApi, ratesApi, guestReportsApi, listsApi, type ReportsFinance, type DiscountReport, type ReportFilters, type ReportFilterOptions } from "../../lib/api";
@@ -88,8 +88,8 @@ export default function AdminReports() {
 
   const periodPicker = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <label className="flex items-center gap-1.5 text-ink-600">من <input type="date" className="input w-auto py-1" dir="ltr" value={period.from} max={period.to} onChange={(e) => e.target.value && setPeriod({ ...period, from: e.target.value })} /></label>
-      <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={period.to} min={period.from} onChange={(e) => e.target.value && setPeriod({ ...period, to: e.target.value })} /></label>
+      <label className="flex items-center gap-1.5 text-ink-600">من <input type="date" className="input w-auto py-1" dir="ltr" value={period.from} max={period.to} onChange={(e) => e.target.value && setPeriod({ ...period, from: e.target.value })} aria-label="من" /></label>
+      <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={period.to} min={period.from} onChange={(e) => e.target.value && setPeriod({ ...period, to: e.target.value })} aria-label="إلى" /></label>
       <button type="button" onClick={() => setPeriod(last30())} className="btn-ghost py-1 text-xs">آخر 30 يومًا</button>
       <button type="button" onClick={() => setPeriod(thisMonth())} className="btn-ghost py-1 text-xs">هذا الشهر</button>
       {fin.refreshing && <Spinner className="h-4 w-4" />}
@@ -157,7 +157,7 @@ export default function AdminReports() {
       ["نسبة التحصيل %", r.collection_rate_pct == null ? "—" : r.collection_rate_pct, rateHidden ? "لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب" : ""],
       ["رصيد التأمين المفتوح (ليس إيرادًا)", money(r.ledger.deposit_balance_open), "رصيد حالي لا يتبع الفترة"],
       ["قبض تأمين / رد تأمين / تأمين مستخدم", `${sar(r.ledger.deposits_received)} / ${sar(r.ledger.deposits_refunded)} / ${sar(r.ledger.deposits_applied)}`, ""],
-      ["حجوزات الفترة", r.reservations.count, `${r.reservations.nights} ليلة · ملغاة ${r.reservations.cancelled} · عدم حضور ${r.reservations.no_show}`],
+      ["حجوزات الفترة", r.reservations.count, `${COUNT.night(r.reservations.nights)} · ملغاة ${r.reservations.cancelled} · عدم حضور ${r.reservations.no_show}`],
       [], ["اليوم", "قبض", "استرداد", "صافي"],
       ...r.by_day.map((d) => [d.day, money(d.receipts), money(d.refunds), money(d.receipts - d.refunds)]),
     ];
@@ -175,7 +175,7 @@ export default function AdminReports() {
   return (
     <div>
       <SectionTitle title="التقارير" subtitle="مؤشرات مالية من دفتر السندات وإحصاءات تشغيلية" action={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <BranchPicker />
           <ExportMenu allOnly source={{ statement: statementFor("التقرير المالي"), table: financeTable, pageCount: report?.by_day.length ?? 0, total: report ? Math.max(1, report.by_day.length) : 0 }} disabled={!report} />
         </div>
@@ -197,7 +197,7 @@ export default function AdminReports() {
               <Card key={t.label} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-ink-400">{t.label}</p>
-                  {t.badge && <Badge className="bg-warning-500/10 text-warning-600">{t.badge}</Badge>}
+                  {t.badge && <Badge className="bg-warning-500/10 text-warning-700">{t.badge}</Badge>}
                 </div>
                 <p className={`text-xl font-bold ${t.tone}`} dir="ltr">{t.value}</p>
                 <p className="flex items-start gap-1 text-[11px] leading-relaxed text-ink-400"><Info className="mt-0.5 h-3 w-3 shrink-0" /> <span>{t.note}</span></p>
@@ -211,10 +211,10 @@ export default function AdminReports() {
       {!ops ? <div className="mb-6"><LoadErrorCard message={opsQ.error ?? "تعذّر تحميل الإحصاءات التشغيلية."} onRetry={opsQ.reload} /></div> : <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card><p className="text-xs text-ink-400">إجمالي الحجوزات</p><p className="mt-1 text-xl font-bold text-ink-800">{total}</p></Card>
         <Card><p className="text-xs text-ink-400">معدل الدخول</p><p className="mt-1 text-xl font-bold text-accent-600">{pct(checkedIn, total)}%</p></Card>
-        {report && <Card><p className="text-xs text-ink-400">حجوزات الفترة</p><p className="mt-1 text-xl font-bold text-ink-800">{report.reservations.count}</p><p className="text-[11px] text-ink-400">{report.reservations.nights} ليلة إقامة</p></Card>}
+        {report && <Card><p className="text-xs text-ink-400">حجوزات الفترة</p><p className="mt-1 text-xl font-bold text-ink-800">{report.reservations.count}</p><p className="text-[11px] text-ink-400">ليالي الإقامة: {report.reservations.nights}</p></Card>}
         {report && <Card><p className="text-xs text-ink-400">ملغاة / عدم حضور (الفترة)</p><p className="mt-1 text-xl font-bold text-ink-800">{report.reservations.cancelled} / {report.reservations.no_show}</p></Card>}
         <Card><p className="text-xs text-ink-400">تذاكر تحويل مفتوحة</p><p className="mt-1 text-xl font-bold text-danger-600">{ops.handoffs}</p></Card>
-        <Card><p className="text-xs text-ink-400">حجوزات غير مطابقة</p><p className="mt-1 text-xl font-bold text-warning-600">{ops.unmatched}</p></Card>
+        <Card><p className="text-xs text-ink-400">حجوزات غير مطابقة</p><p className="mt-1 text-xl font-bold text-warning-700">{ops.unmatched}</p></Card>
         <Card><p className="text-xs text-ink-400">طلبات المساعد الذكي (14 يومًا)</p><p className="mt-1 text-xl font-bold text-brand-700">{ops.aiRequests14}</p></Card>
         <Card><p className="text-xs text-ink-400">تحويل لمسار تقليدي (14 يومًا)</p><p className="mt-1 text-xl font-bold text-ink-800">{ops.aiFallbacks14}</p></Card>
       </div>}
@@ -328,7 +328,7 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
     <Card className="mt-4" data-testid="late-entries-report">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink-700">حجوزات المنصات المتأخرة الإدخال ({from} → {to})</h3>
-        <div className="flex items-center gap-2">{d && <p className="text-sm text-ink-600">{d.late} من {d.platform_bookings} حجز منصة أُدخل بعد يوم أو أكثر{d.after_arrival ? ` · ${d.after_arrival} بعد موعد الوصول` : ""}</p>}<ExportMenu allOnly source={{ statement: statementFor("حجوزات المنصات المتأخرة الإدخال"), table, pageCount: d?.late ?? 0, total: d?.late ?? 0 }} /></div>
+        <div className="flex flex-wrap items-center gap-2">{d && <p className="text-sm text-ink-600">{d.late} من {d.platform_bookings} حجز منصة أُدخل بعد يوم أو أكثر{d.after_arrival ? ` · ${d.after_arrival} بعد موعد الوصول` : ""}</p>}<ExportMenu allOnly source={{ statement: statementFor("حجوزات المنصات المتأخرة الإدخال"), table, pageCount: d?.late ?? 0, total: d?.late ?? 0 }} /></div>
       </div>
       {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.late === 0 ? <p className="text-sm text-ink-400">لا حجوزات متأخرة الإدخال في هذه الفترة.</p> : (
         <div className="grid gap-4 lg:grid-cols-3">
@@ -369,7 +369,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
     <Card className="mt-4" data-testid="identities-report">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink-700">الهويات المعتمدة ({from} → {to})</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select className="input py-1 text-xs" value={path} onChange={(e) => setPath(e.target.value as typeof path)} aria-label="المسار"><option value="office">من المكتب (من الوثيقة)</option><option value="guest">أدخلها الضيف وطابقها المشرف</option><option value="all">الكل</option></select>
           {d && <p className="text-sm text-ink-600">{d.count}</p>}
           <ExportMenu allOnly source={{ statement: statementFor("الهويات المعتمدة", [`المسار: ${pathWord}`]), table, pageCount: d?.count ?? 0, total: d?.count ?? 0 }} />
@@ -412,7 +412,7 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
     <Card className="mt-4" data-testid="discounts-report">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink-700">تقرير الخصومات ({from} → {to})</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs text-ink-600"><input type="checkbox" checked={afterArrival} onChange={(e) => setAfterArrival(e.target.checked)} /> بعد الوصول فقط</label>
           {d && <p className="text-sm text-ink-600">{d.count} خصم · <span className="font-semibold" dir="ltr">{sar(d.total_halalas)}</span></p>}
           <ExportMenu allOnly source={{ statement: statementFor("تقرير الخصومات", afterArrival ? ["بعد الوصول فقط"] : []), table, pageCount: d?.rows?.length ?? 0, total: d?.rows?.length ?? 0 }} />
@@ -435,7 +435,7 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
                     <tr key={r.id} className="border-b border-ink-50">
                       <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
                       <td dir="ltr">{sar(r.amount_halalas)}</td>
-                      <td className="text-ink-600">{r.reason ?? "—"}{r.after_arrival && <Badge className="mr-1 bg-warning-500/10 text-warning-600">بعد الوصول</Badge>}</td>
+                      <td className="text-ink-600">{r.reason ?? "—"}{r.after_arrival && <Badge className="mr-1 bg-warning-500/10 text-warning-700">بعد الوصول</Badge>}</td>
                       <td className="text-xs text-ink-500">{r.staff ?? "—"}</td>
                       <td className="text-xs text-ink-400" dir="ltr">{r.created_at.slice(0, 16).replace("T", " ")}</td>
                     </tr>

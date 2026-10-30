@@ -67,3 +67,18 @@ test.describe("work lists and the units board (correction batch 4)", () => {
     await expect(drawer).toBeHidden();
   });
 });
+
+test.describe("the imported guests (I5)", () => {
+  test("LW05 a guest without a phone or a document is marked «يحتاج استكمال» and has its own filter", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/admin/guests");
+    await expect(page.getByTestId("guest-row").first()).toBeVisible();
+    await page.getByTestId("guest-filter-incomplete").click();
+    await expect(page.getByTestId("guest-filter-incomplete")).toHaveAttribute("aria-pressed", "true");
+    const rows = page.getByTestId("guest-row");
+    await expect(rows.first()).toBeVisible();
+    await expect(rows.filter({ hasNot: page.getByTestId("guest-incomplete") })).toHaveCount(0);   // every row listed is incomplete
+    await page.getByTestId("guest-filter-all").click();
+    await expect(rows.filter({ hasNot: page.getByTestId("guest-incomplete") }).first()).toBeVisible();   // and «الكل» shows complete ones too
+  });
+});

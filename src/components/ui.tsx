@@ -6,12 +6,14 @@ export function Card({ className, children, ...rest }: { className?: string; chi
   return <div className={cn("card p-5", className)} {...rest}>{children}</div>;
 }
 
-export function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+/** A page title (H1) or, with `level={2}`, a section inside the page. */
+export function SectionTitle({ title, subtitle, action, level = 1 }: { title: string; subtitle?: string; action?: ReactNode; level?: 1 | 2 }) {
+  const H = level === 1 ? "h1" : "h2";
   return (
     // on a phone the action (branch picker, buttons) moves under the title instead of squeezing it into a narrow column
     <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="min-w-0 flex-1 basis-64">
-        <h2 className="text-xl font-semibold text-ink-800">{title}</h2>
+        <H className="text-xl font-semibold text-ink-800">{title}</H>{/* U1 note 12: the page title is the page's one H1 */}
         {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       </div>
       {action}
@@ -19,14 +21,14 @@ export function SectionTitle({ title, subtitle, action }: { title: string; subti
   );
 }
 
-export function Badge({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
-  return <span className={cn("badge", className)} title={title}>{children}</span>;
+export function Badge({ children, className, title, testId }: { children: ReactNode; className?: string; title?: string; testId?: string }) {
+  return <span className={cn("badge", className)} title={title} data-testid={testId}>{children}</span>;
 }
 
 export function EmptyState({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-ink-200 bg-ink-50/50 px-6 py-16 text-center">
-      {icon && <div className="mb-4 text-ink-300">{icon}</div>}
+      {icon && <div className="mb-4 text-ink-400">{icon}</div>}
       <h3 className="text-base font-medium text-ink-700">{title}</h3>
       {description && <p className="mt-1.5 max-w-sm text-sm text-ink-400">{description}</p>}
     </div>

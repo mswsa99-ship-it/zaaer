@@ -52,7 +52,7 @@ export default function AdminLayout() {
         <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4 scrollbar-thin">
           {groups.map((g) => (
             <div key={g.title}>
-              <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-300">{g.title}</p>
+              <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{g.title}</p>
               <div className="space-y-0.5">
                 {g.items.map((item) => (
                   <NavLink

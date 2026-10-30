@@ -96,6 +96,22 @@ export function arabicCount(n: number, [one, two, few, many]: readonly [string, 
   return `${n} ${many}`;
 }
 
+/** U1 note 11: the counted nouns the screens show, so «1 مهمة» reads «مهمة واحدة» and «2 ليلة» reads «ليلتان». */
+const W = (one: string, two: string, few: string, many: string) => (n: number) => arabicCount(n, [one, two, few, many]);
+export const COUNT = {
+  unit: W("وحدة واحدة", "وحدتان", "وحدات", "وحدة"),
+  task: W("مهمة واحدة", "مهمتان", "مهام", "مهمة"),
+  night: W("ليلة واحدة", "ليلتان", "ليالٍ", "ليلة"),
+  voucher: W("سند واحد", "سندان", "سندات", "سندًا"),
+  booking: W("حجز واحد", "حجزان", "حجوزات", "حجزًا"),
+  request: W("طلب واحد", "طلبان", "طلبات", "طلبًا"),
+  guest: W("نزيل واحد", "نزيلان", "نزلاء", "نزيلًا"),
+  companion: W("مرافق واحد", "مرافقان", "مرافقين", "مرافقًا"),
+  floor: W("طابق واحد", "طابقان", "طوابق", "طابقًا"),
+  facility: W("مرفق واحد", "مرفقان", "مرافق", "مرفقًا"),
+  file: W("ملف واحد", "ملفان", "ملفات", "ملفًا"),
+} as const;
+
 /** How long ago, in Arabic: «الآن», «منذ دقيقتين», «منذ 3 ساعات», «منذ 11 يومًا». */
 export function sinceArabic(iso: string, now: number = Date.now()): string {
   const minutes = Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000));

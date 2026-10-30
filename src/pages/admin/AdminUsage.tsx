@@ -18,7 +18,7 @@ import type { ExportScope, ExportStatement, ExportTable } from "../../lib/export
 const STATUS: Record<CapabilityUsageRow["status"], { label: string; cls: string; note: string }> = {
   used: { label: "مستخدم", cls: "bg-success-500/10 text-success-600", note: "استُعمل بنجاح ضمن النافذة" },
   idle: { label: "غير مستخدم", cls: "bg-ink-100 text-ink-600", note: "السجل يغطي النافذة كلها ولا استعمال فيها" },
-  undetermined: { label: "غير محسوم", cls: "bg-warning-500/10 text-warning-600", note: "السجل لا يرى كل مسارات هذه القدرة، أو لا يغطي النافذة كلها؛ لا يُدّعى عدم الاستخدام" },
+  undetermined: { label: "غير محسوم", cls: "bg-warning-500/10 text-warning-700", note: "السجل لا يرى كل مسارات هذه القدرة، أو لا يغطي النافذة كلها؛ لا يُدّعى عدم الاستخدام" },
   unmeasured: { label: "غير مقيس", cls: "bg-ink-50 text-ink-400", note: "قراءة فقط: لا تُسجَّل في سجل الإجراءات" },
 };
 const COVERAGE: Record<string, string> = { full: "كاملة", partial: "جزئية", none: "لا تُسجَّل" };

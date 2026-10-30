@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, createContext, useContext, type ReactNode, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, createContext, useContext, type ReactNode, type FormEvent } from "react";
 import { X, Archive, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
 import { cn } from "../lib/utils";
 import { ErrorBanner, Spinner } from "./ui";
@@ -28,9 +28,15 @@ export function Modal({ open, title, onClose, children, wide }: { open: boolean;
 }
 
 export function Field({ label, children, hint, className, error }: { label: string; children: ReactNode; hint?: string; className?: string; error?: string | null }) {
+  // U1 note 13 (WCAG 4.1.2): the field's control is named by its label for a screen reader, whatever control it holds
+  const id = useId(); const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current?.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea");
+    if (el && !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby") && !(el as HTMLInputElement).labels?.length) el.setAttribute("aria-labelledby", id);
+  });
   return (
-    <div className={className}>
-      <label className="label">{label}</label>
+    <div className={className} ref={box}>
+      <label className="label" id={id}>{label}</label>
       {children}
       {error ? <p className="mt-1 text-xs text-danger-600" role="alert">{error}</p> : hint && <p className="mt-1 text-xs text-ink-400">{hint}</p>}
     </div>

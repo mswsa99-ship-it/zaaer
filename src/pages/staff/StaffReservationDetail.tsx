@@ -186,7 +186,7 @@ export default function StaffReservationDetail() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge className="bg-brand-50 text-brand-700">{RESERVATION_STATUS_LABELS[detail.status]}</Badge>
-          {canMoney && <Badge className="bg-warning-500/10 text-warning-600">{PAYMENT_STATUS_LABELS[detail.payment_status]}</Badge>}
+          {canMoney && <Badge className="bg-warning-500/10 text-warning-700">{PAYMENT_STATUS_LABELS[detail.payment_status]}</Badge>}
           <Badge className={detail.identity_status === "verified" ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{GUEST_VERIFICATION_LABELS[detail.identity_status]}</Badge>
         </div>
       </div>
@@ -287,7 +287,7 @@ export default function StaffReservationDetail() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><p className="text-xs text-ink-400">الإجمالي</p><p className="font-medium text-ink-700">{formatCurrency(detail.total_halalas / 100)}</p></div>
               <div><p className="text-xs text-ink-400">المدفوع</p><p className="font-medium text-success-600">{formatCurrency(detail.paid_halalas / 100)}</p></div>
-              <div><p className="text-xs text-ink-400">المتبقي</p><p className="font-medium text-warning-600">{formatCurrency(remaining / 100)}</p></div>
+              <div><p className="text-xs text-ink-400">المتبقي</p><p className="font-medium text-warning-700">{formatCurrency(remaining / 100)}</p></div>
               <div><p className="text-xs text-ink-400">الحالة</p><p className="font-medium text-ink-700">{PAYMENT_STATUS_LABELS[detail.payment_status]}</p></div>
             </div>
             <p className="mt-3 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-500">تُسجَّل الدفعات والتأمين والاسترداد من «الملخص المالي» أدناه — مسار واحد لكل حركة مالية، بسند مرقّم وقابل للتدقيق.</p>

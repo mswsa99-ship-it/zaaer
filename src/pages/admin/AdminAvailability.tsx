@@ -41,11 +41,11 @@ export default function AdminAvailability() {
   return (
     <div>
       <SectionTitle title="التحكم بالتوفر" subtitle="إدارة الرصيد اليومي لكل تصنيف" action={
-        <div className="flex items-center gap-2">
-          <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
           </select>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input w-auto" />
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input w-auto" aria-label="بداية العرض" />
         </div>
       } />
       {(error || (q.error && rows.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
@@ -66,13 +66,13 @@ export default function AdminAvailability() {
                 <td className="py-2.5 text-ink-700">{r.date}</td>
                 <td className="py-2.5 text-ink-600">{r.category?.name_ar}</td>
                 <td className="py-2.5 text-center">
-                  <input type="number" defaultValue={r.total_units} onBlur={(e) => updateField(r.id, "total_units", Number(e.target.value))} className="input mx-auto w-16 text-center" disabled={acting === r.id + "total_units"} />
+                  <input type="number" defaultValue={r.total_units} onBlur={(e) => updateField(r.id, "total_units", Number(e.target.value))} className="input mx-auto w-16 text-center" aria-label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting === r.id + "total_units"} />
                 </td>
                 <td className="py-2.5 text-center">
-                  <input type="number" defaultValue={r.publicly_visible_units} onBlur={(e) => updateField(r.id, "publicly_visible_units", Number(e.target.value))} className="input mx-auto w-16 text-center" disabled={acting === r.id + "publicly_visible_units"} />
+                  <input type="number" defaultValue={r.publicly_visible_units} onBlur={(e) => updateField(r.id, "publicly_visible_units", Number(e.target.value))} className="input mx-auto w-16 text-center" aria-label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting === r.id + "publicly_visible_units"} />
                 </td>
                 <td className="py-2.5 text-center">
-                  <input type="number" defaultValue={r.blocked_units} onBlur={(e) => updateField(r.id, "blocked_units", Number(e.target.value))} className="input mx-auto w-16 text-center" disabled={acting === r.id + "blocked_units"} />
+                  <input type="number" defaultValue={r.blocked_units} onBlur={(e) => updateField(r.id, "blocked_units", Number(e.target.value))} className="input mx-auto w-16 text-center" aria-label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting === r.id + "blocked_units"} />
                 </td>
               </tr>
             ))}

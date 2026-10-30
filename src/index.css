@@ -73,6 +73,21 @@ textarea {
   }
 }
 
+/* U1 note 10 (WCAG 2.5.8): on a touch screen every button and check box gets a 44 px touch area (24 px for the box itself)
+   without changing how it looks on a computer */
+@media (pointer: coarse) {
+  .btn,
+  button[aria-label] {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+}
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;

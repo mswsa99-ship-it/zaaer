@@ -80,14 +80,14 @@ export default function BookingStatus() {
       <div className="space-y-3">
         {steps.map((s, i) => (
           <div key={i} className={`card flex items-center gap-3 p-4 ${s.done ? "border-success-500/30" : "border-warning-500/30"}`}>
-            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${s.done ? "bg-success-500/15 text-success-600" : "bg-warning-500/15 text-warning-600"}`}>
+            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${s.done ? "bg-success-500/15 text-success-600" : "bg-warning-500/15 text-warning-700"}`}>
               {s.done ? <CheckCircle2 className="h-5 w-5" /> : <s.icon className="h-5 w-5" />}
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-ink-700">{s.label}</p>
               <p className="text-xs text-ink-400">{s.statusText}</p>
             </div>
-            {s.action ? <Link to={s.action.to} className="btn-outline text-xs">{s.action.label}</Link> : !s.done && <Clock className="h-4 w-4 text-ink-300" />}
+            {s.action ? <Link to={s.action.to} className="btn-outline text-xs">{s.action.label}</Link> : !s.done && <Clock className="h-4 w-4 text-ink-400" />}
           </div>
         ))}
       </div>

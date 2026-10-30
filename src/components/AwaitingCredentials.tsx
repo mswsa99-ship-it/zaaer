@@ -16,9 +16,9 @@ export function AwaitingCredentials({ title, description, fields, children }: {
       </div>
       <Card className="mb-4 border-warning-500/30">
         <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning-600" />
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning-700" />
           <div>
-            <Badge className="bg-warning-500/10 text-warning-600">بانتظار الاعتماد الخارجي</Badge>
+            <Badge className="bg-warning-500/10 text-warning-700">بانتظار الاعتماد الخارجي</Badge>
             <p className="mt-2 text-sm text-ink-600">هذا التكامل يحتاج بيانات اعتماد خارجية لم يُدخلها المالك بعد. البنية الخلفية والنموذج جاهزان، وستعمل تلقائيًا عند توفير البيانات.</p>
           </div>
         </div>
@@ -30,7 +30,7 @@ export function AwaitingCredentials({ title, description, fields, children }: {
             <div key={f.label}>
               <label className="label">{f.label}</label>
               <input type={f.type ?? "text"} placeholder={f.placeholder} className="input" dir="ltr" disabled />
-              <p className="mt-1 text-xs text-ink-300">يُحفظ بشكل آمن — لا يُعرض في الواجهة</p>
+              <p className="mt-1 text-xs text-ink-400">يُحفظ بشكل آمن — لا يُعرض في الواجهة</p>
             </div>
           ))}
         </div>

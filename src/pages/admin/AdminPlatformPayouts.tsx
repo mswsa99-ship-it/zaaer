@@ -116,7 +116,7 @@ export default function AdminPlatformPayouts() {
                 <tr key={p.id} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
                   <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {p.voucher_count} دفعة</span></td>
                   <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{sar(p.received_halalas)}</td>
-                  <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-600"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
+                  <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
                   <td className="font-mono text-xs">{p.reference}</td>
                   <td className="text-left">{p.status === "cancelled" ? <Badge className="bg-ink-100 text-ink-500" >ملغاة</Badge> : canCancel ? <button className="btn-ghost text-xs text-danger-600" onClick={() => { setReason(""); setCancelFor(p); }}><Ban className="h-3.5 w-3.5" /> إلغاء</button> : null}</td>
                 </tr>

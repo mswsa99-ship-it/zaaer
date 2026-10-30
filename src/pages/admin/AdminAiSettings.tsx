@@ -140,7 +140,7 @@ export default function AdminAiSettings() {
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {!isOwner && <div className="mb-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-500">العرض فقط — حفظ الإعدادات متاح للمالك.</div>}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         {/* Settings form */}
         <Card className="lg:col-span-2">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink-700"><Bot className="h-4 w-4 text-brand-600" /> إعدادات المحرك</h3>
@@ -160,14 +160,14 @@ export default function AdminAiSettings() {
               <label className="label">النموذج</label>
               <input className="input" dir="ltr" list="ai-models" value={form.model} onChange={(e) => set("model", e.target.value)} disabled={!isOwner} />
               <datalist id="ai-models">{MODEL_HINTS.map((m) => <option key={m} value={m} />)}</datalist>
-              <p className="mt-1 text-xs text-ink-300" dir="ltr">{MODEL_HINTS.join(" · ")}</p>
+              <p className="mt-1 text-xs text-ink-400" dir="ltr">{MODEL_HINTS.join(" · ")}</p>
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="ai-fallbacks">النماذج الاحتياطية (حتى 3، بالترتيب)</label>
               <input id="ai-fallbacks" className="input" dir="ltr" value={fallbackText} onChange={(e) => { setFallbackText(e.target.value); setSaved(false); }} disabled={!isOwner} placeholder="gemini-3.6-flash, gemini-3.5-flash-lite" />
               {fallbackError
                 ? <p className="mt-1 text-xs text-danger-600">{fallbackError}</p>
-                : <p className="mt-1 text-xs text-ink-300">إن تعذّر النموذج الأساسي (ضغط على المزود، تجاوز حصته، أو إيقافه) يُجرَّب التالي ضمن نفس المهلة، ويُسجَّل حدث provider_fallback. اتركه فارغًا لإيقاف ذلك.</p>}
+                : <p className="mt-1 text-xs text-ink-400">إن تعذّر النموذج الأساسي (ضغط على المزود، تجاوز حصته، أو إيقافه) يُجرَّب التالي ضمن نفس المهلة، ويُسجَّل حدث provider_fallback. اتركه فارغًا لإيقاف ذلك.</p>}
             </div>
             <NumberField label={`درجة الحرارة (${form.temperature.toFixed(2)})`} value={form.temperature} min={0} max={1} step={0.05} onChange={(v) => set("temperature", v)} disabled={!isOwner} range />
             <NumberField label="الحد الأقصى لتوكنز الرد (50–2000)" value={form.max_output_tokens} min={50} max={2000} step={10} onChange={(v) => set("max_output_tokens", v)} disabled={!isOwner} />
@@ -179,13 +179,13 @@ export default function AdminAiSettings() {
             <div className="sm:col-span-2">
               <label className="label">تعليمات إضافية (اختياري)</label>
               <textarea className="input min-h-[96px]" maxLength={1500} value={form.extra_instructions ?? ""} onChange={(e) => set("extra_instructions", e.target.value)} disabled={!isOwner} placeholder="مثال: استخدم لهجة رسمية مختصرة، واذكر اسم المنشأة في التحية." />
-              <p className="mt-1 text-xs text-ink-300">{extraLen}/1500 — هذه التعليمات تُضاف لأسلوب الرد فقط ولا يمكنها تجاوز القواعد الصلبة (النطاق، حماية البيانات، الأدوات المصرح بها).</p>
+              <p className="mt-1 text-xs text-ink-400">{extraLen}/1500 — هذه التعليمات تُضاف لأسلوب الرد فقط ولا يمكنها تجاوز القواعد الصلبة (النطاق، حماية البيانات، الأدوات المصرح بها).</p>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-3">
             <button onClick={save} disabled={!isOwner || saving} className="btn-primary text-sm">{saving ? <Spinner className="h-4 w-4" /> : "حفظ الإعدادات"}</button>
             {saved && <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> تم الحفظ</Badge>}
-            {form.updated_at && <span className="text-xs text-ink-300">آخر تحديث: {formatDateTime(form.updated_at)}</span>}
+            {form.updated_at && <span className="text-xs text-ink-400">آخر تحديث: {formatDateTime(form.updated_at)}</span>}
           </div>
         </Card>
 
@@ -202,7 +202,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
               <Row k="الاتصال" v={health.ok ? "ناجح" : "فشل"} ok={health.ok} />
               {health.model && <Row k="النموذج المستخدم الآن" v={health.model} />}
               {health.ok && health.primary && health.model !== health.primary && (
-                <p className="text-warning-600">النموذج الأساسي {health.primary} لا يجيب حاليًا؛ المساعد يعمل عبر النموذج الاحتياطي.</p>
+                <p className="text-warning-700">النموذج الأساسي {health.primary} لا يجيب حاليًا؛ المساعد يعمل عبر النموذج الاحتياطي.</p>
               )}
               {typeof health.latency_ms === "number" && <Row k="زمن الاستجابة" v={`${health.latency_ms} ms`} />}
               {health.checked && health.checked.length > 1 && health.checked.map((c) => (
@@ -218,7 +218,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
                 </div>
               )}
               {[health.error, ...(health.checked ?? []).map((c) => c.error)].some(isFreeTierError) && (
-                <p className="rounded-lg bg-warning-500/10 px-3 py-2 text-warning-600">مفتاح Gemini الحالي على <strong>الخطة المجانية</strong> لدى Google: حدودها منخفضة لكل نموذج (عدد الطلبات في الدقيقة وفي اليوم)، والنماذج الاحتياطية تخفّف أثرها. للتشغيل الفعلي فعّل الفوترة لمشروع المفتاح في Google AI Studio.</p>
+                <p className="rounded-lg bg-warning-500/10 px-3 py-2 text-warning-700">مفتاح Gemini الحالي على <strong>الخطة المجانية</strong> لدى Google: حدودها منخفضة لكل نموذج (عدد الطلبات في الدقيقة وفي اليوم)، والنماذج الاحتياطية تخفّف أثرها. للتشغيل الفعلي فعّل الفوترة لمشروع المفتاح في Google AI Studio.</p>
               )}
             </div>
           )}
@@ -229,7 +229,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
       <Card className="mt-4">
         <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink-700"><Gauge className="h-4 w-4 text-brand-600" /> الاستهلاك — آخر 14 يومًا</h3>
         {usage.length === 0 ? <p className="text-sm text-ink-400">لا يوجد استهلاك مسجّل بعد.</p> : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={usageChart}>
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#6f83a3" }} />
@@ -281,7 +281,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
                 <table className="w-full text-xs">
                   <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">المرحلة</th><th className="py-1.5 text-right font-medium">القاعدة</th><th className="py-1.5 text-right font-medium">الوقت</th></tr></thead>
                   <tbody>{guards.map((g) => (
-                    <tr key={g.id} className="border-b border-ink-50"><td className="py-1.5"><Badge className="bg-warning-500/10 text-warning-600">{g.stage}</Badge></td><td className="py-1.5 text-ink-600" dir="ltr">{g.rule}</td><td className="py-1.5 text-ink-400">{formatDateTime(g.created_at)}</td></tr>
+                    <tr key={g.id} className="border-b border-ink-50"><td className="py-1.5"><Badge className="bg-warning-500/10 text-warning-700">{g.stage}</Badge></td><td className="py-1.5 text-ink-600" dir="ltr">{g.rule}</td><td className="py-1.5 text-ink-400">{formatDateTime(g.created_at)}</td></tr>
                   ))}</tbody>
                 </table>
               </div>

@@ -10,7 +10,7 @@ import { useBranchQuery } from "../../lib/useBranchQuery";
 import { SectionTitle, LoadingScreen, Card, EmptyState, LoadErrorCard, ErrorBanner } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, type PaymentMethod, type VoucherKind } from "../../lib/types";
-import { formatCurrency, todayISO } from "../../lib/utils";
+import { formatCurrency, todayISO, COUNT } from "../../lib/utils";
 
 const sar = (h: number) => formatCurrency(h / 100);
 /** money that came in (+) or went back out (−); applying the deposit moves money between the guest's two balances */
@@ -41,7 +41,7 @@ export default function DaySummary() {
               <div className="divide-y divide-ink-50 text-sm">
                 {rows.map((r, i) => (
                   <div key={i} className="flex items-center justify-between gap-3 py-1.5">
-                    <span>{VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind} <span className="text-xs text-ink-400">· {r.method ? PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method : "من رصيد التأمين"} · {r.count} سند</span></span>
+                    <span>{VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind} <span className="text-xs text-ink-400">· {r.method ? PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method : "من رصيد التأمين"} · {COUNT.voucher(r.count)}</span></span>
                     <span dir="ltr" className={(SIGN[r.kind] ?? 0) < 0 ? "text-danger-600" : ""}>{sar(r.total)}</span>
                   </div>
                 ))}

@@ -12,7 +12,7 @@ import { useAuth } from "../lib/auth";
 import { staffApi, stayApi, toArabicError, newIdempotencyKey, type StayStatus, type PaymentEntry, type CheckInResult } from "../lib/api";
 import { useCashAccounts } from "../lib/useCashAccounts";
 import { METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, RESERVATION_STATUS_LABELS, type PaymentMethod, type ReservationStatus } from "../lib/types";
-import { formatCurrency, formatDateTime, UI_LOCALE } from "../lib/utils";
+import { formatCurrency, formatDateTime, UI_LOCALE, COUNT } from "../lib/utils";
 import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
 import { PaymentFields } from "./ReservationOperations";
@@ -86,10 +86,10 @@ function ShomoosCard({ s, id, done, fail, canAct, money }: Common & { canAct: bo
   const showForm = canAct && open && (!sh.registered || changed || editing);
   return (
     <Card data-testid="shomoos">
-      <Head icon={FileCheck} title="التسجيل في شموس" badge={sh.accepted_at && !changed ? <Badge className="bg-success-500/10 text-success-600">مقبول</Badge> : sh.registered && !changed ? <Badge className="bg-warning-500/10 text-warning-600">بانتظار القبول</Badge> : <Badge className="bg-ink-100 text-ink-500">لم يُسجَّل</Badge>} />
+      <Head icon={FileCheck} title="التسجيل في شموس" badge={sh.accepted_at && !changed ? <Badge className="bg-success-500/10 text-success-600">مقبول</Badge> : sh.registered && !changed ? <Badge className="bg-warning-500/10 text-warning-700">بانتظار القبول</Badge> : <Badge className="bg-ink-100 text-ink-500">لم يُسجَّل</Badge>} />
       <div className="grid gap-2 sm:grid-cols-2">
         <Step ok={sh.registered && !changed} label="تسجيل جميع النزلاء والمرافقين"
-          detail={sh.registered ? [money && sh.reference ? `المرجع ${sh.reference}` : null, `${sh.guest_count ?? 0} نزيل`, sh.registered_by, when(sh.registered_at)].filter(Boolean).join(" · ") : "لم يُسجَّل بعد"} />
+          detail={sh.registered ? [money && sh.reference ? `المرجع ${sh.reference}` : null, COUNT.guest(sh.guest_count ?? 0), sh.registered_by, when(sh.registered_at)].filter(Boolean).join(" · ") : "لم يُسجَّل بعد"} />
         <Step ok={!!sh.accepted_at && !changed} label="قبول شموس للتسجيل"
           detail={sh.accepted_at ? [sh.accepted_by, when(sh.accepted_at)].filter(Boolean).join(" · ") : sh.registered ? "بانتظار تأكيد القبول" : "بعد التسجيل"} />
       </div>
@@ -151,9 +151,9 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
       {money && (
         <AmountGrid className="mt-3">
           <AmountBox label="الليلة الأولى" value={sar(c.first_night)} />
-          <AmountBox label="المحصّل" value={sar(c.collected)} tone={(c.first_night_short ?? 0) > 0 ? "text-warning-600" : "text-success-600"} />
+          <AmountBox label="المحصّل" value={sar(c.collected)} tone={(c.first_night_short ?? 0) > 0 ? "text-warning-700" : "text-success-600"} />
           <AmountBox label="تأمين الفرع" value={sar(c.deposit_required)} />
-          <AmountBox label="التأمين المستلم" value={sar(c.deposit_balance)} tone={(c.deposit_short ?? 0) > 0 ? "text-warning-600" : "text-success-600"} />
+          <AmountBox label="التأمين المستلم" value={sar(c.deposit_balance)} tone={(c.deposit_short ?? 0) > 0 ? "text-warning-700" : "text-success-600"} />
         </AmountGrid>
       )}
       {canAct && core.length === 0 && (
@@ -238,7 +238,7 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
             <AmountBox label="ليالٍ مدفوعة" value={`${d.nights_covered} من ${d.nights}`} />
             <AmountBox label="المستحق حتى الآن" value={sar(d.due_now)} />
             <AmountBox label="المحصّل" value={sar(d.collected)} tone="text-success-600" />
-            <AmountBox label="المتبقي على الإقامة" value={sar(d.balance_due)} tone={d.balance_due > 0 ? "text-warning-600" : "text-success-600"} />
+            <AmountBox label="المتبقي على الإقامة" value={sar(d.balance_due)} tone={d.balance_due > 0 ? "text-warning-700" : "text-success-600"} />
           </AmountGrid>
           {d.overdue ? (
             <div className="mt-3 rounded-xl border border-danger-500/30 bg-danger-500/10 p-3 text-sm text-danger-600" role="alert" data-testid="overdue">
@@ -290,13 +290,13 @@ function DepartedCard({ s, id, done, canInspect, money, isMgr }: Common & { canI
   const closed = !!s.closure?.closed;
   return (
     <Card data-testid="departed">
-      <Head icon={LogOut} title={closed ? "مغلق" : "غادر"} badge={closed ? <Badge className="bg-ink-100 text-ink-600">مغلق</Badge> : <Badge className="bg-warning-500/10 text-warning-600">غادر ولم يُغلق</Badge>} />
+      <Head icon={LogOut} title={closed ? "مغلق" : "غادر"} badge={closed ? <Badge className="bg-ink-100 text-ink-600">مغلق</Badge> : <Badge className="bg-warning-500/10 text-warning-700">غادر ولم يُغلق</Badge>} />
       <p className="text-xs text-ink-500">غادر {when(s.checked_out_at)}{s.checked_out_by ? ` · سجّله ${s.checked_out_by}` : ""}</p>
       {closed
         ? <div className="mt-3"><Ok>أُغلقت الإقامة{s.closure?.closed_at ? ` في ${formatDateTime(s.closure.closed_at)}` : ""}: لا مستحق ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.</Ok></div>
         : <div className="mt-3"><Reasons tone="info" title="تُغلق الإقامة وحدها حين يكتمل ما يلي:" items={money && s.closure?.missing.length ? s.closure.missing : ["تسوية المال والتأمين وإصدار الفاتورة"]} /></div>}
       {s.inspection ? <InspectionView s={s} money={money} /> : canInspect && s.inspection_due && <InspectionForm id={id} done={done} />}
-      {money && s.deposit_refund_blocker && <p className="mt-3 flex items-center gap-1.5 text-xs text-warning-600"><ShieldAlert className="h-3.5 w-3.5" /> رد التأمين: {s.deposit_refund_blocker}</p>}
+      {money && s.deposit_refund_blocker && <p className="mt-3 flex items-center gap-1.5 text-xs text-warning-700"><ShieldAlert className="h-3.5 w-3.5" /> رد التأمين: {s.deposit_refund_blocker}</p>}
       {isMgr && s.corrections.reopen_until && (
         <button onClick={() => setReopen(true)} className="btn-ghost mt-3 text-xs text-danger-600"><RotateCcw className="h-3.5 w-3.5" /> إعادة فتح الإقامة (حتى {hhmm(s.corrections.reopen_until)})</button>
       )}
@@ -376,7 +376,7 @@ function Step({ ok, label, detail }: { ok: boolean; label: string; detail: strin
   );
 }
 function Reasons({ title, items, tone = "warning" }: { title: string; items: string[]; tone?: "warning" | "info" }) {
-  const cls = tone === "warning" ? "border-warning-500/30 bg-warning-500/10 text-warning-600" : "border-ink-100 bg-ink-50 text-ink-600";
+  const cls = tone === "warning" ? "border-warning-500/30 bg-warning-500/10 text-warning-700" : "border-ink-100 bg-ink-50 text-ink-600";
   return (
     <div className={`rounded-xl border p-3 ${cls}`} data-testid="reasons">
       <p className="flex items-center gap-2 text-sm font-medium"><AlertCircle className="h-4 w-4" /> {title}</p>
@@ -388,14 +388,14 @@ function Ok({ children }: { children: ReactNode }) {
   return <p className="flex items-start gap-2 rounded-xl bg-success-500/10 px-3 py-2 text-sm text-success-600"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> <span>{children}</span></p>;
 }
 function Warn({ children }: { children: ReactNode }) {
-  return <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-600"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{children}</span></p>;
+  return <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{children}</span></p>;
 }
 function ReasonModal({ open, title, warning, onClose, onSubmit }: { open: boolean; title: string; warning: string; onClose: () => void; onSubmit: (reason: string) => Promise<void> }) {
   const [reason, setReason] = useState("");
   return (
     <Modal open={open} title={title} onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!reason.trim()) throw new Error("VALIDATION: reason"); await onSubmit(reason.trim()); setReason(""); }}>
-        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />{warning}</div>
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />{warning}</div>
         <ReasonInput value={reason} onChange={setReason} />
         <Submit label="تأكيد" onCancel={onClose} />
       </ActionForm>

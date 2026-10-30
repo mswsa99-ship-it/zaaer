@@ -148,7 +148,7 @@ function stateLine(u: KeyboxUnit): string {
   return "لا يوجد صندوق مفاتيح مسجّل لهذه الوحدة";
 }
 
-const LINE_COLOR: Record<KeyboxState, string> = { change: "text-danger-600", untested: "text-warning-600", ok: "text-success-600", none: "text-ink-500" };
+const LINE_COLOR: Record<KeyboxState, string> = { change: "text-danger-600", untested: "text-warning-700", ok: "text-success-600", none: "text-ink-500" };
 
 function UnitCard({ u, shownCode, editing, busy, onReveal, onHide, onEdit, onCancel, onSaved, onTested }: {
   u: KeyboxUnit; shownCode: string | null; editing: boolean; busy: string | null;
@@ -250,7 +250,7 @@ function ChangeForm({ u, onCancel, onSaved }: { u: KeyboxUnit; onCancel: () => v
   return (
     <form onSubmit={submit} className="mt-3 space-y-3 rounded-xl border border-ink-100 bg-ink-50/60 p-3" data-testid="code-form">
       <p className="text-xs text-ink-500">اضبط الرمز الجديد على الصندوق وجرّبه، ثم اكتبه هنا مرتين. لا يُقبل الرمز الحالي نفسه.</p>
-      {u.guest_in_house && <p className="text-xs text-warning-600">في الوحدة نزيل مقيم: بعد التغيير سلّمه الرمز الجديد بنفسك.</p>}
+      {u.guest_in_house && <p className="text-xs text-warning-700">في الوحدة نزيل مقيم: بعد التغيير سلّمه الرمز الجديد بنفسك.</p>}
       <div className="grid grid-cols-2 gap-2">
         <Field label="الرمز الجديد">
           <input aria-label="الرمز الجديد" type="password" inputMode="numeric" autoComplete="off" value={code1} onChange={(e) => setCode1(digits(e.target.value))}

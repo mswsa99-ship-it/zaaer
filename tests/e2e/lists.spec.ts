@@ -176,11 +176,11 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await loginAs("finance");
     await go("/admin/finance");
     await page.getByLabel("من", { exact: true }).fill("2020-01-01");
-    const total = await matching(page, /(\d+) سند مطابق/);
+    const total = await matching(page, /السندات المطابقة: (\d+)/);
     expect(total).toBeGreaterThan(0);
     await expect(page.getByTestId("finance-totals")).toContainText("قبض إقامة");
     await page.getByLabel("الطريقة").selectOption("cash");
-    const cash = await matching(page, /(\d+) سند مطابق/);
+    const cash = await matching(page, /السندات المطابقة: (\d+)/);
     expect(cash).toBeLessThanOrEqual(total);
     for (const row of await page.locator("[data-testid=voucher-row]").all()) await expect(row).toContainText("نقد");
     const wb = await exportAll(page, "all");
@@ -192,7 +192,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     // the cancelled are shown only when asked
     await page.getByLabel("الطريقة").selectOption("");
     await page.getByLabel("الحالة").selectOption("all");
-    expect(await matching(page, /(\d+) سند مطابق/)).toBeGreaterThanOrEqual(total);
+    expect(await matching(page, /السندات المطابقة: (\d+)/)).toBeGreaterThanOrEqual(total);
   });
 
   test("LE06 / X09d the reports take the filters their data has: by staff member the collection rate is not claimed, by method the breakdown holds one method; the file carries the filters", async ({ page, loginAs, go }) => {

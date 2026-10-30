@@ -122,7 +122,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
           <div className="flex-1">
             <p className="text-sm font-semibold text-ink-800">مساعد الاستقبال الذكي</p>
             <p className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
-              {status.handedOff ? <span className="inline-flex items-center gap-1 text-warning-600"><UserRound className="h-3 w-3" /> تم التحويل إلى موظف الاستقبال — سيرد هنا</span>
+              {status.handedOff ? <span className="inline-flex items-center gap-1 text-warning-700"><UserRound className="h-3 w-3" /> تم التحويل إلى موظف الاستقبال — سيرد هنا</span>
                 : status.mode === "ai" ? <span className="inline-flex items-center gap-1 text-accent-600"><Bot className="h-3 w-3" /> مساعد رقمي</span>
                 : <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" /> مسار إرشادي</span>}
               {status.verified && <span className="inline-flex items-center gap-1 text-success-600"><ShieldCheck className="h-3 w-3" /> حجز متحقق</span>}
@@ -132,7 +132,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
         </div>
 
         {status.handedOff && (
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning-500/30 bg-warning-500/10 px-3 py-2 text-xs text-warning-600">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning-500/30 bg-warning-500/10 px-3 py-2 text-xs text-warning-700">
             <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" /> هذه المحادثة محوّلة إلى موظف الاستقبال وسيرد هنا. الأسئلة العامة (المواعيد، الإنترنت، المواقف، الموقع) تُجاب فورًا.</span>
             <button onClick={resetConversation} className="font-medium underline-offset-2 hover:underline">بدء محادثة جديدة</button>
           </div>
@@ -159,7 +159,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); send(input); setInput(""); }} className="mt-2 flex items-center gap-2">
-          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={status.handedOff ? "اكتب لموظف الاستقبال…" : "اكتب سؤالك…"} className={cn("input flex-1", kiosk && "py-3 text-base")} maxLength={2000} disabled={thinking} autoFocus />
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} aria-label="رسالتك" placeholder={status.handedOff ? "اكتب لموظف الاستقبال…" : "اكتب سؤالك…"} className={cn("input flex-1", kiosk && "py-3 text-base")} maxLength={2000} disabled={thinking} autoFocus />
           <button type="submit" className="btn-primary" disabled={!input.trim() || thinking} aria-label="إرسال"><Send className="h-4 w-4" /></button>
         </form>
       </div>

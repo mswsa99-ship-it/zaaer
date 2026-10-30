@@ -1,3 +1,4 @@
+import { COUNT } from "../../lib/utils";
 import { useReservations } from "../../lib/hooks";
 import { ReservationCardRow } from "../../components/ReservationCard";
 import { SectionTitle, LoadingScreen, EmptyState, LoadErrorCard, ErrorBanner } from "../../components/ui";
@@ -45,7 +46,7 @@ export default function StaffDashboard() {
 
   const stats = [
     { label: "وصول اليوم", value: arrivals.length, icon: CalendarClock, to: "/staff/arrivals", color: "bg-brand-50 text-brand-600" },
-    { label: "بانتظار المطابقة", value: pendingIdentity.length, icon: UserCheck, to: "/staff/identity-verification", color: "bg-warning-500/10 text-warning-600" },
+    { label: "بانتظار المطابقة", value: pendingIdentity.length, icon: UserCheck, to: "/staff/identity-verification", color: "bg-warning-500/10 text-warning-700" },
     { label: "بانتظار الدفع", value: pendingPayment.length, icon: CreditCard, to: "/staff/payments", color: "bg-danger-500/10 text-danger-600" },
     { label: "جاهز لتسجيل الوصول", value: readyForApproval.length, icon: LogIn, to: "/staff/access-approvals", color: "bg-accent-500/10 text-accent-600" },
     { label: "استلموا الرمز أو المفتاح", value: delivered.length, icon: KeyRound, to: "/staff/access-approvals", color: "bg-success-500/10 text-success-600" },
@@ -58,7 +59,7 @@ export default function StaffDashboard() {
       <ReviewBanner summary={review} />
       {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
       {fu && fu.overdue.length + fu.departed_open.length + fu.late_departures.length > 0 && (
-        <Link to="/staff/followups" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-600 hover:shadow-sm" data-testid="followups-banner">
+        <Link to="/staff/followups" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-700 hover:shadow-sm" data-testid="followups-banner">
           <span className="flex items-center gap-2 font-medium"><BellRing className="h-4 w-4" /> متابعة الإقامات</span>
           {fu.overdue.length > 0 && <span>{fu.overdue.length} بليلة غير مدفوعة بعد موعدها</span>}
           {fu.departed_open.length > 0 && <span>{fu.departed_open.length} غادر ولم يُغلق</span>}
@@ -93,7 +94,7 @@ export default function StaffDashboard() {
         ))}
       </div>
 
-      <SectionTitle title="وصول اليوم" subtitle={`${arrivals.length} حجز`} />
+      <SectionTitle level={2} title="وصول اليوم" subtitle={COUNT.booking(arrivals.length)} />
       {arrivals.length === 0 ? (
         <EmptyState icon={<CalendarClock className="h-10 w-10" />} title="لا توجد وصولات اليوم" />
       ) : (
@@ -105,7 +106,7 @@ export default function StaffDashboard() {
       {readyForApproval.length > 0 && (
         <>
           <div className="mt-8" />
-          <SectionTitle title="جاهز لتسجيل الوصول" subtitle={`${readyForApproval.length} حجز اكتملت هويته وشموس`} action={<Link to="/staff/access-approvals" className="text-sm text-brand-600">عرض الكل</Link>} />
+          <SectionTitle level={2} title="جاهز لتسجيل الوصول" subtitle={`اكتملت هويته وشموس: ${readyForApproval.length}`} action={<Link to="/staff/access-approvals" className="text-sm text-brand-600">عرض الكل</Link>} />
           <div className="space-y-3">
             {readyForApproval.slice(0, 5).map((r) => <ReservationCardRow key={r.id} r={r} />)}
           </div>

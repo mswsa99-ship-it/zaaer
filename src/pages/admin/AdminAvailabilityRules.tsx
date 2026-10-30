@@ -57,7 +57,7 @@ export default function AdminAvailabilityRules() {
   return (
     <div>
       <SectionTitle title="قواعد الكشف التدريجي" subtitle="Sequential Room Release — تحكم في عدد الغرف المعروضة تدريجيًا" action={
-        <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)}>
+        <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
           {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
         </select>
       } />
@@ -81,11 +81,11 @@ export default function AdminAvailabilityRules() {
               <div className="flex flex-wrap items-center gap-4">
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">العدد الابتدائي</label>
-                  <input type="number" min={0} defaultValue={r.initial_public_release} onBlur={(e) => updateField(r.id, "initial_public_release", Number(e.target.value))} className="input w-20 text-center" disabled={acting === r.id + "initial_public_release"} />
+                  <input type="number" min={0} defaultValue={r.initial_public_release} onBlur={(e) => updateField(r.id, "initial_public_release", Number(e.target.value))} className="input w-20 text-center" aria-label="الإتاحة الأولى للعامة" disabled={acting === r.id + "initial_public_release"} />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">الزيادة</label>
-                  <input type="number" min={1} defaultValue={r.release_increment} onBlur={(e) => updateField(r.id, "release_increment", Number(e.target.value))} className="input w-20 text-center" disabled={acting === r.id + "release_increment"} />
+                  <input type="number" min={1} defaultValue={r.release_increment} onBlur={(e) => updateField(r.id, "release_increment", Number(e.target.value))} className="input w-20 text-center" aria-label="زيادة الإتاحة" disabled={acting === r.id + "release_increment"} />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">الشرط</label>

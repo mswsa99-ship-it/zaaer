@@ -39,7 +39,7 @@ export default function AccessApprovals() {
   const showOpen = filter !== "done"; const showDone = filter !== "open";
   return (
     <div>
-      <SectionTitle title="الوصول وتسليم الرمز" subtitle={`${arriving.length} بانتظار تسجيل الوصول · ${awaitingCode.length} بانتظار تسليم الرمز`} />
+      <SectionTitle title="الوصول وتسليم الرمز" subtitle={`بانتظار تسجيل الوصول: ${arriving.length} · بانتظار تسليم الرمز: ${awaitingCode.length}`} />
       <ListFilterBar value={filter} onChange={setFilter} openLabel="غير المعالَج" doneLabel="تمت معالجته" openCount={arriving.length + awaitingCode.length} doneCount={handled.length} windowHours={WINDOW_HOURS} />
       {showOpen && <>
       <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-700"><LogIn className="h-4 w-4 text-brand-600" /> بانتظار تسجيل الوصول</h2>

@@ -6,7 +6,7 @@ import { opsApi, ratesApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, COUNT } from "../../lib/utils";
 
 interface Cat { id: string; name_ar: string; name_en: string | null; description: string | null; base_capacity: number; max_capacity: number; base_price_halalas: number; amenities: string[] | null; is_active: boolean; is_public: boolean; sort_order: number; archived_at: string | null; version: number; rooms?: number;
   /** 0030: weekly and monthly prices (7+ / 30+ nights), the minimum nightly price, and one price or one for the platforms too */
@@ -51,7 +51,7 @@ export default function AdminRoomCategories() {
                   <div className="flex items-center gap-2"><h3 className="text-base font-semibold text-ink-800">{c.name_ar}</h3><ArchivedBadge archivedAt={c.archived_at} />{!c.is_public && <Badge className="bg-ink-100 text-ink-500">غير معلن</Badge>}</div>
                   {c.name_en && <p className="text-xs text-ink-400" dir="ltr">{c.name_en}</p>}
                   {c.description && <p className="mt-1 text-sm text-ink-500">{c.description}</p>}
-                  <p className="mt-2 text-xs text-ink-500">السعة {c.base_capacity}–{c.max_capacity} · {c.rooms} وحدة · السعر الأساسي <span className="font-medium text-ink-700">{formatCurrency(c.base_price_halalas / 100)}</span> / ليلة</p>
+                  <p className="mt-2 text-xs text-ink-500">السعة {c.base_capacity}–{c.max_capacity} · {COUNT.unit(c.rooms ?? 0)} · السعر الأساسي <span className="font-medium text-ink-700">{formatCurrency(c.base_price_halalas / 100)}</span> / ليلة</p>
                   <p className="mt-1 text-xs text-ink-400" data-testid="category-prices">{[c.weekly_price_halalas != null ? `أسبوعي ${sar(c.weekly_price_halalas)}` : null, c.monthly_price_halalas != null ? `شهري ${sar(c.monthly_price_halalas)}` : null, c.min_nightly_halalas != null ? `الأدنى ${sar(c.min_nightly_halalas)}` : null, c.price_mode === "by_channel" ? "مختلف للمنصات" : "سعر موحد"].filter(Boolean).join(" · ")}</p>
                   {c.amenities && c.amenities.length > 0 && <p className="mt-1 text-xs text-ink-400">{c.amenities.join(" · ")}</p>}
                 </div>
@@ -90,7 +90,7 @@ export default function AdminRoomCategories() {
             </div>
             <div className="mt-3 flex gap-4"><Toggle checked={draft.is_public ?? true} onChange={(v) => setDraft({ ...draft, is_public: v })} label="معلن للنزلاء" />{draft.id && <Toggle checked={draft.is_active ?? true} onChange={(v) => setDraft({ ...draft, is_active: v })} label="فعال" />}</div>
             {impact && impact.length > 0 && (
-              <div className="mt-4 rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" role="alert" data-testid="capacity-impact">
+              <div className="mt-4 rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700" role="alert" data-testid="capacity-impact">
                 <p className="font-medium">{impact.length} حجز قادم فيه نزلاء أكثر من السعة الجديدة:</p>
                 <ul className="mt-1 list-inside list-disc text-xs">{impact.map((x) => <li key={x.id}><span className="font-mono">{x.internal_ref}</span> · {x.guests} نزلاء · <span dir="ltr">{x.check_in} → {x.check_out}</span></li>)}</ul>
                 <p className="mt-1 text-xs">تبقى هذه الحجوزات كما هي. احفظ مرة أخرى لتأكيد السعة الجديدة.</p>

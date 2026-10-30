@@ -85,7 +85,7 @@ export default function AdminRates() {
               <tr>
                 <th className="sticky right-0 z-20 min-w-[8.5rem] border-b border-l border-ink-100 bg-white px-3 py-2 text-right font-semibold text-ink-700 sm:min-w-[13rem]">النوع</th>
                 {nights.map((n) => (
-                  <th key={n} className={`min-w-[4.5rem] border-b border-ink-100 px-1 py-1.5 text-center font-medium ${isPast(n) ? "bg-ink-50 text-ink-300" : dow(n) === 5 || dow(n) === 6 ? "bg-brand-50/60 text-brand-800" : "text-ink-600"}`}>
+                  <th key={n} className={`min-w-[4.5rem] border-b border-ink-100 px-1 py-1.5 text-center font-medium ${isPast(n) ? "bg-ink-50 text-ink-400" : dow(n) === 5 || dow(n) === 6 ? "bg-brand-50/60 text-brand-800" : "text-ink-600"}`}>
                     <div>{DAY_NAMES[dow(n)]}</div><div dir="ltr" className="text-[10px] opacity-80">{n.slice(8, 10)}/{n.slice(5, 7)}</div>
                   </th>
                 ))}
@@ -124,7 +124,7 @@ function TypeRows({ c, past, picked, onPick }: { c: RateCategory; past: (night: 
           </div>
         </th>
         {c.days.map((d) => (
-          <td key={d.night} className={`border-t border-ink-100 px-1 pt-2 text-center font-medium ${past(d.night) ? "bg-ink-50 text-ink-300" : d.available === 0 ? "text-danger-600" : "text-ink-500"}`} data-testid="rates-available">
+          <td key={d.night} className={`border-t border-ink-100 px-1 pt-2 text-center font-medium ${past(d.night) ? "bg-ink-50 text-ink-400" : d.available === 0 ? "text-danger-600" : "text-ink-500"}`} data-testid="rates-available">
             {d.available}/{c.units}
           </td>
         ))}
@@ -141,7 +141,7 @@ function TypeRows({ c, past, picked, onPick }: { c: RateCategory; past: (night: 
               <td key={d.night} className="px-0.5 py-0.5">
                 <button type="button" disabled={isPast} onClick={(e) => onPick(cell, e.shiftKey)}
                   aria-pressed={on} aria-label={`${c.name} ${label(r)} ${d.night}`} data-testid="rates-cell"
-                  className={`w-full rounded-lg px-1 py-1.5 text-center tabular-nums transition ${isPast ? "cursor-default bg-ink-50 text-ink-300" : on ? "bg-brand-600 font-semibold text-white" : v != null ? "bg-white font-semibold text-ink-800 ring-1 ring-inset ring-ink-100 hover:ring-brand-300" : "bg-ink-50/60 text-ink-400 hover:bg-ink-100"}`}>
+                  className={`w-full rounded-lg px-1 py-1.5 text-center tabular-nums transition ${isPast ? "cursor-default bg-ink-50 text-ink-400" : on ? "bg-brand-600 font-semibold text-white" : v != null ? "bg-white font-semibold text-ink-800 ring-1 ring-inset ring-ink-100 hover:ring-brand-300" : "bg-ink-50/60 text-ink-400 hover:bg-ink-100"}`}>
                   {short(shown)}
                 </button>
               </td>

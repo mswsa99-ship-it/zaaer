@@ -117,10 +117,10 @@ export default function AdminDashboard() {
     { label: "وصول اليوم", value: stats.arrivalsToday, icon: BookCheck, color: "bg-brand-50 text-brand-600" },
     { label: "إجمالي الحجوزات", value: stats.totalReservations, icon: Users, color: "bg-ink-100 text-ink-600" },
     { label: "صافي التحصيل (7 أيام، من دفتر السندات)", value: stats.netCollected7Halalas == null ? "—" : formatCurrency(stats.netCollected7Halalas / 100), icon: Wallet, color: "bg-success-500/10 text-success-600" },
-    { label: "طلبات دفع معلّقة", value: stats.pendingPayments, icon: Wallet, color: "bg-warning-500/10 text-warning-600" },
+    { label: "طلبات دفع معلّقة", value: stats.pendingPayments, icon: Wallet, color: "bg-warning-500/10 text-warning-700" },
     { label: "تذاكر تحويل لمشرف (مفتوحة)", value: stats.openHandoffs, icon: LifeBuoy, color: stats.openHandoffs > 0 ? "bg-danger-500/10 text-danger-600" : "bg-ink-100 text-ink-600" },
-    { label: "حجوزات غير مطابقة", value: stats.unmatched, icon: SearchX, color: stats.unmatched > 0 ? "bg-warning-500/10 text-warning-600" : "bg-ink-100 text-ink-600" },
-    { label: "تسليم رمز بلا تأكيد (> ساعة)", value: stats.deliveryFailures, icon: KeyRound, color: stats.deliveryFailures > 0 ? "bg-warning-500/10 text-warning-600" : "bg-ink-100 text-ink-600" },
+    { label: "حجوزات غير مطابقة", value: stats.unmatched, icon: SearchX, color: stats.unmatched > 0 ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-600" },
+    { label: "تسليم رمز بلا تأكيد (> ساعة)", value: stats.deliveryFailures, icon: KeyRound, color: stats.deliveryFailures > 0 ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-600" },
     { label: "طلبات المساعد الذكي اليوم", value: stats.aiToday ? `${stats.aiToday.requests} (${stats.aiToday.tokens.toLocaleString("en")} توكن)` : "0", icon: Bot, color: "bg-brand-50 text-brand-600" },
   ];
 

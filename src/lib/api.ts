@@ -788,7 +788,7 @@ export interface GroupSummary {
   units: Array<{ id: string; internal_ref: string; status: string; check_in: string; check_out: string; adults: number; companions: number; room_number: string | null; category_name: string | null; total_halalas: number | null; paid_halalas: number | null; balance_due_halalas: number | null; deposit_balance_halalas: number | null }>;
   totals: { units: number; active_units?: number; total_halalas?: number; paid_halalas?: number; balance_due_halalas?: number; deposit_balance_halalas?: number };
 }
-export interface GuestProfileRow { id: string; full_name: string; phone_masked: string | null; nationality: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; stays: number; last_check_in: string | null; banned: boolean; ban_reason: string | null; duplicates: number; created_at: string }
+export interface GuestProfileRow { id: string; full_name: string; phone_masked: string | null; nationality: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; stays: number; last_check_in: string | null; banned: boolean; ban_reason: string | null; duplicates: number; incomplete?: boolean; created_at: string }
 export interface GuestProfileDetail {
   profile: { id: string; full_name: string; phone: string | null; nationality: string | null; email: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; rated_at: string | null; rated_by: string | null; created_at: string };
   ban: { id: string; reason: string; since: string; own: boolean; by: string | null } | null;
@@ -799,7 +799,7 @@ export interface GuestProfileDetail {
 }
 /** Guest profiles (decisions 2, 21): search, one profile with its stays, the rating, the ban. */
 export const guestProfileApi = {
-  list: (p: { q?: string; filter?: "all" | "banned" | "duplicates" | "rated" | "low"; limit?: number; offset?: number }) => rpc<{ total: number; rows: GuestProfileRow[] }>("fn_guest_profiles", { p }),
+  list: (p: { q?: string; filter?: "all" | "banned" | "duplicates" | "rated" | "low" | "incomplete"; limit?: number; offset?: number }) => rpc<{ total: number; rows: GuestProfileRow[] }>("fn_guest_profiles", { p }),
   get: (id: string) => rpc<GuestProfileDetail>("fn_guest_profile", { p_id: id }),
   rate: (profileId: string, rating: number | null, note: string | null) => rpc<{ ok: boolean; rating: number | null }>("fn_guest_rate", { p: { profile_id: profileId, rating, note } }),
   ban: (profileId: string, reason: string) => rpc<{ ok: boolean; duplicate: boolean; ban_id?: string }>("fn_guest_ban", { p: { profile_id: profileId, ban: true, reason } }),

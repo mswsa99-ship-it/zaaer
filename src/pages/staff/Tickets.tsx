@@ -39,7 +39,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 const KIND_COLORS: Record<string, string> = {
-  unmatched_reservation: "bg-warning-500/10 text-warning-600",
+  unmatched_reservation: "bg-warning-500/10 text-warning-700",
   assistance: "bg-brand-50 text-brand-700",
   escalation: "bg-danger-500/10 text-danger-600",
   ai_guardrail: "bg-danger-500/10 text-danger-600",
@@ -141,7 +141,7 @@ export default function Tickets() {
 
       {canSeeHandoff && (
         <section>
-          <SectionTitle title="طلبات التدخل البشري" subtitle={`${openHandoff} طلب مفتوح`} />
+          <SectionTitle title="طلبات التدخل البشري" subtitle={`طلبات مفتوحة: ${openHandoff}`} />
           {handoffs.length === 0 ? (
             <EmptyState icon={<LifeBuoy className="h-10 w-10" />} title="لا توجد طلبات تدخل" description="تظهر هنا الحالات التي أحالها المساعد الذكي إلى موظف." />
           ) : (
@@ -181,7 +181,7 @@ export default function Tickets() {
       )}
 
       <section>
-        <SectionTitle title="البلاغات والصيانة" subtitle={`${openMaint} بلاغ مفتوح`} action={
+        <SectionTitle title="البلاغات والصيانة" subtitle={`بلاغات مفتوحة: ${openMaint}`} action={
           <button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلاغ جديد</button>
         } />
 

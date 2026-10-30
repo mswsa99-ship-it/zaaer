@@ -73,7 +73,7 @@ function PreviewBox({ pv, error }: { pv: InvoicePreview | null; error: string | 
   return (
     <div className="space-y-2" data-testid="invoice-preview">
       {pv.problems.length > 0 && (
-        <div className="flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600" role="status">
+        <div className="flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700" role="status">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><div>{pv.problems.map((p) => <p key={p}>{p}</p>)}</div>
         </div>
       )}
@@ -206,7 +206,7 @@ function CancelInvoiceDialog({ inv, onClose, onDone }: { inv: Invoice | null; on
   return (
     <Modal open title={`إلغاء الفاتورة ${inv.number}`} onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!reason.trim()) throw new Error("VALIDATION: reason"); await invoiceApi.cancel(inv.id, reason.trim()); await onDone(); }}>
-        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />تبقى الفاتورة مسجلة بحالة «ملغاة»، ويعود ما حملته إلى «لم يُفوتر»، ويظهر الإلغاء في قائمة المراجعة للمالك. الإقامة المغلقة تعود إلى «غادر» حتى تُفوتر من جديد.</div>
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />تبقى الفاتورة مسجلة بحالة «ملغاة»، ويعود ما حملته إلى «لم يُفوتر»، ويظهر الإلغاء في قائمة المراجعة للمالك. الإقامة المغلقة تعود إلى «غادر» حتى تُفوتر من جديد.</div>
         <ReasonInput value={reason} onChange={setReason} />
         <Submit label="إلغاء الفاتورة" onCancel={onClose} danger />
       </ActionForm>
@@ -276,7 +276,7 @@ export function InvoiceList({ d, canEdit, canCancel, onDone }: { d: ReservationD
     <>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink-700">الفواتير</h3>
-        {left > 0 && <span className="text-xs text-warning-600" data-testid="uninvoiced">لم يُفوتر بعد: <span dir="ltr">{sar(left)}</span></span>}
+        {left > 0 && <span className="text-xs text-warning-700" data-testid="uninvoiced">لم يُفوتر بعد: <span dir="ltr">{sar(left)}</span></span>}
         {left < 0 && <span className="text-xs text-danger-600" data-testid="uninvoiced">الفواتير تزيد على قيمة الإقامة <span dir="ltr">{sar(-left)}</span> — عدّل الفاتورة</span>}
       </div>
       {invoices.length === 0 ? <p className="text-xs text-ink-400">لا فواتير بعد. تُصدر فاتورة الإقامة تلقائيًا عند المغادرة.</p> : (

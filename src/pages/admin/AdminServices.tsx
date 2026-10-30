@@ -41,12 +41,12 @@ export default function AdminServices() {
             <Card key={r.id} className={r.archived_at ? "opacity-60" : ""}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2"><h3 className="font-semibold text-ink-800">{r.name_ar}</h3><ArchivedBadge archivedAt={r.archived_at} />{!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-600">معطلة</Badge>}</div>
+                  <div className="flex items-center gap-2"><h3 className="font-semibold text-ink-800">{r.name_ar}</h3><ArchivedBadge archivedAt={r.archived_at} />{!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطلة</Badge>}</div>
                   <p className="text-sm text-ink-700">{r.is_free ? "مجانية" : formatCurrency(r.price_halalas / 100)} <span className="text-xs text-ink-400">· {BILLING_UNIT_LABELS[r.billing_unit]} · {r.taxable ? "خاضعة للضريبة" : "بدون ضريبة"}</span></p>
                   {r.late_checkout_until && <p className="mt-1 text-xs text-brand-700">مغادرة متأخرة: تنقل المغادرة إلى الساعة <span dir="ltr">{r.late_checkout_until.slice(0, 5)}</span></p>}
                   {r.description && <p className="mt-1 text-xs text-ink-500">{r.description}</p>}
                 </div>
-                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل الخدمة" title="تعديل"><Pencil className="h-4 w-4" /></button>
               </div>
             </Card>
           ))}

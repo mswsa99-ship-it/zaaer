@@ -162,7 +162,7 @@ export default function StaffReservationNew() {
                 </div>
               ) : (
                 <div>
-                  <div className="relative"><Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" /><input className="input pr-9" value={profileQ} onChange={(e) => setProfileQ(e.target.value)} placeholder="ضيف سابق؟ ابحث بالاسم أو الجوال أو رقم الوثيقة" aria-label="بحث عن ضيف سابق" /></div>
+                  <div className="relative"><Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" /><input className="input pr-9" value={profileQ} onChange={(e) => setProfileQ(e.target.value)} placeholder="ضيف سابق؟ ابحث بالاسم أو الجوال أو رقم الوثيقة" aria-label="بحث عن ضيف سابق" /></div>
                   {profileHits.length > 0 && (
                     <ul className="mt-2 divide-y divide-ink-50 rounded-lg border border-ink-100 bg-white text-sm">
                       {profileHits.map((g) => <li key={g.id}><button type="button" onClick={() => { setGuest(g); setNewProfile(false); setProfileQ(""); setProfileHits([]); setF({ ...f, guest_name: g.full_name, nationality: g.nationality ?? f.nationality }); }} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-right hover:bg-ink-50" data-testid="profile-hit"><span>{g.full_name}{g.banned && <span className="mr-2 text-xs text-danger-600">محظور</span>}</span><span className="text-xs text-ink-400" dir="ltr">{g.phone_masked ?? ""} · {g.stays}</span></button></li>)}

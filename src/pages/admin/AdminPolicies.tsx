@@ -61,7 +61,7 @@ export default function AdminPolicies() {
     <div>
       <SectionTitle title="السياسات" subtitle="قاعدة المعرفة العامة للمنشأة لكل فرع" action={
         <div className="flex items-center gap-2">
-          <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)}>
+          <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
           </select>
           {canEdit && <button onClick={() => setDraft({ ...EMPTY, sort_order: rows.length + 1 })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> سياسة جديدة</button>}
@@ -83,8 +83,8 @@ export default function AdminPolicies() {
                 <FileText className="h-4 w-4 text-brand-600" />
                 <h3 className="text-sm font-semibold text-ink-800">{p.title}</h3>
                 <Badge className="bg-ink-100 text-ink-500">{TOPICS[p.topic] ?? p.topic}</Badge>
-                <Badge className={p.is_public ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-600"}>{p.is_public ? "عامة — يراها المساعد" : "داخلية"}</Badge>
-                <span className="mr-auto text-xs text-ink-300">#{p.sort_order ?? 0}</span>
+                <Badge className={p.is_public ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{p.is_public ? "عامة — يراها المساعد" : "داخلية"}</Badge>
+                <span className="mr-auto text-xs text-ink-400">#{p.sort_order ?? 0}</span>
                 {canEdit && (
                   <>
                     <button onClick={() => setDraft({ ...p })} className="text-ink-400 hover:text-brand-600" title="تعديل"><Pencil className="h-4 w-4" /></button>

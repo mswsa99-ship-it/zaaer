@@ -68,7 +68,7 @@ function GuardCard({ icon, title, description, detail, action }: { icon: ReactNo
   return (
     <div className="mx-auto max-w-xl py-10" role="alert">
       <Card className="flex flex-col items-center gap-3 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning-500/10 text-warning-600">{icon}</div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning-500/10 text-warning-700">{icon}</div>
         <h2 className="text-lg font-semibold text-ink-800">{title}</h2>
         <p className="max-w-md text-sm text-ink-500">{description}</p>
         {detail && <p className="max-w-md text-xs text-danger-600">{detail}</p>}

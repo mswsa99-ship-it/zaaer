@@ -46,7 +46,7 @@ export default function StaySummary() {
         </div>
       ) : (
         <div className="space-y-3">
-          {s.accepted_at && <p className="rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600">{en ? "The summary changed since your last acceptance (a payment or a change of the stay). Please read and accept the current one." : "تغيّر الملخص منذ إقرارك السابق (دفعة أو تعديل في الإقامة). اقرأ النسخة الحالية وأقرّ بها."}</p>}
+          {s.accepted_at && <p className="rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700">{en ? "The summary changed since your last acceptance (a payment or a change of the stay). Please read and accept the current one." : "تغيّر الملخص منذ إقرارك السابق (دفعة أو تعديل في الإقامة). اقرأ النسخة الحالية وأقرّ بها."}</p>}
           <button onClick={async () => { if (!token) return; setBusy(true); try { await guestApi.acknowledge(token, s.hash); await load(); } catch (e) { setError(toArabicError(e)); } finally { setBusy(false); } }} disabled={busy} className="btn-primary w-full" data-testid="accept-summary">
             {busy ? <Spinner /> : en ? "I have read the summary and accept it" : "قرأت ملخص الإقامة وأقرّ به"}
           </button>

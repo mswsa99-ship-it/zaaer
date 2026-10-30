@@ -54,14 +54,14 @@ export default function AdminCashAccounts() {
                       <span className="font-semibold text-ink-800">{a.name}</span>
                       {a.is_default && !a.archived_at && <Badge className="bg-brand-50 text-brand-700"><Star className="ml-1 inline h-3 w-3" />الافتراضي</Badge>}
                       <ArchivedBadge archivedAt={a.archived_at} />
-                      {!a.is_active && !a.archived_at && <Badge className="bg-warning-500/10 text-warning-600">موقوف</Badge>}
+                      {!a.is_active && !a.archived_at && <Badge className="bg-warning-500/10 text-warning-700">موقوف</Badge>}
                     </div>
                     {(a.bank_name || a.account_last4) && <p className="mt-0.5 text-xs text-ink-500">{[a.bank_name, last4Text(a.account_last4)].filter(Boolean).join(" · ")}</p>}
                     {a.archive_reason && <p className="mt-0.5 text-xs text-ink-400">سبب الأرشفة: {a.archive_reason}</p>}
                   </div>
                   {canEdit && (
                     <div className="flex gap-1">
-                      {!a.archived_at && <button onClick={() => setDraft({ ...a })} className="btn-ghost p-1.5" title="تعديل"><Pencil className="h-4 w-4" /></button>}
+                      {!a.archived_at && <button onClick={() => setDraft({ ...a })} className="btn-ghost p-1.5" title="تعديل" aria-label="تعديل"><Pencil className="h-4 w-4" /></button>}
                       <button onClick={() => { setReason(""); setLifecycle({ a, archive: !a.archived_at }); }} className="btn-ghost p-1.5 text-ink-400" title={a.archived_at ? "استعادة" : "أرشفة"}>{a.archived_at ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}</button>
                     </div>
                   )}
@@ -79,8 +79,8 @@ export default function AdminCashAccounts() {
       <SectionTitle title="الصناديق والحسابات" subtitle="أين يُقيَّد كل قبض ورد في هذا الفرع — قيود فقط، يكمّلها النظام المحاسبي لاحقًا" action={
         <div className="flex items-center gap-3"><BranchPicker />{canEdit && <button onClick={() => setDraft({ kind: "cash_box", name: "", is_default: false })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> صندوق أو حساب</button>}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
-      {notice && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-600">{notice}</p>}
-      {missingDefault.length > 0 && rows.length > 0 && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-600">لا يوجد {missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} افتراضي: كل سند بهذه الطريقة يحتاج اختيار الحساب يدويًا.</p>}
+      {notice && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{notice}</p>}
+      {missingDefault.length > 0 && rows.length > 0 && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">لا يوجد {missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} افتراضي: كل سند بهذه الطريقة يحتاج اختيار الحساب يدويًا.</p>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : rows.length === 0 ? <EmptyState icon={<Wallet className="h-10 w-10" />} title="لا توجد صناديق ولا حسابات" description="لكل فرع صندوق وحساب بنكي من البداية؛ أضف ما تحتاج." /> : (
         <div className="grid gap-6 lg:grid-cols-2">{group("cash_box")}{group("bank_account")}</div>

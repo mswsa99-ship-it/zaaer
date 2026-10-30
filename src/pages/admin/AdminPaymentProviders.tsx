@@ -26,11 +26,11 @@ export default function AdminPaymentProviders() {
           </div>
           <div className="rounded-xl border border-warning-500/30 p-3">
             <p className="text-sm font-medium text-ink-700">رابط دفع إلكتروني</p>
-            <p className="mt-1 text-xs text-warning-600">بانتظار اعتماد المزود — البنية جاهزة</p>
+            <p className="mt-1 text-xs text-warning-700">بانتظار اعتماد المزود — البنية جاهزة</p>
           </div>
           <div className="rounded-xl border border-warning-500/30 p-3">
             <p className="text-sm font-medium text-ink-700">جهاز نقاط البيع (POS)</p>
-            <p className="mt-1 text-xs text-warning-600">يدوي حاليًا — إدخال رقم مرجع يدوي معتمد من المشرف</p>
+            <p className="mt-1 text-xs text-warning-700">يدوي حاليًا — إدخال رقم مرجع يدوي معتمد من المشرف</p>
           </div>
         </div>
       </Card>

@@ -28,9 +28,9 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <StatusBadge status={r.identity_status} map={GUEST_VERIFICATION_LABELS} colorMap={{ verified: "bg-success-500/10 text-success-600", rejected: "bg-danger-500/10 text-danger-600", data_submitted: "bg-warning-500/10 text-warning-600", not_started: "bg-ink-100 text-ink-400" }} />
-            <StatusBadge status={r.payment_status} map={PAYMENT_STATUS_LABELS} colorMap={{ paid: "bg-success-500/10 text-success-600", pending: "bg-warning-500/10 text-warning-600", failed: "bg-danger-500/10 text-danger-600" }} />
-            <StatusBadge status={r.access_status} map={ACCESS_STATUS_LABELS} colorMap={{ approved: "bg-accent-500/10 text-accent-600", delivered: "bg-success-500/10 text-success-600", acknowledged: "bg-success-500/10 text-success-600", key_handed: "bg-success-500/10 text-success-600", eligibility_review: "bg-warning-500/10 text-warning-600", locked: "bg-ink-100 text-ink-400" }} />
+            <StatusBadge status={r.identity_status} map={GUEST_VERIFICATION_LABELS} colorMap={{ verified: "bg-success-500/10 text-success-600", rejected: "bg-danger-500/10 text-danger-600", data_submitted: "bg-warning-500/10 text-warning-700", not_started: "bg-ink-100 text-ink-400" }} />
+            <StatusBadge status={r.payment_status} map={PAYMENT_STATUS_LABELS} colorMap={{ paid: "bg-success-500/10 text-success-600", pending: "bg-warning-500/10 text-warning-700", failed: "bg-danger-500/10 text-danger-600" }} />
+            <StatusBadge status={r.access_status} map={ACCESS_STATUS_LABELS} colorMap={{ approved: "bg-accent-500/10 text-accent-600", delivered: "bg-success-500/10 text-success-600", acknowledged: "bg-success-500/10 text-success-600", key_handed: "bg-success-500/10 text-success-600", eligibility_review: "bg-warning-500/10 text-warning-700", locked: "bg-ink-100 text-ink-400" }} />
           </div>
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-ink-50 pt-2 text-xs text-ink-400">

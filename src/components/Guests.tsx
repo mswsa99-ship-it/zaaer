@@ -59,7 +59,7 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
       )}
       {(gp?.rating != null || gp?.rating_note) && (
         <div data-testid="guest-rating" className="flex items-start gap-3 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-2.5 text-sm text-ink-700">
-          <Star className="mt-0.5 h-4 w-4 shrink-0 text-warning-600" />
+          <Star className="mt-0.5 h-4 w-4 shrink-0 text-warning-700" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold">تقييم الضيف: {gp.rating != null ? <Stars n={gp.rating} /> : "—"}{gp.stays > 1 ? ` · ${gp.stays} إقامات` : ""}</p>
             {gp.rating_note && <p className="mt-0.5 text-xs text-ink-600">ملاحظة داخلية: {gp.rating_note}{gp.rated_by ? ` — ${gp.rated_by}` : ""}</p>}
@@ -87,7 +87,7 @@ function HoldDialog({ open, hold, reservationId, onClose, onDone }: { open: bool
   return (
     <Modal open={open} title={hold ? "وضع حظر على الحجز" : "رفع الحظر عن الحجز"} onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!reason.trim()) throw new Error("VALIDATION: reason"); await opsApi.setHold(reservationId, hold, reason.trim()); setReason(""); onDone(); }}>
-        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           {hold ? "يمنع الحظر تسجيل الوصول وتسليم الرمز لهذا الحجز وحده، ويُدرَج في قائمة المراجعة. رفعه للمالك أو المدير بسبب." : "يعود الحجز إلى مساره الطبيعي؛ السبب يُحفظ في السجل."}
         </div>
         <ReasonInput value={reason} onChange={setReason} />
@@ -173,7 +173,7 @@ export function CancelDialog({ open, d, group, onClose, onDone }: { open: boolea
       {result ? (
         <div className="space-y-3 text-sm">
           <p className="font-medium text-ink-800">أُلغي {result.cancelled === 1 ? "الحجز" : `${result.cancelled} حجوزات`}.</p>
-          {result.refund && <p className="rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600">يوجد مبلغ محصّل أو تأمين مقبوض؛ الإلغاء لا يرد شيئًا. قرار الاسترداد يُسجَّل من الدفتر بسند مستقل.</p>}
+          {result.refund && <p className="rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700">يوجد مبلغ محصّل أو تأمين مقبوض؛ الإلغاء لا يرد شيئًا. قرار الاسترداد يُسجَّل من الدفتر بسند مستقل.</p>}
           {result.collected && <p className="rounded-xl bg-brand-50 p-3 text-xs text-brand-700">قبضت المنصة هذا الحجز: سند «آجل عبر المنصات» يبقى حتى تتم مطابقته مع إيداع المنصة أو إلغاؤه من الإدارة.</p>}
           <button onClick={onDone} className="btn-primary w-full text-sm">تم</button>
         </div>
@@ -183,7 +183,7 @@ export function CancelDialog({ open, d, group, onClose, onDone }: { open: boolea
           const r = await opsApi.cancel({ reservation_id: d.reservation.id, reason: reason.trim(), cancel_number: platform && byPlatform ? num.trim() : null, by_platform: platform ? byPlatform : false, whole_group: whole });
           setResult({ cancelled: r.cancelled, refund: !!r.refund_required_separately, collected: !!r.platform_collected });
         }}>
-          <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-600"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             الإلغاء يحرر الوحدة ولا يسترد أي مبلغ تلقائيًا{f && f.net_collected + f.deposit_balance > 0 ? ` — يوجد ${sar(f.net_collected)} محصّل و${sar(f.deposit_balance)} تأمين تحتاج قرار استرداد مستقل` : ""}. التراجع ممكن خلال ساعة من الإدارة.
           </div>
           {platform && (
@@ -266,7 +266,7 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
               </select>
             </Field>
           )}
-          {changedSource && <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="platform-source-note">يُعاد تسعير الإقامة كلها بأسعار المنصة الجديدة، ويظهر الفرق في بنود الحجز مستحقًا على الضيف أو له.</p>}
+          {changedSource && <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="platform-source-note">يُعاد تسعير الإقامة كلها بأسعار المنصة الجديدة، ويظهر الفرق في بنود الحجز مستحقًا على الضيف أو له.</p>}
           <Field label="رقم الحجز في المنصة"><input className="input" dir="ltr" value={ext} onChange={(e) => setExt(e.target.value)} aria-label="رقم الحجز في المنصة" /></Field>
           <Field label="تاريخ الحجز في المنصة"><input type="date" className="input" dir="ltr" max={todayISO()} value={booked} onChange={(e) => setBooked(e.target.value)} aria-label="تاريخ الحجز في المنصة" /></Field>
           {knowsCollects && <Field label="من يقبض">
@@ -276,7 +276,7 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
             </select>
           </Field>}
           {changedCollects && (
-            <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-600" data-testid="platform-collects-note">
+            <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="platform-collects-note">
               {collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من الضيف عند الوصول."}
             </p>
           )}
@@ -308,11 +308,11 @@ export function GroupPanel({ current, group }: { current: string; group: GroupSu
                 <td className="py-1.5">{u.room_number ?? u.category_name ?? "—"}</td>
                 <td className="py-1.5 text-xs text-ink-500">{u.status}</td>
                 <td className="py-1.5 text-xs">{u.adults + u.companions}</td>
-                {t.total_halalas != null && <><td className="py-1.5" dir="ltr">{sar(u.total_halalas)}</td><td className="py-1.5 text-success-600" dir="ltr">{sar(u.paid_halalas)}</td><td className="py-1.5 text-warning-600" dir="ltr">{sar(u.balance_due_halalas)}</td><td className="py-1.5" dir="ltr">{sar(u.deposit_balance_halalas)}</td></>}
+                {t.total_halalas != null && <><td className="py-1.5" dir="ltr">{sar(u.total_halalas)}</td><td className="py-1.5 text-success-600" dir="ltr">{sar(u.paid_halalas)}</td><td className="py-1.5 text-warning-700" dir="ltr">{sar(u.balance_due_halalas)}</td><td className="py-1.5" dir="ltr">{sar(u.deposit_balance_halalas)}</td></>}
               </tr>
             ))}
           </tbody>
-          {t.total_halalas != null && <tfoot><tr className="text-sm font-semibold text-ink-800"><td className="pt-2" colSpan={4}>الإجمالي ({t.units} وحدات{t.active_units != null && t.active_units !== t.units ? `، ${t.active_units} قائمة` : ""})</td><td className="pt-2" dir="ltr" data-testid="group-total">{sar(t.total_halalas)}</td><td className="pt-2 text-success-600" dir="ltr">{sar(t.paid_halalas)}</td><td className="pt-2 text-warning-600" dir="ltr">{sar(t.balance_due_halalas)}</td><td className="pt-2" dir="ltr">{sar(t.deposit_balance_halalas)}</td></tr></tfoot>}
+          {t.total_halalas != null && <tfoot><tr className="text-sm font-semibold text-ink-800"><td className="pt-2" colSpan={4}>الإجمالي ({t.units} وحدات{t.active_units != null && t.active_units !== t.units ? `، ${t.active_units} قائمة` : ""})</td><td className="pt-2" dir="ltr" data-testid="group-total">{sar(t.total_halalas)}</td><td className="pt-2 text-success-600" dir="ltr">{sar(t.paid_halalas)}</td><td className="pt-2 text-warning-700" dir="ltr">{sar(t.balance_due_halalas)}</td><td className="pt-2" dir="ltr">{sar(t.deposit_balance_halalas)}</td></tr></tfoot>}
         </table>
       </div>
       <p className="mt-2 text-xs text-ink-400">كل وحدة بماليتها ووصولها كما في الحجز المنفرد؛ التأمين لكل وحدة.</p>
@@ -354,7 +354,7 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
             <h4 className="mb-1 text-xs font-semibold text-ink-600">الإقرارات المسجلة</h4>
             {s.acknowledgements.length === 0 ? <p className="text-xs text-ink-400">لم يُقر الضيف بعد (إلكترونيًا عند التسجيل، أو ورقيًا من هنا).</p> : (
               <ul className="space-y-1 text-xs text-ink-600" data-testid="ack-list">
-                {s.acknowledgements.map((a) => <li key={a.id} className="flex items-center gap-2"><CheckCircle2 className={`h-3.5 w-3.5 ${a.text_hash === s.hash ? "text-success-600" : "text-ink-300"}`} />{a.method === "paper" ? "توقيع ورقي" : "إقرار إلكتروني"} · {formatDateTime(a.accepted_at)}{a.recorded_by ? ` · ${a.recorded_by}` : ""}{a.text_hash !== s.hash ? " · على نص سابق" : ""}</li>)}
+                {s.acknowledgements.map((a) => <li key={a.id} className="flex items-center gap-2"><CheckCircle2 className={`h-3.5 w-3.5 ${a.text_hash === s.hash ? "text-success-600" : "text-ink-400"}`} />{a.method === "paper" ? "توقيع ورقي" : "إقرار إلكتروني"} · {formatDateTime(a.accepted_at)}{a.recorded_by ? ` · ${a.recorded_by}` : ""}{a.text_hash !== s.hash ? " · على نص سابق" : ""}</li>)}
               </ul>
             )}
           </div>

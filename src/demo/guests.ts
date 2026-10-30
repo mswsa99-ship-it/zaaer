@@ -232,15 +232,15 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
 
     // ---- profiles, ratings, bans, holds (decisions 2, 21) ----
     fn_guest_profiles: ({ p }) => {
-      requireRole("owner", "manager", "supervisor"); const q = String(p?.q ?? "").trim(); const filter = p?.filter || "all"; const limit = Math.min(Math.max(Number(p?.limit ?? 50), 1), 200); const offset = Math.max(Number(p?.offset ?? 0), 0);
+      requireRole("owner", "manager", "supervisor"); const q = String(p?.q ?? "").trim(); const filter = p?.filter || "all"; if (!["all", "banned", "duplicates", "rated", "low", "incomplete"].includes(filter)) throw new Error("VALIDATION: filter"); const limit = Math.min(Math.max(Number(p?.limit ?? 50), 1), 200); const offset = Math.max(Number(p?.offset ?? 0), 0);
       const digits = q.replace(/[٠-٩]/g, (x) => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/\D/g, "");
       const fps = /^[A-Za-z0-9]{5,15}$/.test(q) ? ["national_id", "passport", "gcc_id"].map((t) => fingerprint(t, q)) : [];
       const rows = T("guest_profiles").filter((gp) => gp.organization_id === ORG && profileVisible(gp)).filter((gp) => !q
         || String(gp.full_name).includes(q) || (digits.length >= 4 && String(gp.phone ?? "").replace(/\D/g, "").includes(digits)) || (digits.length === 4 && gp.identity_last4 === digits) || fps.includes(gp.identity_fingerprint)
         || T("reservation_guests").some((g) => g.guest_profile_id === gp.id && (fps.includes(g.identity_fingerprint) || (digits.length === 4 && g.identity_number_last4 === digits)))
         || T("reservation_guests").some((g) => g.guest_profile_id === gp.id && [byId("reservations", g.reservation_id)?.internal_ref, byId("reservations", g.reservation_id)?.external_ref].some((x) => String(x ?? "").toLowerCase() === q.toLowerCase())))
-        .map((gp) => { const ban = profileBan(gp); return { id: gp.id, full_name: gp.full_name, phone_masked: maskPhone(gp.phone), nationality: gp.nationality, identity_type: gp.identity_type ?? null, identity_last4: gp.identity_last4 ?? null, rating: gp.rating ?? null, rating_note: gp.rating_note ?? null, stays: staysOf(gp.id), last_check_in: lastCheckIn(gp.id), banned: !!ban, ban_reason: ban?.reason ?? null, duplicates: duplicatesOf(gp).length, created_at: gp.created_at }; })
-        .filter((x) => filter === "all" || (filter === "banned" && x.banned) || (filter === "duplicates" && x.duplicates > 0) || (filter === "rated" && x.rating != null) || (filter === "low" && x.rating != null && x.rating <= 2))
+        .map((gp) => { const ban = profileBan(gp); return { id: gp.id, full_name: gp.full_name, phone_masked: maskPhone(gp.phone), nationality: gp.nationality, identity_type: gp.identity_type ?? null, identity_last4: gp.identity_last4 ?? null, rating: gp.rating ?? null, rating_note: gp.rating_note ?? null, stays: staysOf(gp.id), last_check_in: lastCheckIn(gp.id), banned: !!ban, ban_reason: ban?.reason ?? null, duplicates: duplicatesOf(gp).length, incomplete: !gp.phone || !gp.identity_fingerprint, created_at: gp.created_at }; })
+        .filter((x) => filter === "all" || (filter === "incomplete" && x.incomplete) || (filter === "banned" && x.banned) || (filter === "duplicates" && x.duplicates > 0) || (filter === "rated" && x.rating != null) || (filter === "low" && x.rating != null && x.rating <= 2))
         .sort((a, b) => (a.last_check_in === b.last_check_in ? (a.created_at < b.created_at ? 1 : -1) : (a.last_check_in ?? "") < (b.last_check_in ?? "") ? 1 : -1));
       return { total: rows.length, rows: rows.slice(offset, offset + limit) };
     },

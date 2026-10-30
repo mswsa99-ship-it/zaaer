@@ -4,7 +4,7 @@ import { ArrowLeft, UserPlus, CheckCircle2, AlertCircle, IdCard } from "lucide-r
 import { guestApi, toArabicError, VALIDATION_AR, type GuestSession, type GuestStaySummary } from "../../lib/api";
 import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { IDENTITY_TYPE_LABELS, GUEST_VERIFICATION_LABELS, type IdentityType, type GuestVerificationStatus } from "../../lib/types";
-import { gregorianToHijri, hijriToGregorian, maskId, todayISO } from "../../lib/utils";
+import { gregorianToHijri, hijriToGregorian, maskId, todayISO, COUNT } from "../../lib/utils";
 import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../../lib/validation";
 
 type GuestRow = GuestSession["guests"][number];
@@ -44,7 +44,7 @@ export default function Registration() {
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-500">
           <span className="rounded-lg bg-ink-50 px-3 py-1">الوصول: {r.check_in}</span>
           <span className="rounded-lg bg-ink-50 px-3 py-1">المغادرة: {r.check_out}</span>
-          <span className="rounded-lg bg-ink-50 px-3 py-1">{r.adults} نزيل + {r.companions} مرافق</span>
+          <span className="rounded-lg bg-ink-50 px-3 py-1">{COUNT.guest(r.adults)}{r.companions ? ` + ${COUNT.companion(r.companions)}` : ""}</span>
         </div>
       </div>
 
@@ -97,7 +97,7 @@ export default function Registration() {
           <button onClick={() => navigate(`/booking/status/${token}`)} className="btn-primary mt-4">متابعة حالة الحجز</button>
         </div>
       ) : (
-        <div className="mt-6 rounded-xl bg-warning-500/10 p-4 text-sm text-warning-600">
+        <div className="mt-6 rounded-xl bg-warning-500/10 p-4 text-sm text-warning-700">
           <div className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><p>يجب إكمال بيانات جميع النزلاء قبل تسجيل الوصول. إدخال البيانات لا يعني مطابقة الهوية — سيراجعها المشرف مع الوثيقة الأصلية.</p></div>
         </div>
       )}

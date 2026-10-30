@@ -83,10 +83,10 @@ export default function AdminKnowledge() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-sm">
           <button onClick={() => setTab("entries")} className={`rounded-lg px-4 py-1.5 ${tab === "entries" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>الأسئلة والأجوبة</button>
-          <button onClick={() => setTab("unanswered")} className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 ${tab === "unanswered" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>بلا إجابة {open.length > 0 && <span className="rounded-full bg-warning-500/15 px-1.5 text-[11px] font-semibold text-warning-600">{open.length}</span>}</button>
+          <button onClick={() => setTab("unanswered")} className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 ${tab === "unanswered" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>بلا إجابة {open.length > 0 && <span className="rounded-full bg-warning-500/15 px-1.5 text-[11px] font-semibold text-warning-700">{open.length}</span>}</button>
         </div>
         {tab === "entries" && <>
-          <div className="relative"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-300" /><input value={search} onChange={(e) => setSearch(e.target.value)} className="input w-64 pr-9" placeholder="ابحث في الأسئلة أو الكلمات المفتاحية…" /></div>
+          <div className="relative"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} className="input w-64 pr-9" aria-label="بحث في قاعدة المعرفة" placeholder="ابحث في الأسئلة أو الكلمات المفتاحية…" /></div>
           <Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" />
         </>}
       </div>
@@ -100,7 +100,7 @@ export default function AdminKnowledge() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-ink-800">{r.question}</h3>
                     <ArchivedBadge archivedAt={r.archived_at} />
-                    {!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-600">معطل</Badge>}
+                    {!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطل</Badge>}
                     {r.is_public ? <Badge className="bg-success-500/10 text-success-600"><Globe className="ml-1 inline h-3 w-3" />للنزلاء</Badge> : <Badge className="bg-ink-100 text-ink-600"><Lock className="ml-1 inline h-3 w-3" />للموظفين فقط</Badge>}
                   </div>
                   <p className="mt-1.5 whitespace-pre-line text-sm text-ink-600">{r.answer}</p>

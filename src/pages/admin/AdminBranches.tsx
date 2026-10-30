@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { opsApi, branchMediaApi, guestApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, COUNT } from "../../lib/utils";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
 
 interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean; default_deposit_halalas: number; supervisor_max_discount_bp: number; tax_number: string | null; commercial_register: string | null; archived_at: string | null; version: number; rooms?: number;
@@ -47,11 +47,11 @@ export default function AdminBranches() {
             <Card key={b.id} className={b.archived_at ? "opacity-60" : ""}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-2"><h3 className="text-base font-semibold text-ink-800">{b.name_ar}</h3><ArchivedBadge archivedAt={b.archived_at} />{!b.is_active && !b.archived_at && <Badge className="bg-warning-500/10 text-warning-600">معطل</Badge>}</div>
+                  <div className="flex items-center gap-2"><h3 className="text-base font-semibold text-ink-800">{b.name_ar}</h3><ArchivedBadge archivedAt={b.archived_at} />{!b.is_active && !b.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطل</Badge>}</div>
                   {b.name_en && <p className="text-xs text-ink-400" dir="ltr">{b.name_en}</p>}
                   <p className="mt-1 text-sm text-ink-500">{[b.city, b.address].filter(Boolean).join(" · ") || "—"}</p>
-                  <p className="mt-1 text-xs text-ink-400">{b.rooms} وحدة · وصول {b.check_in_time?.slice(0, 5)} / مغادرة {b.check_out_time?.slice(0, 5)} · {taxText(b)} · التأمين {formatCurrency(b.default_deposit_halalas / 100)} لكل وحدة · {b.timezone} · {b.default_language === "en" ? "English" : "عربي"}</p>
-                  <p className="mt-1 text-xs text-ink-400">{b.booking_platform_url ? <a href={b.booking_platform_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline" dir="ltr">رابط منصة الحجز</a> : <span className="text-warning-600">لا رابط منصة حجز — يُحال الضيف إلى الاستقبال</span>}{b.map_url ? <> · <a href={b.map_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">الخريطة</a></> : null}</p>
+                  <p className="mt-1 text-xs text-ink-400">{COUNT.unit(b.rooms ?? 0)} · وصول {b.check_in_time?.slice(0, 5)} / مغادرة {b.check_out_time?.slice(0, 5)} · {taxText(b)} · التأمين {formatCurrency(b.default_deposit_halalas / 100)} لكل وحدة · {b.timezone} · {b.default_language === "en" ? "English" : "عربي"}</p>
+                  <p className="mt-1 text-xs text-ink-400">{b.booking_platform_url ? <a href={b.booking_platform_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline" dir="ltr">رابط منصة الحجز</a> : <span className="text-warning-700">لا رابط منصة حجز — يُحال الضيف إلى الاستقبال</span>}{b.map_url ? <> · <a href={b.map_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">الخريطة</a></> : null}</p>
                 </div>
                 <button onClick={() => setDraft(b)} className="btn-ghost p-1.5" title="تعديل" aria-label={`تعديل ${b.name_ar}`}><Pencil className="h-4 w-4" /></button>
               </div>
@@ -136,7 +136,7 @@ function BranchMedia({ branchId }: { branchId: string }) {
           <div key={kind} className="rounded-lg bg-ink-50 p-3">
             <p className="text-[11px] text-ink-500">{label}</p>
             <div className="mt-2 flex items-center gap-3">
-              {preview[kind] ? <img src={preview[kind]!} alt="" className={`rounded-md object-contain ${kind === "logo" ? "h-12 max-w-[120px]" : "h-16 max-w-[160px]"}`} /> : <div className="flex h-12 w-16 items-center justify-center rounded-md bg-white text-ink-300"><ImageIcon className="h-5 w-5" /></div>}
+              {preview[kind] ? <img src={preview[kind]!} alt="" className={`rounded-md object-contain ${kind === "logo" ? "h-12 max-w-[120px]" : "h-16 max-w-[160px]"}`} /> : <div className="flex h-12 w-16 items-center justify-center rounded-md bg-white text-ink-400"><ImageIcon className="h-5 w-5" /></div>}
               <div className="flex-1 text-[11px] text-ink-400">{info[kind] ? `${info[kind]!.mime.replace("image/", "").toUpperCase()} · ${kb(info[kind]!.size_bytes)}${info[kind]!.updated_by ? ` · ${info[kind]!.updated_by}` : ""}` : "لا يوجد"}</div>
             </div>
             <div className="mt-2 flex gap-2">

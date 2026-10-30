@@ -105,7 +105,7 @@ export default function AdminAuditLogs() {
               {data.rows.map((l) => (
                 <tr key={l.id} className={`border-t border-ink-50 hover:bg-ink-50/60 ${l.category === "security" ? "bg-warning-500/5" : ""}`} data-testid="audit-row" onClick={() => setOpen(l)}>
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-500">{formatDateTime(l.created_at)}</td>
-                  <td className="px-3 py-2 font-medium text-ink-700" data-testid="audit-action">{l.action_label}{l.category === "security" && <Badge className="mr-1 bg-warning-500/10 text-warning-600">أمني</Badge>}</td>
+                  <td className="px-3 py-2 font-medium text-ink-700" data-testid="audit-action">{l.action_label}{l.category === "security" && <Badge className="mr-1 bg-warning-500/10 text-warning-700">أمني</Badge>}</td>
                   <td className="px-3 py-2 text-ink-600">{l.entity_label}</td>
                   <td className="px-3 py-2 font-mono text-xs text-ink-600">{l.entity_ref ?? "—"}{l.entity_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("entity_id", l.entity_id ?? undefined); }} title="كل أحداث هذا الكيان">تتبّع</button>}</td>
                   <td className="px-3 py-2 text-ink-600">{l.actor_name ?? "—"}{l.actor_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("actor_id", l.actor_id ?? undefined); }} title="كل ما نفّذه">فقط هو</button>}</td>

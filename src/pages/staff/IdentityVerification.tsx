@@ -29,9 +29,9 @@ export default function IdentityVerification() {
   const shown = pick(filter, open, done);
   return (
     <div>
-      <SectionTitle title="مطابقة الهويات" subtitle={`${open.length} بانتظار المطابقة`} />
+      <SectionTitle title="مطابقة الهويات" subtitle={`بانتظار المطابقة: ${open.length}`} />
       <ListFilterBar value={filter} onChange={setFilter} openLabel="غير المطابَق" doneLabel="طُوبق" openCount={open.length} doneCount={done.length} windowHours={WINDOW_HOURS} />
-      {windowError && filter !== "open" && <p className="mb-3 text-sm text-warning-600">تعذّر تحميل ما طُوبق في آخر 24 ساعة؛ أعد تحميل الصفحة.</p>}
+      {windowError && filter !== "open" && <p className="mb-3 text-sm text-warning-700">تعذّر تحميل ما طُوبق في آخر 24 ساعة؛ أعد تحميل الصفحة.</p>}
       {shown.length === 0 ? (
         <EmptyState icon={<UserCheck className="h-10 w-10" />} title={filter === "done" ? "لم تُطابَق هوية في آخر 24 ساعة" : "لا توجد هويات بانتظار المطابقة"} />
       ) : (

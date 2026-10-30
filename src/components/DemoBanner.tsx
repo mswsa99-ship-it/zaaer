@@ -8,10 +8,10 @@ export function DemoBanner() {
   if (!isDemo || hidden) return null;
   const reset = async () => { const m = await import("../demo/client"); m.resetDemo(); window.location.reload(); };
   return (
-    <div className="relative z-30 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-warning-500/15 px-4 py-1.5 text-center text-[12px] text-warning-600">
+    <div className="relative z-30 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-warning-500/15 px-4 py-1.5 text-center text-[12px] text-warning-700">
       <span className="inline-flex items-center gap-1.5 font-medium"><FlaskConical className="h-3.5 w-3.5" /> عرض تجريبي — البيانات افتراضية وتُحفظ في متصفحك فقط؛ لا يوجد خادم أو مزود ذكاء اصطناعي متصل.</span>
       <button onClick={reset} className="inline-flex items-center gap-1 underline-offset-2 hover:underline"><RotateCcw className="h-3 w-3" /> إعادة ضبط البيانات</button>
-      <button onClick={() => setHidden(true)} className="absolute left-2 top-1 text-warning-600/70 hover:text-warning-600" aria-label="إخفاء"><X className="h-3.5 w-3.5" /></button>
+      <button onClick={() => setHidden(true)} className="absolute left-2 top-1 text-warning-700/70 hover:text-warning-700" aria-label="إخفاء"><X className="h-3.5 w-3.5" /></button>
     </div>
   );
 }

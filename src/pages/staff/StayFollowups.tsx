@@ -34,13 +34,13 @@ export default function StayFollowups() {
         <Group icon={LogOut} title="غادر ولم يُغلق" count={f.departed_open.length} empty="كل المغادرات مغلقة." testId="followups-departed">
           {f.departed_open.map((x) => (
             <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}`} sub={`${x.guest ?? "—"} · غادر ${x.checked_out_at ? formatDateTime(x.checked_out_at) : "—"} · ${x.missing.join(" · ") || "—"}`}
-              side={<>{x.inspected ? <Badge className="bg-success-500/10 text-success-600">فُحصت</Badge> : <Badge className="bg-warning-500/10 text-warning-600">بلا فحص</Badge>}{x.deposit_balance > 0 && <span className="text-xs text-ink-500">تأمين <span dir="ltr">{sar(x.deposit_balance)}</span></span>}</>} />
+              side={<>{x.inspected ? <Badge className="bg-success-500/10 text-success-600">فُحصت</Badge> : <Badge className="bg-warning-500/10 text-warning-700">بلا فحص</Badge>}{x.deposit_balance > 0 && <span className="text-xs text-ink-500">تأمين <span dir="ltr">{sar(x.deposit_balance)}</span></span>}</>} />
           ))}
         </Group>
         <Group icon={Clock} title="تجاوزوا موعد المغادرة" count={f.late_departures.length} empty="لا أحد تجاوز موعد مغادرته." testId="followups-late">
           {f.late_departures.map((x) => (
             <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}`} sub={`${x.guest ?? "—"} · كان موعد المغادرة ${x.check_out} الساعة ${x.departure_time}`}
-              side={<Badge className="bg-warning-500/10 text-warning-600">مقيم بعد موعده</Badge>} />
+              side={<Badge className="bg-warning-500/10 text-warning-700">مقيم بعد موعده</Badge>} />
           ))}
         </Group>
       </div>

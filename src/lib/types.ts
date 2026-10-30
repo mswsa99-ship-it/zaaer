@@ -34,7 +34,7 @@ export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
 
 export const RESERVATION_STATUS_COLORS: Record<ReservationStatus, string> = {
   draft: "bg-ink-100 text-ink-500",
-  pending_verification: "bg-warning-500/10 text-warning-600",
+  pending_verification: "bg-warning-500/10 text-warning-700",
   confirmed: "bg-brand-500/10 text-brand-700",
   checked_in: "bg-success-500/10 text-success-600",
   checked_out: "bg-ink-500/10 text-ink-700",
@@ -101,7 +101,7 @@ export const ROOM_STATUS_COLORS: Record<RoomStatus, string> = {
   available: "bg-success-500/10 text-success-600",
   reserved: "bg-brand-500/10 text-brand-700",
   occupied: "bg-ink-500/10 text-ink-700",
-  cleaning: "bg-warning-500/10 text-warning-600",
+  cleaning: "bg-warning-500/10 text-warning-700",
   maintenance: "bg-danger-500/10 text-danger-600",
   blocked: "bg-ink-300/30 text-ink-600",
   out_of_service: "bg-danger-500/15 text-danger-600",
@@ -150,7 +150,7 @@ export const CHARGE_KIND_LABELS: Record<ChargeKind, string> = {
 };
 
 export const CLEANLINESS_LABELS: Record<string, string> = { clean: "نظيفة", dirty: "متسخة", in_progress: "قيد التنظيف" };
-export const CLEANLINESS_COLORS: Record<string, string> = { clean: "bg-success-500/10 text-success-600", dirty: "bg-danger-500/10 text-danger-600", in_progress: "bg-warning-500/10 text-warning-600" };
+export const CLEANLINESS_COLORS: Record<string, string> = { clean: "bg-success-500/10 text-success-600", dirty: "bg-danger-500/10 text-danger-600", in_progress: "bg-warning-500/10 text-warning-700" };
 export const TASK_STATUS_LABELS: Record<string, string> = { pending: "معلقة", in_progress: "قيد التنفيذ", completed: "مكتملة", cancelled: "ملغاة" };
 export const TASK_PRIORITY_LABELS: Record<string, string> = { low: "منخفضة", medium: "متوسطة", high: "مرتفعة" };
 export const BILLING_UNIT_LABELS: Record<string, string> = { once: "مرة واحدة", night: "لكل ليلة", person: "لكل شخص", quantity: "بالكمية" };

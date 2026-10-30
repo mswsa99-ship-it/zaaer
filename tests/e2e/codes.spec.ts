@@ -104,6 +104,6 @@ test.describe("«الرموز» — key-box codes", () => {
     await loginAs("owner");
     await go("/admin/keyboxes");
     await expect(page).toHaveURL(/#\/staff\/codes/);
-    await expect(page.locator("main h2")).toHaveText("الرموز");
+    await expect(page.locator("main h1")).toHaveText("الرموز");
   });
 });

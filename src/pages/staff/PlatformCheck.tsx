@@ -6,7 +6,7 @@ import { useBranch } from "../../lib/branch";
 import { SectionTitle, Card, EmptyState, Badge, ErrorBanner, Spinner, LoadingScreen } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { RESERVATION_STATUS_LABELS, type ReservationStatus } from "../../lib/types";
-import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
 
 /**
  * The platforms' daily list (decision 4): every platform booking arriving today or tomorrow, to be matched against the
@@ -28,7 +28,7 @@ export default function PlatformCheck() {
   const pending = (rows ?? []).filter((r) => !r.verified_at && !["cancelled", "no_show"].includes(r.status)).length;
   return (
     <div>
-      <SectionTitle title="مطابقة المنصات" subtitle={`وصول اليوم والغد من المنصات: ${rows?.length ?? 0} حجز، ${pending} بانتظار المطابقة`} action={<div className="flex items-center gap-2"><input type="date" className="input" dir="ltr" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="اليوم" /><BranchPicker /></div>} />
+      <SectionTitle title="مطابقة المنصات" subtitle={`وصول اليوم والغد من المنصات: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex flex-wrap items-center gap-2"><input type="date" className="input" dir="ltr" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="اليوم" /><BranchPicker /></div>} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {(rows ?? []).length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا حجوزات من المنصات في هذين اليومين" /> : (
         <Card className="overflow-x-auto">

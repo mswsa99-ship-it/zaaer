@@ -7,7 +7,7 @@ import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, LoadErrorCard, Er
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, type RoomStatus, type ReservationStatus } from "../../lib/types";
-import { formatCurrency, formatDateTime, todayISO, addDaysISO } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../../lib/utils";
 
 const NO_BOARD: { units: UnitCard[]; summary: DailySummary | null } = { units: [], summary: null };
 
@@ -63,7 +63,7 @@ export default function StaffRooms() {
   );
   return (
     <div>
-      <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? (view === "calendar" ? `الإشغال ${summary.occupancy_pct}% — ${u?.occupied} مؤجرة من ${u?.active} فعالة · ${u?.ready} جاهزة · ${u?.dirty} تحتاج تنظيفًا · ${u?.maintenance} صيانة · آخر تحديث ${formatDateTime(summary.generated_at)}` : `آخر تحديث ${formatDateTime(summary.generated_at)}`) : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker /></div>} />
+      <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? (view === "calendar" ? `الإشغال ${summary.occupancy_pct}% — مؤجرة ${u?.occupied} من ${u?.active} فعالة · جاهزة ${u?.ready} · تحتاج تنظيفًا ${u?.dirty} · صيانة ${u?.maintenance} · آخر تحديث ${formatDateTime(summary.generated_at)}` : `آخر تحديث ${formatDateTime(summary.generated_at)}`) : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker /></div>} />
       {board.error && <div className="mb-4"><ErrorBanner message={board.error} /></div>}
       {view === "board" && summary && u && (
         // B12 (note 13): the occupancy strip — the figures in large type; a figure filters the units it counts
@@ -72,7 +72,7 @@ export default function StaffRooms() {
             ["all", "الإشغال", `${summary.occupancy_pct}%`, `${u.occupied} من ${u.active} فعالة`, "text-ink-900"],
             ["occupied", "مؤجرة", String(u.occupied), "وحدة مشغولة الآن", "text-brand-700"],
             ["ready", "جاهزة", String(u.ready), "للتسليم الآن", "text-success-600"],
-            ["dirty", "تحتاج تنظيفًا", String(u.dirty), "متسخة أو قيد التنظيف", "text-warning-600"],
+            ["dirty", "تحتاج تنظيفًا", String(u.dirty), "متسخة أو قيد التنظيف", "text-warning-700"],
             ["maintenance", "صيانة", String(u.maintenance), "خارج التشغيل مؤقتًا", "text-danger-600"],
           ] as const).map(([k, label, value, hint, tone], i) => (
             <button key={label} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k}
@@ -108,14 +108,14 @@ export default function StaffRooms() {
                   <Badge className={CLEANLINESS_COLORS[x.cleanliness]}><Sparkles className="h-3 w-3" /> {CLEANLINESS_LABELS[x.cleanliness]}</Badge>
                   <Badge className={x.keybox_ready ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}><KeyRound className="h-3 w-3" /> {x.keybox_ready ? "الرمز جاهز" : "الرمز يحتاج تدويرًا"}</Badge>
                   {x.open_maintenance > 0 && <Badge className="bg-danger-500/10 text-danger-600"><Wrench className="h-3 w-3" /> صيانة</Badge>}
-                  {x.open_tasks > 0 && <Badge className="bg-warning-500/10 text-warning-600">{x.open_tasks} مهمة</Badge>}
+                  {x.open_tasks > 0 && <Badge className="bg-warning-500/10 text-warning-700">{COUNT.task(x.open_tasks)}</Badge>}
                 </div>
                 {x.current ? (
                   <Link to={`/staff/reservations/${x.current.reservation_id}`} className="mt-3 block rounded-xl bg-ink-50 p-2.5 text-xs hover:bg-brand-50">
                     <div className="flex justify-between"><span className="font-mono font-medium text-ink-700">{x.current.internal_ref}</span><span className="text-ink-500">{RESERVATION_STATUS_LABELS[x.current.status as ReservationStatus] ?? x.current.status}</span></div>
                     <p className="mt-0.5 text-ink-600">{x.current.guest}</p>
                     <p className="text-ink-400" dir="ltr">{x.current.check_in} → {x.current.check_out}</p>
-                    {x.current.balance_due > 0 && <p className="mt-0.5 font-medium text-warning-600">متبقٍ {formatCurrency(x.current.balance_due / 100)}</p>}
+                    {x.current.balance_due > 0 && <p className="mt-0.5 font-medium text-warning-700">متبقٍ {formatCurrency(x.current.balance_due / 100)}</p>}
                     {late && <p className="mt-0.5 font-medium text-danger-600">وصول متأخر لم يُسجَّل</p>}
                     {over && <p className="mt-0.5 font-medium text-danger-600">تجاوز موعد المغادرة</p>}
                   </Link>
