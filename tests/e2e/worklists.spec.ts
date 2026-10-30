@@ -53,4 +53,17 @@ test.describe("work lists and the units board (correction batch 4)", () => {
     await page.getByRole("button", { name: "صفحة A4" }).click();
     await expect.poll(async () => page.evaluate(() => [...document.querySelectorAll("iframe")].map((f) => f.contentDocument?.body?.innerText ?? "").join("|"))).toContain("لا غير");
   });
+
+  test("LW04 on a phone the owner opens the administration menu and reaches every group, «تفريغ البيانات» included", async ({ page, loginAs, go }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginAs("owner");
+    await go("/admin/dashboard");
+    await page.getByTestId("admin-menu-button").click();
+    const drawer = page.getByTestId("admin-menu-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText("الحوكمة");
+    await drawer.getByRole("link", { name: "تفريغ البيانات" }).click();
+    await expect(page).toHaveURL(/#\/admin\/data-purge/);
+    await expect(drawer).toBeHidden();
+  });
 });
