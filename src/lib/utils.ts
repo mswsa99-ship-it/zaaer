@@ -71,9 +71,15 @@ export function formatHijri(iso: string): string {
   return `${h.day}/${String(h.month).padStart(2, "0")}/${h.year}هـ`;
 }
 
+/**
+ * The interface's locale (the owner's decision, 30 Oct 2026; design system U2): Arabic words with Latin digits 0–9 and
+ * the Gregorian calendar everywhere — amounts, dates and times read the same on every screen and every print.
+ */
+export const UI_LOCALE = "ar-SA-u-ca-gregory-nu-latn";
+
 export function formatDateTime(iso: string): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("ar-SA", {
+  return new Date(iso).toLocaleString(UI_LOCALE, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -144,5 +150,5 @@ export function maskName(name: string | undefined): string {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 2 }).format(amount);
+  return new Intl.NumberFormat(UI_LOCALE, { style: "currency", currency: "SAR", maximumFractionDigits: 2 }).format(amount);
 }

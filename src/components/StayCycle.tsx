@@ -12,14 +12,14 @@ import { useAuth } from "../lib/auth";
 import { staffApi, stayApi, toArabicError, newIdempotencyKey, type StayStatus, type PaymentEntry, type CheckInResult } from "../lib/api";
 import { useCashAccounts } from "../lib/useCashAccounts";
 import { METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, RESERVATION_STATUS_LABELS, type PaymentMethod, type ReservationStatus } from "../lib/types";
-import { formatCurrency, formatDateTime } from "../lib/utils";
+import { formatCurrency, formatDateTime, UI_LOCALE } from "../lib/utils";
 import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
 import { PaymentFields } from "./ReservationOperations";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
 /** the hour of an instant at the property (decision 47: the property's clock, whatever the browser's) */
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Riyadh" });
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Riyadh" });
 const when = (iso: string | null | undefined) => (iso ? formatDateTime(iso) : "—");
 type Done = (message?: string | null) => Promise<void>;
 

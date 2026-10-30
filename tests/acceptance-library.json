@@ -693,7 +693,8 @@
     "VD": "صحة البيانات المدخلة — دفعة التصحيح الأولى: الاسم والجوال والعمر وصيغة الهوية وعدم تكرار الرمز (tests/sql/guests_platforms_tests.sql و tests/sql/keybox_codes_tests.sql)",
     "AM": "حقل المبلغ وصندوق المبلغ الموحّدان — دفعة التصحيح الثانية (tests/unit/amount_input.test.ts و tests/e2e/amounts.spec.ts)",
     "LW": "قوائم العمل ولوحة الوحدات — دفعة التصحيح الرابعة: نوافذ القوائم وفلترها الافتراضي، لوحة الوحدات أولًا، شريط الإشغال (tests/e2e/worklists.spec.ts)",
-    "PV": "طباعة السندات والفواتير — دفعة التصحيح الرابعة: قالب A4 وإيصال 80 مم والمبلغ رقمًا وكتابةً (tests/unit/amount_words.test.ts و tests/e2e/worklists.spec.ts)"
+    "PV": "طباعة السندات والفواتير — دفعة التصحيح الرابعة: قالب A4 وإيصال 80 مم والمبلغ رقمًا وكتابةً (tests/unit/amount_words.test.ts و tests/e2e/worklists.spec.ts)",
+    "NU": "نظام الأرقام — قرار المالك 30 أكتوبر واعتماد نظام التصميم U2: أرقام إنجليزية 0–9 وتقويم ميلادي في كل الشاشات والمطبوعات (tests/unit/numerals.test.ts)"
   },
   "renamed": [
     {

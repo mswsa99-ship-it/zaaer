@@ -5,7 +5,7 @@ import { DoorClosed, BedDouble, TrendingUp, BookCheck, Users, Wallet, LifeBuoy, 
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { opsApi, type ReportsFinance } from "../../lib/api";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
-import { addDaysISO, formatCurrency, todayISO } from "../../lib/utils";
+import { addDaysISO, formatCurrency, todayISO, UI_LOCALE } from "../../lib/utils";
 import { ReviewBanner } from "../../components/ReviewBanner";
 import { useReviewSummary } from "../../lib/reviewAlerts";
 
@@ -63,7 +63,7 @@ async function loadStats(branchId: string): Promise<Stats> {
   for (let i = 6; i >= 0; i--) {
     const ds = addDaysISO(today, -i);
     weekly.push({
-      day: new Date(ds + "T12:00:00Z").toLocaleDateString("ar-SA", { weekday: "short", timeZone: "UTC" }),
+      day: new Date(ds + "T12:00:00Z").toLocaleDateString(UI_LOCALE, { weekday: "short", timeZone: "UTC" }),
       bookings: resFlat.filter((r) => r.check_in === ds).length,
       net: (netByDay.get(ds) ?? 0) / 100,
     });

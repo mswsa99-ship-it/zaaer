@@ -4,6 +4,7 @@ import { ArrowRight, Send, Smartphone, Monitor, CheckCheck, Info } from "lucide-
 import { useBranch } from "../../lib/branch";
 import { whatsappApi } from "../../lib/api";
 import { Spinner } from "../../components/ui";
+import { UI_LOCALE } from "../../lib/utils";
 import { simGuests, simSend, simHumanReply, simPollStaff, type SimGuest } from "../../demo/whatsappSim";
 import { demoBridgeKey } from "../../demo/client";
 
@@ -21,7 +22,7 @@ const SILENT: Record<string, string> = {
   disabled: "واتساب هذا الفرع غير مفعّل.",
   too_old: "رسالة قديمة: تُسجل للموظفين دون رد آلي.",
 };
-const time = () => new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+const time = () => new Date().toLocaleTimeString(UI_LOCALE, { hour: "2-digit", minute: "2-digit" });
 let bubbleSeq = 0;
 
 function Linkified({ text }: { text: string }) {

@@ -14,7 +14,7 @@ import { accountLabel } from "../../lib/useCashAccounts";
 import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, EmptyState } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
-import { formatCurrency, todayISO, isoDateIn } from "../../lib/utils";
+import { formatCurrency, todayISO, isoDateIn, UI_LOCALE } from "../../lib/utils";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
 interface Payout { id: string; source_id: string; account_id: string; expected_halalas: number; received_halalas: number; difference_halalas: number; voucher_count: number; received_on: string; reference: string; note: string | null; status: string; cancel_reason: string | null; created_at: string }
@@ -23,7 +23,7 @@ const NO_DATA: Data = { unsettled: [], payouts: [], accounts: [], sources: [] };
 /** The month a payment belongs to, by the property's calendar day (not the UTC one). */
 const monthOf = (iso: string) => isoDateIn(new Date(iso)).slice(0, 7);
 /** "2026-10" → "أكتوبر 2026" (Gregorian: platforms pay by calendar month). */
-const monthName = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "long", year: "numeric", timeZone: "UTC" });
+const monthName = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString(UI_LOCALE, { month: "long", year: "numeric", timeZone: "UTC" });
 
 export default function AdminPlatformPayouts() {
   const { canFull } = useAuth();
