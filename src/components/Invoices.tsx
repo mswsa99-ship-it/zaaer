@@ -15,6 +15,10 @@ import { Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, ReasonInput, Submit, useFormBusy } from "./forms";
 import { CHARGE_KIND_LABELS, type ChargeKind } from "../lib/types";
 import { formatCurrency, formatDateTime } from "../lib/utils";
+import { PrintButton, stayPrintContext } from "./PrintButton";
+import { buildInvoicePrint, type PrintContext } from "../lib/printDocs";
+import { useBranches } from "../lib/branch";
+import { useAuth } from "../lib/auth";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
 
@@ -211,7 +215,7 @@ function CancelInvoiceDialog({ inv, onClose, onDone }: { inv: Invoice | null; on
 }
 
 /** One invoice: how it came, its period and version, its total; its lines and earlier versions on «عرض». */
-function InvoiceRow({ inv, canEdit, canCancel, onEdit, onCancel }: { inv: Invoice; canEdit: boolean; canCancel: boolean; onEdit: () => void; onCancel: () => void }) {
+function InvoiceRow({ inv, ctx, canEdit, canCancel, onEdit, onCancel }: { inv: Invoice; ctx: PrintContext; canEdit: boolean; canCancel: boolean; onEdit: () => void; onCancel: () => void }) {
   const [shown, setShown] = useState(false);
   const issued = inv.status === "issued";
   return (
@@ -226,6 +230,7 @@ function InvoiceRow({ inv, canEdit, canCancel, onEdit, onCancel }: { inv: Invoic
         {issued ? <Badge className="bg-success-500/10 text-success-600">صادرة</Badge> : <Badge className="bg-danger-500/10 text-danger-600">ملغاة</Badge>}
         <div className="flex gap-1">
           <button type="button" onClick={() => setShown((x) => !x)} className="btn-ghost px-2 py-1 text-[11px]" aria-expanded={shown}>{shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />} {shown ? "إخفاء" : "عرض"}</button>
+          <PrintButton testId={`print-invoice-${inv.number}`} build={(f) => buildInvoicePrint({ ...inv, kindLabel: `فاتورة — ${invoiceKindLabel(inv)}`, lines: inv.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price_halalas: l.unit_price_halalas, amount_halalas: l.amount_halalas })) }, ctx, f)} />
           {issued && canEdit && <button type="button" onClick={onEdit} className="btn-ghost px-2 py-1 text-[11px]"><PencilLine className="h-3.5 w-3.5" /> تعديل</button>}
           {issued && canCancel && <button type="button" onClick={onCancel} className="btn-ghost px-2 py-1 text-[11px] text-danger-600"><Ban className="h-3.5 w-3.5" /> إلغاء</button>}
         </div>
@@ -265,6 +270,8 @@ export function InvoiceList({ d, canEdit, canCancel, onDone }: { d: ReservationD
   const [cancelling, setCancelling] = useState<Invoice | null>(null);
   const left = d.invoicing?.uninvoiced_halalas ?? 0;
   const invoices = d.invoices ?? [];
+  const { branches } = useBranches(); const { profile } = useAuth();
+  const ctx = stayPrintContext(d, branches.find((b) => b.id === d.reservation.branch_id)?.name_ar ?? "", profile?.full_name);
   return (
     <>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -274,7 +281,7 @@ export function InvoiceList({ d, canEdit, canCancel, onDone }: { d: ReservationD
       </div>
       {invoices.length === 0 ? <p className="text-xs text-ink-400">لا فواتير بعد. تُصدر فاتورة الإقامة تلقائيًا عند المغادرة.</p> : (
         <div className="divide-y divide-ink-50">
-          {invoices.map((i) => <InvoiceRow key={i.id} inv={i} canEdit={canEdit} canCancel={canCancel} onEdit={() => setEditing(i)} onCancel={() => setCancelling(i)} />)}
+          {invoices.map((i) => <InvoiceRow key={i.id} inv={i} ctx={ctx} canEdit={canEdit} canCancel={canCancel} onEdit={() => setEditing(i)} onCancel={() => setCancelling(i)} />)}
         </div>
       )}
       <EditInvoiceDialog inv={editing} onClose={() => setEditing(null)} onDone={async () => { setEditing(null); await onDone(); }} />

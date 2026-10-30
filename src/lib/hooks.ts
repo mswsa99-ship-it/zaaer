@@ -19,6 +19,9 @@ export interface ReservationCard {
   shomoos_accepted_at?: string | null;
   access_status: string;
   keybox_delivered: boolean;
+  /** B8–B10: when the guest arrived, and the row's last change (the windows of «تمت معالجته») */
+  actual_check_in?: string | null;
+  updated_at?: string | null;
   source?: { name: string };
   room?: { room_number: string };
   room_category?: { name_ar: string };
@@ -33,6 +36,7 @@ const NO_CARDS: ReservationCard[] = [];
 const SELECT = `
   id, internal_ref, external_ref, status, check_in, check_out, adults, companions,
   payment_status, identity_status, government_registration, shomoos_accepted_at, access_status, keybox_delivered,
+  actual_check_in, updated_at,
   source:booking_sources(name),
   room:rooms(room_number),
   room_category:room_categories(name_ar),

@@ -691,7 +691,9 @@
     "PG": "الضابط G20 مع الدفع اليدوي — القرار 38: لا سند من جلسة ضيف أو دور بلا خانته، و«مدفوع» عند الضيف من حالة الخادم وحدها (tests/sql/acceptance_tests.sql)",
     "AX": "ما يستدعيه زائر بلا حساب — الترحيل 0045: الدوال الثلاث عشرة لصفحات الضيف وحدها، وغيرها يُرفض قبل أن يعمل (tests/sql/acceptance_tests.sql)",
     "VD": "صحة البيانات المدخلة — دفعة التصحيح الأولى: الاسم والجوال والعمر وصيغة الهوية وعدم تكرار الرمز (tests/sql/guests_platforms_tests.sql و tests/sql/keybox_codes_tests.sql)",
-    "AM": "حقل المبلغ وصندوق المبلغ الموحّدان — دفعة التصحيح الثانية (tests/unit/amount_input.test.ts و tests/e2e/amounts.spec.ts)"
+    "AM": "حقل المبلغ وصندوق المبلغ الموحّدان — دفعة التصحيح الثانية (tests/unit/amount_input.test.ts و tests/e2e/amounts.spec.ts)",
+    "LW": "قوائم العمل ولوحة الوحدات — دفعة التصحيح الرابعة: نوافذ القوائم وفلترها الافتراضي، لوحة الوحدات أولًا، شريط الإشغال (tests/e2e/worklists.spec.ts)",
+    "PV": "طباعة السندات والفواتير — دفعة التصحيح الرابعة: قالب A4 وإيصال 80 مم والمبلغ رقمًا وكتابةً (tests/unit/amount_words.test.ts و tests/e2e/worklists.spec.ts)"
   },
   "renamed": [
     {

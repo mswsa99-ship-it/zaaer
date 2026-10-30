@@ -57,6 +57,8 @@ export interface NavPage {
 
 export const PAGES: readonly NavPage[] = [
   // ---- staff (operations centre) — order = navigation order ----
+  // B11 (note 12, decision 5): the units board comes first — the front desk's first page
+  { path: "/staff/rooms", label: "لوحة الوحدات", icon: DoorClosed, area: "staff", roles: ALL_STAFF },
   { path: "/staff/dashboard", label: "لوحة العمليات", icon: LayoutDashboard, area: "staff", roles: ALL_STAFF },
   { path: "/staff/arrivals", label: "وصول اليوم", icon: CalendarClock, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
   { path: "/staff/reservations", label: "الحجوزات", icon: BookCheck, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
@@ -72,7 +74,6 @@ export const PAGES: readonly NavPage[] = [
   // decision 4: today's and tomorrow's platform arrivals, matched against the platform (the supervisor's daily list)
   { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, area: "staff", roles: ["owner", "manager", "supervisor"] },
   { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, area: "staff", roles: MONEY_ROLES },
-  { path: "/staff/rooms", label: "لوحة الوحدات", icon: DoorClosed, area: "staff", roles: ALL_STAFF },
   { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
   { path: "/staff/codes", label: "الرموز", icon: KeyRound, area: "staff", roles: CODES_ROLES, cap: ["keybox.code"] },
   { path: "/staff/tickets", label: "البلاغات", icon: Wrench, area: "staff", roles: ALL_STAFF },
@@ -182,10 +183,12 @@ export const hasAdminAccess = (role: string | null | undefined, allows?: Allows)
 
 /**
  * Where a role lands after signing in: the screen where its work starts (fewest clicks to the first task).
- * housekeeping → its task list; finance → the ledger; front office and management → the operations board.
+ * housekeeping → its task list; finance → the ledger; the supervisor (the front desk) → the units board (B11, the
+ * owner's note 12); the owner and managers → the operations board.
  */
 export function homeFor(role: string | null | undefined): string {
   if (role === "housekeeping") return "/staff/housekeeping";
   if (role === "finance") return "/admin/finance";
+  if (role === "supervisor") return "/staff/rooms";
   return "/staff/dashboard";
 }

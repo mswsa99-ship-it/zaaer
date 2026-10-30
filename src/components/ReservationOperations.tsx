@@ -17,6 +17,9 @@ import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLI
 import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
 import type { CashAccount } from "../lib/api";
 import { formatCurrency, formatDateTime, todayISO } from "../lib/utils";
+import { PrintButton, stayPrintContext } from "./PrintButton";
+import { buildVoucherPrint } from "../lib/printDocs";
+import { useBranches } from "../lib/branch";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
 type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice" | "damage";
@@ -39,6 +42,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
 
   const load = useCallback(async () => { try { setD(await opsApi.detail(reservationId)); setError(null); } catch (e) { setError(toArabicError(e)); } }, [reservationId]);
   const accounts = useCashAccounts(canMoney ? d?.reservation.branch_id : null);
+  const { branches } = useBranches();
   // the deposit the branch asks for (50 SAR per unit — decisions 33, 69), suggested in the deposit receipt
   const [depositDefault, setDepositDefault] = useState(5000);
   const branchOfRes = d?.reservation.branch_id;
@@ -57,6 +61,13 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   }, [reservationId, load]);
 
   if (!d) return error ? <ErrorBanner message={error} /> : <div className="py-6 text-center"><Spinner /></div>;
+  // B7 (note 8): every voucher prints on A4 or an 80 mm receipt, its amount in figures and words
+  const printCtx = stayPrintContext(d, branches.find((b) => b.id === d.reservation.branch_id)?.name_ar ?? "", profile?.full_name);
+  const printVoucher = (v: Voucher) => (
+    <PrintButton testId={`print-voucher-${v.number}`} build={(f) => buildVoucherPrint({ number: v.number, kind: v.kind, kindLabel: VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind, amount_halalas: v.amount_halalas,
+      methodLabel: v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method, reference: v.reference, note: v.note, occurred_at: v.occurred_at, status: v.status,
+      created_by_name: v.created_by_name ?? null, original_number: v.original_number ?? null, cancel_reason: v.cancel_reason }, printCtx, f)} />
+  );
   const r = d.reservation; const f = d.finance ?? ({ rent: 0, addons: 0, discounts: 0, penalties: 0, adjustments: 0, tax: 0, total: 0, received: 0, refunded: 0, deposit_applied: 0, net_collected: 0, balance_due: 0, credit: 0, deposit_received: 0, deposit_refunded: 0, deposit_balance: 0, payment_status: "pending" } as Finance);
   const open = !["cancelled", "rejected", "closed", "no_show"].includes(r.status);
   const done = async () => { setDialog(null); await load(); onChanged(); };
@@ -111,8 +122,9 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
             <Table rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="text-[10px] text-ink-400">{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}{accounts.nameOf(v.account_id) ? ` · ${accounts.nameOf(v.account_id)}` : ""}{v.reference ? ` · ${v.reference}` : ""} · {formatDateTime(v.occurred_at)}{v.created_by_name ? ` · ${v.created_by_name}` : ""}</div>
                 {v.original_number && <div className="text-[10px] text-brand-700">تصحيح للسند {v.original_number}</div>}
                 {v.replaced_by_number && <div className="text-[10px] text-ink-500">صُحّح بالسند {v.replaced_by_number}</div>}</span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
-              v.status === "cancelled" ? <Badge key="s" className="bg-danger-500/10 text-danger-600" >ملغى</Badge> : (
+              v.status === "cancelled" ? <div key="s" className="flex flex-col items-end gap-0.5"><Badge className="bg-danger-500/10 text-danger-600" >ملغى</Badge>{printVoucher(v)}</div> : (
                 <div key="a" className="flex flex-col items-end gap-0.5">
+                  {printVoucher(v)}
                   {canCorrect(v) && <button onClick={() => setCorrecting(v)} className="btn-ghost px-2 py-1 text-[11px]"><PencilLine className="h-3 w-3" /> تصحيح</button>}
                   {can("voucher.cancel") && !v.payout_id && <CancelVoucherButton id={v.id} onDone={done} />}
                   {v.payout_id && <span className="text-[10px] text-ink-400">ضمن مطابقة منصة</span>}

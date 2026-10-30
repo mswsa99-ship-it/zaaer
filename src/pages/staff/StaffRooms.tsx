@@ -17,7 +17,7 @@ export default function StaffRooms() {
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "calendar" ? "calendar" : "board";
   const setView = (v: "board" | "calendar") => { const p = new URLSearchParams(params); if (v === "calendar") p.set("view", "calendar"); else p.delete("view"); setParams(p, { replace: true }); };
-  const [filter, setFilter] = useState<"all" | "free" | "occupied" | "dirty" | "arriving" | "departing" | "attention">("all");
+  const [filter, setFilter] = useState<"all" | "free" | "occupied" | "ready" | "dirty" | "maintenance" | "arriving" | "departing" | "attention">("all");
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [floor, setFloor] = useState("");
@@ -42,7 +42,9 @@ export default function StaffRooms() {
     switch (filter) {
       case "free": return !u.current && u.is_active && !["maintenance", "out_of_service", "blocked"].includes(u.status);
       case "occupied": return u.status === "occupied";
-      case "dirty": return u.cleanliness !== "clean";
+      case "ready": return u.status === "ready";
+      case "maintenance": return u.status === "maintenance";
+      case "dirty": return u.is_active && u.cleanliness !== "clean";
       case "arriving": return (u.current?.check_in === today && u.current.status !== "checked_in") || u.next?.check_in === today;
       case "departing": return u.current?.check_out === today && u.current.status === "checked_in";
       case "attention": return u.cleanliness !== "clean" || u.open_maintenance > 0 || (!!u.current && u.current.check_in <= today && u.current.status !== "checked_in") || (!!u.current && u.current.check_out < today);
@@ -61,13 +63,33 @@ export default function StaffRooms() {
   );
   return (
     <div>
-      <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? `الإشغال ${summary.occupancy_pct}% — ${u?.occupied} مؤجرة من ${u?.active} فعالة · ${u?.ready} جاهزة · ${u?.dirty} تحتاج تنظيفًا · ${u?.maintenance} صيانة · آخر تحديث ${formatDateTime(summary.generated_at)}` : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker /></div>} />
+      <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? (view === "calendar" ? `الإشغال ${summary.occupancy_pct}% — ${u?.occupied} مؤجرة من ${u?.active} فعالة · ${u?.ready} جاهزة · ${u?.dirty} تحتاج تنظيفًا · ${u?.maintenance} صيانة · آخر تحديث ${formatDateTime(summary.generated_at)}` : `آخر تحديث ${formatDateTime(summary.generated_at)}`) : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker /></div>} />
       {board.error && <div className="mb-4"><ErrorBanner message={board.error} /></div>}
+      {view === "board" && summary && u && (
+        // B12 (note 13): the occupancy strip — the figures in large type; a figure filters the units it counts
+        <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3" data-testid="occupancy-strip">
+          {([
+            ["all", "الإشغال", `${summary.occupancy_pct}%`, `${u.occupied} من ${u.active} فعالة`, "text-ink-900"],
+            ["occupied", "مؤجرة", String(u.occupied), "وحدة مشغولة الآن", "text-brand-700"],
+            ["ready", "جاهزة", String(u.ready), "للتسليم الآن", "text-success-600"],
+            ["dirty", "تحتاج تنظيفًا", String(u.dirty), "متسخة أو قيد التنظيف", "text-warning-600"],
+            ["maintenance", "صيانة", String(u.maintenance), "خارج التشغيل مؤقتًا", "text-danger-600"],
+          ] as const).map(([k, label, value, hint, tone], i) => (
+            <button key={label} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k}
+              className={`flex min-h-[44px] flex-col items-start gap-1 rounded-2xl border bg-white p-3 text-right shadow-sm transition hover:border-brand-500 ${filter === k ? "border-brand-500 ring-2 ring-brand-100" : "border-ink-100"}`}
+              data-testid={`strip-${i === 0 ? "occupancy" : k}`}>
+              <span className="text-[13px] font-medium text-ink-500">{label}</span>
+              <span className={`text-3xl font-bold leading-10 tabular-nums ${tone}`} dir="ltr">{value}</span>
+              <span className="text-xs text-ink-500">{hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input w-32" placeholder="رقم الوحدة" value={q} onChange={(e) => setQ(e.target.value)} aria-label="رقم الوحدة" />
         <select className="input w-auto py-1.5 text-sm" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="نوع الوحدة" data-testid="filter-category"><option value="">كل الأنواع</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         <select className="input w-auto py-1.5 text-sm" value={floor} onChange={(e) => setFloor(e.target.value)} aria-label="الطابق" data-testid="filter-floor"><option value="">كل الطوابق</option>{floors.map((f) => <option key={f} value={f}>{f}</option>)}</select>
-        {view === "board" && ([["all", "الكل"], ["free", "خالية"], ["occupied", "مؤجرة"], ["arriving", "وصول اليوم"], ["departing", "مغادرة اليوم"], ["dirty", "تحتاج تنظيفًا"], ["attention", "تحتاج انتباهًا"]] as const).map(([k, v]) => (
+        {view === "board" && ([["all", "الكل"], ["free", "خالية"], ["occupied", "مؤجرة"], ["ready", "جاهزة"], ["arriving", "وصول اليوم"], ["departing", "مغادرة اليوم"], ["dirty", "تحتاج تنظيفًا"], ["maintenance", "صيانة"], ["attention", "تحتاج انتباهًا"]] as const).map(([k, v]) => (
           <button key={k} onClick={() => setFilter(k)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${filter === k ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-600"}`}>{v}</button>
         ))}
       </div>
