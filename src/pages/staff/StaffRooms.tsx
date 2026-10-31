@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { DoorClosed, KeyRound, Wrench, Sparkles, CalendarClock, CalendarRange, LayoutGrid, ChevronRight, ChevronLeft } from "lucide-react";
+import { DoorClosed, KeyRound, Wrench, Sparkles, CalendarClock, CalendarRange, LayoutGrid, ChevronRight, ChevronLeft, BellRing } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { opsApi, listsApi, type UnitCard, type DailySummary, type ReservationCalendar, type CalendarSegment } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, LoadErrorCard, ErrorBanner, DataState } from "../../components/ui";
@@ -52,6 +52,31 @@ export default function StaffRooms() {
     }
   }), [units, filter, q, category, floor, today]);
 
+  // U3 (approved 31 Oct): what needs doing now, first — late arrivals, overstays, a unit to clean or a code to change
+  // before today's arrival; the cards then put the units needing attention before the others
+  const urgency = (x: UnitCard) => {
+    const arrivingToday = (x.current?.check_in === today && x.current.status !== "checked_in") || x.next?.check_in === today;
+    if (x.current && x.current.check_in < today && x.current.status !== "checked_in") return 0;
+    if (x.current && x.current.check_out < today && x.current.status === "checked_in") return 0;
+    if (arrivingToday && x.is_active && (x.cleanliness !== "clean" || !x.keybox_ready)) return 0;
+    if (x.is_active && (x.cleanliness !== "clean" || x.open_maintenance > 0)) return 1;
+    return 2;
+  };
+  const ordered = useMemo(() => [...visible].sort((a, b) => urgency(a) - urgency(b) || a.room_number.localeCompare(b.room_number, "en", { numeric: true })),
+    [visible, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const now = useMemo(() => {
+    const out: Array<{ key: string; text: string; to?: string }> = [];
+    for (const x of units) {
+      if (!x.is_active) continue;
+      if (x.current && x.current.check_in < today && x.current.status !== "checked_in") out.push({ key: `late-${x.room_id}`, text: `${x.room_number}: وصول متأخر لم يُسجَّل`, to: `/staff/reservations/${x.current.reservation_id}` });
+      else if (x.current && x.current.check_out < today && x.current.status === "checked_in") out.push({ key: `over-${x.room_id}`, text: `${x.room_number}: تجاوز موعد المغادرة`, to: `/staff/reservations/${x.current.reservation_id}` });
+      const arrivingToday = (x.current?.check_in === today && x.current.status !== "checked_in") || x.next?.check_in === today;
+      if (arrivingToday && x.cleanliness !== "clean") out.push({ key: `clean-${x.room_id}`, text: `${x.room_number}: تحتاج تنظيفًا قبل وصول اليوم`, to: "/staff/housekeeping" });
+      if (arrivingToday && !x.keybox_ready) out.push({ key: `code-${x.room_id}`, text: `${x.room_number}: رمز الصندوق يحتاج تغييرًا قبل الوصول`, to: "/staff/codes" });
+    }
+    return out;
+  }, [units, today]);
+
   if (board.loading) return <LoadingScreen />;
   if (board.error && units.length === 0) return <div><SectionTitle title="لوحة الوحدات" action={<BranchPicker />} /><LoadErrorCard message={board.error} onRetry={reload} /></div>;
   const u = summary?.units;
@@ -65,6 +90,18 @@ export default function StaffRooms() {
     <div>
       <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? (view === "calendar" ? `الإشغال ${summary.occupancy_pct}% — مؤجرة ${u?.occupied} من ${u?.active} فعالة · جاهزة ${u?.ready} · تحتاج تنظيفًا ${u?.dirty} · صيانة ${u?.maintenance} · آخر تحديث ${formatDateTime(summary.generated_at)}` : `آخر تحديث ${formatDateTime(summary.generated_at)}`) : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker /></div>} />
       {board.error && <div className="mb-4"><ErrorBanner message={board.error} /></div>}
+      {view === "board" && now.length > 0 && (
+        <section aria-label="ينتظرك الآن" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-warning-500/30 bg-warning-50 px-4 py-3" data-testid="units-now">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 font-semibold text-warning-700"><BellRing className="h-4 w-4" aria-hidden="true" /> ينتظرك الآن</p>
+            <ul className="mt-1 space-y-0.5 text-sm text-ink-800">
+              {now.slice(0, 4).map((n) => <li key={n.key}>{n.to ? <Link to={n.to} className="hover:underline">{n.text}</Link> : n.text}</li>)}
+            </ul>
+            {now.length > 4 && <p className="mt-1 text-xs text-ink-500">و{now.length - 4 === 1 ? "أمر آخر" : `${now.length - 4} أمور أخرى`}</p>}
+          </div>
+          <button type="button" className="btn-primary text-sm" onClick={() => setFilter("attention")}>عرض ما يحتاج انتباهًا</button>
+        </section>
+      )}
       {view === "board" && summary && u && (
         // B12 (note 13): the occupancy strip — the figures in large type; a figure filters the units it counts
         <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3" data-testid="occupancy-strip">
@@ -90,16 +127,16 @@ export default function StaffRooms() {
         <select className="input w-auto py-1.5 text-sm" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="نوع الوحدة" data-testid="filter-category"><option value="">كل الأنواع</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         <select className="input w-auto py-1.5 text-sm" value={floor} onChange={(e) => setFloor(e.target.value)} aria-label="الطابق" data-testid="filter-floor"><option value="">كل الطوابق</option>{floors.map((f) => <option key={f} value={f}>{f}</option>)}</select>
         {view === "board" && ([["all", "الكل"], ["free", "خالية"], ["occupied", "مؤجرة"], ["ready", "جاهزة"], ["arriving", "وصول اليوم"], ["departing", "مغادرة اليوم"], ["dirty", "تحتاج تنظيفًا"], ["maintenance", "صيانة"], ["attention", "تحتاج انتباهًا"]] as const).map(([k, v]) => (
-          <button key={k} onClick={() => setFilter(k)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${filter === k ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-600"}`}>{v}</button>
+          <button key={k} type="button" aria-pressed={filter === k} data-testid={`units-filter-${k}`} onClick={() => setFilter(k)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${filter === k ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-600"}`}>{v}</button>
         ))}
       </div>
       {view === "calendar" ? <CalendarView roomFilter={(id) => visible.some((x) => x.room_id === id)} /> : visible.length === 0 ? <EmptyState icon={<DoorClosed className="h-10 w-10" />} title="لا وحدات مطابقة" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {visible.map((x) => {
+          {ordered.map((x) => {
             const late = x.current && x.current.check_in < today && x.current.status !== "checked_in";
             const over = x.current && x.current.check_out < today && x.current.status === "checked_in";
             return (
-              <Card key={x.room_id} className={!x.is_active ? "opacity-60" : ""}>
+              <Card key={x.room_id} className={!x.is_active ? "opacity-60" : ""} data-testid="unit-card" data-room={x.room_number} data-urgency={urgency(x)}>
                 <div className="flex items-start justify-between">
                   <div><p className="text-lg font-bold text-ink-800">{x.room_number}</p><p className="text-[11px] text-ink-400">{x.category}{x.block ? ` · ${x.block}` : ""}{x.floor ? ` / ${x.floor}` : ""}</p></div>
                   <Badge className={ROOM_STATUS_COLORS[x.status as RoomStatus] ?? "bg-ink-100"}>{ROOM_STATUS_LABELS[x.status as RoomStatus] ?? x.status}</Badge>

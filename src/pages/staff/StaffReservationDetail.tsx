@@ -10,8 +10,9 @@ import {
   RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, IDENTITY_TYPE_LABELS, ROOM_STATUS_LABELS,
   type ReservationStatus, type PaymentStatus, type GuestVerificationStatus, type AccessStatus, type IdentityType, type RoomStatus,
 } from "../../lib/types";
-import { formatCurrency, maskId, formatDateTime } from "../../lib/utils";
+import { formatCurrency, maskId, formatDateTime, todayISO } from "../../lib/utils";
 import { ReservationOperations } from "../../components/ReservationOperations";
+import { StayProgress, type StaySection } from "../../components/StayProgress";
 import { StayCycle } from "../../components/StayCycle";
 import { GuestAlerts, OfficeGuestDialog, PlatformPanel, GroupPanel, StaySummaryDialog, GuestEntryBadge } from "../../components/Guests";
 import { opsApi, type ReservationDetail, type GroupSummary } from "../../lib/api";
@@ -167,6 +168,8 @@ export default function StaffReservationDetail() {
   if (!detail) return <EmptyState title="الحجز غير موجود" />;
 
   const remaining = Math.max(0, detail.total_halalas - detail.paid_halalas);
+  // U3: the next-step button moves to the section that does it (each keeps its own rules)
+  const jump = (s: StaySection) => document.getElementById(`res-${s}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <div>
@@ -207,11 +210,14 @@ export default function StaffReservationDetail() {
         </div>
       )}
 
+      <StayProgress canMoney={canMoney} onJump={jump}
+        r={{ status: detail.status, identity_status: detail.identity_status, has_room: !!detail.room, total_halalas: detail.total_halalas, paid_halalas: detail.paid_halalas, check_out: detail.check_out, today: todayISO() }} />
+
       {loadError && <div className="mb-4"><ErrorBanner message={loadError} /></div>}
       {actionError && <div className="mb-4"><ErrorBanner message={actionError} /></div>}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Guests / Identity */}
-        <Card>
+        <Card id="res-guests" className="scroll-mt-20">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-brand-600" /><h2 className="text-base font-semibold text-ink-800">النزلاء ومطابقة الهوية</h2></div>
             <div className="flex flex-wrap gap-2">
@@ -293,7 +299,7 @@ export default function StaffReservationDetail() {
             <p className="mt-3 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-500">تُسجَّل الدفعات والتأمين والاسترداد من «الملخص المالي» أدناه — مسار واحد لكل حركة مالية، بسند مرقّم وقابل للتدقيق.</p>
           </Card>}
 
-          <Card>
+          <Card id="res-room" className="scroll-mt-20">
             <div className="mb-3 flex items-center gap-2">
               <DoorClosed className="h-5 w-5 text-brand-600" />
               <h2 className="text-base font-semibold text-ink-800">الغرفة</h2>
@@ -324,12 +330,12 @@ export default function StaffReservationDetail() {
         <StaySummaryDialog open={summaryOpen} reservationId={detail.id} canRecord={can("checkin")} onClose={() => setSummaryOpen(false)} onChanged={load} />
 
         {/* The stay cycle (0033): Shomoos, the arrival, the code, the nights, the departure, the inspection, «مغلق» */}
-        <div className="lg:col-span-2">
+        <div className="scroll-mt-20 lg:col-span-2" id="res-stay">
           <StayCycle reservationId={detail.id} branchId={detail.branch_id} refreshKey={tick} onChanged={load} />
         </div>
 
         {/* Stay management & financial ledger (Zaaer core) */}
-        <div className="lg:col-span-2">
+        <div className="scroll-mt-20 lg:col-span-2" id="res-ops">
           <ReservationOperations reservationId={detail.id} refreshKey={tick} onChanged={load} />
         </div>
 

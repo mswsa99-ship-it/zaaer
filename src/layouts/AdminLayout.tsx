@@ -11,6 +11,7 @@ import { KeyboxAlertBanner } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 import { useReviewSummary } from "../lib/reviewAlerts";
 import { ReviewNavCount } from "../components/ReviewBanner";
+import { BottomTabs, pickTabs } from "../components/BottomTabs";
 
 export default function AdminLayout() {
   const { profile, signOut, can, canFull } = useAuth();
@@ -24,6 +25,8 @@ export default function AdminLayout() {
 
   // phones and tablets: the same menu opens as a drawer (it was missing below the desktop width)
   const [menuOpen, setMenuOpen] = useState(false);
+  // U3: the owner's bottom bar on a phone; «المزيد» opens the same drawer as «القائمة»
+  const tabs = pickTabs(groups.flatMap((g) => g.items), ["/admin/dashboard", "/admin/reservations", "/admin/finance", "/admin/review"]);
   const location = useLocation();
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -115,11 +118,12 @@ export default function AdminLayout() {
           </header>
           <KeyboxAlertBanner alerts={codeAlerts} />
         </div>
-        <main className="flex-1 p-4 pb-24 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
+        <main className="flex-1 p-4 pb-36 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
           <Outlet />
         </main>
       </div>
       <OpsCopilot />
+      <BottomTabs items={tabs} onMore={() => setMenuOpen(true)} moreOpen={menuOpen} />
     </div>
   );
 }

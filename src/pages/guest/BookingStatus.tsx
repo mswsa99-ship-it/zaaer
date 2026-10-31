@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText } from "lucide-react";
-import { guestApi, toArabicError, type GuestSession, type PublicBranch } from "../../lib/api";
+import { guestApi, toArabicError, type GuestSession, type PublicBranch, type GuestStaySummary } from "../../lib/api";
 import { Card, Spinner, EmptyState, ErrorBanner } from "../../components/ui";
 import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
-import { formatCurrency, formatHijri } from "../../lib/utils";
+import { formatCurrency, formatHijri, todayISO } from "../../lib/utils";
 
 export default function BookingStatus() {
   const { token } = useParams();
@@ -14,6 +14,7 @@ export default function BookingStatus() {
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [branch, setBranch] = useState<PublicBranch | null>(null);
+  const [rules, setRules] = useState<GuestStaySummary["policies"] | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -26,6 +27,8 @@ export default function BookingStatus() {
   // decision 31: the branch's map link; decision 19: the stay summary page
   const branchId = data?.reservation.branch_id;
   useEffect(() => { if (!branchId) return; guestApi.branch(branchId).then(setBranch).catch(() => setBranch(null)); }, [branchId]);
+  // U3: the stay rules are the branch's own policies (set in the settings), read once from the stay summary
+  useEffect(() => { if (!token || !branchId) return; guestApi.staySummary(token).then((x) => setRules(x?.policies ?? null)).catch(() => setRules(null)); }, [token, branchId]);
   // Poll every 15s so supervisor approvals show up without a reload (guest has no realtime access to tables)
   useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
@@ -59,16 +62,28 @@ export default function BookingStatus() {
     setActing(false);
   }
 
-  return (
-    <div className="mx-auto max-w-lg px-4 py-8 lg:py-12">
-      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> الرئيسية</Link>
+  // U3: one welcome line for where the stay is
+  const today = todayISO();
+  const greeting = ["checked_out", "closed"].includes(r.status) ? "شكرًا لإقامتك معنا"
+    : arrived ? "نتمنى لك إقامة طيبة"
+    : r.check_in === today ? "أهلًا بك، إقامتك تبدأ اليوم"
+    : r.check_in > today ? `أهلًا بك، موعد وصولك ${r.check_in}` : "أهلًا بك";
+  const checkInTime = branch?.check_in_time?.slice(0, 5);
 
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold text-ink-800">حالة الحجز</h1>
-        <p className="mt-1 text-sm text-ink-500">{r.internal_ref} · {r.branch_name}</p>
-      </div>
+  return (
+    <div>
+      <header className="bg-brand-800 px-4 pb-10 pt-6 text-white" data-testid="guest-hero">
+        <div className="mx-auto max-w-lg">
+          <Link to="/" className="mb-3 inline-flex items-center gap-1.5 text-sm text-brand-100 hover:text-white"><ArrowLeft className="h-4 w-4" /> الرئيسية</Link>
+          <p className="font-semibold">{r.branch_name}</p>
+          <p className="mt-2 text-xl font-bold leading-8" data-testid="guest-greeting">{greeting}</p>
+          <h1 className="mt-1 text-sm font-medium text-brand-100">حالة الحجز · <span className="font-mono" dir="ltr">{r.internal_ref}</span>{checkInTime && !arrived ? ` · الوصول من ${checkInTime}` : ""}</h1>
+        </div>
+      </header>
+    <div className="mx-auto -mt-6 max-w-lg px-4 pb-10">
 
       <Card className="mb-6">
+        <h2 className="mb-3 text-base font-semibold text-ink-800">حجزك</h2>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><p className="text-xs text-ink-400">الوحدة</p><p className="font-medium text-ink-700">{r.room_number ?? "غير مخصصة بعد"} · {r.category_name}</p></div>
           <div><p className="text-xs text-ink-400">الحالة</p><p className="font-medium text-ink-700">{RESERVATION_STATUS_LABELS[r.status as ReservationStatus]}</p></div>
@@ -77,9 +92,10 @@ export default function BookingStatus() {
         </div>
       </Card>
 
-      <div className="space-y-3">
+      <h2 className="mb-3 text-base font-semibold text-ink-800">{arrived ? "إقامتك" : "قبل وصولك"}</h2>
+      <ol className="space-y-3" aria-label="خطوات الإقامة">
         {steps.map((s, i) => (
-          <div key={i} className={`card flex items-center gap-3 p-4 ${s.done ? "border-success-500/30" : "border-warning-500/30"}`}>
+          <li key={i} className={`card flex items-center gap-3 p-4 ${s.done ? "border-success-500/30" : "border-warning-500/30"}`}>
             <div className={`flex h-9 w-9 items-center justify-center rounded-full ${s.done ? "bg-success-500/15 text-success-600" : "bg-warning-500/15 text-warning-700"}`}>
               {s.done ? <CheckCircle2 className="h-5 w-5" /> : <s.icon className="h-5 w-5" />}
             </div>
@@ -87,10 +103,10 @@ export default function BookingStatus() {
               <p className="text-sm font-medium text-ink-700">{s.label}</p>
               <p className="text-xs text-ink-400">{s.statusText}</p>
             </div>
-            {s.action ? <Link to={s.action.to} className="btn-outline text-xs">{s.action.label}</Link> : !s.done && <Clock className="h-4 w-4 text-ink-400" />}
-          </div>
+            {s.action ? <Link to={s.action.to} className="btn-primary text-xs">{s.action.label}</Link> : !s.done && <Clock className="h-4 w-4 text-ink-400" aria-hidden="true" />}
+          </li>
         ))}
-      </div>
+      </ol>
 
       {!data.access.allowed && data.access.reasons.length > 0 && !delivered && !(arrived && !hasKeybox) && (
         <div className="mt-4 rounded-xl bg-ink-50 p-4 text-xs text-ink-500">
@@ -115,6 +131,15 @@ export default function BookingStatus() {
         {branch?.map_url && <a href={branch.map_url} target="_blank" rel="noopener noreferrer" className="btn-outline" data-testid="map-link"><MapPin className="h-4 w-4" /> الموقع على الخريطة</a>}
       </div>
 
+      {rules && rules.length > 0 && (
+        <Card className="mt-6" data-testid="guest-rules">
+          <h2 className="mb-2 text-base font-semibold text-ink-800">قواعد الإقامة</h2>
+          <ul className="space-y-2 text-sm text-ink-700">
+            {rules.map((p, i) => <li key={i}><p className="font-medium text-ink-800">{p.title}</p><p className="whitespace-pre-line text-ink-600">{p.content}</p></li>)}
+          </ul>
+        </Card>
+      )}
+
       {delivered && (
         <div className="mt-6 rounded-2xl bg-accent-500/10 p-5 text-center">
           <KeyRound className="mx-auto mb-2 h-8 w-8 text-accent-600" />
@@ -122,6 +147,7 @@ export default function BookingStatus() {
           <Link to={`/checkin/${token}`} className="btn-accent mt-3">عرض رمز الدخول</Link>
         </div>
       )}
+    </div>
     </div>
   );
 }

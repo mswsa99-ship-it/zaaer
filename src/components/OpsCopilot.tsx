@@ -55,12 +55,12 @@ export function OpsCopilot() {
   if (!branchId) return null;
   return (
     <>
-      <button onClick={() => setOpen((o) => !o)} className="fixed bottom-4 left-4 z-40 flex h-12 w-12 items-center justify-center gap-2 rounded-full bg-ink-800 text-sm font-medium text-white shadow-lg hover:bg-ink-900 sm:w-auto sm:px-4" aria-label="مساعد العمليات" aria-expanded={open}>
+      <button onClick={() => setOpen((o) => !o)} className="fixed bottom-[72px] left-4 z-40 flex h-12 w-12 lg:bottom-4 items-center justify-center gap-2 rounded-full bg-ink-800 text-sm font-medium text-white shadow-lg hover:bg-ink-900 sm:w-auto sm:px-4" aria-label="مساعد العمليات" aria-expanded={open}>
         {/* U1 note 03: an icon on a phone, so it covers less of the cards beneath it */}
         <Bot className="h-5 w-5" /> <span className="hidden sm:inline">مساعد العمليات</span>
       </button>
       {open && (
-        <div className="fixed bottom-20 left-5 z-40 flex h-[min(640px,80vh)] w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xl">
+        <div className="fixed bottom-[136px] left-5 z-40 flex h-[min(640px,70vh)] lg:bottom-20 w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-ink-100 bg-ink-800 px-4 py-3 text-white">
             <div className="flex items-center gap-2"><Bot className="h-5 w-5" /><div className="leading-tight"><p className="text-sm font-semibold">مساعد العمليات</p><p className="text-[11px] text-ink-400">{branch?.name_ar} · يقرأ البيانات ويقترح؛ أنت من ينفذ</p></div></div>
             <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-white"><X className="h-4 w-4" /></button>

@@ -7,6 +7,8 @@ import { opsApi, type ReportsFinance } from "../../lib/api";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { addDaysISO, formatCurrency, todayISO, UI_LOCALE } from "../../lib/utils";
 import { ReviewBanner } from "../../components/ReviewBanner";
+import { OwnerOverview } from "../../components/OwnerOverview";
+import { useAuth } from "../../lib/auth";
 import { useReviewSummary } from "../../lib/reviewAlerts";
 
 interface Stats {
@@ -96,7 +98,8 @@ export default function AdminDashboard() {
   // G24 (decision 40): the active branch's figures only — a slow answer for the previous branch is dropped
   const q = useBranchQuery<Stats | null>(loadStats, [], null);
   const stats = q.data;
-  const review = useReviewSummary(true);   // the owner: what waits for review, and the monitors when due (decision 54)
+  const review = useReviewSummary(true);
+  const { profile } = useAuth();   // the owner: what waits for review, and the monitors when due (decision 54)
 
   const header = <SectionTitle title="لوحة الإدارة" subtitle="مؤشرات الأداء التشغيلي" action={<BranchPicker />} />;
   if (q.loading) return <LoadingScreen />;
@@ -131,6 +134,9 @@ export default function AdminDashboard() {
       {header}
       <ReviewBanner summary={review} />
       {q.error && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
+      {/* U3: the owner's view across the branches, then the active branch's figures below */}
+      {profile?.role === "owner" && <OwnerOverview />}
+      <h2 className="mb-3 text-base font-semibold text-ink-800">مؤشرات الفرع المختار</h2>
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map((k) => (
           <Card key={k.label} className="flex flex-col gap-2">
