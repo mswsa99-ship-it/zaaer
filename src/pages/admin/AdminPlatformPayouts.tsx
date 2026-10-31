@@ -15,9 +15,10 @@ import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, E
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO, isoDateIn, UI_LOCALE } from "../../lib/utils";
+import { bpToPercent } from "../../lib/money";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
-interface Payout { id: string; source_id: string; account_id: string; expected_halalas: number; received_halalas: number; difference_halalas: number; voucher_count: number; received_on: string; reference: string; note: string | null; status: string; cancel_reason: string | null; created_at: string }
+interface Payout { id: string; source_id: string; account_id: string; expected_halalas: number; commission_bp: number | null; commission_halalas: number | null; received_halalas: number; difference_halalas: number; voucher_count: number; received_on: string; reference: string; note: string | null; status: string; cancel_reason: string | null; created_at: string }
 interface Data { unsettled: PlatformPayment[]; payouts: Payout[]; accounts: CashAccount[]; sources: Array<{ id: string; name: string }> }
 const NO_DATA: Data = { unsettled: [], payouts: [], accounts: [], sources: [] };
 /** The month a payment belongs to, by the property's calendar day (not the UTC one). */
@@ -38,7 +39,7 @@ export default function AdminPlatformPayouts() {
   const q = useBranchQuery<Data>(async (branchId) => {
     const [u, p, a, s] = await Promise.all([
       moneyApi.platformUnsettled(branchId),
-      supabase.from("platform_payouts").select("id, source_id, account_id, expected_halalas, received_halalas, difference_halalas, voucher_count, received_on, reference, note, status, cancel_reason, created_at").eq("branch_id", branchId).order("received_on", { ascending: false }).limit(50),
+      supabase.from("platform_payouts").select("id, source_id, account_id, expected_halalas, commission_bp, commission_halalas, received_halalas, difference_halalas, voucher_count, received_on, reference, note, status, cancel_reason, created_at").eq("branch_id", branchId).order("received_on", { ascending: false }).limit(50),
       supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, is_default, is_active, archived_at, archive_reason, version").eq("branch_id", branchId).eq("kind", "bank_account").order("name"),
       supabase.from("booking_sources").select("id, name").order("name"),
     ]);
@@ -59,6 +60,10 @@ export default function AdminPlatformPayouts() {
   const chosen = unsettled.filter((x) => picked.has(x.id));
   const chosenSources = [...new Set(chosen.map((x) => x.source_id))];
   const expected = chosen.reduce((s, x) => s + x.signed_halalas, 0);
+  // 0051: the platform keeps its commission; what should arrive is the gross less it (rounded to the halala, as the server)
+  const bp = chosenSources.length === 1 ? (chosen[0]?.commission_bp ?? 0) : 0;
+  const commission = Math.sign(expected) * Math.round(Math.abs(expected * bp) / 10000);
+  const net = expected - commission;
 
   if (q.loading) return <LoadingScreen />;
   const sourceName = (id: string) => sources.find((s) => s.id === id)?.name ?? "—";
@@ -101,8 +106,8 @@ export default function AdminPlatformPayouts() {
       )}
       {chosen.length > 0 && (
         <div className="sticky bottom-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white p-3 shadow-lg">
-          <span className="text-sm text-ink-700">{chosen.length} دفعة · المتوقع <span dir="ltr" className="font-semibold">{sar(expected)}</span>{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
-          <button type="button" className="btn-primary text-sm" disabled={chosenSources.length !== 1} onClick={() => { setForm({ received: expected, on: todayISO(), account: activeAccounts.find((a) => a.is_default)?.id ?? activeAccounts[0]?.id ?? "", reference: "", note: "" }); setConfirming(true); }}>تأكيد إيداع المنصة</button>
+          <span className="text-sm text-ink-700">{chosen.length} دفعة · المتوقع <span dir="ltr" className="font-semibold">{sar(net)}</span>{bp > 0 && <span className="text-ink-500"> (بعد عمولة <span dir="ltr">{bpToPercent(bp)}%</span>)</span>}{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
+          <button type="button" className="btn-primary text-sm" disabled={chosenSources.length !== 1} onClick={() => { setForm({ received: net, on: todayISO(), account: activeAccounts.find((a) => a.is_default)?.id ?? activeAccounts[0]?.id ?? "", reference: "", note: "" }); setConfirming(true); }}>تأكيد إيداع المنصة</button>
         </div>
       )}
 
@@ -110,12 +115,12 @@ export default function AdminPlatformPayouts() {
       {payouts.length === 0 ? <p className="text-sm text-ink-400">لا إيداعات بعد.</p> : (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">المتوقع</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="text-right font-medium">المرجع</th><th></th></tr></thead>
+            <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">الإجمالي</th><th className="text-right font-medium">العمولة</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="text-right font-medium">المرجع</th><th></th></tr></thead>
             <tbody>
               {payouts.map((p) => (
                 <tr key={p.id} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
                   <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {p.voucher_count} دفعة</span></td>
-                  <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{sar(p.received_halalas)}</td>
+                  <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] text-ink-400">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</td><td dir="ltr">{sar(p.received_halalas)}</td>
                   <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
                   <td className="font-mono text-xs">{p.reference}</td>
                   <td className="text-left">{p.status === "cancelled" ? <Badge className="bg-ink-100 text-ink-500" >ملغاة</Badge> : canCancel ? <button className="btn-ghost text-xs text-danger-600" onClick={() => { setReason(""); setCancelFor(p); }}><Ban className="h-3.5 w-3.5" /> إلغاء</button> : null}</td>
@@ -131,17 +136,21 @@ export default function AdminPlatformPayouts() {
           <ActionForm onSubmit={async () => {
             if (form.received == null || form.received <= 0) throw new Error("VALIDATION: amount");
             if (!form.reference.trim()) throw new Error("VALIDATION: reference_required");
-            if (form.received !== expected && !form.note.trim()) throw new Error("VALIDATION: note_required");
+            if (form.received !== net && !form.note.trim()) throw new Error("VALIDATION: note_required");
             await moneyApi.platformConfirm({ branch_id: branchId, source_id: chosenSources[0], voucher_ids: chosen.map((x) => x.id), received_halalas: form.received, received_on: form.on, account_id: form.account || undefined, reference: form.reference.trim(), note: form.note.trim() || undefined });
             setConfirming(false); setPicked(new Set()); q.reload();
           }}>
-            <p className="mb-3 text-sm text-ink-600">{sourceName(chosenSources[0])}: {chosen.length} دفعة، والمتوقع <span dir="ltr">{sar(expected)}</span></p>
+            <div className="mb-3 space-y-0.5 text-sm text-ink-600" data-testid="payout-expected">
+              <p>{sourceName(chosenSources[0])}: {chosen.length} دفعة بإجمالي <span dir="ltr">{sar(expected)}</span></p>
+              {bp > 0 && <p>عمولة المنصة <span dir="ltr">{bpToPercent(bp)}%</span>: <span dir="ltr">{sar(commission)}</span></p>}
+              <p className="font-semibold text-ink-800">الصافي المتوقع: <span dir="ltr">{sar(net)}</span></p>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="المبلغ المستلم فعلًا"><MoneyInput valueHalalas={form.received} onChange={(h) => setForm({ ...form, received: h })} /></Field>
               <Field label="تاريخ الاستلام"><input type="date" className="input" dir="ltr" max={todayISO()} value={form.on} onChange={(e) => setForm({ ...form, on: e.target.value })} /></Field>
               <Field label="الحساب البنكي"><select className="input" value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })}>{activeAccounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}</select></Field>
               <Field label="مرجع الإيداع (إلزامي)"><input className="input" dir="ltr" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} aria-label="مرجع الإيداع" /></Field>
-              {form.received != null && form.received !== expected && <Field label={`سبب الفرق ${sar((form.received ?? 0) - expected)} (إلزامي)`} className="sm:col-span-2"><input className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="مثال: عمولة المنصة" aria-label="سبب الفرق" /></Field>}
+              {form.received != null && form.received !== net && <Field label={`سبب الفرق ${sar((form.received ?? 0) - net)} (إلزامي)`} className="sm:col-span-2"><input className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="مثال: عمولة المنصة" aria-label="سبب الفرق" /></Field>}
             </div>
             <Submit label="تأكيد" onCancel={() => setConfirming(false)} />
           </ActionForm>

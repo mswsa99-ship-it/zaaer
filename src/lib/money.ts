@@ -31,3 +31,14 @@ export function moneyTextToHalalas(t: string): number | null {
   const n = Number(t);
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 }
+
+// 0051: a booking source's commission
+/** 1500 → "15", 1250 → "12.5" (basis points as a percentage, Latin digits). */
+export const bpToPercent = (bp: number | null | undefined) => String(Number(((bp ?? 0) / 100).toFixed(2)));
+/** "15" / "12.5" / "١٥" → 1500 / 1250; null when it is not a percentage 0–100 with at most two decimals. */
+export function percentToBp(text: string): number | null {
+  const t = text.trim().replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace("٫", ".").replace(/%$/, "").trim();
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return null;
+  const bp = Math.round(Number(t) * 100);
+  return bp >= 0 && bp <= 10000 ? bp : null;
+}

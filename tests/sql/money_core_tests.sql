@@ -271,6 +271,31 @@ do $$ declare r1 text; begin
 exception when others then perform t_record('MC12b only the owner or manager cancels a payout; the payments return to the unmatched list and the payout stays as cancelled', false, sqlerrm); end $$;
 reset role;
 
+-- MC12c (0051): the owner sets a source's commission; the deposit that equals the gross less it needs no reason, and the
+-- payout keeps the rate and the commission; finance cannot change the rate; a rate outside 0–100% is refused
+set role authenticated;
+do $$ declare fin text; bad text; c jsonb; aud int; begin
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000004', false);
+  perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000004', 'email', 'fin@test.local')::text, false);
+  fin := t_fails(format('select fn_admin_set_source_commission(%L::jsonb)', jsonb_build_object('id', '00000000-0000-0000-0000-000000000020', 'commission_bp', 1000)), 'FORBIDDEN%');
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000001', false);
+  perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000001', 'email', 'owner@test.local')::text, false);
+  bad := t_fails(format('select fn_admin_set_source_commission(%L::jsonb)', jsonb_build_object('id', '00000000-0000-0000-0000-000000000020', 'commission_bp', 10001)), 'VALIDATION: commission%');
+  perform fn_admin_set_source_commission(jsonb_build_object('id', '00000000-0000-0000-0000-000000000020', 'commission_bp', 1000));
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000004', false);
+  perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000004', 'email', 'fin@test.local')::text, false);
+  c := fn_platform_payout_confirm(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'source_id','00000000-0000-0000-0000-000000000020',
+         'voucher_ids', jsonb_build_array(t_id('vOta1'), t_id('vOta2')), 'received_halalas', 63000, 'received_on', current_date, 'reference', 'PAYOUT-2'));
+  reset role;
+  select count(*) into aud from audit_events where action = 'source.commission_updated' and entity_id = '00000000-0000-0000-0000-000000000020';
+  update booking_sources set commission_bp = 0 where id = '00000000-0000-0000-0000-000000000020';
+  perform t_record('MC12c a source''s commission (owner only, 0–100%, audited) is expected: the gross less 10% arrives with no reason, the payout keeps rate and commission',
+    fin = 'ok' and bad = 'ok' and aud = 1 and (c->'payout'->>'commission_bp')::int = 1000 and (c->'payout'->>'commission_halalas')::bigint = 7000
+    and (c->'payout'->>'expected_halalas')::bigint = 70000 and (c->'payout'->>'difference_halalas')::bigint = 0 and c->'payout'->>'note' is null,
+    fin || ' / ' || bad || ' / ' || aud || ' / ' || coalesce(c::text, ''));
+exception when others then reset role; perform t_record('MC12c a source''s commission (owner only, 0–100%, audited) is expected: the gross less 10% arrives with no reason, the payout keeps rate and commission', false, sqlerrm); end $$;
+reset role;
+
 -- ---------------------------------------------------------------- MC13–MC14: tax zero owned by the owner; the 50 SAR deposit
 set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
@@ -331,5 +356,5 @@ select count(*) filter (where ok) as passed, count(*) filter (where ok is not tr
 \set ON_ERROR_STOP on
 do $$ begin
   if exists (select 1 from test_results where ok is not true) then raise exception 'MONEY CORE TESTS FAILED'; end if;
-  if (select count(*) from test_results) < 22 then raise exception 'MONEY CORE TESTS INCOMPLETE: % of 22 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 23 then raise exception 'MONEY CORE TESTS INCOMPLETE: % of 23 checks ran', (select count(*) from test_results); end if;
 end $$;

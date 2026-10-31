@@ -157,3 +157,35 @@ test.describe("core money (phase 1)", () => {
     await expect(page.getByText(/^الضريبة 15%/)).toBeVisible();
   });
 });
+
+test.describe("the commission of each booking source (0051)", () => {
+  test("CM02 the owner sets a source's commission; matching its deposit expects the gross less it, with no reason asked", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/admin/booking-sources");
+    await expect(page.getByTestId("commission-agoda")).toContainText("15%");
+    await page.getByTestId("edit-commission-booking_com").click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByTestId("commission-input").fill("150");
+    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await expect(dlg.getByText("العمولة نسبة من 0 إلى 100%")).toBeVisible();
+    await dlg.getByTestId("commission-input").fill("10");
+    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await expect(page.getByTestId("commission-booking_com")).toContainText("10%");
+
+    await go("/admin/platform-payouts");
+    const card = page.locator(".card", { hasText: "Booking.com" }).first();
+    await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "تحديد الكل" }).click();
+    await page.getByRole("button", { name: "تأكيد إيداع المنصة" }).click();
+    const pay = page.getByRole("dialog");
+    await expect(pay.getByTestId("payout-expected")).toContainText("عمولة المنصة 10%");
+    const gross = parseSar(await pay.getByTestId("payout-expected").locator("p").first().locator("[dir=ltr]").innerText());
+    const received = Number(await pay.locator("input[data-money]").first().inputValue());
+    expect(received).toBeCloseTo(gross * 0.9, 2);
+    await expect(pay.getByLabel("سبب الفرق")).toHaveCount(0);
+    await pay.getByLabel("مرجع الإيداع").fill("PAYOUT-CM02");
+    await pay.getByRole("button", { name: "تأكيد" }).click();
+    await expect(pay).toHaveCount(0);
+    await expect(page.locator("tr", { hasText: "PAYOUT-CM02" })).toContainText("10%");
+  });
+});

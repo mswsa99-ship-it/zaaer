@@ -69,7 +69,7 @@ export function seed(): Store {
     member(STAFF.manager.id, BRANCH_B),
   ]);
   // the twelve sources of decision 22 (0038): a code, a kind, whether the platform's number is needed; Booking Engine off (decision 23)
-  const src = (id: string, code: string, name: string, kind: "direct" | "external", ref: boolean, active = true) => ({ id, organization_id: ORG, name, code, kind, external_reference_required: ref, booking_url: null, is_active: active, archived_at: null, created_at: ts(-400) });
+  const src = (id: string, code: string, name: string, kind: "direct" | "external", ref: boolean, active = true) => ({ id, organization_id: ORG, name, code, kind, external_reference_required: ref, booking_url: null, is_active: active, archived_at: null, created_at: ts(-400), commission_bp: code === "agoda" || code === "jathr_inn" ? 1500 : 0 });
   put("booking_sources", [
     src(fixed(21), "reception", "الاستقبال", "direct", false), src(fixed(20), "booking_com", "Booking.com", "external", true), src(fixed(22), "airbnb", "Airbnb", "external", true),
     src(fixed(523), "almosafer", "Almosafer Web", "external", true), src(fixed(524), "airport", "المطار", "external", false), src(fixed(525), "agoda", "Agoda.com", "external", true),

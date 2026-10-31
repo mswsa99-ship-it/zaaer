@@ -154,6 +154,7 @@ export const VALIDATION_AR: Record<string, string> = {
   account_last4: "آخر أربعة أرقام من الحساب: أربعة أرقام فقط.",
   reference: "رقم العملية بين 3 و60 حرفًا.",
   note_required: "يوجد فرق: اكتب سببه.",
+  commission: "العمولة نسبة من 0 إلى 100%، بخانتين عشريتين على الأكثر.",
   business_date: "لا تُسوّى إلا الأيام التي مضت أو اليوم.",
   received_on: "تاريخ الاستلام لا يكون بعد اليوم.",
   vouchers: "اختر دفعة واحدة على الأقل.",
@@ -547,7 +548,7 @@ export interface PosDay {
   settlement: PosSettlement | null;
 }
 export interface PosSettlement { id: string; account_id: string; business_date: string; terminal_total_halalas: number; system_total_halalas: number; difference_halalas: number; voucher_count: number; status: "matched" | "difference"; note: string | null; version: number; updated_at: string }
-export interface PlatformPayment { id: string; number: string; kind: "receipt" | "refund"; amount_halalas: number; signed_halalas: number; occurred_at: string; reservation_id: string; internal_ref: string; external_ref: string | null; check_in: string; source_id: string; source_name: string | null }
+export interface PlatformPayment { id: string; number: string; kind: "receipt" | "refund"; amount_halalas: number; signed_halalas: number; occurred_at: string; reservation_id: string; internal_ref: string; external_ref: string | null; check_in: string; source_id: string; source_name: string | null; commission_bp?: number }
 export const moneyApi = {
   upsertAccount: (p: Partial<CashAccount> & { name: string }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_cash_account", { p }),
   archiveAccount: (id: string, archive: boolean, reason: string) => rpc<{ ok: boolean; used_by_vouchers?: number; default_missing?: boolean; unchanged?: boolean }>("fn_admin_archive_cash_account", { p_id: id, p_archive: archive, p_reason: reason }),
@@ -815,6 +816,8 @@ export const branchMediaApi = {
   set: (branchId: string, kind: "logo" | "image", dataBase64: string | null) => rpc<{ ok: boolean; changed: boolean; media: { mime: string; size_bytes: number; sha256: string } | null }>("fn_admin_set_branch_media", { p: { branch_id: branchId, kind, data_base64: dataBase64 ?? "" } }),
   info: (branchId: string) => rpc<Record<"logo" | "image", { mime: string; size_bytes: number; updated_at: string; updated_by: string | null } | undefined>>("fn_admin_branch_media_info", { p_branch: branchId }),
   setSourceActive: (id: string, isActive: boolean, reason?: string | null) => rpc<{ ok: boolean; changed: boolean }>("fn_admin_set_source_active", { p: { id, is_active: isActive, reason: reason ?? null } }),
+  /** 0051: the source's commission in basis points (1500 = 15%). */
+  setSourceCommission: (id: string, commissionBp: number, reason?: string | null) => rpc<{ ok: boolean; changed: boolean }>("fn_admin_set_source_commission", { p: { id, commission_bp: String(commissionBp), reason: reason ?? null } }),
 };
 export interface UnitCard {
   room_id: string; room_number: string; category: string; block: string | null; floor: string | null; is_active: boolean; status: string; cleanliness: string;

@@ -401,6 +401,15 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       audit(null, s.is_active ? "source.enabled" : "source.disabled", "booking_source", s.id, { before: { code: s.code, is_active: was }, after: { code: s.code, is_active: s.is_active }, reason: String(p.reason ?? "").trim() || null });
       return { ok: true, changed: true };
     },
+    // 0051: the source's commission in basis points (0–10000), the owner or a manager, audited
+    fn_admin_set_source_commission: ({ p }) => {
+      requireCap("definitions"); const raw = String(p?.commission_bp ?? ""); if (!/^[0-9]{1,5}$/.test(raw) || Number(raw) > 10000) throw new Error("VALIDATION: commission");
+      const s = byId("booking_sources", p.id); if (!s) throw new Error("NOT_FOUND"); const bp = Number(raw); const was = Number(s.commission_bp ?? 0);
+      if (was === bp) return { ok: true, changed: false };
+      s.commission_bp = bp; emit("booking_sources");
+      audit(null, "source.commission_updated", "booking_source", s.id, { before: { code: s.code, commission_bp: was }, after: { code: s.code, commission_bp: bp }, reason: String(p.reason ?? "").trim() || null });
+      return { ok: true, changed: true };
+    },
   };
 }
 
