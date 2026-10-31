@@ -278,18 +278,20 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     expect((await vrow(v.voucher_id)).account_id).toBe(created.id);
   });
 
-  it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit to the stay takes none", async () => {
+  it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
     const r = await createRes({ ci: 64, co: 66 });
     const d = await defaults(BRANCH);
     await voucher(r.id, { method: "cash", amount_halalas: 10000 });
     await voucher(r.id, { kind: "deposit", method: "cash", amount_halalas: 5000 });
     await expect(refund(r.id, { method: "pos", amount_halalas: 2000 })).rejects.toThrow(/reference_required/);
-    const back = await vrow((await refund(r.id, { method: "pos", reference: "RF-2001", amount_halalas: 2000 })).voucher_id);
+    // 0054 (MONEY-06): paid in cash, back by the terminal only with a written reason
+    await expect(refund(r.id, { method: "pos", reference: "RF-2001", amount_halalas: 2000 })).rejects.toThrow(/^REFUND_METHOD_DIFFERS/);
+    const back = await vrow((await refund(r.id, { method: "pos", reference: "RF-2001", amount_halalas: 2000, method_reason: "النزيل طلب الرد على بطاقته" })).voucher_id);
     expect(back).toMatchObject({ account_id: d.bank.id, reference: "RF-2001" });
     const cashBack = await vrow((await refund(r.id, { method: "cash", amount_halalas: 1000 })).voucher_id);
     expect(cashBack.account_id).toBe(d.cash.id);
     const applied = await vrow((await refund(r.id, { kind: "deposit_apply", method: undefined, amount_halalas: 3000 })).voucher_id);
-    expect(applied.account_id).toBeNull();
+    expect(applied).toMatchObject({ method: "cash", account_id: d.cash.id });
   });
 
   it("MC10 the supervisor settles the day: the terminal vouchers net (taken in − paid back) against the terminal total; equal is matched", async () => {
@@ -305,6 +307,25 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     expect(day.voucher_count - base.voucher_count).toBe(2);
     const s = await rpc<any>("fn_pos_settle", { p: { branch_id: BRANCH, account_id: d.bank.id, business_date: today(), terminal_total_halalas: day.system_total_halalas, version: day.settlement?.version } });
     expect(s.settlement).toMatchObject({ status: "matched", difference_halalas: 0 });
+  });
+
+  // ---- 0054: the money findings of the 31 October review, in the demo with the server's rules (QM*)
+  it("QM08 a voucher of a settled POS day is reversed and re-issued today, never touched; a POS difference and a confirmed duplicate number go to the owner's review", async () => {
+    const d = await defaults(BRANCH);
+    const r = await createRes({ ci: 71, co: 73 });
+    const v = await voucher(r.id, { method: "pos", reference: "TRX-7101", amount_halalas: 30000 });
+    const day = await rpc<any>("fn_pos_settlement_preview", { p_branch: BRANCH, p_account: d.bank.id, p_date: today() });
+    await rpc("fn_pos_settle", { p: { branch_id: BRANCH, account_id: d.bank.id, business_date: today(), terminal_total_halalas: day.system_total_halalas + 500, note: "فرق الجهاز", version: day.settlement?.version } });
+    const items = async (kind: string) => ((await rpc<any>("fn_review_list", { p: { status: "open", limit: 500 } })).items as any[]).filter((x) => x.kind === kind);
+    expect((await items("pos_difference")).length).toBeGreaterThan(0);
+    const c = await rpc<any>("fn_staff_correct_voucher", { p: { voucher_id: v.voucher_id, amount_halalas: 25000, reason: "المبلغ الصحيح", idempotency_key: uid() } });
+    expect(c).toMatchObject({ ok: true, settled: true });
+    expect(((await client.from("financial_vouchers").select("status").eq("id", v.voucher_id).maybeSingle()).data as any).status).toBe("approved");
+    await expect(rpc("fn_staff_correct_voucher", { p: { voucher_id: v.voucher_id, amount_halalas: 20000, reason: "مرة ثانية", idempotency_key: uid() } })).rejects.toThrow(/^VOUCHER_ALREADY_REVERSED/);
+    const r2 = await createRes({ ci: 74, co: 75 });
+    await expect(voucher(r2.id, { method: "pos", reference: "trx-7101", amount_halalas: 1000 })).rejects.toThrow(/^DUPLICATE_REFERENCE/);
+    await voucher(r2.id, { method: "pos", reference: "trx-7101", amount_halalas: 1000, duplicate_reference_ok: true });
+    expect((await items("voucher_duplicate_reference")).length).toBe(1);
   });
 
   it("MC11 a difference must be explained, is kept with its sign for the owner", async () => {
@@ -685,11 +706,50 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
     await arrive(r.id, 20000);
     expect(await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "supervisor" })).toEqual({ ok: true, code: "3141" });
     expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "screen" })).reasons).toEqual(["تم تسليم الرمز مسبقًا لهذا الحجز"]);
+    // 0052 (SEC-01): staff opening the guest's page see it as «عرض الرمز» — it is not the guest's receipt
     expect(await rpc<any>("fn_guest_access_code", { p_token: token })).toMatchObject({ allowed: true, code: "3141" });
+    expect((await row(r.id)).access_status).toBe("delivered");
+    await client.auth.signOut();
+    expect(await rpc<any>("fn_guest_access_code", { p_token: token })).toMatchObject({ allowed: true, code: "3141" });
+    await login("owner@demo.sa");
     expect((await row(r.id)).access_status).toBe("acknowledged");
     const n = await inHouse(N1, 0, 1);
     expect((await row(n)).access_status).toBe("key_handed");
     expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: n, p_channel: "screen" })).reasons).toEqual(["الوحدة بلا صندوق مفتاح؛ يُسلَّم مفتاحها يدويًا"]);
+  });
+
+  // ---- 0053: the front desk findings of the 31 October review, in the demo with the server's rules (QF*)
+  it("QF05 leaving before the departure date asks first; «تقصير» ends the stay with the nights left as the guest's credit; «إبقاء» keeps them paid, both with a reason", async () => {
+    const id = await inHouse(K1, 0, 3);
+    const first = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    expect(first).toMatchObject({ ok: false, early_departure: true, unused_nights: 2, unused_halalas: 20000, new_check_out: day(1) });
+    expect(await fails(rpc("fn_staff_check_out", { p: { reservation_id: id, early_departure: "shorten" } }))).toMatch(/^VALIDATION: reason/);
+    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id, early_departure: "shorten", reason: "ظرف عائلي" } });
+    expect(out.ok).toBe(true); expect(out.credit_halalas).toBe(20000);
+    expect((await row(id)).check_out).toBe(day(1));
+    const id2 = await inHouse(K2, 0, 2);
+    const kept = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id2, early_departure: "keep", reason: "طلب النزيل" } });
+    expect(kept.ok).toBe(true); expect((await row(id2)).check_out).toBe(day(2));
+  });
+
+  it("QF06 a unit whose resident stayed past the departure is not offered or allocated for tonight, and is for tomorrow", async () => {
+    const id = await inHouse(K1, 0, 1);
+    await client.from("reservations").update({ check_in: day(-3), check_out: day(-1) }).eq("id", id);
+    await client.from("reservation_allocations").update({ from_date: day(-3), to_date: day(-1) }).eq("reservation_id", id);
+    const tonight = await rpc<any[]>("fn_available_rooms", { p_branch: A, p_from: day(0), p_to: day(1), p_category: CAT });
+    expect(tonight.map((x) => x.room_id)).not.toContain(K1);
+    expect(await fails(book(K1, 0, 1))).toMatch(/^(ROOM_OCCUPIED_OVERSTAY|ROOM_NOT_AVAILABLE)/);
+    expect((await book(K1, 1, 2)).id).toBeTruthy();
+  });
+
+  it("QF07 a booking «بانتظار التحقق» is confirmed when its identity is verified, and a once-only service added twice needs a reason", async () => {
+    const r = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: A, category_id: CAT, source_id: SOURCE, check_in: day(0), check_out: day(1), guest_name: "ضيف منصة", guest_phone: "0500000000", room_id: K2, adults: 1, companions: 0, confirm: false } });
+    expect((await row(r.id)).status).toBe("pending_verification");
+    await prepare(r.id, r.internal_ref);
+    expect((await row(r.id)).status).toBe("confirmed");
+    await rpc("fn_staff_add_service", { p_reservation: r.id, p_service: SVC, p_quantity: 1, p_note: null });
+    expect(await fails(rpc("fn_staff_add_service", { p_reservation: r.id, p_service: SVC, p_quantity: 1, p_note: null }))).toMatch(/^SERVICE_ALREADY_ADDED/);
+    expect((await rpc<any>("fn_staff_add_service", { p_reservation: r.id, p_service: SVC, p_quantity: 1, p_note: "زجاجة ثانية" })).ok).toBe(true);
   });
 
   it("SD04 night by night: a night unpaid past its deadline stops extending and services until it is paid or a reason excuses it", async () => {
@@ -715,17 +775,17 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
 
   it("SD05 the departure only with nothing owed, for anyone — the override is gone; a held deposit keeps the stay «غادر»", async () => {
     const id = await inHouse(K1, 0, 2, 10000);   // one night of two paid
-    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } });
     expect(out).toMatchObject({ ok: false, balance_due: 10000 });
     expect(out.reasons[0]).toContain("على الحجز مبلغ مستحق 100.00 ر.س");
     expect((await rpc<any>("fn_staff_checkout", { p_reservation: id, p_override_reason: "بقرار المالك" })).ok).toBe(false);
     await pay(id, 10000);
-    const ok = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    const ok = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } });
     expect(ok).toMatchObject({ ok: true, status: "checked_out", deposit_to_settle_halalas: 5000 });
     expect(ok.missing).toContain("تأمين لم يُسوَّ 50.00 ر.س");
     expect((await client.from("rooms").select("status, cleanliness").eq("id", K1).maybeSingle()).data).toMatchObject({ status: "cleaning", cleanliness: "dirty" });
     expect((await rpc<any>("fn_stay_followups", { p_branch: A })).departed_open.some((x: any) => x.id === id)).toBe(true);
-    expect((await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } })).duplicate).toBe(true);
+    expect((await rpc<any>("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } })).duplicate).toBe(true);
   });
 
   it("SD06 the deposit goes back after the departure and its inspection — the supervisor may return it; the departure invoiced the stay, so the refund closes it, and cancelling its invoice reopens «غادر»", async () => {
@@ -733,7 +793,7 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
     const refund = () => rpc("fn_refund", { p: { reservation_id: id, kind: "deposit_refund", amount_halalas: 5000, method: "cash", reason: "إرجاع التأمين", idempotency_key: uid() } });
     await login("reception@demo.sa");
     expect(await fails(refund())).toBe("VALIDATION: deposit_refund_before_checkout");
-    await rpc("fn_staff_check_out", { p: { reservation_id: id } });
+    await rpc("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } });
     expect(await fails(refund())).toMatch(/^INSPECTION_REQUIRED/);
     expect((await status(id)).deposit_refund_blocker).toBe("سجّل فحص المغادرة أولًا");
     expect(await fails(rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "notes" } }))).toBe("VALIDATION: inspection_notes");
@@ -761,7 +821,7 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
 
   it("SD07 a damage charge carries its reason and comes off the deposit as far as it goes; the same key is one charge", async () => {
     const id = await inHouse(N1, 0, 1);
-    await rpc("fn_staff_check_out", { p: { reservation_id: id } });
+    await rpc("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } });
     await login("reception@demo.sa");
     expect(await fails(rpc("fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 3000, reason: "", idempotency_key: "dmg" } }))).toBe("VALIDATION: reason");
     const d = await rpc<any>("fn_staff_add_damage", { p: { reservation_id: id, amount_halalas: 3000, description: "كوب مكسور", reason: "كسر أثناء الإقامة", idempotency_key: "dmg" } });
@@ -793,7 +853,7 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
   it("SD09 a departure reopens within 2 hours (its cleaning cancelled, an unchanged code still the guest's); a cancellation comes back within the hour unless its unit was taken", async () => {
     const id = await inHouse(K1, 0, 2);
     await rpc("fn_staff_deliver_access_code", { p_reservation: id, p_channel: "screen" });
-    await rpc("fn_staff_check_out", { p: { reservation_id: id } });
+    await rpc("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } });
     await rpc("fn_staff_record_inspection", { p: { reservation_id: id, result: "ok" } });
     expect(await rpc<any>("fn_staff_reopen_stay", { p: { reservation_id: id, reason: "سُجّلت المغادرة قبل موعدها" } })).toEqual({ ok: true, access_status: "delivered" });
     expect((await row(id)).status).toBe("checked_in");
@@ -823,8 +883,8 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
   });
 
   it("SD11 readiness: a unit without a key box is ready when clean, one with a box also needs a new tested code; a manual cleanliness change is free and recorded", async () => {
-    const n = await inHouse(N1, 0, 1); await rpc("fn_staff_check_out", { p: { reservation_id: n } });
-    const k = await inHouse(K1, 0, 1); await rpc("fn_staff_check_out", { p: { reservation_id: k } });
+    const n = await inHouse(N1, 0, 1); await rpc("fn_staff_check_out", { p: { reservation_id: n, early_departure: "keep", reason: "اختبار المغادرة" } });
+    const k = await inHouse(K1, 0, 1); await rpc("fn_staff_check_out", { p: { reservation_id: k, early_departure: "keep", reason: "اختبار المغادرة" } });
     const task = async (room: string) => ((await client.from("housekeeping_tasks").select("id, status, version").eq("room_id", room)).data as any[]).find((t) => t.status === "pending");
     await login("reception@demo.sa");
     expect((await rpc<any>("fn_hk_set_cleanliness", { p_room: N1, p_state: "clean", p_reason: "نُظّفت قبل فتح المهمة" })).room_status).toBe("ready");
@@ -1017,7 +1077,7 @@ describe("G10/G13/G14/G15/G22 — invoices, voucher correction and the review li
     const id = await inHouse(U[5], 2);
     await rpc("fn_staff_add_service", { p_reservation: id, p_service: SVC, p_quantity: 1 });
     await receipt(id, 1500);
-    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });
+    const out = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id, early_departure: "keep", reason: "اختبار المغادرة" } });
     let inv = await invoicesOf(id);
     expect(out).toMatchObject({ ok: true, status: "checked_out", invoice: inv[0].number });
     expect(inv[0]).toMatchObject({ origin: "checkout", scope: "remaining", total_halalas: 21500 });
@@ -1143,7 +1203,7 @@ describe("G10/G13/G14/G15/G22 — invoices, voucher correction and the review li
     expect(await get("financial_vouchers", pos.voucher_id)).toMatchObject({ method: "pos", reference: "TRX-5521", amount_halalas: 11000 });
     expect((await get("cash_accounts", (await get("financial_vouchers", pos.voucher_id)).account_id)).kind).toBe("bank_account");
     // 110.00 received, 100.00 refunded: the receipt down to 50.00 would refund more than was received
-    const rf = await rpc<any>("fn_refund", { p: { reservation_id: r.id, kind: "refund", amount_halalas: 10000, method: "cash", reason: "إلغاء ليلة", idempotency_key: uid() } });
+    const rf = await rpc<any>("fn_refund", { p: { reservation_id: r.id, kind: "refund", amount_halalas: 10000, method: "cash", method_reason: "رد نقدي من الصندوق", reason: "إلغاء ليلة", idempotency_key: uid() } });
     expect(await fails(correct(pos.voucher_id, { reason: "x", amount_halalas: 5000 }))).toBe("CANCEL_WOULD_GO_NEGATIVE");
     expect((await get("financial_vouchers", pos.voucher_id)).status).toBe("approved");
     const c = await correct(rf.voucher_id, { reason: "المبلغ المردود 90", amount_halalas: 9000 });

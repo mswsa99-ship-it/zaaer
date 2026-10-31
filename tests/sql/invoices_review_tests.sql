@@ -210,7 +210,7 @@ do $$ declare res uuid; r jsonb; co jsonb; inv invoices%rowtype; begin
   if not (r->>'ok')::boolean then raise exception 'arrival refused: %', r; end if;
   perform fn_staff_add_service(res, t_id('svc'), 1, null);
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 1500, 'method', 'cash', 'idempotency_key', 'iv06-svc'));
-  co := fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  co := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   select * into inv from invoices where reservation_id = res and status = 'issued';
   perform t_record('IV06 the check-out invoices everything not yet invoiced in the same operation',
     (co->>'ok')::boolean and (co->>'invoice') = inv.number and inv.origin = 'checkout' and inv.scope = 'remaining'

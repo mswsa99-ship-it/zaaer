@@ -14,7 +14,7 @@ interface ConversationRow {
   last_message_at: string | null;
   branch_id: string | null;
   handoff_reason: string | null;
-  guest_token: string | null;
+  guest_verified: boolean | null;
   human_active_until?: string | null;
 }
 
@@ -46,7 +46,7 @@ export default function Inbox() {
   // G24 (decision 40): the active branch's conversations (and unassigned ones) only — never an unscoped list
   const q = useBranchQuery<ConversationRow[]>(async (branchId) => must(await supabase
       .from("conversations")
-      .select("id, channel, status, created_at, last_message_at, branch_id, handoff_reason, guest_token, human_active_until")
+      .select("id, channel, status, created_at, last_message_at, branch_id, handoff_reason, guest_verified, human_active_until")
       .or(`branch_id.eq.${branchId},branch_id.is.null`)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(50)) as ConversationRow[], [], NO_CONVERSATIONS);
@@ -83,7 +83,10 @@ export default function Inbox() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => loadConversations())
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    // 0052: conversations are read by column (no guest token), so the list also refreshes on a timer in case a live
+    // change of that table does not arrive
+    const t = setInterval(() => { loadConversations(); if (selected) loadMessages(selected); }, 20000);
+    return () => { supabase.removeChannel(ch); clearInterval(t); };
   }, [selected, loadMessages, loadConversations]);
 
   async function sendReply(e: React.FormEvent) {
@@ -146,7 +149,7 @@ export default function Inbox() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-ink-600">{channelLabel(c.channel)}</span>
                   <div className="flex items-center gap-1">
-                    {c.guest_token && <Badge className="bg-accent-500/10 text-accent-600"><ShieldCheck className="h-3 w-3" /> متحقق</Badge>}
+                    {c.guest_verified && <Badge className="bg-accent-500/10 text-accent-600"><ShieldCheck className="h-3 w-3" /> متحقق</Badge>}
                     <Badge className={STATUS_COLORS[c.status] ?? "bg-ink-100 text-ink-400"}>{STATUS_LABELS[c.status] ?? c.status}</Badge>
                   </div>
                 </div>
@@ -163,7 +166,7 @@ export default function Inbox() {
                     <MessageCircle className="h-5 w-5 text-brand-600" />
                     <p className="text-sm font-medium text-ink-700">محادثة {channelLabel(current.channel)}</p>
                     <Badge className={STATUS_COLORS[current.status] ?? ""}>{STATUS_LABELS[current.status] ?? current.status}</Badge>
-                    {current.guest_token && <Badge className="bg-accent-500/10 text-accent-600">متحقق</Badge>}
+                    {current.guest_verified && <Badge className="bg-accent-500/10 text-accent-600">متحقق</Badge>}
                   </div>
                   <div className="flex gap-2">
                     {current.status !== "handed_off" && current.status !== "closed" && (

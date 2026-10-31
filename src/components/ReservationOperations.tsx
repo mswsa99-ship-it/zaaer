@@ -165,7 +165,8 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
 
       {/* ---------- dialogs ---------- */}
       <VoucherDialog open={dialog === "receipt" || dialog === "deposit"} kind={dialog === "deposit" ? "deposit" : "receipt"} reservationId={reservationId} accounts={accounts.active} suggested={dialog === "deposit" ? depositDefault : f.balance_due} onClose={() => setDialog(null)} onDone={done} />
-      <RefundDialog open={dialog === "refund" || dialog === "deposit_refund" || dialog === "deposit_apply"} kind={(dialog as "refund" | "deposit_refund" | "deposit_apply") ?? "refund"} reservationId={reservationId} accounts={accounts.active} available={dialog === "refund" ? f.received - f.refunded : dialog === "deposit_apply" ? Math.min(f.deposit_balance, f.balance_due) : f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
+      <RefundDialog open={dialog === "refund" || dialog === "deposit_refund" || dialog === "deposit_apply"} kind={(dialog as "refund" | "deposit_refund" | "deposit_apply") ?? "refund"} reservationId={reservationId} accounts={accounts.active}
+        payments={(d.vouchers ?? []).filter((v) => v.status === "approved" && v.kind === (dialog === "deposit_refund" ? "deposit" : "receipt"))} available={dialog === "refund" ? f.received - f.refunded : dialog === "deposit_apply" ? Math.min(f.deposit_balance, f.balance_due) : f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
       <DamageDialog open={dialog === "damage"} reservationId={reservationId} depositBalance={f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
       <AdjustDialog open={dialog === "adjust"} reservationId={reservationId} version={r.version} isMgr={can("price.adjust")} onClose={() => setDialog(null)} onDone={done} />
       <ServiceDialog open={dialog === "service"} reservationId={reservationId} branchId={r.branch_id} onClose={() => setDialog(null)} onDone={done} />
@@ -300,13 +301,21 @@ export function PaymentFields({ method, setMethod, accountId, setAccountId, refe
 function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose, onDone }: { open: boolean; kind: "receipt" | "deposit"; reservationId: string; accounts: CashAccount[]; suggested: number; onClose: () => void; onDone: () => Promise<void> }) {
   const [amount, setAmount] = useState<number | null>(suggested || null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [accountId, setAccountId] = useState(""); const [ref, setRef] = useState(""); const [note, setNote] = useState("");
   const [key, setKey] = useState(newIdempotencyKey());
-  useEffect(() => { if (open) { setAmount(suggested || null); setKey(newIdempotencyKey()); setMethod("cash"); setRef(""); setNote(""); } }, [open, suggested]);
+  // 0054 (MONEY-03): a number already on another voucher is a warning — the operator confirms it, the owner sees it
+  const [dupWarn, setDupWarn] = useState<string | null>(null);
+  useEffect(() => { if (open) { setAmount(suggested || null); setKey(newIdempotencyKey()); setMethod("cash"); setRef(""); setNote(""); setDupWarn(null); } }, [open, suggested]);
+  useEffect(() => { setDupWarn(null); }, [ref, method]);
   return (
     <Modal open={open} title={kind === "receipt" ? "سند قبض إقامة" : "سند قبض تأمين"} onClose={onClose}>
       <ActionForm onSubmit={async () => {
         if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
         if (METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
-        await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key });
+        try {
+          await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key, ...(dupWarn ? { duplicate_reference_ok: true } : {}) });
+        } catch (e) {
+          if (!dupWarn && /DUPLICATE_REFERENCE/.test((e as Error).message ?? "")) { setDupWarn(toArabicError(e)); return; }
+          throw e;
+        }
         await onDone();
       }}>
         <p className="mb-3 text-xs text-ink-500">{kind === "receipt" ? "يُخصم من المتبقي على الإقامة." : "يُحتجز في دفتر التأمين المنفصل ولا يسدد الإقامة، ويُرد بعد فحص المغادرة. المقترح هو تأمين الفرع لكل وحدة."}</p>
@@ -314,32 +323,53 @@ function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose
           <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
           <PaymentFields method={method} setMethod={setMethod} accountId={accountId} setAccountId={setAccountId} reference={ref} setReference={setRef} accounts={accounts} verb="receive" deposit={kind === "deposit"} />
           <Field label="ملاحظة"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          {dupWarn && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" data-testid="duplicate-reference">{dupWarn} يظهر هذا للمالك في «المراجعة».</p>}
         </div>
-        <Submit label="حفظ السند" onCancel={onClose} />
+        <Submit label={dupWarn ? "تأكيد التسجيل رغم التكرار" : "حفظ السند"} onCancel={onClose} />
       </ActionForm>
     </Modal>
   );
 }
 
-function RefundDialog({ open, kind, reservationId, accounts, available, onClose, onDone }: { open: boolean; kind: "refund" | "deposit_refund" | "deposit_apply"; reservationId: string; accounts: CashAccount[]; available: number; onClose: () => void; onDone: () => Promise<void> }) {
+function RefundDialog({ open, kind, reservationId, accounts, available, payments, onClose, onDone }: { open: boolean; kind: "refund" | "deposit_refund" | "deposit_apply"; reservationId: string; accounts: CashAccount[]; available: number; payments: Voucher[]; onClose: () => void; onDone: () => Promise<void> }) {
   const [amount, setAmount] = useState<number | null>(null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [accountId, setAccountId] = useState(""); const [ref, setRef] = useState(""); const [reason, setReason] = useState("");
   const [key, setKey] = useState(newIdempotencyKey());
-  useEffect(() => { if (open) { setAmount(available); setKey(newIdempotencyKey()); setMethod("cash"); setRef(""); setReason(""); } }, [open, available]);
+  // 0054 (MONEY-06): the refund goes back against a payment, by its method by default; the amount is typed, not prefilled
+  const [orig, setOrig] = useState(""); const [methodReason, setMethodReason] = useState("");
+  const original = payments.find((x) => x.id === orig);
+  const paymentsKey = payments.map((x) => x.id).join(",");
+  useEffect(() => {
+    if (!open) return;
+    const last = payments[payments.length - 1];
+    setAmount(kind === "refund" ? null : available); setKey(newIdempotencyKey()); setRef(""); setReason(""); setMethodReason("");
+    setOrig(last?.id ?? ""); setMethod(((last?.method as PaymentMethod) ?? "cash")); setAccountId(last?.account_id ?? "");
+  }, [open, available, paymentsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const otherMethod = kind === "refund" && !!original && original.method !== method;
   const titles = { refund: "استرداد من مقبوض الإقامة", deposit_refund: "رد تأمين", deposit_apply: "استخدام التأمين لتغطية رسوم" };
   return (
     <Modal open={open} title={titles[kind]} onClose={onClose}>
       <ActionForm onSubmit={async () => {
         if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
         if (kind !== "deposit_apply" && METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
+        if (otherMethod && !methodReason.trim()) throw new Error("REFUND_METHOD_DIFFERS");
         await opsApi.refund(kind === "deposit_apply"
           ? { reservation_id: reservationId, kind, amount_halalas: amount, reason: reason.trim(), idempotency_key: key }
-          : { reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, reason: reason.trim(), idempotency_key: key });
+          : { reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, reason: reason.trim(), idempotency_key: key,
+              ...(kind === "refund" && original ? { original_voucher_id: original.id } : {}), ...(otherMethod ? { method_reason: methodReason.trim() } : {}) });
         await onDone();
       }}>
         <p className="mb-3 text-xs text-ink-500">المتاح: <span dir="ltr">{sar(available)}</span>. يمنع الخادم أي رد يتجاوزه حتى مع طلبين متزامنين.</p>
         <div className="space-y-3">
           <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
+          {kind === "refund" && payments.length > 0 && (
+            <Field label="الدفعة التي يُرد منها">
+              <select className="input" value={orig} data-testid="refund-original" onChange={(e) => { setOrig(e.target.value); const x = payments.find((y) => y.id === e.target.value); if (x) { setMethod(x.method as PaymentMethod); setAccountId(x.account_id ?? ""); } }}>
+                {payments.map((x) => <option key={x.id} value={x.id}>{x.number} — {PAYMENT_METHOD_LABELS[x.method as PaymentMethod] ?? x.method} — {sar(x.amount_halalas)}</option>)}
+              </select>
+            </Field>
+          )}
           {kind !== "deposit_apply" && <PaymentFields method={method} setMethod={setMethod} accountId={accountId} setAccountId={setAccountId} reference={ref} setReference={setRef} accounts={accounts} verb="return" deposit={kind === "deposit_refund"} />}
+          {otherMethod && <ReasonInput value={methodReason} onChange={setMethodReason} label="سبب الرد بطريقة غير طريقة الدفع (إلزامي)" placeholder="يظهر للمالك في «المراجعة»" />}
           <ReasonInput value={reason} onChange={setReason} />
         </div>
         <Submit label="تنفيذ" onCancel={onClose} />
@@ -421,17 +451,20 @@ function AdjustDialog({ open, reservationId, version, isMgr, onClose, onDone }: 
 
 function ServiceDialog({ open, reservationId, branchId, onClose, onDone }: { open: boolean; reservationId: string; branchId: string; onClose: () => void; onDone: () => Promise<void> }) {
   const [services, setServices] = useState<Array<{ id: string; name_ar: string; price_halalas: number; is_free: boolean; billing_unit: string; late_checkout_until: string | null }>>([]);
-  const [svc, setSvc] = useState(""); const [qty, setQty] = useState(1);
+  const [svc, setSvc] = useState(""); const [qty, setQty] = useState(1); const [note, setNote] = useState("");
+  useEffect(() => { if (open) setNote(""); }, [open]);
   useEffect(() => { if (!open) return; supabase.from("service_definitions").select("id, name_ar, price_halalas, is_free, billing_unit, late_checkout_until").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name_ar").then(({ data }) => { setServices((data as typeof services) ?? []); setSvc((data?.[0] as { id: string } | undefined)?.id ?? ""); }); }, [open, branchId]);
   const s = services.find((x) => x.id === svc);
   return (
     <Modal open={open} title="إضافة خدمة" onClose={onClose}>
-      <ActionForm onSubmit={async () => { if (!svc) throw new Error("SERVICE_NOT_AVAILABLE"); await opsApi.addService(reservationId, svc, qty); await onDone(); }}>
+      <ActionForm onSubmit={async () => { if (!svc) throw new Error("SERVICE_NOT_AVAILABLE"); await opsApi.addService(reservationId, svc, qty, note.trim() || undefined); await onDone(); }}>
         {services.length === 0 ? <p className="text-sm text-ink-500">لا توجد خدمات معرّفة لهذا الفرع. أضفها من إدارة الخدمات.</p> : (
           <div className="space-y-3">
             <Field label="الخدمة"><select className="input" value={svc} onChange={(e) => setSvc(e.target.value)}>{services.map((x) => <option key={x.id} value={x.id}>{x.name_ar} — {x.is_free ? "مجانية" : sar(x.price_halalas)}</option>)}</select></Field>
             {s?.billing_unit === "quantity" && <Field label="الكمية"><input type="number" min={1} className="input" dir="ltr" value={qty} onChange={(e) => setQty(Number(e.target.value))} /></Field>}
             {s?.late_checkout_until && <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">مغادرة متأخرة: ينتقل موعد مغادرة هذه الإقامة إلى الساعة <span dir="ltr">{s.late_checkout_until.slice(0, 5)}</span>.</p>}
+            {/* 0053 (FRONT-04): a once-only service added a second time needs its reason here */}
+            <Field label="ملاحظة أو سبب (اختياري)"><input className="input" value={note} maxLength={120} onChange={(e) => setNote(e.target.value)} placeholder="إلزامي إذا كانت الخدمة مضافة من قبل لهذا الحجز" data-testid="service-note" /></Field>
             <p className="text-xs text-ink-400">يُحفظ الاسم والسعر والضريبة لحظة الإضافة.</p>
           </div>
         )}

@@ -52,5 +52,7 @@ echo "== running permissions matrix tests (0043: the owner's editable matrix, de
 psql -d "$DB" -f tests/sql/permissions_tests.sql
 echo "== running Phase 7 acceptance tests (decisions 37, 38, 44, 53: branch isolation X04, G20 with manual payments, no self-escalation, D05)"
 psql -d "$DB" -f tests/sql/acceptance_tests.sql
+echo "== running the review's Phase 1 tests (0052–0054: tokens by branch, money only, the AI guard, the bridge key, the front desk, money)"
+psql -d "$DB" -f tests/sql/audit_phase1_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

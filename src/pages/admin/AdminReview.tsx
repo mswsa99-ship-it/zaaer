@@ -22,10 +22,15 @@ const KIND_AR: Record<string, string> = {
   "monitor:allocation_conflict": "تعارض تخصيص", "monitor:ledger_mismatch": "الملخص المالي يختلف عن الدفتر", "monitor:deposit_invalid": "رصيد تأمين غير صالح",
   "monitor:provider_stuck": "مزود خارجي متوقف", "monitor:verification_failures": "محاولات تحقق فاشلة", "monitor:duplicate_departure": "مهام مغادرة مكررة",
   "monitor:out_of_scope": "محاولات خارج الصلاحية",
+  // 0052 (SEC-05)
+  "security:bridge_key_rotation": "تغيير مفتاح كمبيوتر الاستقبال", "security:whatsapp_burst": "محادثات واتساب غير معتادة",
+  // 0054 (MONEY-01..06)
+  voucher_reversed: "عكس سند يومه مُسوّى", voucher_duplicate_reference: "رقم عملية مكرر", refund_other_method: "استرداد بطريقة أخرى",
+  pos_difference: "فرق تسوية الشبكة", platform_payout_difference: "فرق إيداع منصة",
 };
 type Group = "" | "voucher" | "invoice" | "stay" | "monitor";
-const GROUPS: Array<[Group, string]> = [["", "كل الأنواع"], ["voucher", "السندات"], ["invoice", "الفواتير"], ["stay", "تصحيحات الإقامة"], ["monitor", "المراقبة"]];
-const groupOf = (kind: string): Group => (kind.startsWith("monitor:") ? "monitor" : kind.startsWith("voucher_") ? "voucher" : kind.startsWith("invoice_") ? "invoice" : "stay");
+const GROUPS: Array<[Group, string]> = [["", "كل الأنواع"], ["voucher", "السندات والمال"], ["invoice", "الفواتير"], ["stay", "تصحيحات الإقامة"], ["monitor", "المراقبة"]];
+const groupOf = (kind: string): Group => (kind.startsWith("monitor:") || kind.startsWith("security:") ? "monitor" : /^(voucher_|refund_|pos_|platform_)/.test(kind) ? "voucher" : kind.startsWith("invoice_") ? "invoice" : "stay");
 const methodAr = (m: unknown) => (typeof m === "string" ? PAYMENT_METHOD_LABELS[m as PaymentMethod] ?? m : "—");
 
 /** What changed, in a line: the voucher before and after, the invoice's totals and periods, what a monitor counted. */

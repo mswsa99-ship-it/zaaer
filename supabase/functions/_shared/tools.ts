@@ -139,6 +139,12 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
     case "open_supervisor_ticket":
     case "request_human_assistance": {
       const kind = name === "request_human_assistance" ? "assistance" : "escalation";
+      // SEC-02: one open ticket per conversation — asking again does not flood the supervisor
+      const { data: open } = await ctx.db.from("human_handoff_tickets").select("id").eq("conversation_id", ctx.conversationId).eq("status", "open").limit(1);
+      if (open && open.length) {
+        if (kind === "assistance") await ctx.db.from("conversations").update({ status: "handed_off", handed_off_at: new Date().toISOString(), handoff_reason: String(args.reason ?? "") }).eq("id", ctx.conversationId);
+        return { ok: true, handed_off: kind === "assistance", existing: true };
+      }
       await ctx.db.from("human_handoff_tickets").insert({
         organization_id: ctx.organizationId, branch_id: ctx.branchId, conversation_id: ctx.conversationId,
         kind, details: { reason: args.reason ?? "", verified: !!ctx.guestToken },

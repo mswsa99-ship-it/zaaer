@@ -187,7 +187,7 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
 function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, isMgr, onReveal }: Common & { canAct: boolean; canInspect: boolean; money: boolean; isMgr: boolean; onReveal: (code: string) => void }) {
   const [channel, setChannel] = useState<"screen" | "supervisor">("screen");
   const [busy, setBusy] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<null | "exception" | "undo" | "failed">(null);
+  const [dialog, setDialog] = useState<null | "exception" | "undo" | "failed" | "checkout">(null);
   const run = async (key: string, fn: () => Promise<string | null>) => {
     setBusy(key);
     try { const message = await fn(); if (message !== null) await done(message); } catch (e) { fail(toArabicError(e)); } finally { setBusy(null); }
@@ -258,14 +258,8 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
 
       {canAct && (
         <Section icon={LogOut} title="المغادرة">
-          <button disabled={busy === "checkout"} onClick={() => run("checkout", async () => {
-            const r = await stayApi.checkOut(id, s.version);
-            if (!r.ok) { refused(r.reasons ?? []); return null; }
-            // decision 27: the departure invoices what is not yet invoiced, in the same operation
-            const invoiced = r.invoice ? ` وصدرت فاتورة الإقامة ${r.invoice}` : "";
-            if (r.status === "closed") return `سُجِّلت المغادرة${invoiced} وأُغلقت الإقامة: لا مستحق، ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.`;
-            return `سُجِّلت المغادرة${invoiced}.${(r.deposit_to_settle_halalas ?? 0) > 0 ? ` يبقى تأمين ${sar(r.deposit_to_settle_halalas)} يُرد بعد فحص المغادرة.` : ""}`;
-          })} className="btn-danger w-full">{busy === "checkout" ? <Spinner className="h-4 w-4" /> : <LogOut className="h-4 w-4" />} تسجيل المغادرة</button>
+          {/* 0053 (FRONT-03): the departure asks first; leaving before the date asks what happens to the nights not used */}
+          <button disabled={busy === "checkout"} onClick={() => setDialog("checkout")} className="btn-danger w-full" data-testid="checkout-open">{busy === "checkout" ? <Spinner className="h-4 w-4" /> : <LogOut className="h-4 w-4" />} تسجيل المغادرة</button>
           <p className="mt-1.5 text-xs text-ink-400">لا مغادرة وعلى الحجز مبلغ مستحق، لأي دور. يُصفَّر بسند قبض، أو بالخصم من التأمين بسبب، أو بتسوية سعر من المالك أو المدير بسبب.</p>
         </Section>
       )}
@@ -278,6 +272,8 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
         onClose={() => setDialog(null)} onSubmit={async (reason) => { await stayApi.paymentException(id, reason); setDialog(null); await done("سُجِّل سبب الاستمرار."); }} />
       <ReasonModal open={dialog === "undo"} title="تراجع عن تسجيل الوصول" warning="يعود الحجز «مؤكدًا» وتعود الوحدة محجوزة له. إن كان رمز الصندوق قد سُلِّم فيجب تغييره. يُضاف التصحيح إلى قائمة المراجعة لدى المالك."
         onClose={() => setDialog(null)} onSubmit={async (reason) => { const r = await stayApi.undoCheckIn(id, reason); setDialog(null); await done(r.code_needs_change ? "أُلغي تسجيل الوصول. غيّر رمز الصندوق قبل تسليمه لأحد." : "أُلغي تسجيل الوصول."); }} />
+      <CheckoutModal open={dialog === "checkout"} s={s} id={id} money={money} onClose={() => setDialog(null)}
+        onDone={async (message) => { setDialog(null); await done(message); }} onRefused={(items) => { setDialog(null); refused(items); }} />
       <ReasonModal open={dialog === "failed"} title="الإبلاغ عن فشل تسليم الرمز" warning="يعود الرمز إلى «بانتظار التسليم» لإعادة المحاولة من قناة أخرى."
         onClose={() => setDialog(null)} onSubmit={async (reason) => { await staffApi.markDeliveryFailed(id, reason); setDialog(null); await done("سُجِّل فشل التسليم."); }} />
     </Card>
@@ -389,6 +385,49 @@ function Ok({ children }: { children: ReactNode }) {
 }
 function Warn({ children }: { children: ReactNode }) {
   return <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{children}</span></p>;
+}
+/** 0053 (FRONT-03): «تسجيل المغادرة» — a confirmation; before the departure date, a decision on the nights not used. */
+function CheckoutModal({ open, s, id, money, onClose, onDone, onRefused }: { open: boolean; s: StayStatus; id: string; money: boolean; onClose: () => void; onDone: (m: string) => Promise<void>; onRefused: (items: string[]) => void }) {
+  const [early, setEarly] = useState<null | { unused_nights: number; unused_halalas: number; new_check_out: string }>(null);
+  const [mode, setMode] = useState<"shorten" | "keep">("shorten");
+  const [reason, setReason] = useState("");
+  useEffect(() => { if (!open) { setEarly(null); setMode("shorten"); setReason(""); } }, [open]);
+  const finish = (r: Awaited<ReturnType<typeof stayApi.checkOut>>) => {
+    // decision 27: the departure invoices what is not yet invoiced, in the same operation
+    const invoiced = r.invoice ? ` وصدرت فاتورة الإقامة ${r.invoice}` : "";
+    const credit = (r.credit_halalas ?? 0) > 0 ? ` للضيف رصيد ${sar(r.credit_halalas)} يُرد أو يُبقى حسب سياسة الفرع.` : "";
+    if (r.status === "closed") return `سُجِّلت المغادرة${invoiced} وأُغلقت الإقامة: لا مستحق، ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.`;
+    return `سُجِّلت المغادرة${invoiced}.${credit}${(r.deposit_to_settle_halalas ?? 0) > 0 ? ` يبقى تأمين ${sar(r.deposit_to_settle_halalas)} يُرد بعد فحص المغادرة.` : ""}`;
+  };
+  return (
+    <Modal open={open} title={early ? "مغادرة قبل موعدها" : "تأكيد المغادرة"} onClose={onClose}>
+      <ActionForm onSubmit={async () => {
+        if (early && !reason.trim()) throw new Error("VALIDATION: reason");
+        const r = await stayApi.checkOut(id, s.version, early ? { early_departure: mode, reason: reason.trim() } : undefined);
+        if (!r.ok && r.early_departure) { setEarly({ unused_nights: r.unused_nights ?? 0, unused_halalas: r.unused_halalas ?? 0, new_check_out: r.new_check_out ?? "" }); return; }
+        if (!r.ok) { onRefused(r.reasons ?? []); return; }
+        await onDone(finish(r));
+      }}>
+        {!early ? (
+          <p className="text-sm text-ink-700" data-testid="checkout-confirm">تُسجَّل مغادرة النزيل الآن: تُغلق الوحدة للتنظيف، ويُطلب تغيير رمز الصندوق، وتصدر فاتورة الإقامة. لا يمكن للمشرف التراجع عنها.</p>
+        ) : (
+          <div className="space-y-3" data-testid="early-departure">
+            <div className="flex items-start gap-2 rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>بقي {COUNT.night(early.unused_nights)} لم تُستخدم{money ? ` بقيمة ${sar(early.unused_halalas)}` : ""}.</span></div>
+            <fieldset className="space-y-2">
+              <legend className="label">ماذا يحدث لليالي المتبقية؟</legend>
+              <label className="flex items-start gap-2 text-sm"><input type="radio" name="early" checked={mode === "shorten"} onChange={() => setMode("shorten")} className="mt-1" data-testid="early-shorten" />
+                <span><span className="font-medium text-ink-800">تقصير الإقامة إلى {early.new_check_out}</span><span className="block text-xs text-ink-500">تُحذف الليالي المتبقية من الإقامة ويصبح ثمنها رصيدًا للضيف، يُرد له أو يُبقى حسب سياسة الفرع.</span></span></label>
+              <label className="flex items-start gap-2 text-sm"><input type="radio" name="early" checked={mode === "keep"} onChange={() => setMode("keep")} className="mt-1" data-testid="early-keep" />
+                <span><span className="font-medium text-ink-800">إبقاء الليالي مدفوعة</span><span className="block text-xs text-ink-500">تبقى الإقامة بتواريخها، ولا يُرد شيء.</span></span></label>
+            </fieldset>
+            <ReasonInput value={reason} onChange={setReason} placeholder="مثال: ظرف عائلي، طلب النزيل المغادرة" />
+          </div>
+        )}
+        <Submit label={early ? "تأكيد المغادرة المبكرة" : "نعم، سجّل المغادرة"} onCancel={onClose} danger />
+      </ActionForm>
+    </Modal>
+  );
 }
 function ReasonModal({ open, title, warning, onClose, onSubmit }: { open: boolean; title: string; warning: string; onClose: () => void; onSubmit: (reason: string) => Promise<void> }) {
   const [reason, setReason] = useState("");

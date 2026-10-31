@@ -47,7 +47,7 @@ export default function StaffDashboard() {
   const stats = [
     { label: "وصول اليوم", value: arrivals.length, icon: CalendarClock, to: "/staff/arrivals", color: "bg-brand-50 text-brand-600" },
     { label: "بانتظار المطابقة", value: pendingIdentity.length, icon: UserCheck, to: "/staff/identity-verification", color: "bg-warning-500/10 text-warning-700" },
-    { label: "بانتظار الدفع", value: pendingPayment.length, icon: CreditCard, to: "/staff/payments", color: "bg-danger-500/10 text-danger-600" },
+    ...(permissions.seesMoney ? [{ label: "بانتظار الدفع", value: pendingPayment.length, icon: CreditCard, to: "/staff/payments", color: "bg-danger-500/10 text-danger-600" }] : []),
     { label: "جاهز لتسجيل الوصول", value: readyForApproval.length, icon: LogIn, to: "/staff/access-approvals", color: "bg-accent-500/10 text-accent-600" },
     { label: "استلموا الرمز أو المفتاح", value: delivered.length, icon: KeyRound, to: "/staff/access-approvals", color: "bg-success-500/10 text-success-600" },
     { label: "إجمالي الحجوزات", value: all.length, icon: BookCheck, to: "/staff/reservations", color: "bg-ink-100 text-ink-600" },
@@ -76,8 +76,11 @@ export default function StaffDashboard() {
             { l: "جاهزة للدخول", v: sum.units.ready, to: "/staff/rooms" },
             { l: "تحتاج تنظيفًا", v: sum.units.dirty, to: "/staff/housekeeping" },
             { l: "مغادرة اليوم", v: `${sum.departures.done}/${sum.departures.expected}`, to: "/staff/reservations" },
-            { l: "متبقٍ على المقيمين", v: formatCurrency(sum.finance.outstanding_in_house / 100), to: "/staff/reservations" },
-            { l: "تأمينات محتجزة", v: formatCurrency(sum.finance.deposits_held / 100), to: "/admin/finance" },
+            // 0052 (PERM-01): the money tiles only for a role that sees money (the server leaves finance out otherwise)
+            ...(sum.finance ? [
+              { l: "متبقٍ على المقيمين", v: formatCurrency(sum.finance.outstanding_in_house / 100), to: "/staff/reservations" },
+              { l: "تأمينات محتجزة", v: formatCurrency(sum.finance.deposits_held / 100), to: "/admin/finance" },
+            ] : []),
           ].map((t) => <Link key={t.l} to={t.to} className="card p-3 hover:shadow-md"><p className="text-lg font-bold text-ink-800" dir="ltr">{t.v}</p><p className="text-[11px] text-ink-400">{t.l}</p></Link>)}
         </div>
       </div>

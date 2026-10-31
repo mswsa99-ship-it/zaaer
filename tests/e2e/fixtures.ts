@@ -117,3 +117,19 @@ export async function financeCell(page: Page, label: string): Promise<number> {
   await expect(el).toBeVisible();
   return parseSar(await el.innerText());
 }
+
+/** 0053 (FRONT-03): «تسجيل المغادرة» asks first; before the departure date it asks about the nights left — here they
+ *  stay paid («إبقاء الليالي مدفوعة») with a reason. Clicks the button in `scope` and answers the dialog. */
+export async function checkOut(page: Page, scope = page.getByTestId("in-house")) {
+  await scope.getByRole("button", { name: "تسجيل المغادرة" }).click();
+  const dlg = page.getByRole("dialog");
+  await dlg.getByRole("button", { name: "نعم، سجّل المغادرة" }).click();
+  const early = dlg.getByTestId("early-departure");
+  await Promise.race([dlg.waitFor({ state: "hidden" }), early.waitFor({ state: "visible" })]);
+  if (await early.isVisible().catch(() => false)) {
+    await dlg.getByTestId("early-keep").check();
+    await dlg.locator("textarea").fill("مغادرة قبل الموعد (اختبار)");
+    await dlg.getByRole("button", { name: "تأكيد المغادرة المبكرة" }).click();
+    await expect(dlg).toBeHidden();
+  }
+}

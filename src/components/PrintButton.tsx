@@ -3,12 +3,14 @@ import { Printer } from "lucide-react";
 import { printDocument } from "../lib/exports";
 import type { PrintContext, PrintFormat } from "../lib/printDocs";
 import type { ReservationDetail } from "../lib/api";
+import { loadOrganization, organizationName } from "../lib/organization";
 
 /** B7: «طباعة» opens its two forms — an A4 page or an 80 mm receipt; Escape or a tap outside closes it. */
 export function PrintButton({ build, testId }: { build: (format: PrintFormat) => string; testId?: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const first = useRef<HTMLButtonElement>(null);
+  useEffect(() => { void loadOrganization(); }, []);
   useEffect(() => {
     if (!open) return;
     first.current?.focus();
@@ -35,6 +37,7 @@ export function PrintButton({ build, testId }: { build: (format: PrintFormat) =>
 /** What a printed voucher or invoice says about its stay. */
 export function stayPrintContext(d: ReservationDetail, branchName: string, printedBy?: string | null): PrintContext {
   const primary = (d.guests ?? []).find((g) => g.is_primary);
-  return { property: "فايف اورز", branch: branchName, reservationRef: d.reservation.internal_ref, externalRef: d.reservation.external_ref ?? null, guest: primary?.full_name ?? null,
+  // the organisation's own name (fn_organization_info), never one written in the code
+  return { property: organizationName() ?? branchName, branch: branchName, reservationRef: d.reservation.internal_ref, externalRef: d.reservation.external_ref ?? null, guest: primary?.full_name ?? null,
            room: d.room?.room_number ?? d.category ?? null, checkIn: d.reservation.check_in, checkOut: d.reservation.check_out, printedBy: printedBy ?? null };
 }

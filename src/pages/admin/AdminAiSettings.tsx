@@ -23,6 +23,10 @@ interface AiSettings {
   ops_enabled: boolean;
   ops_daily_request_limit: number;
   briefing_with_insights: boolean;
+  guard_repeat_limit: number;
+  guard_burst_messages: number;
+  guard_burst_minutes: number;
+  guard_conversation_tokens: number;
   extra_instructions: string | null;
   updated_at?: string | null;
 }
@@ -30,6 +34,7 @@ interface AiSettings {
 const DEFAULTS: AiSettings = {
   enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000,
   daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: "", ops_enabled: true, ops_daily_request_limit: 500, briefing_with_insights: true,
+  guard_repeat_limit: 3, guard_burst_messages: 15, guard_burst_minutes: 10, guard_conversation_tokens: 40000,
 };
 
 interface UsageRow { day: string; requests: number; tokens_in: number; tokens_out: number; fallbacks: number; guardrail_blocks: number }
@@ -115,6 +120,8 @@ export default function AdminAiSettings() {
         daily_token_budget: form.daily_token_budget, per_session_message_limit: form.per_session_message_limit,
         strict_scope: form.strict_scope, extra_instructions: (form.extra_instructions ?? "").slice(0, 1500),
         ops_enabled: form.ops_enabled, ops_daily_request_limit: form.ops_daily_request_limit, briefing_with_insights: form.briefing_with_insights,
+        guard_repeat_limit: form.guard_repeat_limit, guard_burst_messages: form.guard_burst_messages, guard_burst_minutes: form.guard_burst_minutes,
+        guard_conversation_tokens: form.guard_conversation_tokens,
       };
       await staffApi.updateAiSettings(patch);
       setSaved(true);
@@ -176,6 +183,17 @@ export default function AdminAiSettings() {
             <NumberField label="حد طلبات مساعد العمليات اليومي" value={form.ops_daily_request_limit} min={0} step={50} onChange={(v) => set("ops_daily_request_limit", v)} disabled={!isOwner} />
             <NumberField label="ميزانية التوكنز اليومية" value={form.daily_token_budget} min={0} step={1000} onChange={(v) => set("daily_token_budget", v)} disabled={!isOwner} />
             <NumberField label="حد الرسائل لكل جلسة" value={form.per_session_message_limit} min={1} max={500} step={1} onChange={(v) => set("per_session_message_limit", v)} disabled={!isOwner} />
+            {/* 0052 (SEC-02): the conversation's rhythm — past any of these the AI stops on that conversation and the supervisor gets it */}
+            <div className="sm:col-span-2 rounded-xl border border-ink-100 bg-ink-50/50 p-3" data-testid="ai-guard">
+              <p className="text-sm font-semibold text-ink-800">إيقاف المساعد عند نمط غير طبيعي</p>
+              <p className="mb-3 mt-0.5 text-xs text-ink-500">إذا تجاوزت المحادثة أيًّا من هذه الحدود يتوقف الذكاء الاصطناعي عليها، وتُحوَّل إلى المشرف بتذكرة واحدة، ويُسجَّل السبب.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <NumberField label="الرسالة نفسها متتالية (2–20 مرة)" value={form.guard_repeat_limit} min={2} max={20} step={1} onChange={(v) => set("guard_repeat_limit", v)} disabled={!isOwner} />
+                <NumberField label="أكثر من هذا العدد من الرسائل (3–200)" value={form.guard_burst_messages} min={3} max={200} step={1} onChange={(v) => set("guard_burst_messages", v)} disabled={!isOwner} />
+                <NumberField label="خلال هذه الدقائق (1–120)" value={form.guard_burst_minutes} min={1} max={120} step={1} onChange={(v) => set("guard_burst_minutes", v)} disabled={!isOwner} />
+                <NumberField label="توكنز المحادثة الواحدة (1000–1000000)" value={form.guard_conversation_tokens} min={1000} max={1000000} step={1000} onChange={(v) => set("guard_conversation_tokens", v)} disabled={!isOwner} />
+              </div>
+            </div>
             <div className="sm:col-span-2">
               <label className="label">تعليمات إضافية (اختياري)</label>
               <textarea className="input min-h-[96px]" maxLength={1500} value={form.extra_instructions ?? ""} onChange={(e) => set("extra_instructions", e.target.value)} disabled={!isOwner} placeholder="مثال: استخدم لهجة رسمية مختصرة، واذكر اسم المنشأة في التحية." />

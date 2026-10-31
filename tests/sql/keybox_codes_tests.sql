@@ -125,7 +125,7 @@ do $$ declare r jsonb; f jsonb; begin
   if (f->>'balance_due')::bigint > 0 then
     perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind', 'receipt', 'amount_halalas', (f->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'kc-pay'));
   end if;
-  r := fn_staff_checkout(t_id('res'));
+  r := fn_staff_checkout(t_id('res'), 'اختبار المغادرة');
   if not (r->>'ok')::boolean then raise exception 'checkout refused: %', r; end if;
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000003', 'hk@test.local');

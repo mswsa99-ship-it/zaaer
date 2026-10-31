@@ -30,6 +30,9 @@ const ERROR_AR: Record<string, string> = {
   ROOM_NOT_FOUND: "الغرفة غير موجودة.",
   ROOM_CATEGORY_MISMATCH: "تصنيف الغرفة لا يطابق تصنيف الحجز.",
   ROOM_NOT_AVAILABLE: "الغرفة غير متاحة للتخصيص.",
+  ROOM_OCCUPIED_OVERSTAY: "في الوحدة نزيل تجاوز موعد مغادرته ولم تُسجَّل مغادرته؛ تبقى مشغولة حتى تُسجَّل.",
+  VOUCHER_ALREADY_REVERSED: "هذا السند عُكس من قبل ولا يُصحح مرة أخرى؛ صحّح السند البديل.",
+  SERVICE_ALREADY_ADDED: "هذه الخدمة مضافة لهذا الحجز من قبل. لإضافتها مرة أخرى اكتب السبب في الملاحظة.",
   RESERVATION_STATUS_INVALID: "حالة الحجز لا تسمح بهذا الإجراء.",
   NOT_CHECKED_IN: "الحجز ليس في حالة دخول.",
   NOT_IN_DELIVERED_STATE: "لم يتم تسليم الرمز لهذا الحجز.",
@@ -98,6 +101,10 @@ const ERROR_AR: Record<string, string> = {
 };
 
 export const VALIDATION_AR: Record<string, string> = {
+  // 0052: the AI guard and the WhatsApp contact alert
+  early_departure: "اختر: تقصير الإقامة أو إبقاء الليالي مدفوعة.",
+  ai_guard: "حدود إيقاف المساعد خارج نطاقها: التكرار 2–20، الرسائل 3–200 خلال 1–120 دقيقة، التوكنز 1000–1000000.",
+  alert_new_contacts_per_hour: "حد التنبيه من 5 إلى 1000 محادثة جديدة في الساعة.",
   // guests, platforms and the branch (0038)
   document_matched: "أكّد «طابقتُ الوثيقة الأصلية» قبل الحفظ.",
   acknowledgement_required: "يجب الإقرار بملخص الإقامة أولًا.",
@@ -227,6 +234,10 @@ function arabicMessage(msg: string): string {
   for (const [re, ar] of FORBIDDEN_AR) if (re.test(msg)) return ar;
   const matrix = matrixRefusal(msg);
   if (matrix) return matrix;
+  // 0054: a warning that names the other booking, and a refund in another method
+  const dup = msg.match(/DUPLICATE_REFERENCE:\s*(\S*)\s*(\S*)/);
+  if (dup) return `رقم العملية مسجّل من قبل${dup[1] ? ` في الحجز ${dup[1]}` : ""}${dup[2] ? ` (السند ${dup[2]})` : ""}. تأكّد منه، ثم أكّد التسجيل إن كان صحيحًا.`;
+  if (/REFUND_METHOD_DIFFERS/.test(msg)) return "الاسترداد يكون بطريقة الدفع نفسها. لطريقة أخرى اكتب سبب الاختلاف.";
   for (const k of Object.keys(ERROR_AR)) if (msg.includes(k)) return ERROR_AR[k];
   if (/permission denied|row-level security/i.test(msg)) return ERROR_AR.FORBIDDEN;
   return "تعذّر تنفيذ العملية: " + msg.slice(0, 120);
@@ -379,7 +390,8 @@ export interface StayStatus {
 /** One entry of the arrival screen: the rent receipt or the deposit receipt (each its own voucher). */
 export interface PaymentEntry { amount_halalas: number; method: string; account_id?: string; reference?: string; idempotency_key: string }
 export interface CheckInResult { ok: boolean; duplicate?: boolean; reasons?: string[]; has_keybox?: boolean; rent_voucher?: string | null; deposit_voucher?: string | null; released_count?: number | null; status?: string }
-export interface CheckOutResult { ok: boolean; duplicate?: boolean; status?: string; balance_due?: number; reasons?: string[]; deposit_to_settle_halalas?: number; credit_halalas?: number; missing?: string[]; invoice?: string | null }
+export interface CheckOutResult { ok: boolean; duplicate?: boolean; status?: string; balance_due?: number; reasons?: string[];
+  early_departure?: boolean; unused_nights?: number; unused_halalas?: number; new_check_out?: string; deposit_to_settle_halalas?: number; credit_halalas?: number; missing?: string[]; invoice?: string | null }
 export interface StayFollowups {
   generated_at: string;
   overdue: Array<{ id: string; internal_ref: string; room_number: string | null; guest: string | null; overdue_amount: number; overdue_since: string | null; check_out: string; excused: boolean }>;
@@ -395,7 +407,9 @@ export const stayApi = {
   /** Shomoos: «register» with the reference and «every guest registered», then «accept» once Shomoos accepted it */
   shomoos: (p: { reservation_id: string; action: "register" | "accept"; reference?: string; all_guests?: boolean }) => rpc<{ ok: boolean; unchanged: boolean }>("fn_staff_shomoos", { p }),
   /** the departure, with nothing owed for anyone (decision 8) */
-  checkOut: (reservationId: string, version?: number) => rpc<CheckOutResult>("fn_staff_check_out", { p: version == null ? { reservation_id: reservationId } : { reservation_id: reservationId, expected_version: version } }),
+  /** 0053: early = the decision on the nights not used when leaving before the departure date (with a reason) */
+  checkOut: (reservationId: string, version?: number, early?: { early_departure: "shorten" | "keep"; reason: string }) =>
+    rpc<CheckOutResult>("fn_staff_check_out", { p: { reservation_id: reservationId, ...(version == null ? {} : { expected_version: version }), ...(early ?? {}) } }),
   inspect: (p: { reservation_id: string; result: "ok" | "notes"; notes?: string; suggested_deduction_halalas?: number }) => rpc<{ ok: boolean; id: string }>("fn_staff_record_inspection", { p }),
   damage: (p: { reservation_id: string; amount_halalas: number; description?: string; reason: string; apply_deposit?: boolean; idempotency_key: string }) =>
     rpc<{ ok: boolean; duplicate: boolean; charge_id: string; from_deposit_halalas?: number; finance: Finance }>("fn_staff_add_damage", { p }),
@@ -500,6 +514,10 @@ export const whatsappApi = {
   /** bridge_key comes back once, only when it was just created (regenerate_bridge_key) */
   save: (branchId: string, patch: Record<string, unknown>) => rpc<{ ok: boolean; status: string; enabled: boolean; mode: WaMode; bridge_key?: string }>("fn_admin_whatsapp_save", { p_branch: branchId, p: patch }),
   publicInfo: (branchId: string) => rpc<PublicWhatsapp | null>("fn_public_whatsapp", { p_branch: branchId }),
+  /** 0052 (SEC-05): whether the reception computer's key must change (a staff member left the branch), and the
+   *  number of new WhatsApp contacts in an hour that raises a review item; pass the number to change it */
+  security: (branchId: string, patch?: { alert_new_contacts_per_hour: number }) =>
+    rpc<{ configured: boolean; rotation_due_at?: string | null; rotation_reason?: string | null; alert_new_contacts_per_hour?: number; has_bridge_key?: boolean }>("fn_admin_whatsapp_security", { p_branch: branchId, p: patch ?? null }),
   async check(branchId: string): Promise<WaCheck> {
     const { data, error } = await supabase.functions.invoke<WaCheck>("whatsapp-send", { body: { mode: "check", branch_id: branchId } });
     if (error || !data) return { ok: false, error: error?.message ?? "unavailable" };
@@ -667,9 +685,9 @@ export const opsApi = {
   list: (branchId: string, filters: ReservationListFilters, limit = 50, offset = 0) => rpc<{ total: number; rows: ReservationRow[] }>("fn_reservation_list", { p_branch: branchId, p_filters: filters, p_limit: limit, p_offset: offset }),
 
   // money
-  createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; account_id?: string; reference?: string; note?: string; reason?: string; idempotency_key: string }) =>
+  createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; account_id?: string; reference?: string; note?: string; reason?: string; idempotency_key: string; duplicate_reference_ok?: boolean }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; finance: Finance }>("fn_create_voucher", { p }),
-  refund: (p: { reservation_id: string; kind: "refund" | "deposit_refund" | "deposit_apply"; amount_halalas: number; method?: string; account_id?: string; reference?: string; reason: string; idempotency_key: string; original_voucher_id?: string }) =>
+  refund: (p: { reservation_id: string; kind: "refund" | "deposit_refund" | "deposit_apply"; amount_halalas: number; method?: string; account_id?: string; reference?: string; reason: string; idempotency_key: string; original_voucher_id?: string; method_reason?: string }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; finance: Finance }>("fn_refund", { p }),
   cancelVoucher: (id: string, reason: string) => rpc<{ ok: boolean; finance: Finance; provider_refund_note?: string }>("fn_cancel_voucher", { p_voucher: id, p_reason: reason }),
   createInvoice: (reservationId: string, from?: string, to?: string) => rpc<{ ok: boolean; id: string; number: string; total_halalas: number }>("fn_create_invoice", { p_reservation: reservationId, p_from: from ?? null, p_to: to ?? null }),
@@ -690,6 +708,8 @@ export const opsApi = {
 
   // reports (GAP05): money KPIs come from the voucher ledger, never from reservation totals. Role-gated on the server.
   reportsFinance: (branchId: string, from: string, to: string, filters: ReportFilters = {}) => rpc<ReportsFinance>("fn_reports_finance", { p_branch: branchId, p_from: from, p_to: to, p_filters: filters }),
+  /** 0054 (MONEY-05): the platforms' payouts in the period — received, commission, difference — and what they still owe */
+  reportsPlatforms: (branchId: string, from: string, to: string) => rpc<ReportsPlatforms>("fn_reports_platforms", { p_branch: branchId, p_from: from, p_to: to }),
 
   // AI ops proposals (human-in-the-loop)
   executeProposal: (id: string) => rpc<{ ok: boolean; result?: unknown; error?: string }>("fn_ai_ops_execute_proposal", { p_id: id }),
@@ -825,6 +845,10 @@ export interface UnitCard {
   current: { reservation_id: string; internal_ref: string; status: string; check_in: string; check_out: string; guest: string; balance_due: number } | null;
   next: { internal_ref: string; check_in: string } | null;
 }
+export interface ReportsPlatforms {
+  received_halalas: number; expected_halalas: number; commission_halalas: number; difference_halalas: number; payouts: number; still_owed_halalas: number;
+  by_source: Array<{ source: string; account: string; payouts: number; expected_halalas: number; commission_halalas: number; received_halalas: number; difference_halalas: number }>;
+}
 /** fn_reports_finance(p_branch, p_from, p_to) — all amounts are halalas (integers). */
 export interface ReportsFinance {
   period: { from: string; to: string };
@@ -846,10 +870,12 @@ export interface ReportsFinance {
 export interface DailySummary {
   date: string; occupancy_pct: number;
   units: { active: number; occupied: number; reserved: number; ready: number; dirty: number; maintenance: number; out_of_service: number };
-  arrivals: { expected: number; arrived: number; pending_identity: number; unpaid: number; overdue: number };
-  departures: { expected: number; done: number; overstay: number; with_balance: number };
+  // 0052: unpaid, with_balance and finance are left out for a role the matrix does not let see money (money_hidden)
+  arrivals: { expected: number; arrived: number; pending_identity: number; unpaid?: number; overdue: number };
+  departures: { expected: number; done: number; overstay: number; with_balance?: number };
   housekeeping: { open: number; in_progress: number; completed_today: number; unassigned: number };
-  finance: { received_today: number; refunded_today: number; deposits_held: number; outstanding_in_house: number; deposit_to_settle_after_checkout: number };
+  finance?: { received_today: number; refunded_today: number; deposits_held: number; outstanding_in_house: number; deposit_to_settle_after_checkout: number };
+  money_hidden?: boolean;
   tickets_open: number; generated_at: string;
 }
 

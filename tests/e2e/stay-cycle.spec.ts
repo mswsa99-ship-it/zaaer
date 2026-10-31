@@ -6,7 +6,7 @@
  * inspection), G17 (resources with commitments), G19 (corrections only within their windows), G22 (each step audited
  * with who and when), G27 (the screen shows the server's refusal, never a fake success).
  */
-import { test, expect, financeCell } from "./fixtures";
+import { test, expect, financeCell, checkOut } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Opens the stay whose unit is `room`, among the reservations of `status`. */
@@ -87,7 +87,7 @@ test.describe("the stay cycle (phase 3)", () => {
     await loginAs("supervisor");
     await openByRoom(page, go, "201", "checked_in");
     const inHouse = page.getByTestId("in-house");
-    await inHouse.getByRole("button", { name: "تسجيل المغادرة" }).click();
+    await checkOut(page, inHouse);
     await expect(page.getByTestId("reasons").first()).toContainText("على الحجز مبلغ مستحق");
     await expect(inHouse).toBeVisible();
     // pay what is owed (the receipt suggests the balance)
@@ -96,7 +96,7 @@ test.describe("the stay cycle (phase 3)", () => {
     await pay.getByRole("button", { name: "حفظ السند" }).click();
     await expect(pay).toBeHidden();
     await expect.poll(() => financeCell(page, "المتبقي")).toBe(0);
-    await inHouse.getByRole("button", { name: "تسجيل المغادرة" }).click();
+    await checkOut(page, inHouse);
     await expect(page.getByTestId("stay-notice")).toContainText(/سُجِّلت المغادرة وصدرت فاتورة الإقامة INV-/);
     const departed = page.getByTestId("departed");
     await expect(departed).toContainText("غادر ولم يُغلق");

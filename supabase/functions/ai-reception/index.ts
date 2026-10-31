@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
   }
 
   const { data: conv } = await db.from("conversations").select("status").eq("id", conversationId).single();
-  const handedOff = conv?.status === "handed_off";
+  let handedOff = conv?.status === "handed_off";
 
   // ---- per-session limit --------------------------------------------------
   const { count: msgCount } = await db.from("conversation_messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversationId).eq("sender", "guest");
@@ -95,6 +95,13 @@ Deno.serve(async (req) => {
   // ---- persist guest message (PII-redacted) --------------------------------
   const input = gateInput(message);
   await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "guest", content: input.redacted, meta: { pii: input.piiFound, scope: input.scope, channel } });
+
+  // ---- SEC-02: the conversation's rhythm (the same message again and again, a burst, far more tokens than a normal
+  // conversation) stops the AI here and hands the conversation to the supervisor with one ticket (fn_ai_conversation_guard)
+  if (!handedOff) {
+    const { data: guard } = await db.rpc("fn_ai_conversation_guard", { p_conversation: conversationId });
+    if ((guard as { stop?: boolean } | null)?.stop) handedOff = true;
+  }
 
   // ---- property facts the deterministic path may state (never invented) ------
   // loaded once per request (three queries in parallel), shared by the scripted path, the knowledge pre-check and the prompt

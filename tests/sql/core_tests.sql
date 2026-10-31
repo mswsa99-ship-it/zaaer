@@ -257,8 +257,8 @@ exception when others then perform t_record('R11 duplicate OTA cancel event proc
 do $$ declare r1 jsonb; r2 jsonb; res uuid := (select v from ids where k='resIn'); room uuid := (select v from ids where k='room2'); begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 20000, 'method','cash','idempotency_key','k-dep-in'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method','cash','idempotency_key','k-rcp-in'));
-  r1 := fn_staff_checkout(res);
-  r2 := fn_staff_checkout(res);
+  r1 := fn_staff_checkout(res, 'اختبار المغادرة');
+  r2 := fn_staff_checkout(res, 'اختبار المغادرة');
   perform t_record('R14 repeated checkout: single transition, one cleaning task, deposit NOT auto-refunded',
     (r1->>'ok')::boolean and (r2->>'duplicate')::boolean and (select count(*) from housekeeping_tasks where room_id = room and reservation_id = res and status = 'pending') = 1
     and (t_fin(res)->>'deposit_balance')::bigint = 20000 and (r1->>'deposit_to_settle_halalas')::bigint = 20000
@@ -643,7 +643,7 @@ do $$ declare r jsonb; b uuid; cat uuid; rm uuid; res uuid; begin
   reset role; update reservations set status = 'checked_in', actual_check_in = now() where id = res; update rooms set status = 'occupied' where id = rm;
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 20000, 'method','cash','idempotency_key','rv4'));
-  r := fn_staff_checkout(res);
+  r := fn_staff_checkout(res, 'اختبار المغادرة');
   perform t_record('RV04b checkout in a freshly created branch creates the cleaning task', (r->>'ok')::boolean and (select count(*) from housekeeping_tasks where room_id = rm and status = 'pending') = 1, r::text);
   insert into ids values ('branchRV', b);
 exception when others then perform t_record('RV04 new-branch checkout path', false, sqlerrm); end $$;

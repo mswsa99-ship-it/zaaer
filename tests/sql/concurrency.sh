@@ -201,14 +201,14 @@ conflict "$RB" && [[ "$RA" == "R:true" && "$N" == "1" && "$P" == "0" ]] && rc=0 
 # ---------- X05 (decision 46): check-out against an extension, both read at the same version ----------
 R4=$(in_house 00000000-0000-0000-0000-000000000175)
 V4=$(qs "select version from reservations where id = '$R4'")
-race "fn_staff_check_out(jsonb_build_object('reservation_id','$R4'))->>'ok'" "fn_staff_amend_stay('$R4', '$D3', 'keep_rate', 'سباق', $V4)->>'ok'"
+race "fn_staff_check_out(jsonb_build_object('early_departure','keep','reason','race','reservation_id','$R4'))->>'ok'" "fn_staff_amend_stay('$R4', '$D3', 'keep_rate', 'سباق', $V4)->>'ok'"
 ST=$(qs "select status || ' ' || check_out from reservations where id = '$R4'")
 echo "X05a A=$RA B=$RB state=$ST"
 # departed: the check-out invoiced the stay (0036), and with nothing owed or held it closed by itself
 [[ "$RA" == "R:true" && ( "$RB" == *"VERSION_CONFLICT"* || "$RB" == *"RESERVATION_STATUS_INVALID"* ) && "$ST" == "closed $D2" ]] && rc=0 || rc=1; check "X05a check-out first → the extension gets a declared conflict; the stay stays departed (never back in house)" $rc "A=$RA B=$RB $ST"
 R5=$(in_house 00000000-0000-0000-0000-000000000176)
 V5=$(qs "select version from reservations where id = '$R5'")
-race "fn_staff_amend_stay('$R5', '$D3', 'keep_rate', 'سباق', $V5)->>'ok'" "fn_staff_check_out(jsonb_build_object('reservation_id','$R5'))->>'ok'"
+race "fn_staff_amend_stay('$R5', '$D3', 'keep_rate', 'سباق', $V5)->>'ok'" "fn_staff_check_out(jsonb_build_object('early_departure','keep','reason','race','reservation_id','$R5'))->>'ok'"
 ST=$(qs "select status || ' ' || check_out from reservations where id = '$R5'")
 echo "X05b A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && "$RB" == "R:false" && "$ST" == "checked_in $D3" ]] && rc=0 || rc=1; check "X05b extension first → the check-out sees the added night owed and is refused; one valid order, no hybrid" $rc "A=$RA B=$RB $ST"
@@ -239,7 +239,7 @@ echo "X05d2 A=$RA B=$RB type=$ST"
 
 # ---------- X05e (decision 46): the same correction run twice at once succeeds once ----------
 R6=$(in_house 00000000-0000-0000-0000-000000000179)
-q "select fn_staff_check_out(jsonb_build_object('reservation_id','$R6'))->>'ok';" >/dev/null
+q "select fn_staff_check_out(jsonb_build_object('early_departure','keep','reason','race','reservation_id','$R6'))->>'ok';" >/dev/null
 race "fn_staff_reopen_stay(jsonb_build_object('reservation_id','$R6','reason','سباق'))->>'ok'" "fn_staff_reopen_stay(jsonb_build_object('reservation_id','$R6','reason','سباق'))->>'ok'"
 ST=$(qs "select status || ' ' || (select count(*) from review_items v where v.entity_id = r.id and v.kind = 'stay_reopened') from reservations r where id = '$R6'")
 echo "X05e A=$RA B=$RB state=$ST"
@@ -263,7 +263,7 @@ echo "IR02 A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"VOUCHER_STATUS_INVALID"* && "$ST" == "1 9000 1" ]] && rc=0 || rc=1; check "IR02 one voucher corrected twice at once → one replacement, one review item; the second finds it cancelled" $rc "A=$RA B=$RB $ST"
 # the departure's automatic invoice against a partial invoice of the whole stay: either order, the stay is invoiced once
 R9=$(in_house 00000000-0000-0000-0000-000000000180)
-race "fn_staff_check_out(jsonb_build_object('reservation_id','$R9'))->>'ok'" \
+race "fn_staff_check_out(jsonb_build_object('early_departure','keep','reason','race','reservation_id','$R9'))->>'ok'" \
      "fn_staff_issue_invoice(jsonb_build_object('reservation_id','$R9','from','$TODAY','to','$D2'))->>'ok'"
 ST=$(qs "select count(*) || ' ' || (select status from reservations where id = '$R9') || ' ' || fn_uninvoiced_value('$R9') from invoices where reservation_id = '$R9' and status = 'issued'")
 echo "IR03 A=$RA B=$RB state=$ST"

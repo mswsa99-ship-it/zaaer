@@ -100,7 +100,12 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     const g = guestsOf(r.id); const req = r.adults + r.companions;
     const v = g.filter((x) => x.verification_status === "verified").length, s = g.filter((x) => x.data_submitted).length, rj = g.filter((x) => x.verification_status === "rejected").length;
     const st = v >= req && v === g.length && g.length > 0 ? "verified" : rj > 0 ? "rejected" : s >= req && s === g.length && g.length > 0 ? "pending_supervisor" : s > 0 ? "data_submitted" : "not_started";
-    if (st !== r.identity_status) { r.identity_status = st; r.updated_at = nowISO(); emit("reservations"); }
+    if (st !== r.identity_status) {
+      r.identity_status = st; r.updated_at = nowISO();
+      // 0053 (FRONT-02): a booking waiting for verification is confirmed when its identity is verified
+      if (st === "verified" && r.status === "pending_verification") { r.status = "confirmed"; audit(r.branch_id, "reservation.confirmed", "reservation", r.id, { before: { status: "pending_verification" }, after: { status: "confirmed", by: "identity_verified" } }); }
+      emit("reservations");
+    }
     return st;
   };
   // a verified guest joins a profile: its own, else the one profile with the document, else a new one; two → unlinked and flagged

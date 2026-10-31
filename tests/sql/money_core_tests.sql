@@ -158,10 +158,11 @@ do $$ declare a jsonb; b jsonb; c jsonb; r1 text; begin
   r1 := t_fails(format('select fn_refund(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit_refund', 'amount_halalas', 1000, 'method','bank_transfer', 'reason','رد تأمين', 'idempotency_key','mc-09b')), 'VALIDATION: reference_required%');
   b := fn_refund(jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit_refund', 'amount_halalas', 1000, 'method','bank_transfer', 'reference','TR-RET-1', 'reason','رد تأمين', 'idempotency_key','mc-09c'));
   c := fn_refund(jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit_apply', 'amount_halalas', 1000, 'reason','تغطية من التأمين', 'idempotency_key','mc-09d'));
-  perform t_record('MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit to the stay takes none',
+  perform t_record('MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)',
     (t_voucher((a->>'voucher_id')::uuid)).account_id = t_id('cash10') and r1 = 'ok' and (t_voucher((b->>'voucher_id')::uuid)).account_id = t_id('bank10')
-    and (t_voucher((c->>'voucher_id')::uuid)).account_id is null, r1);
-exception when others then perform t_record('MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit to the stay takes none', false, sqlerrm); end $$;
+    and (t_voucher((c->>'voucher_id')::uuid)).account_id is not distinct from (select d.account_id from financial_vouchers d where d.reservation_id = t_id('res') and d.kind = 'deposit' and d.status = 'approved' order by d.occurred_at desc limit 1)
+    and (t_voucher((c->>'voucher_id')::uuid)).method = (select d.method from financial_vouchers d where d.reservation_id = t_id('res') and d.kind = 'deposit' and d.status = 'approved' order by d.occurred_at desc limit 1), r1);
+exception when others then perform t_record('MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)', false, sqlerrm); end $$;
 reset role;
 
 -- ---------------------------------------------------------------- F09: whole, positive halalas for every kind (decision 47)

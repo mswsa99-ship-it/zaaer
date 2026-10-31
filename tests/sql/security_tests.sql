@@ -334,10 +334,34 @@ do $$ declare r jsonb; tok text; begin
   perform t_record('T16b other guest cannot get that code', (r->>'allowed')::boolean = false and r->>'code' is null, r::text);
 end $$;
 reset role;
+-- QS03 (0052, SEC-01): a staff session on the guest's page follows «عرض الرمز» — the branch's supervisor gets it, audited
+-- under their name; finance (no keybox.code) and another organisation's owner do not; it never marks the code received
+do $$ declare r jsonb; tok text; n0 bigint; n1 bigint; st0 text; st1 text; msgs text := ''; ok_fin boolean := false; ok_other boolean := false; begin
+  tok := (t_lookup('BK-DEMO-1002','0222',null,'fp10'))->>'token';
+  select count(*) into n0 from audit_events where action = 'keybox.code_viewed' and actor_id = '10000000-0000-0000-0000-000000000002';
+  select access_status into st0 from reservations where external_ref = 'BK-DEMO-1002';
+  update reservations set access_status = 'delivered' where external_ref = 'BK-DEMO-1002';
+  perform t_login('a0000000-0000-0000-0000-000000000002','sup@test.local'); set local role authenticated;
+  r := fn_guest_access_code(tok);
+  reset role;
+  select count(*) into n1 from audit_events where action = 'keybox.code_viewed' and actor_id = '10000000-0000-0000-0000-000000000002';
+  select access_status into st1 from reservations where external_ref = 'BK-DEMO-1002';
+  perform t_login('a0000000-0000-0000-0000-000000000004','fin@test.local'); set local role authenticated;
+  begin perform fn_guest_access_code(tok); exception when others then ok_fin := true; msgs := msgs || sqlerrm || ' '; end;
+  reset role;
+  perform t_login('a0000000-0000-0000-0000-000000000005','owner2@test.local'); set local role authenticated;
+  begin perform fn_guest_access_code(tok); exception when others then ok_other := true; msgs := msgs || sqlerrm; end;
+  reset role;
+  update reservations set access_status = st0::access_status where external_ref = 'BK-DEMO-1002';
+  perform t_record('QS03 a staff session on the guest page: the branch supervisor gets the code audited as them and it stays «delivered»; finance and another organisation are refused',
+    (r->>'allowed')::boolean and r->>'code' = '4321' and n1 = n0 + 1 and st1 = 'delivered' and ok_fin and ok_other, r::text || ' ' || n0 || '→' || n1 || ' ' || st1 || ' ' || msgs);
+exception when others then perform t_record('QS03 a staff session on the guest page: the branch supervisor gets the code audited as them and it stays «delivered»; finance and another organisation are refused', false, sqlerrm);
+end $$;
+reset role;
 -- T20/T16: checkout → cleaning + code needs change; room not available until rotated
 set role authenticated; select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ declare r jsonb; st text; ks text; begin
-  r := fn_staff_checkout('00000000-0000-0000-0000-000000000201');
+  r := fn_staff_checkout('00000000-0000-0000-0000-000000000201', 'اختبار المغادرة');
   st := t_room_status('00000000-0000-0000-0000-000000000100');
   ks := t_keybox_status('00000000-0000-0000-0000-000000000100');
   perform t_record('Checkout → room cleaning + keybox needs_change', (r->>'ok')::boolean and st='cleaning' and ks='needs_change', st||'/'||ks);
@@ -360,7 +384,7 @@ do $$ declare r jsonb; begin
   reset role;
   update reservations set total_halalas = 99999 where id='00000000-0000-0000-0000-000000000203';
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
-  r := fn_staff_checkout('00000000-0000-0000-0000-000000000203');
+  r := fn_staff_checkout('00000000-0000-0000-0000-000000000203', 'اختبار المغادرة');
   perform t_record('Checkout refused with outstanding balance (supervisor)', (r->>'ok')::boolean = false, r::text);
 end $$;
 

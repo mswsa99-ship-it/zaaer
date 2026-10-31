@@ -28,7 +28,7 @@ export default function StaffPayments() {
   }, [data]);
   if (loading) return <LoadingScreen />;
   if (error && data.length === 0) return <LoadErrorCard message={error} onRetry={reload} />;
-  const open = data.filter((r) => LIVE.includes(r.status) && OWING.includes(r.payment_status));
+  const open = data.filter((r) => LIVE.includes(r.status) && OWING.includes(r.payment_status ?? ""));
   const done = data.filter((r) => LIVE.includes(r.status) && r.payment_status === "paid" && paidRecently.has(r.id));
   const shown = pick(filter, open, done);
   return (

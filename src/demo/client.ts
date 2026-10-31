@@ -211,16 +211,19 @@ function parseSelect(sel: string): { cols: string[]; embeds: Embed[] } {
   flush();
   return { cols, embeds };
 }
-function project(table: string, row: Row, sel: string): Row {
+function project(table: string, row: Row, sel: string, service = false): Row {
   const { cols, embeds } = parseSelect(sel);
   const out: Row = {};
   if (cols.includes("*") || cols.length === 0) Object.assign(out, row); else for (const c of cols) out[c] = row[c];
   if (table === "keyboxes") delete out.code_plain;   // like code_encrypted on the server: never readable through a query, only fn_keybox_reveal
+  // 0052 (SEC-01): a guest's link token never reaches a staff query; «متحقق» is guest_verified
+  if (table === "conversations") { if (cols.includes("guest_verified") || cols.includes("*") || cols.length === 0) out.guest_verified = !!row.guest_token; if (!service) delete out.guest_token; }
+  if (table === "registration_sessions" && !service) delete out.token;
   for (const e of embeds) {
     const col = (e.hint && FK_HINT[e.hint]) || FK[table]?.[e.table];
     if (!col) { out[e.alias] = null; continue; }
     const target = byId(e.table, row[col]);
-    out[e.alias] = target ? project(e.table, target, e.cols) : null;
+    out[e.alias] = target ? project(e.table, target, e.cols, service) : null;
   }
   return out;
 }
@@ -318,10 +321,10 @@ class QB implements PromiseLike<any> {
         }
         for (const p of list) { const i = this.mode === "upsert" ? rows.findIndex((r) => r.id === p.id || (this.table === "ai_usage_daily" && r.organization_id === p.organization_id && r.day === p.day)) : -1; if (i >= 0) rows[i] = { ...rows[i], ...p }; else rows.push(p); }
         emit(this.table);
-        const data = list.map((r: Row) => project(this.table, r, this.sel));
+        const data = list.map((r: Row) => project(this.table, r, this.sel, this.service));
         return { data: this.one ? data[0] : data, error: null, count: null };
       }
-      if (this.mode === "update") { const hit = rows.filter(match); for (const r of hit) Object.assign(r, this.payload); emit(this.table); return { data: hit.map((r) => project(this.table, r, this.sel)), error: null, count: null }; }
+      if (this.mode === "update") { const hit = rows.filter(match); for (const r of hit) Object.assign(r, this.payload); emit(this.table); return { data: hit.map((r) => project(this.table, r, this.sel, this.service)), error: null, count: null }; }
       if (this.mode === "delete") { const keep = rows.filter((r) => !match(r)); S[this.table] = keep; emit(this.table); return { data: [], error: null, count: null }; }
       let out = rows.filter(match).filter((r) => this.service || visible(this.table, r));   // RLS emulation (read side)
       for (const o of [...this.orders].reverse()) out = [...out].sort((a, b) => { const x = a[o.col], y = b[o.col]; if (x == null && y == null) return 0; if (x == null) return o.nullsFirst ? -1 : 1; if (y == null) return o.nullsFirst ? 1 : -1; return (x < y ? -1 : x > y ? 1 : 0) * (o.asc ? 1 : -1); });
@@ -329,7 +332,7 @@ class QB implements PromiseLike<any> {
       if (this.off) out = out.slice(this.off);
       if (this.lim != null) out = out.slice(0, this.lim);
       if (this.head) return { data: null, error: null, count };
-      const data = out.map((r) => project(this.table, r, this.sel));
+      const data = out.map((r) => project(this.table, r, this.sel, this.service));
       if (this.one === "maybe") return { data: data[0] ?? null, error: null, count };
       if (this.one === "one") return data.length === 1 ? { data: data[0], error: null, count } : { data: null, error: { message: "PGRST116: expected one row" }, count };
       return { data, error: null, count: this.countMode ? count : null };
@@ -387,9 +390,18 @@ const nextNumber = (prefix: string) => `${prefix}-2026-${String(++docSeq).padSta
 // rooms / allocations
 // ---------------------------------------------------------------------------
 function overlaps(a1: string, a2: string, b1: string, b2: string) { return a1 < b2 && b1 < a2; }
+/** 0054 (MONEY-01): a POS voucher is settled when its account's day has a settlement (the branch's calendar day) */
+function voucherSettled(v: Row) { if (v.method !== "pos" || !v.account_id) return false; const tz = byId("branches", v.branch_id)?.timezone || "Asia/Riyadh"; const day = new Date(v.occurred_at).toLocaleDateString("en-CA", { timeZone: tz }); return T("pos_settlements").some((s) => s.account_id === v.account_id && s.business_date === day); }
+/** 0053 (FRONT-01): a resident past their departure (checked in, not checked out) holds the unit until tonight */
+function overstayBlocks(roomId: string, from: string, to: string, exclude?: string | null) {
+  const room = byId("rooms", roomId); if (!room) return false; const today = branchToday(room.branch_id);
+  return T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && a.to_date <= today && byId("reservations", a.reservation_id)?.status === "checked_in"
+    && overlaps(a.to_date, addDays(today, 1), from, to) && (!exclude || a.reservation_id !== exclude));
+}
 function roomAvailable(roomId: string, from: string, to: string, exclude?: string | null) {
   const room = byId("rooms", roomId); if (!room || !myBranches().includes(room.branch_id)) return false;
-  return !T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && overlaps(a.from_date, a.to_date, from, to) && (!exclude || a.reservation_id !== exclude));
+  return !T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && overlaps(a.from_date, a.to_date, from, to) && (!exclude || a.reservation_id !== exclude))
+    && !overstayBlocks(roomId, from, to, exclude);
 }
 function recomputeRoomReady(roomId: string): string {
   const rm = byId("rooms", roomId)!;
@@ -407,6 +419,7 @@ function allocate(resId: string, roomId: string, from: string, to: string, reaso
   if (!rm.is_active || rm.archived_at || ["blocked", "out_of_service", "maintenance"].includes(rm.status)) throw new Error("ROOM_NOT_AVAILABLE");
   if (r.room_category_id && rm.category_id !== r.room_category_id) throw new Error("ROOM_CATEGORY_MISMATCH");
   if (T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && overlaps(a.from_date, a.to_date, from, to))) throw new Error(`ALLOCATION_CONFLICT: room ${rm.room_number} is allocated during part of ${from}–${to}`);
+  if (overstayBlocks(roomId, from, to, resId)) throw new Error("ROOM_OCCUPIED_OVERSTAY");
   const id = uid();
   T("reservation_allocations").push({ id, reservation_id: resId, room_id: roomId, branch_id: r.branch_id, from_date: from, to_date: to, status: "active", reason, created_by: staffId(), created_at: nowISO(), closed_at: null });
   r.room_id = roomId; r.updated_at = nowISO();
@@ -465,7 +478,11 @@ const rpcs: Record<string, (a: any) => any> = {
     const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone: null, role: p_role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
     for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
     emit("staff_profiles"); emit("branch_memberships"); audit(null, "staff_invited", "staff_profile", id, { role: p_role, branch_ids: branches }); return { ok: true, staff_id: id }; },
-  fn_admin_update_ai_settings: ({ p }) => { requireCap("security"); Object.assign(T("ai_settings")[0], p, { updated_at: nowISO() }); emit("ai_settings"); return { ok: true }; },
+  fn_admin_update_ai_settings: ({ p }) => { requireCap("security");
+    // 0052 (SEC-02): the guard's four numbers keep their ranges
+    const rng: Record<string, [number, number]> = { guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
+    for (const [k, [lo, hi]] of Object.entries(rng)) if (p?.[k] != null && !(Number.isInteger(Number(p[k])) && Number(p[k]) >= lo && Number(p[k]) <= hi)) throw new Error("VALIDATION: ai_guard");
+    Object.assign(T("ai_settings")[0], p, { updated_at: nowISO() }); emit("ai_settings"); return { ok: true }; },
   fn_definition_dependencies: ({ p_entity, p_id }) => { requireCap("definitions"); return deps(p_entity, p_id); },
 
   // ---- definitions ----
@@ -742,6 +759,8 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (p_kind === "discount") { ensureNights(r.id); const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active"); checkDiscount(r.room_category_id, r.branch_id, act.length, act.reduce((s, x) => s + x.price_halalas, 0), discountsOf(r.id), p_amount_halalas, ["checked_in", "checked_out"].includes(r.status)); }
     const before = { total_halalas: r.total_halalas }; addCharge(r.id, p_kind, p_description || p_kind, 1, p_amount_halalas, true, p_reason); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.total_changed", "reservation", r.id, { before, after: { total_halalas: r.total_halalas, kind: p_kind, amount_halalas: p_amount_halalas }, reason: p_reason }); return { ok: true, finance: f }; },
   fn_staff_add_service: ({ p_reservation, p_service, p_quantity, p_note }) => { requireCap("charges.add"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); const s = byId("service_definitions", p_service); if (!s || s.branch_id !== r.branch_id || s.archived_at || !s.is_active) throw new Error("SERVICE_NOT_AVAILABLE");
+    // 0053 (FRONT-04): a once-only service already on the stay is added again only with a written reason
+    if (s.billing_unit === "once" && !String(p_note ?? "").trim() && T("reservation_charges").some((c) => c.reservation_id === r.id && c.kind === "addon" && c.service_definition_id === s.id)) throw new Error("SERVICE_ALREADY_ADDED");
     // decision 3: an overdue night stops new services until it is paid or a reason is recorded; decision 10: late check-out is a service of an open stay
     if (r.status === "checked_in" && overdueBlocked(r.id)) throw new Error("PAYMENT_OVERDUE: a night is unpaid past its deadline");
     const late: string | null = s.late_checkout_until ?? null; if (late && !["pending_verification", "confirmed", "checked_in"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
@@ -809,12 +828,20 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (!ACTIVE_METHODS.includes(p.method)) throw new Error("VALIDATION: method_retired");
     if (p.kind === "deposit" && p.method === "ota_deferred") throw new Error("VALIDATION: deposit_method");
     if (["cancelled", "rejected", "no_show"].includes(r.status) && p.kind === "deposit") throw new Error("RESERVATION_STATUS_INVALID");
-    const reference = checkReference(p.method, p.reference); const account_id = voucherAccount(r.branch_id, p.method, p.account_id);
-    const v = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber(p.kind === "receipt" ? "RCP" : "DEP"), kind: p.kind, amount_halalas: amount, method: p.method, account_id, payout_id: null, status: "approved", reference, note: p.note ?? null, reason: p.reason ?? null, original_voucher_id: null, payment_transaction_id: null, idempotency_key: p.idempotency_key, content_hash: hash, occurred_at: nowISO(), created_by: staffId(), created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null };
-    T("financial_vouchers").push(v); emit("financial_vouchers"); const f = recompute(r.id)!; audit(r.branch_id, "voucher." + p.kind + "_created", "voucher", v.id, { after: { number: v.number, amount_halalas: v.amount_halalas, method: v.method, account_id, reference, reservation_id: r.id } }); return { ok: true, duplicate: false, voucher_id: v.id, number: v.number, finance: f }; },
+    const reference = checkReference(p.method, p.reference);
+    // 0054 (MONEY-03): a terminal or transfer number already on an approved voucher of the branch is a warning to confirm
+    const dup = reference && ["pos", "bank_transfer"].includes(p.method) ? T("financial_vouchers").filter((x) => x.branch_id === r.branch_id && x.status === "approved" && x.method === p.method && ["receipt", "deposit"].includes(x.kind) && String(x.reference ?? "").toUpperCase() === reference.toUpperCase()).sort((x, y) => (x.occurred_at < y.occurred_at ? 1 : -1))[0] : undefined;
+    if (dup && !p.duplicate_reference_ok) throw new Error(`DUPLICATE_REFERENCE: ${byId("reservations", dup.reservation_id)?.internal_ref ?? ""} ${dup.number}`);
+    const account_id = voucherAccount(r.branch_id, p.method, p.account_id);
+    const v = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber(p.kind === "receipt" ? "RCP" : "DEP"), kind: p.kind, amount_halalas: amount, method: p.method, account_id, payout_id: null, status: "approved", reference, note: p.note ?? null, reason: p.reason ?? null, original_voucher_id: null, reversal_of: null, payment_transaction_id: null, idempotency_key: p.idempotency_key, content_hash: hash, occurred_at: p.occurred_at ?? nowISO(), created_by: staffId(), created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null };
+    T("financial_vouchers").push(v); emit("financial_vouchers");
+    if (dup && !p.internal_reuse) { const other = byId("reservations", dup.reservation_id)?.internal_ref ?? ""; addReview(r.branch_id, "voucher_duplicate_reference", "voucher", v.id, r.id, `رقم العملية ${reference} مسجّل أيضًا في ${other} (${dup.number})`, null, { reference, method: p.method, other_reservation: other, other_voucher: dup.number, amount_halalas: amount }); } const f = recompute(r.id)!; audit(r.branch_id, "voucher." + p.kind + "_created", "voucher", v.id, { after: { number: v.number, amount_halalas: v.amount_halalas, method: v.method, account_id, reference, reservation_id: r.id } }); return { ok: true, duplicate: false, voucher_id: v.id, number: v.number, finance: f }; },
   // decision 5: the supervisor may also refund a deposit and apply it; a stay's deposit goes back only after check-out and its inspection
   fn_refund: ({ p }) => { if (!["refund", "deposit_refund", "deposit_apply"].includes(p.kind)) throw new Error("VALIDATION: kind"); if (p.kind === "refund") requireCap("voucher.refund"); else if (p.kind === "deposit_apply") requireCap("deposit.apply"); else requireCap("deposit.refund"); const amount = parseHalalas(p.amount_halalas); p.amount_halalas = amount; nonEmpty(p.reason, "reason"); nonEmpty(p.idempotency_key, "idempotency_key");
-    const method = p.kind === "deposit_apply" ? "cash" : p.method; if (!method) throw new Error("VALIDATION: method"); const r = byId("reservations", p.reservation_id); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
+    const r = byId("reservations", p.reservation_id); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
+    // 0054 (MONEY-04): applying the deposit carries the method and account of the deposit it draws on
+    const depSrc = p.kind === "deposit_apply" ? (T("financial_vouchers").find((x) => x.id === p.original_voucher_id && x.kind === "deposit" && x.status === "approved") ?? T("financial_vouchers").filter((x) => x.reservation_id === r.id && x.kind === "deposit" && x.status === "approved").sort((x, y) => (x.occurred_at < y.occurred_at ? 1 : -1))[0]) : undefined;
+    const method = p.kind === "deposit_apply" ? depSrc?.method ?? "cash" : p.method; if (!method) throw new Error("VALIDATION: method");
     const hash = [r.id, p.kind, amount, p.method ?? "", p.reference ?? "", p.account_id ?? ""].join("|"); const ex = T("financial_vouchers").find((v) => v.idempotency_key === p.idempotency_key); if (ex) { if (ex.content_hash !== hash) throw new Error("IDEMPOTENCY_CONFLICT"); if (ex.status === "cancelled") throw new Error("IDEMPOTENCY_CANCELLED"); return { ok: true, duplicate: true, voucher_id: ex.id, number: ex.number, finance: financeOf(r.id) }; }
     if (p.original_voucher_id && byId("financial_vouchers", p.original_voucher_id)?.reservation_id !== r.id) throw new Error("VALIDATION: original_voucher");
     if (p.kind === "deposit_refund" && (r.actual_check_in || ["checked_in", "checked_out", "closed"].includes(r.status))) {
@@ -822,11 +849,17 @@ const rpcsMore: Record<string, (a: any) => any> = {
       if (!T("checkout_inspections").some((i) => i.reservation_id === r.id && i.status === "active")) throw new Error("INSPECTION_REQUIRED: record the check-out inspection first");
     }
     let reference: string | null = null, account_id: string | null = null;
-    if (p.kind !== "deposit_apply") { if (!ACTIVE_METHODS.includes(method)) throw new Error("VALIDATION: method_retired"); if (p.kind === "deposit_refund" && method === "ota_deferred") throw new Error("VALIDATION: deposit_method"); reference = checkReference(method, p.reference); account_id = voucherAccount(r.branch_id, method, p.account_id); }
+    let paid: string[] = []; const methodReason = String(p.method_reason ?? "").trim() || null;
+    if (p.kind !== "deposit_apply") { if (!ACTIVE_METHODS.includes(method)) throw new Error("VALIDATION: method_retired"); if (p.kind === "deposit_refund" && method === "ota_deferred") throw new Error("VALIDATION: deposit_method"); reference = checkReference(method, p.reference); account_id = voucherAccount(r.branch_id, method, p.account_id);
+      // 0054 (MONEY-06): a stay refund goes back by the method of the payment, or with a written reason
+      if (p.kind === "refund") { paid = [...new Set(T("financial_vouchers").filter((x) => x.reservation_id === r.id && x.status === "approved" && x.kind === "receipt" && (!p.original_voucher_id || x.id === p.original_voucher_id)).map((x) => x.method as string))]; if (paid.length && !paid.includes(method) && !methodReason) throw new Error(`REFUND_METHOD_DIFFERS: ${paid.join(",")}`); } }
+    else account_id = depSrc?.account_id ?? null;
     p.method = method; p.reference = reference;
     const f0 = financeOf(r.id); const available = p.kind === "refund" ? f0.received - f0.refunded : f0.deposit_balance; if (p.amount_halalas > available) throw new Error(`REFUND_EXCEEDS_AVAILABLE: available ${available} halalas`); if (p.kind === "deposit_apply" && p.amount_halalas > f0.balance_due) throw new Error("REFUND_EXCEEDS_AVAILABLE: nothing due");
     const v = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, number: nextNumber(p.kind === "refund" ? "RFD" : p.kind === "deposit_refund" ? "DRF" : "DAP"), kind: p.kind, amount_halalas: p.amount_halalas, method: p.method ?? "cash", account_id, payout_id: null, status: "approved", reference: p.reference ?? null, note: p.note ?? null, reason: p.reason, original_voucher_id: p.original_voucher_id ?? null, payment_transaction_id: null, idempotency_key: p.idempotency_key, content_hash: hash, occurred_at: nowISO(), created_by: staffId(), created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null };
-    T("financial_vouchers").push(v); emit("financial_vouchers"); recompute(r.id); audit(r.branch_id, "voucher." + p.kind + "_created", "voucher", v.id, { after: { number: v.number, amount_halalas: v.amount_halalas, available_before: available }, reason: p.reason });
+    T("financial_vouchers").push(v); emit("financial_vouchers");
+    if (p.kind === "refund" && paid.length && !paid.includes(method)) addReview(r.branch_id, "refund_other_method", "voucher", v.id, r.id, `رُدّ ${sarText(p.amount_halalas)} بطريقة غير طريقة الدفع (${paid.join("، ")} ← ${method})`, methodReason, { paid_methods: paid, method, amount_halalas: p.amount_halalas, number: v.number });
+    recompute(r.id); audit(r.branch_id, "voucher." + p.kind + "_created", "voucher", v.id, { after: { number: v.number, amount_halalas: v.amount_halalas, available_before: available, method_reason: methodReason }, reason: p.reason });
     const invoice = ["deposit_refund", "deposit_apply"].includes(p.kind) && ["checked_out", "closed"].includes(r.status) && financeOf(r.id).deposit_balance === 0 ? autoInvoice(r.id, "deposit_settled") : null;
     return { ok: true, duplicate: false, voucher_id: v.id, number: v.number, finance: financeOf(r.id), invoice }; },
   // ---- cash boxes and bank accounts (decision 25) ----
@@ -859,6 +892,8 @@ const rpcsMore: Record<string, (a: any) => any> = {
     const fields = { terminal_total_halalas: terminal, system_total_halalas: t.system_total_halalas, difference_halalas: diff, voucher_count: t.voucher_count, status: diff === 0 ? "matched" : "difference", note, updated_by: staffId(), updated_at: nowISO() };
     if (s) { checkVersion(s.version, p.version); Object.assign(s, fields, { version: s.version + 1 }); }
     else { s = { id: uid(), organization_id: ORG, branch_id: p.branch_id, account_id: p.account_id, business_date: p.business_date, ...fields, version: 1, created_by: staffId(), created_at: nowISO() }; T("pos_settlements").push(s); }
+    // 0054 (MONEY-02): a difference (or a changed one) goes to the owner's review
+    if (diff !== 0 && (!before || before.difference_halalas !== diff)) addReview(p.branch_id, "pos_difference", "pos_settlement", s.id, null, `فرق تسوية الشبكة ${p.business_date}: ${sarText(diff)} (${a.name ?? "—"})`, note, { business_date: p.business_date, terminal_halalas: terminal, system_halalas: t.system_total_halalas, difference_halalas: diff, account_id: p.account_id });
     emit("pos_settlements"); audit(p.branch_id, "pos.settled", "pos_settlement", s.id, { before, after: { ...s }, reason: note }); return { ok: true, settlement: { ...s } }; },
 
   // ---- the monthly platform payout matching (decision 24) ----
@@ -873,7 +908,18 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (vs.length !== ids.length) throw new Error("VALIDATION: payout_vouchers"); const expected = vs.reduce((s, v) => s + (v.kind === "receipt" ? v.amount_halalas : -v.amount_halalas), 0); const note = String(p.note ?? "").trim() || null;
     const bp = Number(byId("booking_sources", p.source_id)?.commission_bp ?? 0); const commission = roundHalfUp((expected * bp) / 10000); const net = expected - commission; if (received !== net && !note) throw new Error("VALIDATION: note_required");
     const pay = { id: uid(), organization_id: ORG, branch_id: p.branch_id, source_id: p.source_id, account_id, expected_halalas: expected, commission_bp: bp, commission_halalas: commission, received_halalas: received, difference_halalas: received - net, voucher_count: vs.length, received_on: p.received_on, reference: ref, note, status: "confirmed", created_by: staffId(), created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null };
-    T("platform_payouts").push(pay); for (const v of vs) v.payout_id = pay.id; emit("platform_payouts"); emit("financial_vouchers"); audit(p.branch_id, "platform.payout_confirmed", "platform_payout", pay.id, { after: pay, reason: note }); return { ok: true, payout: pay }; },
+    T("platform_payouts").push(pay); for (const v of vs) v.payout_id = pay.id; emit("platform_payouts");
+    // 0054 (MONEY-05): a payout with a difference goes to the owner's review
+    if (pay.difference_halalas !== 0) addReview(p.branch_id, "platform_payout_difference", "platform_payout", pay.id, null, `فرق إيداع ${byId("booking_sources", p.source_id)?.name ?? "منصة"}: ${sarText(pay.difference_halalas)} (المرجع ${ref})`, note, { expected_halalas: expected, commission_halalas: commission, received_halalas: received, difference_halalas: pay.difference_halalas, received_on: p.received_on }); emit("financial_vouchers"); audit(p.branch_id, "platform.payout_confirmed", "platform_payout", pay.id, { after: pay, reason: note }); return { ok: true, payout: pay }; },
+  // 0054 (MONEY-05): the period's payouts by source and account, with commission and difference, and what is still owed
+  fn_reports_platforms: ({ p_branch, p_from, p_to }) => { if (!(can("reports.finance") || can("platform.payouts") || hasRole("owner"))) throw new Error("FORBIDDEN: reports.finance"); requireBranch(p_branch); if (!p_from || !p_to || p_to < p_from) throw new Error("VALIDATION: period");
+    const pays = T("platform_payouts").filter((x) => x.branch_id === p_branch && x.status === "confirmed" && x.received_on >= p_from && x.received_on <= p_to); const sum = (rows: Row[], k: string) => rows.reduce((a, x) => a + Number(x[k] ?? 0), 0);
+    const groups = new Map<string, Row[]>(); for (const x of pays) { const k = `${byId("booking_sources", x.source_id)?.name ?? "—"}|${byId("cash_accounts", x.account_id)?.name ?? "—"}`; groups.set(k, [...(groups.get(k) ?? []), x]); }
+    return { received_halalas: sum(pays, "received_halalas"), expected_halalas: sum(pays, "expected_halalas"), commission_halalas: sum(pays, "commission_halalas"), difference_halalas: sum(pays, "difference_halalas"), payouts: pays.length,
+      by_source: [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], "ar")).map(([k, rows]) => ({ source: k.split("|")[0], account: k.split("|")[1], payouts: rows.length, expected_halalas: sum(rows, "expected_halalas"), commission_halalas: sum(rows, "commission_halalas"), received_halalas: sum(rows, "received_halalas"), difference_halalas: sum(rows, "difference_halalas") })),
+      still_owed_halalas: T("financial_vouchers").filter((v) => v.branch_id === p_branch && v.status === "approved" && v.method === "ota_deferred" && v.kind === "receipt" && !v.payout_id).reduce((a, v) => a + v.amount_halalas, 0) }; },
+  // 0054 (MONEY-07): the organisation's own name, for the printed documents
+  fn_organization_info: () => { const m = me(); if (!m) throw new Error("FORBIDDEN"); const o = byId("organizations", m.organization_id); return o ? { name_ar: o.name_ar, name_en: o.name_en ?? null, license_number: o.license_number ?? null } : null; },
   fn_platform_payout_cancel: ({ p_payout, p_reason }) => { requireCapFull("platform.payouts"); nonEmpty(p_reason, "reason"); const pay = byId("platform_payouts", p_payout); if (!pay) throw new Error("NOT_FOUND"); requireBranch(pay.branch_id); if (pay.status !== "confirmed") throw new Error("VALIDATION: payout_status");
     const before = { ...pay }; for (const v of T("financial_vouchers")) if (v.payout_id === pay.id) v.payout_id = null; Object.assign(pay, { status: "cancelled", cancelled_by: staffId(), cancelled_at: nowISO(), cancel_reason: p_reason });
     emit("platform_payouts"); emit("financial_vouchers"); audit(pay.branch_id, "platform.payout_cancelled", "platform_payout", pay.id, { before, after: { ...pay }, reason: p_reason }); return { ok: true }; },
@@ -988,12 +1034,13 @@ const rpcsMore: Record<string, (a: any) => any> = {
     return channel === "supervisor" ? { ok: true, code: kb.code_plain } : { ok: true }; },
   fn_staff_mark_delivery_failed: ({ p_reservation, p_reason }) => { requireCap("code.deliver"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation)!; r.access_status = "approved"; emit("reservations"); audit(r.branch_id, "mark_delivery_failed", "reservation", r.id, { reason: p_reason }); return { ok: true }; },
   // the former check-out: the same rules; the managers' override is gone (decision 8), a reason given to it changes nothing
-  fn_staff_checkout: ({ p_reservation }) => rpcs.fn_staff_check_out({ p: { reservation_id: p_reservation } }),
+  fn_staff_checkout: ({ p_reservation, p_override_reason }) => rpcs.fn_staff_check_out({ p: { reservation_id: p_reservation, ...(String(p_override_reason ?? "").trim() ? { early_departure: "keep", reason: p_override_reason } : {}) } }),
 
   // ---- operations ----
   fn_ops_units_board: ({ p_branch }) => { if (!myBranches().includes(p_branch)) return []; const today = branchToday(); return T("rooms").filter((r) => r.branch_id === p_branch && !r.archived_at).map((r) => { const cur = T("reservation_allocations").filter((a) => a.room_id === r.id && a.status === "active" && a.from_date <= today).map((a) => ({ a, r: byId("reservations", a.reservation_id)! })).filter((x) => x.r && ["confirmed", "checked_in", "pending_verification"].includes(x.r.status) && (today < x.a.to_date || x.r.status === "checked_in")).map((x) => x.r).sort((a) => (a.status === "checked_in" ? -1 : 1))[0]; const next = T("reservation_allocations").filter((a) => a.room_id === r.id && a.status === "active" && a.from_date > today && ["confirmed", "pending_verification"].includes(byId("reservations", a.reservation_id)?.status)).sort((a, b) => (a.from_date < b.from_date ? -1 : 1))[0]; const kb = T("keyboxes").find((k) => k.room_id === r.id);
-    return { room_id: r.id, room_number: r.room_number, category: byId("room_categories", r.category_id)?.name_ar, block: byId("blocks", r.block_id)?.name ?? null, floor: byId("floors", r.floor_id)?.name ?? null, is_active: r.is_active, status: r.status, cleanliness: r.cleanliness, open_tasks: T("housekeeping_tasks").filter((h) => h.room_id === r.id && ["pending", "in_progress"].includes(h.status)).length, open_maintenance: T("maintenance_tickets").filter((m) => m.room_id === r.id && m.status !== "resolved").length, keybox_ready: !!kb && kb.code_status === "active" && kb.field_tested, current: cur ? { reservation_id: cur.id, internal_ref: cur.internal_ref, status: cur.status, check_in: cur.check_in, check_out: cur.check_out, guest: guestName(cur.id) ?? "—", balance_due: cur.balance_due_halalas } : null, next: next ? { internal_ref: byId("reservations", next.reservation_id)!.internal_ref, check_in: next.from_date } : null }; }).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })); },
-  fn_ops_daily_summary: ({ p_branch, p_date }) => summary(p_branch, p_date ?? branchToday()),
+    return { room_id: r.id, room_number: r.room_number, category: byId("room_categories", r.category_id)?.name_ar, block: byId("blocks", r.block_id)?.name ?? null, floor: byId("floors", r.floor_id)?.name ?? null, is_active: r.is_active, status: r.status, cleanliness: r.cleanliness, open_tasks: T("housekeeping_tasks").filter((h) => h.room_id === r.id && ["pending", "in_progress"].includes(h.status)).length, open_maintenance: T("maintenance_tickets").filter((m) => m.room_id === r.id && m.status !== "resolved").length, keybox_ready: !!kb && kb.code_status === "active" && kb.field_tested, current: cur ? { reservation_id: cur.id, internal_ref: cur.internal_ref, status: cur.status, check_in: cur.check_in, check_out: cur.check_out, guest: guestName(cur.id) ?? "—", balance_due: seesMoney() ? cur.balance_due_halalas : null } : null, next: next ? { internal_ref: byId("reservations", next.reservation_id)!.internal_ref, check_in: next.from_date } : null }; }).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })); },
+  // 0052 (PERM-01): a role without money gets the summary without its money (finance, unpaid arrivals, departures with a balance)
+  fn_ops_daily_summary: ({ p_branch, p_date }) => { const s: any = summary(p_branch, p_date ?? branchToday()); if (!s || seesMoney()) return s; const { finance: _f, ...rest } = s; const { unpaid: _u, ...arrivals } = s.arrivals; const { with_balance: _w, ...departures } = s.departures; return { ...rest, arrivals, departures, money_hidden: true }; },
   // Ledger-based finance KPIs for reports (GAP05): revenue = vouchers, never reservation totals; deposits never count as revenue.
   // decision 36 (0040): the filters beside the period — staff member, payment method, box or account («none» = no account),
   // source and unit type; a source or unit-type filter follows the voucher's booking; the collection rate is not claimed
@@ -1085,10 +1132,14 @@ const rpcsMore: Record<string, (a: any) => any> = {
     Object.assign(g, { full_name: p.full_name, identity_type: p.identity_type, identity_number_last4: number.slice(-4), identity_fingerprint: fp, nationality: p.nationality, birth_date: p.birth_date, relationship: g.is_primary ? "self" : p.relationship ?? null, phone: phone ?? g.phone, verification_status: "data_submitted", data_submitted: true, entry_path: "guest", entered_by: null, entered_at: nowISO(), verified_by: null, verified_at: null });
     const all = T("reservation_guests").filter((x) => x.reservation_id === r.id); r.identity_status = all.length >= r.adults + r.companions && all.every((x) => x.data_submitted) ? "pending_supervisor" : "data_submitted"; emit("reservation_guests"); emit("reservations"); return { ok: true, guest_id: g.id }; },
   fn_guest_submit_checkin: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; if (r.access_status === "locked") r.access_status = "eligibility_review"; emit("reservations"); return { ok: true, access_status: r.access_status }; },
-  fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const ev = evaluate(r.id); if (!ev.allowed || !["delivered", "acknowledged"].includes(r.access_status)) return { allowed: false, reasons: ev.allowed ? ["لم يُسلَّم الرمز بعد"] : ev.reasons };
+  fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!;
+    // 0052 (SEC-01): a staff session on the guest's page follows «عرض الرمز» (capability, branch, guest in house) and is audited as that person
+    const staff = staffId(); if (staff) { requireCap("keybox.code"); requireBranch(r.branch_id); if (r.room_id && guestInHouse(r.room_id) && !hasRole("owner", "manager", "supervisor")) throw new Error("GUEST_IN_HOUSE"); }
+    const ev = evaluate(r.id); if (!ev.allowed || !["delivered", "acknowledged"].includes(r.access_status)) return { allowed: false, reasons: ev.allowed ? ["لم يُسلَّم الرمز بعد"] : ev.reasons };
     // the code shown is the one delivered to this stay, never another (0005)
     const kb = T("keyboxes").find((k) => k.room_id === r.room_id); if (!kb?.code_plain || kb.last_reservation_id !== r.id) return { allowed: false, reasons: ["الرمز غير مخصص لهذا الحجز"] };
-    if (r.access_status === "delivered") { r.access_status = "acknowledged"; r.updated_at = nowISO(); emit("reservations"); } for (const e of T("access_delivery_events")) if (e.reservation_id === r.id) e.acknowledged = true;
+    if (staff) audit(r.branch_id, "keybox.code_viewed", "room", r.room_id, { after: { code_version: kb.code_version, code_status: kb.code_status, via: "guest_page", reservation_id: r.id } });
+    else { if (r.access_status === "delivered") { r.access_status = "acknowledged"; r.updated_at = nowISO(); emit("reservations"); } for (const e of T("access_delivery_events")) if (e.reservation_id === r.id) e.acknowledged = true; }
     return { allowed: true, code: kb.code_plain, room_number: roomNo(r.room_id) }; },
   ...knowledgeRpcs({ T, byId, me, myBranches, hasRole, requireRole, requireBranch, checkVersion, audit, emit, staffId, ...perm }),
   ...guestRpcs(guestCtx),
@@ -1097,6 +1148,10 @@ const rpcsMore: Record<string, (a: any) => any> = {
   //      (src/demo/whatsappSim.ts) stands in for the reception computer and runs the server's own code ----
   fn_admin_whatsapp_channels: () => { requireCap("security"); return T("branches").filter((b) => !b.archived_at).map((b) => { const c = T("branch_whatsapp_channels").find((x) => x.branch_id === b.id); return { branch_id: b.id, branch_name: b.name_ar, branch_phone: b.phone, mode: c?.mode ?? "web_bridge", enabled: !!c?.enabled, display_phone: c?.display_phone ?? null, phone_number_id: c?.phone_number_id ?? null, waba_id: c?.waba_id ?? null, has_token: !!c?.has_token, token_last4: c?.token_last4 ?? null, has_app_secret: !!c?.has_app_secret, verify_token: c?.verify_token ?? null, otp_template: c?.otp_template ?? null, template_lang: c?.template_lang ?? "ar", status: c?.status ?? "not_configured", last_error: c?.last_error ?? null, last_checked_at: c?.last_checked_at ?? null, verified_name: c?.verified_name ?? null, updated_at: c?.updated_at ?? null,
     auto_reply: c?.auto_reply ?? true, human_pause_minutes: c?.human_pause_minutes ?? 60, has_bridge_key: !!c?.has_bridge_key, bridge_key_last4: c?.bridge_key_last4 ?? null, bridge_key_created_at: c?.bridge_key_created_at ?? null, bridge_status: c?.bridge_status ?? null, bridge_phone: c?.bridge_phone ?? null, bridge_name: c?.bridge_name ?? null, bridge_version: c?.bridge_version ?? null, bridge_last_seen: c?.bridge_last_seen ?? null, bridge_online: !!c?.bridge_last_seen && Date.now() - Date.parse(c.bridge_last_seen) < 90_000 }; }); },
+  fn_admin_whatsapp_security: ({ p_branch, p }) => { requireCap("security"); requireBranch(p_branch); const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); if (!c) return { configured: false };
+    if (p && "alert_new_contacts_per_hour" in p) { const v = String(p.alert_new_contacts_per_hour ?? ""); if (!/^[0-9]{1,4}$/.test(v) || Number(v) < 5 || Number(v) > 1000) throw new Error("VALIDATION: alert_new_contacts_per_hour");
+      const before = c.alert_new_contacts_per_hour ?? 30; if (Number(v) !== before) { c.alert_new_contacts_per_hour = Number(v); audit(p_branch, "whatsapp_channel_updated", "branch", p_branch, { before: { alert_new_contacts_per_hour: before }, after: { alert_new_contacts_per_hour: Number(v) } }); emit("branch_whatsapp_channels"); } }
+    return { configured: true, rotation_due_at: c.bridge_key_rotation_due_at ?? null, rotation_reason: c.bridge_key_rotation_reason ?? null, alert_new_contacts_per_hour: c.alert_new_contacts_per_hour ?? 30, has_bridge_key: !!c.has_bridge_key }; },
   fn_admin_whatsapp_save: ({ p_branch, p }) => { requireCap("security"); if (!byId("branches", p_branch)) throw new Error("NOT_FOUND: branch");
     let c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch); if (!c) { c = { branch_id: p_branch, organization_id: ORG, mode: "web_bridge", enabled: false, display_phone: null, phone_number_id: null, waba_id: null, has_token: false, token_last4: null, has_app_secret: false, verify_token: "demo-" + uid().replace(/-/g, ""), otp_template: null, template_lang: "ar", status: "not_configured", last_error: null, last_checked_at: null, verified_name: null, auto_reply: true, human_pause_minutes: 60, has_bridge_key: false, bridge_key: null, bridge_key_last4: null, bridge_key_created_at: null, bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null, created_at: nowISO() }; T("branch_whatsapp_channels").push(c); }
     const changed: string[] = []; let key: string | null = null;
@@ -1110,7 +1165,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     const sec = String(p.app_secret ?? "").trim(); if (sec) { if (sec.length < 16 || /\s/.test(sec)) throw new Error("VALIDATION: app_secret"); c.has_app_secret = true; changed.push("app_secret"); }
     if (p.regenerate_verify_token) { c.verify_token = "demo-" + uid().replace(/-/g, ""); changed.push("verify_token"); }
     // the reception computer's key: shown once (the real server keeps only its SHA-256; the demo keeps it to simulate the program)
-    if (p.regenerate_bridge_key) { key = "zb_" + randomHex(32); Object.assign(c, { bridge_key: key, has_bridge_key: true, bridge_key_last4: key.slice(-4), bridge_key_created_at: nowISO(), bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null }); changed.push("bridge_key"); }
+    if (p.regenerate_bridge_key) { key = "zb_" + randomHex(32); Object.assign(c, { bridge_key: key, has_bridge_key: true, bridge_key_last4: key.slice(-4), bridge_key_created_at: nowISO(), bridge_status: null, bridge_phone: null, bridge_name: null, bridge_version: null, bridge_last_seen: null, bridge_key_rotation_due_at: null, bridge_key_rotation_reason: null }); changed.push("bridge_key"); }
     else if (p.revoke_bridge_key && c.has_bridge_key) { Object.assign(c, { bridge_key: null, has_bridge_key: false, bridge_key_last4: null, bridge_key_created_at: null, bridge_status: null, bridge_last_seen: null }); changed.push("bridge_key_revoked"); }
     if ("auto_reply" in p) { if (typeof p.auto_reply !== "boolean") throw new Error("VALIDATION: auto_reply"); if (p.auto_reply !== c.auto_reply) { c.auto_reply = p.auto_reply; changed.push("auto_reply"); } }
     if ("human_pause_minutes" in p) { if (typeof p.human_pause_minutes !== "number") throw new Error("VALIDATION: human_pause_minutes"); const v = Math.round(p.human_pause_minutes); if (v < 5 || v > 720) throw new Error("VALIDATION: human_pause_minutes"); if (v !== c.human_pause_minutes) { c.human_pause_minutes = v; changed.push("human_pause_minutes"); } }
@@ -1507,6 +1562,7 @@ const rpcsInvoices: Record<string, (a: any) => any> = {
     if (ex) { if (ex.original_voucher_id !== v.id) throw new Error("IDEMPOTENCY_CONFLICT: key already used"); return { ok: true, duplicate: true, voucher_id: ex.id, number: ex.number, original_number: v.number, finance: financeOf(r.id) }; }
     if (v.status !== "approved") throw new Error("VOUCHER_STATUS_INVALID");
     if (v.payout_id) throw new Error("VOUCHER_IN_PAYOUT");
+    if (v.reversal_of || T("financial_vouchers").some((x) => x.reversal_of === v.id && x.status === "approved")) throw new Error("VOUCHER_ALREADY_REVERSED");
     if (!capFull("voucher.correct")) {
       if (v.created_by !== staffId()) throw new Error("FORBIDDEN: a supervisor corrects only the vouchers they issued");
       if (Date.parse(v.created_at) < Date.now() - 24 * 3_600_000) throw new Error("CORRECTION_WINDOW_PASSED: after 24 hours a voucher is corrected by a manager");
@@ -1518,17 +1574,25 @@ const rpcsInvoices: Record<string, (a: any) => any> = {
     const acc = "account_id" in p ? p.account_id || null : m !== v.method ? null : v.account_id ?? null;
     const note = "note" in p ? trimOrNull(p.note) : v.note ?? null;
     if (String(amt) === String(v.amount_halalas) && (v.kind === "deposit_apply" || m === v.method) && ref === (v.reference ?? null) && acc === (v.account_id ?? null) && note === (v.note ?? null)) throw new Error("VALIDATION: nothing_changed");
+    // 0054 (MONEY-01): a voucher of a settled POS day is never touched — a reversing voucher and the correct one, today
+    const settled = v.kind !== "deposit_apply" && voucherSettled(v);
     return atomically(() => {
-      Object.assign(v, { status: "cancelled", cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: "تصحيح: " + reason });
-      const payload = stripNulls({ reservation_id: r.id, kind: v.kind, idempotency_key: key, amount_halalas: amt, method: m, reference: ref, account_id: acc, note, reason: v.reason ?? "تصحيح السند " + v.number, original_voucher_id: v.id });
+      let rv: Row | null = null;
+      if (settled) {
+        const rk = ({ receipt: "refund", deposit: "deposit_refund", refund: "receipt", deposit_refund: "deposit" } as Record<string, string>)[v.kind];
+        rv = { id: uid(), organization_id: ORG, branch_id: v.branch_id, reservation_id: v.reservation_id, number: nextNumber(({ receipt: "RCP", deposit: "DEP", refund: "RFD", deposit_refund: "DRF" } as Record<string, string>)[rk]), kind: rk, amount_halalas: v.amount_halalas, method: v.method, account_id: v.account_id ?? null, payout_id: null, status: "approved", reference: v.reference ?? null, note: null, reason: `عكس السند ${v.number}: ${reason}`, original_voucher_id: v.id, reversal_of: v.id, payment_transaction_id: null, idempotency_key: key + ":reverse", content_hash: v.id + "|reverse", occurred_at: nowISO(), created_by: staffId(), created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null };
+        T("financial_vouchers").push(rv);
+      } else Object.assign(v, { status: "cancelled", cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: "تصحيح: " + reason });
+      const payload = stripNulls({ reservation_id: r.id, kind: v.kind, idempotency_key: key, amount_halalas: amt, method: m, reference: ref, account_id: acc, note, reason: v.reason ?? "تصحيح السند " + v.number, original_voucher_id: v.id, duplicate_reference_ok: true, internal_reuse: true, method_reason: "تصحيح السند " + v.number });
       const res = ["receipt", "deposit"].includes(v.kind) ? rpcs.fn_create_voucher({ p: payload }) : rpcs.fn_refund({ p: payload });
       const nv = byId("financial_vouchers", res.voucher_id)!; if (!nv.original_voucher_id) nv.original_voucher_id = v.id;
+      if (!settled) nv.occurred_at = v.occurred_at;   // not settled: the replacement keeps the business date
       const f = financeOf(r.id); if (f.deposit_balance < 0 || f.received - f.refunded < 0) throw new Error("CANCEL_WOULD_GO_NEGATIVE");
       emit("financial_vouchers"); recompute(r.id);
       const pick = (x: Row) => ({ amount_halalas: x.amount_halalas, method: x.method, reference: x.reference ?? null, account_id: x.account_id ?? null });
-      addReview(v.branch_id, "voucher_corrected", "voucher", nv.id, r.id, `تصحيح السند ${v.number} بالسند ${nv.number}`, reason, { original: v.number, replacement: nv.number, kind: v.kind, before: pick(v), after: pick(nv), issued_by_self: v.created_by === staffId() });
-      audit(v.branch_id, "voucher.corrected", "voucher", nv.id, { before: { number: v.number, ...pick(v) }, after: { number: nv.number, ...pick(nv), original_voucher_id: v.id }, reason });
-      return { ok: true, duplicate: false, voucher_id: nv.id, number: nv.number, original_number: v.number, finance: financeOf(r.id) };
+      addReview(v.branch_id, settled ? "voucher_reversed" : "voucher_corrected", "voucher", nv.id, r.id, settled ? `عكس السند ${v.number} بالسند ${rv!.number} وإصدار ${nv.number} (يوم السند مُسوّى)` : `تصحيح السند ${v.number} بالسند ${nv.number}`, reason, { original: v.number, replacement: nv.number, reversal: rv?.number ?? null, kind: v.kind, settled, before: pick(v), after: pick(nv), issued_by_self: v.created_by === staffId() });
+      audit(v.branch_id, "voucher.corrected", "voucher", nv.id, { before: { number: v.number, ...pick(v) }, after: { number: nv.number, ...pick(nv), original_voucher_id: v.id, reversal: rv?.number ?? null, settled }, reason });
+      return { ok: true, duplicate: false, voucher_id: nv.id, number: nv.number, original_number: v.number, reversal_number: rv?.number ?? null, settled, finance: financeOf(r.id) };
     });
   },
   // «بحاجة لمراجعة وتدقيق»: the owner reads and marks (§16)
@@ -1617,6 +1681,27 @@ const rpcsStay: Record<string, (a: any) => any> = {
     if (["checked_out", "closed"].includes(r.status)) return { ok: true, duplicate: true, status: r.status };
     if (r.status !== "checked_in") throw new Error("NOT_CHECKED_IN");
     if (p.expected_version != null) checkVersionLenient(r.version, p.expected_version);
+    // 0053 (FRONT-03): leaving before the departure date is a decision on the nights not used, with a reason
+    const today = branchToday(r.branch_id);
+    if (r.check_out > today) {
+      const end = r.check_in >= today ? addDays(r.check_in, 1) : today; const mode = p.early_departure || null; const reason = String(p.reason ?? "").trim() || null;
+      if (end < r.check_out) {
+        ensureNights(r.id); const left = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active" && x.night >= end && x.night < r.check_out);
+        const amount = left.reduce((a2, x) => a2 + x.price_halalas, 0);
+        if (!mode) return { ok: false, early_departure: true, unused_nights: left.length, unused_halalas: amount, new_check_out: end, reasons: [`مغادرة قبل موعدها: ${left.length} ليلة مدفوعة أو محجوزة لم تُستخدم. اختر تقصير الإقامة أو إبقاء الليالي مدفوعة، مع السبب.`] };
+        if (!["shorten", "keep"].includes(mode)) throw new Error("VALIDATION: early_departure"); if (!reason) throw new Error("VALIDATION: reason");
+        if (mode === "shorten") {
+          if (["weekly", "monthly"].includes(r.price_basis) && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: shortening a weekly or monthly stay requires manager");
+          const before = { check_out: r.check_out, total_halalas: r.total_halalas }; const delta = Math.round((Date.parse(end) - Date.parse(r.check_out)) / 86400000);
+          for (const a3 of T("reservation_allocations")) if (a3.reservation_id === r.id && a3.status === "active" && a3.to_date === r.check_out && a3.from_date < end) a3.to_date = end;
+          for (const x of left) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: reason });
+          emit("reservation_nights"); emit("reservation_allocations");
+          addCharge(r.id, "adjustment", `مغادرة مبكرة: ${-delta} ليلة لم تُستخدم`, 1, -amount, true, reason, null, end, r.check_out);
+          const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active"); r.check_out = end; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((a2, x) => a2 + x.price_halalas, 0) / act.length);
+          recompute(r.id); audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: end, total_halalas: r.total_halalas, delta_nights: delta, early_departure: "shorten", nights: { refunded_halalas: amount } }, reason });
+        } else audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before: { check_out: r.check_out }, after: { check_out: r.check_out, early_departure: "keep", unused_nights: left.length, unused_halalas: amount }, reason });
+      }
+    }
     const f = recompute(r.id)!;
     if (f.balance_due > 0) return { ok: false, balance_due: f.balance_due, reasons: [`على الحجز مبلغ مستحق ${sarText(f.balance_due)}. يُصفَّر بسند قبض، أو بالخصم من التأمين بسبب، أو بتسوية سعر من المالك أو المدير بسبب.`] };
     const at = nowISO();
@@ -1792,6 +1877,10 @@ Object.assign(rpcs, rpcsInvoices);
 /** what the phase 6 module (phase6.ts) needs from the demo's core; registered last, so it supersedes the older emulations it replaces */
 const phase6Ctx = {
   T, byId, me, myBranches, hasRole, requireRole, requireBranch, staffId, audit, emit, ...perm,
+  // 0052 (SEC-05): mirrors fn_bridge_key_rotation_due
+  staffLeftBranch: (branch: string, staff: string, why: string) => { const ch = T("branch_whatsapp_channels").find((x) => x.branch_id === branch && x.has_bridge_key); if (!ch) return; const name = staffName(staff) ?? "موظف";
+    Object.assign(ch, { bridge_key_rotation_due_at: nowISO(), bridge_key_rotation_reason: `${name} — ${why}` }); emit("branch_whatsapp_channels");
+    addReview(branch, "security:bridge_key_rotation", "branch", branch, null, `غيّر مفتاح كمبيوتر الاستقبال: ${name} ${why}`, null, { staff_id: staff, key_last4: ch.bridge_key_last4 }); },
   staffName: (id: string | null | undefined) => staffName(id),
   branchToday: (b?: string) => branchToday(b),
   roomNo: (roomId: string | null) => roomNo(roomId),
@@ -2025,7 +2114,7 @@ function opsContext(branch: string, date: string) {
     open_tickets: T("human_handoff_tickets").filter((t) => t.branch_id === branch && t.status === "open").map((t) => ({ ticket_id: t.id, kind: t.kind, created_at: t.created_at })),
     staff_on_branch: T("staff_profiles").filter((s) => s.is_active && staffInBranch(s.id, branch)).map((s) => ({ staff_id: s.id, name: s.full_name, role: s.role })), generated_at: nowISO() };
 }
-function findRes(branch: string, q: string) { const ql = q.toLowerCase(); return T("reservations").filter((r) => r.branch_id === branch && (r.internal_ref.toLowerCase().includes(ql) || (r.external_ref ?? "").toLowerCase().includes(ql) || (guestName(r.id) ?? "").toLowerCase().includes(ql) || roomNo(r.room_id) === q)).slice(0, 8).map((r) => ({ reservation_id: r.id, ref: r.internal_ref, external_ref: r.external_ref, guest: guestName(r.id), status: r.status, check_in: r.check_in, check_out: r.check_out, room: roomNo(r.room_id), category_id: r.room_category_id, balance_due: r.balance_due_halalas, deposit_balance: r.deposit_balance_halalas, payment_status: r.payment_status, identity_status: r.identity_status, version: r.version })); }
+function findRes(branch: string, q: string) { const ql = q.toLowerCase(); return T("reservations").filter((r) => r.branch_id === branch && (r.internal_ref.toLowerCase().includes(ql) || (r.external_ref ?? "").toLowerCase().includes(ql) || (guestName(r.id) ?? "").toLowerCase().includes(ql) || roomNo(r.room_id) === q)).slice(0, 8).map((r) => ({ reservation_id: r.id, ref: r.internal_ref, external_ref: r.external_ref, guest: guestName(r.id), status: r.status, check_in: r.check_in, check_out: r.check_out, room: roomNo(r.room_id), category_id: r.room_category_id, balance_due: seesMoney() ? r.balance_due_halalas : null, deposit_balance: seesMoney() ? r.deposit_balance_halalas : null, payment_status: seesMoney() ? r.payment_status : null, identity_status: r.identity_status, version: r.version })); }
 
 // ---------------------------------------------------------------------------
 // edge functions (deterministic in the demo — no provider)

@@ -93,8 +93,8 @@ export function OwnerOverview() {
                   {r.summary ? <>
                     <td className="px-3 py-2 text-left tabular-nums">{r.summary.occupancy_pct}%</td>
                     <td className="px-3 py-2 text-left tabular-nums">{r.summary.arrivals.expected} / {r.summary.departures.expected}</td>
-                    <td className="px-3 py-2 text-left tabular-nums">{formatCurrency((r.summary.finance.received_today - r.summary.finance.refunded_today) / 100)}</td>
-                    <td className="px-3 py-2 text-left tabular-nums">{formatCurrency(r.summary.finance.outstanding_in_house / 100)}</td>
+                    <td className="px-3 py-2 text-left tabular-nums">{formatCurrency(((r.summary.finance?.received_today ?? 0) - (r.summary.finance?.refunded_today ?? 0)) / 100)}</td>
+                    <td className="px-3 py-2 text-left tabular-nums">{formatCurrency((r.summary.finance?.outstanding_in_house ?? 0) / 100)}</td>
                   </> : <td colSpan={4} className="px-3 py-2 text-danger-600">{r.error ?? "تعذّر القراءة"}</td>}
                 </tr>
               ))}
@@ -103,8 +103,8 @@ export function OwnerOverview() {
                   <td className="px-3 py-2">المجموع</td>
                   <td className="px-3 py-2 text-left tabular-nums">{active > 0 ? Math.round((occupied / active) * 100) : 0}%</td>
                   <td className="px-3 py-2 text-left tabular-nums">{sum((s) => s.arrivals.expected)} / {sum((s) => s.departures.expected)}</td>
-                  <td className="px-3 py-2 text-left tabular-nums">{formatCurrency(sum((s) => s.finance.received_today - s.finance.refunded_today) / 100)}</td>
-                  <td className="px-3 py-2 text-left tabular-nums">{formatCurrency(sum((s) => s.finance.outstanding_in_house) / 100)}</td>
+                  <td className="px-3 py-2 text-left tabular-nums">{formatCurrency(sum((s) => (s.finance?.received_today ?? 0) - (s.finance?.refunded_today ?? 0)) / 100)}</td>
+                  <td className="px-3 py-2 text-left tabular-nums">{formatCurrency(sum((s) => s.finance?.outstanding_in_house ?? 0) / 100)}</td>
                 </tr>
               )}
             </tbody>

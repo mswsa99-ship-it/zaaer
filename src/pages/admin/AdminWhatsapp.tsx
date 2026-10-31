@@ -5,6 +5,7 @@ import { whatsappApi, toArabicError, bridgeConfig, BRIDGE_DOWNLOAD_PATH, type Wa
 import { isDemo } from "../../lib/supabase";
 import { SectionTitle, LoadingScreen, Card, Badge, Spinner, ErrorBanner } from "../../components/ui";
 import { formatDateTime } from "../../lib/utils";
+import { latinDigits } from "../../lib/validation";
 
 /**
  * WhatsApp per branch (owner): each branch has its own WhatsApp number, answered one of two ways —
@@ -67,6 +68,45 @@ function bridgeLine(live: WaChannelRow): { icon: JSX.Element; text: string; cls:
   return { icon: <Spinner className="h-4 w-4" />, text: "البرنامج يبدأ التشغيل…", cls: "bg-ink-50 text-ink-500" };
 }
 
+/** 0052 (SEC-05): «يجب تغيير المفتاح» after a staff member leaves the branch, and the hourly new-contact alert number. */
+function BridgeSecurity({ branchId, keyTag }: { branchId: string; keyTag: string }) {
+  const [sec, setSec] = useState<Awaited<ReturnType<typeof whatsappApi.security>> | null>(null);
+  const [n, setN] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    whatsappApi.security(branchId).then((x) => { if (alive) { setSec(x); setN(String(x?.alert_new_contacts_per_hour ?? "")); } }).catch(() => alive && setSec(null));
+    return () => { alive = false; };
+  }, [branchId, keyTag]);
+  if (!sec?.configured) return null;
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try { const x = await whatsappApi.security(branchId, { alert_new_contacts_per_hour: Number(latinDigits(n)) }); setSec(x); setMsg({ ok: true, text: "تم الحفظ." }); }
+    catch (e) { setMsg({ ok: false, text: toArabicError(e) }); }
+    setSaving(false);
+  };
+  return (
+    <div className="space-y-2" data-testid="bridge-security">
+      {sec.rotation_due_at && (
+        <p className="flex items-start gap-2 rounded-xl bg-danger-500/10 px-3 py-2 text-sm text-danger-600" data-testid="bridge-rotation-due">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>يجب تغيير مفتاح ربط كمبيوتر الاستقبال: {sec.rotation_reason ?? "غادر موظف الفرع"} ({formatDateTime(sec.rotation_due_at)}). اضغط «مفتاح جديد» وضع ملف الإعداد الجديد في مجلد البرنامج.</span>
+        </p>
+      )}
+      <label className="block rounded-xl border border-ink-100 p-3">
+        <span className="text-sm font-semibold text-ink-700">تنبيه عند عدد غير معتاد من المحادثات الجديدة</span>
+        <span className="mt-1 block text-xs text-ink-500">إذا بدأت في ساعة واحدة محادثات واتساب جديدة أكثر من هذا العدد يظهر لك بند في «المراجعة».</span>
+        <div className="mt-2 flex gap-2">
+          <input className="input w-28" dir="ltr" inputMode="numeric" value={n} onChange={(e) => setN(e.target.value)} aria-label="عدد المحادثات الجديدة في الساعة" />
+          <button type="button" className="btn-outline text-xs" disabled={saving || latinDigits(n) === String(sec.alert_new_contacts_per_hour)} onClick={save}>{saving ? <Spinner /> : "حفظ"}</button>
+        </div>
+        {msg && <span className={`mt-1 block text-xs ${msg.ok ? "text-success-600" : "text-danger-600"}`}>{msg.text}</span>}
+      </label>
+    </div>
+  );
+}
+
 function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChannelRow; live: WaChannelRow; busy: string | null; run: (kind: string, fn: () => Promise<unknown>, ok: string) => Promise<void>; newKey: string | null; setNewKey: (v: string | null) => void }) {
   const [phone, setPhone] = useState(row.display_phone ?? "");
   const [confirmKey, setConfirmKey] = useState<"new" | "revoke" | null>(null);
@@ -127,6 +167,8 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
           )}
         </div>
       </div>
+
+      <BridgeSecurity branchId={row.branch_id} keyTag={row.bridge_key_last4 ?? ""} />
 
       {newKey && (
         <div className="space-y-2 rounded-xl border border-brand-200 bg-brand-50/50 p-3" data-testid="bridge-config">

@@ -84,11 +84,17 @@ ${v.note ? `<p>البيان: ${esc(v.note)}</p>` : ""}
   return page(`${v.kindLabel} ${v.number}`, format, body);
 }
 
+/** MONEY-08: a line without its own text prints its kind in Arabic, never the code («discount» → «خصم») */
+const KIND_TEXT: Record<string, string> = { discount: "خصم", tax: "ضريبة القيمة المضافة", rent: "إيجار", adjustment: "تسوية", penalty: "غرامة", addon: "خدمة" };
+function lineLabel(d: string): string { return d.replace(/\b(discount|tax|rent|adjustment|penalty|addon)\b/g, (k) => KIND_TEXT[k] ?? k); }
 export function buildInvoicePrint(inv: PrintInvoice, ctx: PrintContext, format: PrintFormat): string {
   const a4 = format === "a4";
+  // 0054 (MONEY-07): the printed price is the line's own share per unit, so quantity × price = amount; a share that does
+  // not divide evenly shows its amount only
+  const unitOf = (l: PrintInvoice["lines"][number]) => { const q = Number(l.quantity); return q > 0 && Number.isInteger(l.amount_halalas / q) ? sar(l.amount_halalas / q) : "—"; };
   const rows = inv.lines.map((l) => a4
-    ? `<tr><td>${esc(l.description)}</td><td class="n ltr">${esc(l.quantity)}</td><td class="n">${esc(sar(l.unit_price_halalas))}</td><td class="n">${esc(sar(l.amount_halalas))}</td></tr>`
-    : `<tr><td>${esc(l.description)}</td><td class="n">${esc(sar(l.amount_halalas))}</td></tr>`).join("");
+    ? `<tr><td>${esc(lineLabel(l.description))}</td><td class="n ltr">${esc(l.quantity)}</td><td class="n">${esc(unitOf(l))}</td><td class="n">${esc(sar(l.amount_halalas))}</td></tr>`
+    : `<tr><td>${esc(lineLabel(l.description))}</td><td class="n">${esc(sar(l.amount_halalas))}</td></tr>`).join("");
   const head = a4 ? "<tr><th>البيان</th><th>الكمية</th><th>السعر</th><th>المبلغ</th></tr>" : "<tr><th>البيان</th><th>المبلغ</th></tr>";
   const meta = [
     `<div><span>رقم الفاتورة</span><span class="ltr">${esc(inv.number)}${inv.version > 1 ? ` (v${inv.version})` : ""}</span></div>`,

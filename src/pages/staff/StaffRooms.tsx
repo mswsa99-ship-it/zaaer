@@ -218,7 +218,9 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
                   <div className="relative col-span-full col-start-2 grid" style={{ gridTemplateColumns: `repeat(${span}, ${colW}px)`, gridColumn: `2 / span ${span}` }}>
                     {days.map((d) => <div key={d} className={`border-l border-ink-50 ${d === today ? "bg-brand-50/60" : ""}`} style={{ gridRow: 1 }} />)}
                     {segs.map((s) => {
-                      const start = Math.max(0, dayDiff(from, s.from_date)); const end = Math.min(span, dayDiff(from, s.to_date));
+                      // 0053 (FRONT-01): a resident past their departure still holds the unit — the bar runs to tonight
+                      const until = s.status === "checked_in" && s.to_date <= today ? addDaysISO(today, 1) : s.to_date;
+                      const start = Math.max(0, dayDiff(from, s.from_date)); const end = Math.min(span, dayDiff(from, until));
                       if (end <= start) return null;
                       const title = `${s.internal_ref} · ${s.guest ?? "—"} · ${RESERVATION_STATUS_LABELS[s.status as ReservationStatus] ?? s.status}${s.payment_status ? ` · ${PAYMENT_STATUS_LABELS[s.payment_status as keyof typeof PAYMENT_STATUS_LABELS] ?? s.payment_status}` : ""}${s.balance_due_halalas ? ` · متبقٍ ${formatCurrency(s.balance_due_halalas / 100)}` : ""}`;
                       return (

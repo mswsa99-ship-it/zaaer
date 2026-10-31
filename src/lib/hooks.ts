@@ -2,6 +2,7 @@ import { useEffect, useId } from "react";
 import { supabase } from "./supabase";
 import { useBranchQuery, must } from "./useBranchQuery";
 import { todayISO } from "./utils";
+import { useAuth } from "./auth";
 
 export interface ReservationCard {
   id: string;
@@ -12,7 +13,7 @@ export interface ReservationCard {
   check_out: string;
   adults: number;
   companions: number;
-  payment_status: string;
+  payment_status: string | null;
   identity_status: string;
   government_registration: boolean;
   /** 0033: Shomoos accepted the registration (the arrival's last fixed condition) */
@@ -52,6 +53,8 @@ const SELECT = `
 export function useReservations(filter?: { status?: string[]; todayOnly?: boolean }) {
   const statusKey = filter?.status?.join(",") ?? "";
   const todayOnly = !!filter?.todayOnly;
+  // 0052 (PERM-07): the payment status is money — a role the matrix does not let see money never gets it on a card
+  const money = useAuth().permissions.seesMoney;
 
   const q = useBranchQuery<ReservationCard[]>(async (branchId) => {
     let qq = supabase.from("reservations").select(SELECT).eq("branch_id", branchId);
@@ -67,8 +70,8 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
       .in("reservation_id", list.map((r) => r.id))
       .eq("is_primary", true)) as { reservation_id: string; full_name: string }[];
     const guestMap = new Map(guests.map((g) => [g.reservation_id, g.full_name]));
-    return list.map((r) => ({ ...r, primary_guest: { full_name: guestMap.get(r.id) ?? "—" } }));
-  }, [statusKey, todayOnly], NO_CARDS);
+    return list.map((r) => ({ ...r, payment_status: money ? r.payment_status : null, primary_guest: { full_name: guestMap.get(r.id) ?? "—" } }));
+  }, [statusKey, todayOnly, money], NO_CARDS);
   const reload = q.reload;
 
   // Realtime: any reservation change reloads the active branch's list. Each use of this hook has its own channel:

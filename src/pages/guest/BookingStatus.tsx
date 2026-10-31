@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText, XCircle } from "lucide-react";
 import { guestApi, toArabicError, type GuestSession, type PublicBranch, type GuestStaySummary } from "../../lib/api";
 import { Card, Spinner, EmptyState, ErrorBanner } from "../../components/ui";
 import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
@@ -60,6 +60,32 @@ export default function BookingStatus() {
     setActing(true);
     try { await guestApi.submitCheckin(token); await load(); } catch (e) { setError(toArabicError(e)); }
     setActing(false);
+  }
+
+  // 0053 (GUEST-01): a booking that ended without a stay gets one clear page — no steps, no amounts, no actions
+  const ENDED: Record<string, string> = { cancelled: "هذا الحجز ملغى", no_show: "سُجِّل هذا الحجز «لم يحضر»", rejected: "هذا الحجز مرفوض" };
+  if (ENDED[r.status]) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-10" data-testid="booking-ended">
+        <Card>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-500/10 text-danger-600"><XCircle className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-ink-800">{ENDED[r.status]}</h1>
+              <p className="mt-1 text-sm text-ink-600">{r.branch_name} · <span className="font-mono" dir="ltr">{r.internal_ref}</span> · {r.check_in} → {r.check_out}</p>
+              <p className="mt-2 text-sm text-ink-600">لا يلزم أي إجراء منك على هذا الحجز، ولا يُسجَّل وصول عليه.</p>
+            </div>
+          </div>
+          {branch?.phone && <p className="mt-4 rounded-xl bg-ink-50 px-3 py-2 text-sm text-ink-700">للاستفسار: اتصل بالاستقبال على <span className="font-mono font-semibold" dir="ltr">{branch.phone}</span></p>}
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {branch?.booking_platform_url
+              ? <a href={branch.booking_platform_url} target="_blank" rel="noopener noreferrer" className="btn-primary justify-center">حجز جديد</a>
+              : <Link to="/booking/new" className="btn-primary justify-center">حجز جديد</Link>}
+            <Link to="/booking/lookup" className="btn-outline justify-center">حجوزاتي</Link>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   // U3: one welcome line for where the stay is

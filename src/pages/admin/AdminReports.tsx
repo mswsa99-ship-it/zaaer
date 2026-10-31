@@ -15,7 +15,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGri
 import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { useBranch } from "../../lib/branch";
-import { opsApi, ratesApi, guestReportsApi, listsApi, type ReportsFinance, type DiscountReport, type ReportFilters, type ReportFilterOptions } from "../../lib/api";
+import { opsApi, ratesApi, guestReportsApi, listsApi, type ReportsPlatforms, type ReportsFinance, type DiscountReport, type ReportFilters, type ReportFilterOptions } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { Link } from "react-router-dom";
 import { ROLE_LABELS } from "../../lib/types";
@@ -78,6 +78,7 @@ export default function AdminReports() {
   // Ledger KPIs for the branch + period + filters (a change refreshes in place; a failed refresh keeps the shown figures).
   const fin = useBranchQuery<ReportsFinance | null>((branchId) => opsApi.reportsFinance(branchId, period.from, period.to, filters), [period.from, period.to, filters], null);
   const opsQ = useBranchQuery<OpsData | null>(loadOps, [], null);
+  const platQ = useBranchQuery<ReportsPlatforms | null>((branchId) => opsApi.reportsPlatforms(branchId, period.from, period.to).catch(() => null), [period.from, period.to], null);
   const branchId = fin.branchId;
   const report = fin.data, reportError = fin.error;
   const reservations = opsQ.data?.reservations ?? [];
@@ -205,6 +206,27 @@ export default function AdminReports() {
             ))}
           </div>
         </>
+      )}
+
+      {/* 0054 (MONEY-05): the platforms — what came into the accounts, the commission, the difference, what is still owed */}
+      {platQ.data && (
+        <Card className="mb-6" data-testid="report-platforms">
+          <h3 className="mb-2 text-sm font-semibold text-ink-700">المنصات في الفترة</h3>
+          <div className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
+            <div><p className="text-xs text-ink-400">وصل إلى الحسابات</p><p className="font-bold tabular-nums">{formatCurrency(platQ.data.received_halalas / 100)}</p></div>
+            <div><p className="text-xs text-ink-400">عمولات المنصات</p><p className="font-bold tabular-nums">{formatCurrency(platQ.data.commission_halalas / 100)}</p></div>
+            <div><p className="text-xs text-ink-400">فروقات الإيداع</p><p className={`font-bold tabular-nums ${platQ.data.difference_halalas ? "text-warning-700" : ""}`}>{formatCurrency(platQ.data.difference_halalas / 100)}</p></div>
+            <div><p className="text-xs text-ink-400">ما زال عند المنصات</p><p className="font-bold tabular-nums">{formatCurrency(platQ.data.still_owed_halalas / 100)}</p></div>
+          </div>
+          {platQ.data.by_source.length > 0 && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[30rem] text-xs">
+                <thead><tr className="border-b border-ink-100 text-ink-500"><th className="py-1 text-right">المنصة</th><th className="text-right">الحساب</th><th className="text-left">المتوقع</th><th className="text-left">العمولة</th><th className="text-left">الواصل</th><th className="text-left">الفرق</th></tr></thead>
+                <tbody>{platQ.data.by_source.map((x) => <tr key={x.source + x.account} className="border-b border-ink-50"><td className="py-1">{x.source}</td><td>{x.account}</td><td className="text-left tabular-nums">{formatCurrency(x.expected_halalas / 100)}</td><td className="text-left tabular-nums">{formatCurrency(x.commission_halalas / 100)}</td><td className="text-left tabular-nums">{formatCurrency(x.received_halalas / 100)}</td><td className="text-left tabular-nums">{formatCurrency(x.difference_halalas / 100)}</td></tr>)}</tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       )}
 
       <h3 className="mb-2 text-sm font-semibold text-ink-700">إحصاءات تشغيلية</h3>

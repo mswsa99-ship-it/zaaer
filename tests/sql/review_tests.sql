@@ -99,7 +99,7 @@ end $$;
 -- ---------- A05 reconciliation ----------
 do $$ declare res uuid := (select v from rf where k='res'); rep jsonb; led jsonb; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'deposit', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'rf-dep'));
-  perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'refund', 'amount_halalas', 2500, 'method', 'cash', 'reason', 'تعويض', 'idempotency_key', 'rf-ref'));
+  perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'refund', 'amount_halalas', 2500, 'method', 'cash', 'method_reason', 'النزيل طلب الرد نقدًا', 'reason', 'تعويض', 'idempotency_key', 'rf-ref'));
   rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010'), '{}'::jsonb);
   led := rep->'ledger';
   perform t_record('RF12 A05 report ledger reconciles: net = receipts − refunds + deposit_apply, read straight from vouchers',

@@ -33,6 +33,8 @@ export interface Phase6Ctx extends Permissions {
   audit: (branch: string | null, action: string, entity: string, entityId: string, details: Row) => void;
   emit: (table: string) => void;
   branchToday: (b?: string) => string;
+  /** 0052 (SEC-05): a staff member left a branch — its reception-computer key must change */
+  staffLeftBranch?: (branch: string, staff: string, why: string) => void;
   roomNo: (roomId: string | null) => string | null;
   guestName: (resId: string) => string | null;
   /** fn_is_member: an active owner of the organisation, or an active member whose membership is not retired */
@@ -284,7 +286,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       const before = { full_name: sp.full_name, phone: maskPhone(sp.phone), role: sp.role, branch_ids: beforeB };
       Object.assign(sp, { full_name: vName, phone: vPhone, role: vRole, updated_at: nowISO() });
       // memberships: retire what is gone, re-open or add what is new (effective from the person's next operation)
-      for (const m of T("branch_memberships")) if (m.staff_id === sp.id && !m.removed_at && !vBranches.includes(m.branch_id)) { m.removed_at = nowISO(); m.removed_by = mine; }
+      for (const m of T("branch_memberships")) if (m.staff_id === sp.id && !m.removed_at && !vBranches.includes(m.branch_id)) { m.removed_at = nowISO(); m.removed_by = mine; c.staffLeftBranch?.(m.branch_id, sp.id, "أُزيل من الفرع"); }
       for (const b of vBranches) { const m = T("branch_memberships").find((x) => x.staff_id === sp.id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: sp.id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
       const after = { full_name: vName, phone: maskPhone(vPhone), role: vRole, branch_ids: liveBranches(sp.id) };
       emit("staff_profiles"); emit("branch_memberships");
@@ -299,6 +301,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       const active = p_active == null ? !!sp.is_active : !!p_active; if (!!sp.is_active === active) return { ok: true, unchanged: true };
       const before = { role: sp.role, is_active: !!sp.is_active };
       Object.assign(sp, { is_active: active, updated_at: nowISO(), sessions_ended_at: active ? sp.sessions_ended_at ?? null : nowISO() });
+      if (!active) for (const b of liveBranches(sp.id)) c.staffLeftBranch?.(b, sp.id, "أُوقف حسابه");
       const n = !active && sp.auth_user_id ? 1 : 0;
       emit("staff_profiles"); audit(null, active ? "staff.activated" : "staff.deactivated", "staff_profile", sp.id, { before, after: { role: sp.role, is_active: active }, reason });
       return { ok: true, is_active: active, sessions_ended: n };

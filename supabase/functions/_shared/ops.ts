@@ -158,13 +158,14 @@ export interface BriefingItem { level: "critical" | "warning" | "info"; text: st
 
 export function buildBriefing(ctx: Record<string, any>): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
   const s = ctx?.summary ?? {}; const u = s.units ?? {}; const ar = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
+  const money = !!s.finance;   // PERM-08: a role without money gets no money sentence (not a false zero)
   const items: BriefingItem[] = [];
   const overstays = (ctx.overstays ?? []) as any[]; // deno-lint-ignore no-explicit-any
   const overdue = (ctx.overdue_arrivals ?? []) as any[]; // deno-lint-ignore no-explicit-any
   if (overstays.length) items.push({ level: "critical", text: `${overstays.length} إقامة تجاوزت موعد المغادرة: ${overstays.slice(0, 5).map((o) => `${o.ref} (وحدة ${o.room ?? "—"}، ${o.days_over} يوم)`).join("، ")}`, link: "/staff/reservations" });
   if (overdue.length) items.push({ level: "warning", text: `${overdue.length} وصول متأخر لم يُسجَّل ولم يُعلَن عدم حضور: ${overdue.slice(0, 5).map((o) => o.ref).join("، ")}`, link: "/staff/arrivals" });
-  if (n(ar.expected)) items.push({ level: "info", text: `الوصول اليوم: ${ar.expected} متوقع، ${ar.arrived} وصل، ${ar.pending_identity} بانتظار مطابقة الهوية، ${ar.unpaid} عليه متبقٍ`, link: "/staff/arrivals" });
-  if (n(dp.expected)) items.push({ level: n(dp.with_balance) ? "warning" : "info", text: `المغادرة اليوم: ${dp.expected} متوقعة، ${dp.done} تمت، ${dp.with_balance} عليها رصيد متبقٍ`, link: "/staff/reservations" });
+  if (n(ar.expected)) items.push({ level: "info", text: `الوصول اليوم: ${ar.expected} متوقع، ${ar.arrived} وصل، ${ar.pending_identity} بانتظار مطابقة الهوية${money ? `، ${ar.unpaid} عليه متبقٍ` : ""}`, link: "/staff/arrivals" });
+  if (n(dp.expected)) items.push({ level: money && n(dp.with_balance) ? "warning" : "info", text: `المغادرة اليوم: ${dp.expected} متوقعة، ${dp.done} تمت${money ? `، ${dp.with_balance} عليها رصيد متبقٍ` : ""}`, link: "/staff/reservations" });
   const unitsAttn = (ctx.units_needing_attention ?? []) as any[]; // deno-lint-ignore no-explicit-any
   const arrivingDirty = unitsAttn.filter((x) => x.next_arrival && x.next_arrival <= s.date);
   if (arrivingDirty.length) items.push({ level: "critical", text: `${arrivingDirty.length} وحدة عليها وصول اليوم وليست جاهزة: ${arrivingDirty.map((x) => x.room).join("، ")}`, link: "/staff/housekeeping" });
@@ -174,7 +175,7 @@ export function buildBriefing(ctx: Record<string, any>): { headline: string; ite
   // 0033: a stay's deposit goes back after the departure's inspection; «متابعة الإقامات» lists the departures not closed
   if (n(f.deposit_to_settle_after_checkout)) items.push({ level: "warning", text: `تأمينات لم تُسوَّ بعد المغادرة: ${sar(f.deposit_to_settle_after_checkout)} — تحتاج فحص المغادرة ثم ردًا أو رسم ضرر بسبب`, link: "/staff/followups" });
   if (n(s.tickets_open)) items.push({ level: "warning", text: `${s.tickets_open} تذكرة مفتوحة من المساعد الذكي تحتاج مشرفًا`, link: "/staff/tickets" });
-  items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — ${u.occupied} مؤجرة من ${u.active} فعالة، ${u.ready} جاهزة للدخول، ${u.reserved} محجوزة، ${u.out_of_service} خارج الخدمة. تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` });
+  items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — ${u.occupied} مؤجرة من ${u.active} فعالة، ${u.ready} جاهزة للدخول، ${u.reserved} محجوزة، ${u.out_of_service} خارج الخدمة.${money ? ` تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` : ""}` });
   const crit = items.filter((i) => i.level === "critical").length; const warn = items.filter((i) => i.level === "warning").length;
   const headline = crit ? `${crit} أمر عاجل و${warn} تنبيه يحتاج انتباهك اليوم` : warn ? `لا أمور عاجلة — ${warn} تنبيه للمتابعة` : "اليوم هادئ — لا تنبيهات تشغيلية";
   const text = [headline, ...items.map((i) => (i.level === "critical" ? "🔴 " : i.level === "warning" ? "🟠 " : "🔵 ") + i.text)].join("\n");

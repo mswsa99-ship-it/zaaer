@@ -5,7 +5,7 @@
  * house; finance has no access. Server rules: migration 0025 (tests/sql/keybox_codes_tests.sql); the demo mirrors
  * them (tests/unit/keybox_codes_demo.test.ts).
  */
-import { test, expect } from "./fixtures";
+import { test, expect, checkOut } from "./fixtures";
 
 const unit = (page: import("@playwright/test").Page, room: string) => page.locator(`[data-testid="code-unit"][data-room="${room}"]`);
 
@@ -80,7 +80,7 @@ test.describe("«الرموز» — key-box codes", () => {
     await expect(row).toContainText("تم الدخول");
     await row.getByRole("link", { name: "فتح" }).click();
 
-    await page.getByTestId("in-house").getByRole("button", { name: "تسجيل المغادرة" }).click();
+    await checkOut(page);
     await expect(page.getByTestId("departed")).toBeVisible();
     await expect(page.getByRole("button", { name: "تسجيل المغادرة" })).toHaveCount(0);
 

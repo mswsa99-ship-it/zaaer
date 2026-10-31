@@ -298,7 +298,7 @@ exception when others then perform t_record('SC09a with a night unpaid past its 
 -- ---------------------------------------------------------------- SC10: check-out with nothing owed, for anyone
 do $$ declare res uuid := t_id('resLate'); r jsonb; r2 jsonb; due bigint; begin
   due := (t_fin(res)->>'balance_due')::bigint;
-  r := fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   r2 := fn_staff_checkout(res, 'تجاوز إداري');
   perform t_record('SC10a nothing owed, for anyone: the supervisor and the owner (even with the old override''s reason) are refused, with how to settle it',
@@ -307,7 +307,7 @@ do $$ declare res uuid := t_id('resLate'); r jsonb; r2 jsonb; due bigint; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', due - 3000, 'method', 'cash', 'idempotency_key', 'sc10-pay'));
   -- the supervisor zeroes the rest from the deposit, with a reason (§16: «خصم من التأمين بسبب لتصفير الرصيد»)
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'deposit_apply', 'amount_halalas', 3000, 'reason', 'تسوية الباقي من التأمين', 'idempotency_key', 'sc10-apply'));
-  r := fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   perform t_record('SC10b once settled (a receipt, the rest from the deposit by the supervisor) the departure goes through: cleaning task, not closed while the deposit is held',
     (r->>'ok')::boolean and (t_res(res)).status = 'checked_out' and (t_res(res)).checked_out_by is not null
     and t_count(format('select count(*) from housekeeping_tasks where reservation_id = %L and status = %L', res, 'pending')) = 1
@@ -350,7 +350,7 @@ do $$ declare res uuid; r jsonb; begin
   r := t_check_in(res, 'sc12b');
   if not (r->>'ok')::boolean then raise exception 'check-in refused: %', r; end if;
   r := fn_staff_add_damage(jsonb_build_object('reservation_id', res, 'amount_halalas', 2000, 'reason', 'بقعة على السجاد', 'idempotency_key', 'sc12b-dmg'));
-  r := fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   perform fn_staff_record_inspection(jsonb_build_object('reservation_id', res, 'result', 'notes', 'notes', 'بقعة على السجاد', 'suggested_deduction_halalas', 2000));
   r := fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'deposit_refund', 'amount_halalas', 3000, 'method', 'cash', 'reason', 'باقي التأمين', 'idempotency_key', 'sc12b-ref'));
   perform t_record('SC12b damage 20.00 from a 50.00 deposit, the departure, the inspection with its suggested deduction, then 30.00 back on a separate voucher',
@@ -409,7 +409,7 @@ exception when others then perform t_record('SC14a undoing an arrival: not the s
 do $$ declare res uuid := t_id('resC'); r jsonb; other uuid; m text; begin
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'sc14c-pay'));
-  r := fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   m := t_fails(format('select fn_staff_reopen_stay(%L)', jsonb_build_object('reservation_id', res, 'reason', 'خطأ')), 'FORBIDDEN%');
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   r := fn_staff_reopen_stay(jsonb_build_object('reservation_id', res, 'reason', 'سُجّلت المغادرة قبل خروج الضيف'));
@@ -420,7 +420,7 @@ do $$ declare res uuid := t_id('resC'); r jsonb; other uuid; m text; begin
     and (t_box(t_id('k2'))).code_status = 'active' and (t_unit(t_id('k2'))).status = 'occupied'
     and t_count(format('select count(*) from review_items where entity_id = %L and kind = %L', res, 'stay_reopened')) = 1, m || ' ' || r::text);
   -- leave again; meanwhile the unit is booked for someone else: the reopening is a conflict
-  r := fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   other := t_stay(t_id('k2'), t_today(), t_today() + 1, 'ضيف بعده');
   perform t_record('SC14d a departure is not reopened over the next booking of its unit (a clear conflict), nor after 2 hours',
     t_fails(format('select fn_staff_reopen_stay(%L)', jsonb_build_object('reservation_id', res, 'reason', 'محاولة')), 'ALLOCATION_CONFLICT%') = 'ok'
@@ -564,7 +564,7 @@ do $$ declare res uuid; done0 int; done1 int; r jsonb; st text; begin
   r := t_check_in(res, 'sc21');
   perform t_shift(res, -1);   -- arrived yesterday, leaves today
   done0 := (fn_ops_daily_summary('00000000-0000-0000-0000-000000000010', t_today())->'departures'->>'done')::int;
-  perform fn_staff_check_out(jsonb_build_object('reservation_id', res));
+  perform fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   perform fn_staff_record_inspection(jsonb_build_object('reservation_id', res, 'result', 'ok'));
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'deposit_refund', 'amount_halalas', 5000, 'method', 'cash', 'reason', 'إرجاع التأمين', 'idempotency_key', 'sc21-drf'));
   st := (t_res(res)).status::text;
