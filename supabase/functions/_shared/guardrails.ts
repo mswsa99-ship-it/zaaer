@@ -293,7 +293,8 @@ export function gateOutput(raw: string, ctx: OutputContext): OutputVerdict {
 // ---------------------------------------------------------------------------
 // 4. DETERMINISTIC FALLBACK (works with no AI provider at all)
 // ---------------------------------------------------------------------------
-export type ScriptedIntent = "injection" | "off_scope" | "existing_booking" | "new_booking" | "access_code" | "human" | "greeting" | "thanks" | "policy" | "knowledge" | "unknown";
+export type ScriptedIntent = "injection" | "off_scope" | "existing_booking" | "new_booking" | "access_code" | "human" | "greeting" | "thanks" | "policy" | "knowledge" | "unknown"
+  | "arrival" | "maintenance" | "extension" | "privacy";
 
 export interface ScriptedReply {
   text: string;
@@ -301,7 +302,11 @@ export interface ScriptedReply {
   intent: ScriptedIntent;
   /** set when the answer came from a knowledge_entries row (for usage analytics) */
   knowledgeId?: string;
+  /** GUEST-09: the message needs the reception now (arrival, a fault, an extension): the caller opens a hand-off with this reason */
+  handoff?: string;
 }
+
+const ACCESS_CODE_REFUSAL = "رمز صندوق المفتاح لا يُسلَّم عبر المحادثة. يُعرض فقط في صفحة حجزك الموثقة بعد اعتماد المشرف لجميع شروط الدخول (مطابقة الهوية، السداد، جاهزية الغرفة).";
 
 /** Facts the deterministic path may state (all come from the property's own records, never invented). */
 export interface PropertyKnowledge {
@@ -439,6 +444,10 @@ export function scriptedReply(raw: string, propertyName = PROPERTY_NAME_DEFAULT,
     { label: "حجوزاتي", route: "/booking/lookup" },
     { label: "احجز الآن", route: "/booking/new" },   // the website's page with the platform link; WhatsApp turns it into «احجز الآن»
   ];
+  // GUEST-20: an injection that is after the key-box code gets the code's own refusal, not an unrelated answer
+  if (reason === "injection" && /(رمز|كود|مفتاح|صندوق|code|key)/i.test(t)) {
+    return { text: ACCESS_CODE_REFUSAL, actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "access_code" };
+  }
   if (reason === "injection") {
     return {
       text: "أعتذر، لا أستطيع تنفيذ هذا الطلب. أنا مساعد استقبال رقمي مختص بإجراءات الحجز والوصول فقط. كيف أساعدك في حجزك؟",
@@ -457,6 +466,33 @@ export function scriptedReply(raw: string, propertyName = PROPERTY_NAME_DEFAULT,
       actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "existing_booking",
     };
   }
+  // GUEST-21: an ID number typed in the chat is not kept and the guest is told where it belongs
+  if (/(^|\D)[12]\d{9}(\D|$)/.test(normalizeDigits(raw))) {
+    return {
+      text: "لا ترسل رقم هويتك أو إقامتك في المحادثة. يُدخل في صفحة التسجيل الآمنة: افتح «حجوزاتي» ثم «استكمال البيانات».",
+      actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "privacy",
+    };
+  }
+  // GUEST-09: what cannot wait for a knowledge answer goes to the reception now — an arrival, a fault, an extension
+  const phone = knowledge?.phone ? ` أو اتصل بالاستقبال على ${knowledge.phone}` : "";
+  if (/(خربان|خربانه|خربت|عطل|عطلان|معطل|ما يشتغل|مايشتغل|ما تشتغل|لا يعمل|لا تعمل|تسريب|يسرب|مقطوع|انقطع|broken|not working|leak)/.test(t)) {
+    return {
+      text: `سجّلت بلاغك وحوّلته إلى مشرف الاستقبال الآن ليتابع إصلاحه، وسيرد عليك هنا.${phone ? ` إن كان الأمر عاجلًا${phone}.` : ""}`,
+      actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "maintenance", handoff: "بلاغ عطل من النزيل",
+    };
+  }
+  if (/(تمديد|امدد|امديد|مدد اقامتي|ليله زياده|ليلتين زياده|يوم زياده|extend|extra night)/.test(t)) {
+    return {
+      text: "تمديد الإقامة يحتاج تأكيد التوفر والسعر من الاستقبال. حوّلت طلبك إلى مشرف الاستقبال وسيرد عليك هنا قريبًا.",
+      actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "extension", handoff: "طلب تمديد إقامة",
+    };
+  }
+  if (/(^|\s)(وصلت|وصلنا|انا وصلت|عند الباب|عند البوابه|عند الاستقبال|i'?m here|i have arrived|we have arrived|arrived)(\s|$|[.!؟?])/.test(t)) {
+    return {
+      text: `أهلًا بك! أبلغتُ الاستقبال بوصولك. إن كان لك حجز فافتح «حجوزاتي» لمتابعة خطوات الوصول${phone}.`,
+      actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "arrival", handoff: "النزيل يبلغ بوصوله",
+    };
+  }
   // staff-authored Q&A (knowledge base) — a strong match beats the generic topic answers
   const kb = matchKnowledge(raw, knowledge?.entries);
   const kbActions = [{ label: "حجوزاتي", route: "/booking/lookup" }, { label: "التحدث مع موظف", value: "أرغب بالتحدث مع موظف الاستقبال" }];
@@ -470,7 +506,7 @@ export function scriptedReply(raw: string, propertyName = PROPERTY_NAME_DEFAULT,
   }
   if (/(رمز|كود|مفتاح|صندوق|code|key)/.test(t)) {
     return {
-      text: "رمز صندوق المفتاح لا يُسلَّم عبر المحادثة. يُعرض فقط في صفحة حجزك الموثقة بعد اعتماد المشرف لجميع شروط الدخول (مطابقة الهوية، السداد، جاهزية الغرفة).",
+      text: ACCESS_CODE_REFUSAL,
       actions: [{ label: "حجوزاتي", route: "/booking/lookup" }], intent: "access_code",
     };
   }

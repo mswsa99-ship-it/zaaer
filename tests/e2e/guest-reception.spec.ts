@@ -19,7 +19,7 @@ test.describe("guest reception", () => {
     await expect(page.getByTestId("wa-soon")).toBeVisible();
     await expect(page.getByText("+966500000001")).toBeVisible();
     await expect(page.getByTestId("wa-qr")).toHaveCount(0);
-    await page.getByRole("link", { name: "دخول الموظفين" }).first().click();
+    await page.getByRole("link", { name: "بوابة الموظفين والإدارة" }).first().click();   // GUEST-22: the staff link is in the footer only
     await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
     expect(errors).toEqual([]);
   });
@@ -188,7 +188,7 @@ test.describe("guest reception", () => {
     await expect(bot.last()).toContainText("2️⃣ التحدث مع موظف");
     await bot.last().getByRole("link", { name: /booking\/status/ }).click();
     await expect(page).toHaveURL(/#\/booking\/status\/DEMO/);
-    await expect(page.getByRole("heading", { name: "حالة الحجز" })).toBeVisible();
+    await expect(page.getByTestId("guest-greeting")).toBeVisible();   // GUEST-22: the greeting is the page's heading now
     expect(errors).toEqual([]);
   });
 

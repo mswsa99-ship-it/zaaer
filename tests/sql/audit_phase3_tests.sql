@@ -37,6 +37,9 @@ begin
 exception when others then return sqlerrm;
 end $$;
 
+create or replace function t_token(p uuid) returns text language sql security definer as $$ insert into registration_sessions(reservation_id) values (p) returning token $$;
+create or replace function t_children(p uuid) returns int[] language sql security definer as $$ select children_ages from reservations where id = p $$;
+
 -- ---------------------------------------------------------------- fixtures (the owner)
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
@@ -109,11 +112,48 @@ select t_record('QR07 a mixed code is accepted', t_err(format('select fn_staff_r
 reset role;
 select t_record('QR07b a direct write of a weak code is refused too (every path goes through the key box row)', t_kb_set(t_id('r1'), '0000') like '%code_weak%');
 
+
+-- ---------------------------------------------------------------- QR10–QR14 the guest's registration (0058: GUEST-05, GUEST-07)
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare r jsonb; begin
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', t_id('b'), 'category_id', t_id('cat'), 'guest_name', 'عائلة الاختبار الكريمة', 'guest_phone', '0551000310',
+    'source_id', '00000000-0000-0000-0000-000000000021', 'check_in', (current_date + 1)::text, 'check_out', (current_date + 3)::text, 'adults', 2, 'companions', 1));
+  insert into ids values ('fam', (r->>'id')::uuid);
+end $$;
+reset role;
+do $$ declare tok text := t_token(t_id('fam')); r jsonb; c jsonb; g uuid; begin
+  -- a passport holder writes a two-part name; a wrong passport number is told the passport's rule
+  perform t_record('QR10 a passport holder registers with a two-part name; a wrong passport number is told the passport''s own rule',
+    (fn_guest_submit(tok, null, '{"full_name":"Ahmed Mansoori","identity_type":"passport","identity_number":"N1234567","nationality":"أردني","birth_date":"1990-01-01","relationship":"spouse","consent":"true"}')->>'ok')::boolean
+    and t_err(format('select fn_guest_submit(%L, null, %L)', tok, '{"full_name":"Lina Haddad","identity_type":"passport","identity_number":"12","nationality":"أردني","birth_date":"1990-01-01","consent":"true"}'), '%identity_number_format_passport%') = 'ok'
+    and t_err(format('select fn_guest_submit(%L, null, %L)', tok, '{"full_name":"خالد سعد","identity_type":"national_id","identity_number":"1012345679","nationality":"سعودي","birth_date":"1990-01-01","consent":"true"}'), '%full_name_three_parts%') = 'ok');
+  -- the main guest says the companion is a child of 7: the target drops by one, the supervisor is told
+  c := fn_guest_children(tok);
+  r := fn_guest_set_children(tok, '[7]'::jsonb);
+  perform t_record('QR11 a child under 15 is given by age: counted on the booking, left out of the registration target, the supervisor notified',
+    (c->>'target')::int = 3 and (r->>'target')::int = 2 and t_children(t_id('fam')) = array[7]
+    and exists (select 1 from notifications where link = '/staff/reservations/' || t_id('fam') and title like 'أطفال%'), r::text);
+  perform t_record('QR12 an age of 15 or more, or a word, is not a child''s age',
+    t_err(format('select fn_guest_set_children(%L, %L)', tok, '[15]'), '%child_age%') = 'ok'
+    and t_err(format('select fn_guest_set_children(%L, %L)', tok, '["abc"]'), '%child_age%') = 'ok');
+exception when others then perform t_record('QR11 a child under 15 is given by age: counted on the booking, left out of the registration target, the supervisor notified', false, sqlerrm);
+end $$;
+select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
+set role authenticated;
+select t_record('QR13 the desk corrects the children with a reason (none without one)',
+  t_err(format('select fn_staff_set_children(%L, %L, %L)', t_id('fam'), '[7, 3]', ''), '%reason%') = 'ok'
+  and t_err(format('select fn_staff_set_children(%L, %L, %L)', t_id('fam'), '[7, 3]', 'طفلان مع العائلة'), 'x') = 'accepted');
+select t_record('QR14 with two children the stay registers the two adults only; a third document is refused',
+  t_children(t_id('fam')) = array[7, 3]
+  and (select count(*) from reservation_guests where reservation_id = t_id('fam')) <= 2);
+reset role;
+
 -- a check that comes out NULL counts as a failure here
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),160) as detail from test_results order by ok nulls first, name;
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
   if exists (select 1 from test_results where ok is not true) then raise exception 'REVIEW PHASE 3 TESTS FAILED'; end if;
-  if (select count(*) from test_results) < 8 then raise exception 'REVIEW PHASE 3 TESTS INCOMPLETE: % of 8 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 13 then raise exception 'REVIEW PHASE 3 TESTS INCOMPLETE: % of 13 checks ran', (select count(*) from test_results); end if;
 end $$;

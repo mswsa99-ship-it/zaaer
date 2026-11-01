@@ -180,6 +180,11 @@ export const VALIDATION_AR: Record<string, string> = {
   payout_status: "هذه المطابقة ملغاة مسبقًا.",
   tax_rate: "نسبة الضريبة بين 0 و100%.",
   full_name_three_parts: "الاسم الثلاثي مطلوب كما في الوثيقة.",
+  full_name_two_parts: "اكتب الاسم كما في الجواز أو الهوية الخليجية (الاسم الأول واسم العائلة على الأقل).",
+  identity_number_format_passport: "رقم الجواز من 5 إلى 12 حرفًا ورقمًا إنجليزيًا.",
+  identity_number_format_gcc: "رقم الهوية الخليجية من 6 إلى 15 حرفًا ورقمًا إنجليزيًا.",
+  child_age: "عمر الطفل رقم من 0 إلى 14 سنة.", children: "قائمة الأطفال غير صحيحة.",
+  children_registered: "سُجّلت وثائق نزلاء أكثر مما يبقى بعد الأطفال؛ احذف بيانات أحدهم عبر الاستقبال أولًا.",
   identity_type: "نوع الوثيقة غير صحيح.",
   identity_number_format: "رقم الوثيقة غير صحيح: الهوية الوطنية 10 أرقام تبدأ بـ 1، والإقامة 10 أرقام تبدأ بـ 2.",
   nationality: "الجنسية مطلوبة.",
@@ -350,6 +355,9 @@ export const guestApi = {
   phoneReservations: (token: string) => rpc<PhoneReservations>("fn_guest_phone_reservations", { p_token: token }),
   openPhoneReservation: (token: string, internalRef: string) => rpc<{ status: "ok"; token: string }>("fn_guest_phone_open", { p_token: token, p_internal_ref: internalRef }),
   session: (token: string) => rpc<GuestSession>("fn_guest_session", { p_token: token }),
+  /** 0058 (GUEST-07): the children under 15 by age, and how many people register with a document */
+  children: (token: string) => rpc<{ children_ages: number[]; target: number }>("fn_guest_children", { p_token: token }),
+  setChildren: (token: string, ages: number[]) => rpc<{ ok: boolean; children_ages: number[]; target: number }>("fn_guest_set_children", { p_token: token, p_ages: ages }),
   submit: (token: string, guestId: string | null, payload: Record<string, unknown>) => rpc<{ ok: boolean; guest_id: string }>("fn_guest_submit", { p_token: token, p_guest_id: guestId, p_payload: payload }),
   submitCheckin: (token: string) => rpc<{ ok: boolean; access_status: string }>("fn_guest_submit_checkin", { p_token: token }),
   accessCode: (token: string) => rpc<{ allowed: boolean; code?: string; room_number?: string; reasons?: string[] }>("fn_guest_access_code", { p_token: token }),
@@ -699,6 +707,8 @@ export const opsApi = {
   cancel: (p: { reservation_id: string; reason: string; cancel_number?: string | null; by_platform?: boolean; whole_group?: boolean }) =>
     rpc<{ ok: boolean; duplicate: boolean; cancelled: number; status: string; refund_required_separately?: boolean; platform_collected?: boolean }>("fn_staff_cancel", { p }),
   /** the office path of guest data (decision 2): from the original document, verified at once; a correction with a reason */
+  /** 0058 (GUEST-07): the desk corrects the children under 15 (ages) with a reason */
+  setChildren: (reservationId: string, ages: number[], reason: string) => rpc<{ ok: boolean; children_ages: number[]; target: number }>("fn_staff_set_children", { p_reservation: reservationId, p_ages: ages, p_reason: reason }),
   enterGuest: (p: { reservation_id: string; guest_id?: string | null; full_name: string; identity_type: string; identity_number: string; identity_issue_number?: string | null; nationality: string; birth_date: string; phone?: string | null; relationship?: string | null; document_matched: boolean; reason?: string | null }) =>
     rpc<{ ok: boolean; guest_id: string; identity_status: string }>("fn_staff_enter_guest", { p }),
   /** a hold on one booking (decision 21): placed by the supervisor and up, lifted by the owner or a manager */

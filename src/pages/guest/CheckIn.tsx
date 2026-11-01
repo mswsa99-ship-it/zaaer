@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
+import { GuestLinkError } from "../../components/GuestLinkError";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, KeyRound, Lock, CheckCircle2, AlertCircle, EyeOff } from "lucide-react";
+import { ArrowRight, KeyRound, Lock, CheckCircle2, AlertCircle, EyeOff } from "lucide-react";
 import { guestApi, toArabicError } from "../../lib/api";
-import { Card, Spinner, ErrorBanner } from "../../components/ui";
+import { Card, Spinner } from "../../components/ui";
 
 const AUTO_HIDE_MS = 60_000;
 
@@ -50,11 +51,11 @@ export default function CheckIn() {
   }
 
   if (loading) return <div className="mx-auto max-w-md px-4 py-12"><Spinner className="mx-auto h-8 w-8" /></div>;
-  if (error) return <div className="mx-auto max-w-md px-4 py-12"><ErrorBanner message={error} /><Link to="/" className="mt-4 inline-block text-sm text-brand-600">العودة</Link></div>;
+  if (error) return <GuestLinkError message={error} />;
 
   return (
     <div className="mx-auto max-w-md px-4 py-8 lg:py-12">
-      <Link to={`/booking/status/${token}`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> حالة الحجز</Link>
+      <Link to={`/booking/status/${token}`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowRight className="h-4 w-4" /> حالة الحجز</Link>
 
       <div className="mb-6 text-center">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-500/10 text-accent-600"><KeyRound className="h-7 w-7" /></div>

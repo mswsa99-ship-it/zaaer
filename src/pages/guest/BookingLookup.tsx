@@ -1,6 +1,7 @@
+import { COUNT } from "../../lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Smartphone, MessageCircle, CalendarDays, ChevronLeft, Hash } from "lucide-react";
+import { ArrowRight, Smartphone, MessageCircle, CalendarDays, ChevronLeft, Hash } from "lucide-react";
 import { guestApi, toArabicError, type PhoneReservation } from "../../lib/api";
 import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { RESERVATION_STATUS_LABELS, type ReservationStatus } from "../../lib/types";
@@ -12,6 +13,13 @@ import { RESERVATION_STATUS_LABELS, type ReservationStatus } from "../../lib/typ
 type Step = "phone" | "code" | "ref" | "list";
 const SESSION_KEY = "guest_phone_session";
 const toLatin = (s: string) => s.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+
+/** GUEST-13: «r26a0008», «26A0008» and «R 26A0008» are R-26A0008; a platform's own number is passed as typed */
+function normalizeRef(v: string): string {
+  const t = toLatin(v).trim().toUpperCase().replace(/\s+/g, "");
+  const m = t.match(/^R?-?(\d{2}[A-Z]\d{4})$/);
+  return m ? `R-${m[1]}` : t;
+}
 
 export default function BookingLookup() {
   const navigate = useNavigate();
@@ -44,6 +52,8 @@ export default function BookingLookup() {
     } catch {
       try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
       setStep("phone");
+      // GUEST-14: a session that ran out says so, instead of a silent return to the first step
+      setNotice("انتهت الجلسة. أعد إدخال رقم جوالك لعرض حجوزاتك.");
     }
     setLoading(false);
   }
@@ -85,7 +95,7 @@ export default function BookingLookup() {
     if (!ref.trim()) { setError("اكتب رقم الحجز."); return; }
     setLoading(true);
     try {
-      const r = await guestApi.verifyPhoneRef(toLatin(phone), ref.trim());
+      const r = await guestApi.verifyPhoneRef(toLatin(phone), normalizeRef(ref));
       if (r.status === "ok" && r.token) { await showList(r.token, true); return; }
       setError(r.status === "throttled" ? "محاولات كثيرة. حاول بعد 15 دقيقة أو تواصل مع الاستقبال." : "لم نجد حجزًا بهذا الرقم على هذا الجوال.");
     } catch (err) { setError(toArabicError(err)); }
@@ -99,7 +109,7 @@ export default function BookingLookup() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-8 lg:py-12">
-      <Link to="/reception" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> رجوع</Link>
+      <Link to="/reception" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowRight className="h-4 w-4" /> رجوع</Link>
 
       <div className="mb-6 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
@@ -143,7 +153,7 @@ export default function BookingLookup() {
           <form onSubmit={submitRef} className="space-y-4">
             <div className="relative">
               <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-              <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="رقم الحجز" className="input text-center" dir="ltr" autoComplete="off" autoFocus aria-label="رقم الحجز" />
+              <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="رقم الحجز (مثال: R-26A0008) أو رقم المنصة" className="input text-center" dir="ltr" autoComplete="off" autoFocus aria-label="رقم الحجز" />
             </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>{loading ? <Spinner /> : "عرض حجوزاتي"}</button>
             <button type="button" onClick={restart} className="w-full text-xs text-ink-400 hover:text-ink-600">تغيير الرقم</button>
@@ -162,7 +172,7 @@ export default function BookingLookup() {
                   <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700">{RESERVATION_STATUS_LABELS[r.status as ReservationStatus] ?? r.status}</span>
                 </div>
                 <p className="mt-1 text-sm text-ink-500" dir="ltr">{r.check_in} → {r.check_out}</p>
-                <p className="mt-0.5 text-xs text-ink-400">{r.nights} {r.nights === 1 ? "ليلة" : "ليالٍ"}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span dir="ltr">{r.ref}</span></p>
+                <p className="mt-0.5 text-xs text-ink-400">{COUNT.night(r.nights)}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span dir="ltr">{r.ref}</span></p>
               </div>
               <ChevronLeft className="h-5 w-5 shrink-0 text-ink-400" />
             </button>

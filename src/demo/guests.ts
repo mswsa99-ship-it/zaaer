@@ -13,7 +13,7 @@
  */
 import { uid, nowISO, ORG, type Row } from "./data";
 import type { Permissions } from "./permissions";
-import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, latinDigits } from "../lib/validation";
+import { checkIdentityNumber, checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, registrationTarget } from "../lib/validation";
 
 export interface GuestCtx extends Permissions {
   T: (t: string) => Row[];
@@ -97,7 +97,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     birth_year: g.birth_date ? Number(String(g.birth_date).slice(0, 4)) : null, phone: maskPhone(g.phone), relationship: g.relationship,
     verification_status: g.verification_status, entry_path: g.entry_path ?? null }).filter(([, v]) => v != null)) : null;
   const rollup = (r: Row) => {
-    const g = guestsOf(r.id); const req = r.adults + r.companions;
+    const g = guestsOf(r.id); const req = registrationTarget(r);
     const v = g.filter((x) => x.verification_status === "verified").length, s = g.filter((x) => x.data_submitted).length, rj = g.filter((x) => x.verification_status === "rejected").length;
     const st = v >= req && v === g.length && g.length > 0 ? "verified" : rj > 0 ? "rejected" : s >= req && s === g.length && g.length > 0 ? "pending_supervisor" : s > 0 ? "data_submitted" : "not_started";
     if (st !== r.identity_status) {
@@ -194,7 +194,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       const r = res(p.reservation_id); requireBranch(r.branch_id);
       if (["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(r.status)) throw new Error("RESERVATION_NOT_EDITABLE");
       if (p.document_matched !== true) throw new Error("VALIDATION: document_matched");
-      const name = String(p.full_name ?? "").trim(); if (name.split(/\s+/).length < 3) throw new Error("VALIDATION: full_name_three_parts"); checkPersonName(name);
+      const name = String(p.full_name ?? "").trim(); checkNameParts(name, String(p.identity_type ?? "")); checkPersonName(name);
       const type = String(p.identity_type ?? ""); if (!["national_id", "iqama", "passport", "gcc_id"].includes(type)) throw new Error("VALIDATION: identity_type");
       const number = latinDigits(String(p.identity_number ?? "")).replace(/\s/g, ""); const g = p.guest_id ? byId("reservation_guests", p.guest_id) : null;
       if (p.guest_id && (!g || g.reservation_id !== r.id)) throw new Error("GUEST_NOT_FOUND");
@@ -215,7 +215,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
           entered_by: staffId(), entered_at: nowISO(), verified_by: staffId(), verified_at: nowISO() });
         target = g;
       } else {
-        if (guestsOf(r.id).length >= r.adults + r.companions) throw new Error("GUEST_LIMIT_REACHED");
+        if (guestsOf(r.id).length >= registrationTarget(r)) throw new Error("GUEST_LIMIT_REACHED");
         target = { id: uid(), reservation_id: r.id, guest_profile_id: null, is_primary: false, full_name: name, identity_type: type, identity_number_last4: number.slice(-4), identity_issue_number: issue, identity_fingerprint: fp, nationality: nat, birth_date: birth, phone, phone_verified: false, relationship: rel ?? "other", verification_status: "verified", data_submitted: true, entry_path: "office", entered_by: staffId(), entered_at: nowISO(), verified_by: staffId(), verified_at: nowISO(), created_at: nowISO() };
         T("reservation_guests").push(target);
       }

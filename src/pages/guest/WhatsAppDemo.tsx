@@ -147,7 +147,7 @@ export default function WhatsAppDemo() {
         </div>
         <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="flex items-center gap-2 bg-[#F0F2F5] px-3 py-2">
           <input value={text} onChange={(e) => setText(e.target.value)} className="input flex-1 rounded-full bg-white" placeholder="اكتب رسالة" aria-label="رسالتك" disabled={!linked} data-testid="sim-input" />
-          <button type="submit" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white disabled:opacity-50" disabled={!linked || typing || !text.trim()} aria-label="إرسال" data-testid="sim-send">
+          <button type="submit" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#128C7E] text-white disabled:opacity-50" disabled={!linked || typing || !text.trim()} aria-label="إرسال" data-testid="sim-send">
             {typing ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4 -scale-x-100" />}
           </button>
         </form>

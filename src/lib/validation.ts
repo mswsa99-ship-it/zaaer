@@ -59,8 +59,21 @@ export function maxBirthDate(today: string): string {
 export function checkIdentityNumber(type: string, number: string): void {
   if (type === "national_id" && !/^1\d{9}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
   if (type === "iqama" && !/^2\d{9}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
-  if (type === "gcc_id" && !/^[A-Za-z0-9]{6,15}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
-  if (type === "passport" && !/^[A-Za-z0-9]{5,12}$/.test(number)) throw new Error("VALIDATION: identity_number_format");
+  // 0058 (GUEST-05): a passport or a GCC ID is told its own rule, not the Saudi one
+  if (type === "gcc_id" && !/^[A-Za-z0-9]{6,15}$/.test(number)) throw new Error("VALIDATION: identity_number_format_gcc");
+  if (type === "passport" && !/^[A-Za-z0-9]{5,12}$/.test(number)) throw new Error("VALIDATION: identity_number_format_passport");
+}
+
+/** 0058 (GUEST-05): the name as in the document — two parts for a passport or a GCC ID, three for a Saudi ID or iqama. */
+export function checkNameParts(name: string, type: string): void {
+  const short = type === "passport" || type === "gcc_id";
+  if (String(name ?? "").trim().split(/\s+/).filter(Boolean).length < (short ? 2 : 3)) throw new Error(short ? "VALIDATION: full_name_two_parts" : "VALIDATION: full_name_three_parts");
+}
+
+/** 0058 (GUEST-07): the people registered with a document — everyone but the children under 15, never fewer than the adults. */
+export function registrationTarget(r: { adults?: unknown; companions?: unknown; children_ages?: unknown }): number {
+  const adults = Number(r.adults ?? 0), companions = Number(r.companions ?? 0), children = Array.isArray(r.children_ages) ? r.children_ages.length : 0;
+  return Math.max(adults, adults + companions - children);
 }
 
 /** The form's live hint: the Arabic message for the rule a value breaks, or null when it passes. */

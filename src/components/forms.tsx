@@ -6,21 +6,38 @@ import { opsApi, toArabicError, type DefinitionEntity } from "../lib/api";
 import { formatMoneyInput, moneyTextToHalalas, sanitizeMoneyText } from "../lib/money";
 import { numericText } from "../lib/validation";
 
-/** Modal that never closes on its own after a failed save — the form keeps its values. */
+/**
+ * Modal that never closes on its own after a failed save — the form keeps its values. GUEST-11 / A11Y: focus moves into
+ * the dialog when it opens, Tab stays inside it, Escape closes it, and focus returns to the opener afterwards.
+ */
 export function Modal({ open, title, onClose, children, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+  const box = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const opener = document.activeElement as HTMLElement | null;
+    const focusables = () => Array.from(box.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    const first = focusables().find((el) => el.getAttribute("aria-label") !== "إغلاق") ?? focusables()[0];
+    (first ?? box.current)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { close.current(); return; }
+      if (e.key !== "Tab") return;
+      const list = focusables(); if (list.length === 0) return;
+      const a = list[0], z = list[list.length - 1];
+      if (e.shiftKey && (document.activeElement === a || !box.current?.contains(document.activeElement))) { e.preventDefault(); z.focus(); }
+      else if (!e.shiftKey && (document.activeElement === z || !box.current?.contains(document.activeElement))) { e.preventDefault(); a.focus(); }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    return () => { window.removeEventListener("keydown", onKey); if (opener && document.contains(opener)) opener.focus(); };
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={cn("card max-h-[92vh] w-full overflow-y-auto p-5 sm:p-6", wide ? "sm:max-w-3xl" : "sm:max-w-lg")} role="dialog" aria-modal="true">
+      <div ref={box} tabIndex={-1} className={cn("card max-h-[92vh] w-full overflow-y-auto p-5 outline-none sm:p-6", wide ? "sm:max-w-3xl" : "sm:max-w-lg")} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-ink-800">{title}</h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-ink-400 hover:bg-ink-50 hover:text-ink-700" aria-label="إغلاق"><X className="h-4 w-4" /></button>
+          <h3 id={titleId} className="text-base font-semibold text-ink-800">{title}</h3>
+          <button onClick={onClose} className="rounded-lg p-2 text-ink-400 hover:bg-ink-50 hover:text-ink-700" aria-label="إغلاق"><X className="h-4 w-4" /></button>
         </div>
         {children}
       </div>

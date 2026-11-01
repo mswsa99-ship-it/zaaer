@@ -1,6 +1,6 @@
 import { DemoBanner } from "../components/DemoBanner";
 import { Outlet, Link } from "react-router-dom";
-import { Hotel, ShieldCheck, LogIn } from "lucide-react";
+import { Hotel, ShieldCheck } from "lucide-react";
 import { useOrganizationName } from "../lib/organization";
 
 export default function GuestLayout() {
@@ -21,7 +21,6 @@ export default function GuestLayout() {
           </Link>
           <div className="flex items-center gap-4 text-xs text-ink-400">
             <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4 text-accent-500" /> اتصال آمن</span>
-            <Link to="/staff/login" className="inline-flex items-center gap-1 rounded-lg border border-ink-200 px-2.5 py-1.5 font-medium text-ink-600 hover:border-brand-300 hover:text-brand-700"><LogIn className="h-3.5 w-3.5" /> دخول الموظفين</Link>
           </div>
         </div>
       </header>

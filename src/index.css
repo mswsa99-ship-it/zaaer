@@ -51,7 +51,8 @@ textarea {
     @apply btn bg-brand-600 text-white hover:bg-brand-700;
   }
   .btn-accent {
-    @apply btn bg-accent-500 text-white hover:bg-accent-600;
+    /* GUEST-12: white text needs the dark accent (accent-700, 5.71:1); accent-500 was 2.60:1 */
+    @apply btn bg-accent-700 text-white hover:brightness-90;
   }
   .btn-ghost {
     @apply btn bg-transparent text-ink-700 hover:bg-ink-100;

@@ -10,7 +10,9 @@ import {
   RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, RELATIONSHIP_LABELS, IDENTITY_TYPE_LABELS, ROOM_STATUS_LABELS,
   type ReservationStatus, type PaymentStatus, type GuestVerificationStatus, type AccessStatus, type IdentityType, type RoomStatus,
 } from "../../lib/types";
-import { formatCurrency, maskId, formatDateTime, todayISO } from "../../lib/utils";
+import { formatCurrency, maskId, formatDateTime, todayISO, COUNT } from "../../lib/utils";
+import { Modal, Field, ActionForm, Submit, ReasonInput } from "../../components/forms";
+import { latinDigits, registrationTarget } from "../../lib/validation";
 import { ReservationOperations } from "../../components/ReservationOperations";
 import { StayProgress, type StaySection } from "../../components/StayProgress";
 import { StayCycle } from "../../components/StayCycle";
@@ -24,7 +26,7 @@ interface Detail {
   expected_arrival_time: string | null; expected_departure_time: string | null; group_ref: string | null;
   rent_amount_halalas: number; total_halalas: number; paid_halalas: number;
   payment_status: PaymentStatus; identity_status: GuestVerificationStatus;
-  government_registration: boolean; shomoos_accepted_at?: string | null; gov_registration_ref: string | null; access_status: AccessStatus; keybox_delivered: boolean;
+  government_registration: boolean; shomoos_accepted_at?: string | null; children_ages?: number[] | null; gov_registration_ref: string | null; access_status: AccessStatus; keybox_delivered: boolean;
   security_hold: boolean; security_hold_reason: string | null;
   checkin_approved_by: string | null; checkin_approved_at: string | null; actual_check_in: string | null; actual_check_out: string | null;
   notes: string | null;
@@ -46,7 +48,7 @@ const RESERVATION_SELECT = `
   id, internal_ref, external_ref, status, branch_id, room_id, room_category_id,
   check_in, check_out, adults, companions,
   payment_status, identity_status, expected_arrival_time, expected_departure_time, group_ref,
-  government_registration, shomoos_accepted_at, gov_registration_ref, access_status, keybox_delivered,
+  government_registration, shomoos_accepted_at, children_ages, gov_registration_ref, access_status, keybox_delivered,
   security_hold, security_hold_reason,
   checkin_approved_by, checkin_approved_at, actual_check_in, actual_check_out, notes,
   source:booking_sources(name), room:rooms(room_number, status), room_category:room_categories(name_ar), branch:branches(name_ar)
@@ -224,7 +226,7 @@ export default function StaffReservationDetail() {
             <div className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-brand-600" /><h2 className="text-base font-semibold text-ink-800">النزلاء ومطابقة الهوية</h2></div>
             <div className="flex flex-wrap gap-2">
               {canMoney && <button onClick={() => setSummaryOpen(true)} className="btn-outline text-xs" data-testid="stay-summary-btn"><Printer className="h-3.5 w-3.5" /> ملخص الإقامة</button>}
-              {canOffice && guests.length < detail.adults + detail.companions && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: null })} className="btn-outline text-xs" data-testid="office-add-guest"><UserPlus className="h-3.5 w-3.5" /> إضافة نزيل من الوثيقة</button>}
+              {canOffice && guests.length < registrationTarget(detail) && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: null })} className="btn-outline text-xs" data-testid="office-add-guest"><UserPlus className="h-3.5 w-3.5" /> إضافة نزيل من الوثيقة</button>}
             </div>
           </div>
           <div className="space-y-3">
@@ -275,8 +277,10 @@ export default function StaffReservationDetail() {
                 )}
               </div>
             ))}
+            {/* 0058 (GUEST-07): the children under 15 — counted, not registered with a document */}
+            <ChildrenRow r={detail} canEdit={canOffice && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status)} onSaved={load} />
             {/* FRONT-11: each guest the booking counts but has not recorded yet has its own row and its own action */}
-            {!["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && Array.from({ length: Math.max(0, detail.adults + detail.companions - guests.length) }, (_, k) => (
+            {!["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && Array.from({ length: Math.max(0, registrationTarget(detail) - guests.length) }, (_, k) => (
               <div key={`missing-${k}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-warning-500/40 bg-warning-500/5 p-3" data-testid="missing-guest">
                 <div>
                   <p className="text-sm font-medium text-ink-800">النزيل {guests.length + k + 1} — لم تُدخل بياناته</p>
@@ -415,6 +419,34 @@ function AuditLog({ reservationId, refreshKey }: { reservationId: string; refres
         </div>
       ))}
       {events.length === 0 && <p className="text-xs text-ink-400">لا توجد عمليات مسجّلة بعد.</p>}
+    </div>
+  );
+}
+
+/** 0058 (GUEST-07): the children under 15 on the booking, by age; the desk corrects them with a reason. */
+function ChildrenRow({ r, canEdit, onSaved }: { r: { id: string; children_ages?: number[] | null }; canEdit: boolean; onSaved: () => void }) {
+  const ages = r.children_ages ?? [];
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(ages.join("، "));
+  const [reason, setReason] = useState("");
+  if (ages.length === 0 && !canEdit) return null;
+  return (
+    <div className="rounded-xl border border-ink-100 p-3" data-testid="children-row">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-700">{ages.length ? <>أطفال دون 15 سنة: <span className="font-semibold">{COUNT.child(ages.length)}</span> — الأعمار {ages.join("، ")}</> : "لا أطفال دون 15 سنة في الحجز"}</p>
+        {canEdit && <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => { setText(ages.join("، ")); setReason(""); setOpen(true); }}>تعديل</button>}
+      </div>
+      <Modal open={open} title="الأطفال دون 15 سنة" onClose={() => setOpen(false)}>
+        <ActionForm onSubmit={async () => {
+          const list = latinDigits(text).split(/[\s,،]+/).filter(Boolean);
+          if (list.some((x) => !/^\d{1,2}$/.test(x) || Number(x) > 14)) throw new Error("VALIDATION: child_age");
+          await opsApi.setChildren(r.id, list.map(Number), reason); setOpen(false); onSaved();
+        }}>
+          <Field label="الأعمار (مفصولة بفاصلة)" hint="كل عمر من 0 إلى 14. يُحسبون في نزلاء الحجز ولا يُسجَّلون بوثيقة."><input className="input" dir="ltr" value={text} onChange={(e) => setText(e.target.value)} placeholder="7، 3" /></Field>
+          <ReasonInput value={reason} onChange={setReason} />
+          <Submit label="حفظ" onCancel={() => setOpen(false)} />
+        </ActionForm>
+      </Modal>
     </div>
   );
 }

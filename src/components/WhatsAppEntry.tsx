@@ -61,7 +61,7 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
           <div className="mx-auto mt-8 w-fit rounded-3xl border border-ink-100 bg-white p-4 shadow-sm">
             {qr ? <img src={qr} alt="رمز QR لمحادثة واتساب الاستقبال" className={large ? "h-80 w-80" : "h-64 w-64"} data-testid="wa-qr" /> : <Spinner className="m-24 h-6 w-6" />}
           </div>
-          <a href={waLink(info.wa_phone)} target="_blank" rel="noopener noreferrer" className="btn-primary mx-auto mt-6 inline-flex w-full max-w-xs justify-center bg-[#25D366] hover:bg-[#1ebe5b]" data-testid="wa-open">
+          <a href={waLink(info.wa_phone)} target="_blank" rel="noopener noreferrer" className="btn-primary mx-auto mt-6 inline-flex w-full max-w-xs justify-center bg-[#25D366] text-[#0b141a] hover:bg-[#1ebe5b]" data-testid="wa-open">
             <MessageCircle className="h-5 w-5" /> افتح واتساب
           </a>
           <p className="mt-3 text-sm text-ink-400" dir="ltr">+{info.wa_phone}</p>

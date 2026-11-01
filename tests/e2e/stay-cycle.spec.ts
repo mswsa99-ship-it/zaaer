@@ -191,7 +191,7 @@ test.describe("the stay cycle (phase 3)", () => {
     await open("0501110008", "R-26A0008");   // arriving today, the first night paid
     await expect(page.getByText("تسجيل الوصول في الاستقبال")).toBeVisible();
     await expect(page.getByText("عند وصولك: التسجيل في شموس والتأمين في الاستقبال")).toBeVisible();
-    await expect(page.getByText("قبل تسجيل الوصول:")).toBeVisible();
+    await expect(page.getByTestId("guest-reasons")).toContainText("يُنجزها الاستقبال عند وصولك");   // GUEST-08: the desk's steps in the guest's words
     await expect(page.getByText("رمز صندوق المفتاح")).toBeVisible();
     await open("0501110005", "R-26A0005");   // in house in the annex: no key box
     await expect(page.getByText("مفتاح الوحدة")).toBeVisible();

@@ -2542,3 +2542,18 @@ describe("Review Phase 3a — the front desk in the demo (0057)", () => {
     expect(await fails(rpc("fn_staff_rotate_keybox_code", { p_room: room.id, p_new_code: "7319", p_field_tested: true }))).toBe("accepted");
   });
 });
+
+describe("Review Phase 3b — the guest's registration in the demo (0058)", () => {
+  const fails = async (p: Promise<unknown>) => { try { await p; return "accepted"; } catch (e) { return (e as Error).message; } };
+  it("QR17 a passport holder registers with a two-part name; children under 15 leave the registration target and the desk corrects them with a reason", async () => {
+    const r = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: BRANCH, category_id: CATEGORY, source_id: SOURCE, check_in: fut(3), check_out: fut(5), guest_name: "عائلة الاختبار الكريمة", guest_phone: "0551000391", adults: 2, companions: 1 } });
+    const { token } = await rpc<any>("fn_guest_lookup", { p_external_ref: r.internal_ref, p_phone_last4: "0391" });
+    expect((await rpc<any>("fn_guest_children", { p_token: token })).target).toBe(3);
+    expect(await fails(rpc("fn_guest_submit", { p_token: token, p_guest_id: null, p_payload: { full_name: "Lina Haddad", identity_type: "passport", identity_number: "12", nationality: "أردني", birth_date: "1990-01-01", consent: "true" } }))).toBe("VALIDATION: identity_number_format_passport");
+    expect(await fails(rpc("fn_guest_submit", { p_token: token, p_guest_id: null, p_payload: { full_name: "خالد سعد", identity_type: "national_id", identity_number: "1012345679", nationality: "سعودي", birth_date: "1990-01-01", consent: "true" } }))).toBe("VALIDATION: full_name_three_parts");
+    expect((await rpc<any>("fn_guest_set_children", { p_token: token, p_ages: [7] })).target).toBe(2);
+    expect(await fails(rpc("fn_guest_set_children", { p_token: token, p_ages: [15] }))).toBe("VALIDATION: child_age");
+    expect(await fails(rpc("fn_staff_set_children", { p_reservation: r.id, p_ages: [7, 3], p_reason: "" }))).toBe("VALIDATION: reason");
+    expect((await rpc<any>("fn_staff_set_children", { p_reservation: r.id, p_ages: [7, 3], p_reason: "طفلان مع العائلة" })).children_ages).toEqual([7, 3]);
+  });
+});

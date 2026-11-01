@@ -148,6 +148,9 @@ Deno.serve(async (req) => {
     await noteScripted(r);
     if (/(موظف|مشرف|انسان|بشري|human|staff|supervisor)/.test(message)) {
       await executeTool("request_human_assistance", { reason: "طلب صريح من النزيل (مسار تقليدي)" }, ctx());
+    } else if (r.handoff) {
+      // GUEST-09: an arrival, a fault or an extension reaches the reception at once
+      await executeTool("request_human_assistance", { reason: r.handoff }, ctx());
     }
     await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "assistant", content: r.text, meta: { mode: "scripted", reason } });
     await bump({ requests: 1, fallbacks: reason === "fallback" ? 1 : 0, guardrail_blocks: reason === "injection" || reason === "off_scope" ? 1 : 0 });
@@ -176,6 +179,9 @@ Deno.serve(async (req) => {
       await bump({ requests: 1 });
       return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: false, reply: pre.text, actions: pre.actions, intent: pre.intent, ai_status: s.enabled ? "knowledge_hit" : "disabled" });
     }
+    // GUEST-09 / GUEST-21: an arrival, a fault, an extension or an ID number typed in the chat is answered the same way
+    // whether the model is on or not, and the first three reach the reception at once
+    if (pre.handoff || pre.intent === "privacy") return await respondScripted("in_scope", { ai_status: "scripted_route" });
   }
 
   // ---- AI disabled / provider missing → scripted ----------------------------

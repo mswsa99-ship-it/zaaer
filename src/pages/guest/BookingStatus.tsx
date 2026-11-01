@@ -1,11 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
+import { GuestLinkError } from "../../components/GuestLinkError";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText, XCircle, Phone } from "lucide-react";
 import { guestApi, toArabicError, type GuestSession, type PublicBranch, type GuestStaySummary } from "../../lib/api";
-import { Card, Spinner, EmptyState, ErrorBanner } from "../../components/ui";
+import { Card, Spinner, ErrorBanner } from "../../components/ui";
 import { GuestBranchGuide } from "../../components/GuestBranchGuide";
 import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
 import { formatCurrency, formatHijri, todayISO } from "../../lib/utils";
+
+/** GUEST-08: the reasons a guest can act on (their data, their payment); the rest is the desk's work */
+const guestCanAct = (x: string) => /بيانات|النزلاء المسجلين|سداد|دفع|مبلغ|المتبقي|الليلة الأولى/.test(x);
 
 export default function BookingStatus() {
   const { token } = useParams();
@@ -16,6 +20,7 @@ export default function BookingStatus() {
   const [acting, setActing] = useState(false);
   const [branch, setBranch] = useState<PublicBranch | null>(null);
   const [rules, setRules] = useState<GuestStaySummary["policies"] | null>(null);
+  const [target, setTarget] = useState<number | null>(null);   // 0058 (GUEST-07): children under 15 are not registered
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -30,16 +35,19 @@ export default function BookingStatus() {
   useEffect(() => { if (!branchId) return; guestApi.branch(branchId).then(setBranch).catch(() => setBranch(null)); }, [branchId]);
   // U3: the stay rules are the branch's own policies (set in the settings), read once from the stay summary
   useEffect(() => { if (!token || !branchId) return; guestApi.staySummary(token).then((x) => setRules(x?.policies ?? null)).catch(() => setRules(null)); }, [token, branchId]);
+  useEffect(() => { if (!token || !branchId) return; guestApi.children(token).then((x) => setTarget(x?.target ?? null)).catch(() => setTarget(null)); }, [token, branchId]);
   // Poll every 15s so supervisor approvals show up without a reload (guest has no realtime access to tables)
   useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
   if (loading) return <div className="mx-auto max-w-md px-4 py-12"><Spinner className="mx-auto h-8 w-8" /></div>;
-  if (error || !data) return <div className="mx-auto max-w-md px-4 py-12"><EmptyState title={error ?? "الرابط غير صالح"} /><Link to="/booking/lookup" className="mt-4 inline-block text-sm text-brand-600">إعادة التحقق</Link></div>;
+  if (error || !data) return <GuestLinkError message={error ?? "الرابط غير صالح"} />;
 
   const r = data.reservation;
-  const required = r.adults + r.companions;
+  const required = target ?? r.adults + r.companions;
   const submitted = data.guests.filter((g) => g.data_submitted).length;
-  const delivered = ["delivered", "acknowledged"].includes(r.access_status);
+  // GUEST-02: after departure the code is no longer «ready» here (the code page refuses it too)
+  const departed = ["checked_out", "closed"].includes(r.status);
+  const delivered = ["delivered", "acknowledged"].includes(r.access_status) && !departed;
   const dueHalalas = r.total_halalas - r.paid_halalas;
   // 0033: the arrival is registered at reception; a unit with a key box then gets its code, one without its key
   const arrived = ["checked_in", "checked_out", "closed"].includes(r.status);
@@ -47,7 +55,7 @@ export default function BookingStatus() {
   const firstNightPaid = r.first_night_paid ?? r.payment_status === "paid";
 
   const steps = [
-    { label: "تسجيل بيانات النزلاء", icon: UserCheck, done: submitted >= required && required > 0, statusText: `${submitted} من ${required}`, action: submitted < required ? { label: "استكمال البيانات", to: `/booking/registration/${token}` } : null },
+    { label: "تسجيل بيانات النزلاء", icon: UserCheck, done: submitted >= required && required > 0, statusText: `${submitted} من ${required}`, action: submitted < required && !departed && !["checked_in"].includes(r.status) ? { label: "استكمال البيانات", to: `/booking/registration/${token}` } : null },
     { label: "مطابقة الهوية (الاستقبال)", icon: FileCheck, done: r.identity_status === "verified", statusText: GUEST_VERIFICATION_LABELS[r.identity_status as GuestVerificationStatus] },
     { label: "سداد الليلة الأولى", icon: CreditCard, done: firstNightPaid, statusText: `${PAYMENT_STATUS_LABELS[r.payment_status as PaymentStatus]}${dueHalalas > 0 ? ` · المتبقي على الإقامة ${formatCurrency(dueHalalas / 100)}` : ""}` },
     { label: "تسجيل الوصول في الاستقبال", icon: LogIn, done: arrived, statusText: arrived ? "تم" : "عند وصولك: التسجيل في شموس والتأمين في الاستقبال" },
@@ -94,17 +102,18 @@ export default function BookingStatus() {
   const greeting = ["checked_out", "closed"].includes(r.status) ? "شكرًا لإقامتك معنا"
     : arrived ? "نتمنى لك إقامة طيبة"
     : r.check_in === today ? "أهلًا بك، إقامتك تبدأ اليوم"
-    : r.check_in > today ? `أهلًا بك، موعد وصولك ${r.check_in}` : "أهلًا بك";
+    : r.check_in > today ? `أهلًا بك، موعد وصولك ${r.check_in}`
+    : `موعد وصولك كان ${r.check_in} — إن كنت ما زلت قادمًا فتواصل مع الاستقبال`;   // GUEST-18: an arrival date that has passed
   const checkInTime = branch?.check_in_time?.slice(0, 5);
 
   return (
     <div>
       <header className="bg-brand-800 px-4 pb-10 pt-6 text-white" data-testid="guest-hero">
         <div className="mx-auto max-w-lg">
-          <Link to="/" className="mb-3 inline-flex items-center gap-1.5 text-sm text-brand-100 hover:text-white"><ArrowLeft className="h-4 w-4" /> الرئيسية</Link>
+          <Link to="/" className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-brand-100 hover:text-white"><ArrowRight className="h-4 w-4" /> الرئيسية</Link>
           <p className="font-semibold">{r.branch_name}</p>
-          <p className="mt-2 text-xl font-bold leading-8" data-testid="guest-greeting">{greeting}</p>
-          <h1 className="mt-1 text-sm font-medium text-brand-100">حالة الحجز · <span className="font-mono" dir="ltr">{r.internal_ref}</span>{checkInTime && !arrived ? ` · الوصول من ${checkInTime}` : ""}</h1>
+          <h1 className="mt-2 text-xl font-bold leading-8" data-testid="guest-greeting">{greeting}</h1>
+          <p className="mt-1 text-sm font-medium text-brand-100">حالة الحجز · <span className="font-mono" dir="ltr">{r.internal_ref}</span>{checkInTime && !arrived ? ` · الوصول من ${checkInTime}` : ""}</p>
         </div>
       </header>
     <div className="mx-auto -mt-6 max-w-lg px-4 pb-10">
@@ -135,12 +144,17 @@ export default function BookingStatus() {
         ))}
       </ol>
 
-      {!data.access.allowed && data.access.reasons.length > 0 && !delivered && !(arrived && !hasKeybox) && (
-        <div className="mt-4 rounded-xl bg-ink-50 p-4 text-xs text-ink-500">
-          <p className="mb-1 font-medium text-ink-600">{arrived ? "قبل تسليم الرمز:" : "قبل تسجيل الوصول:"}</p>
-          <ul className="list-disc space-y-0.5 pr-4">{data.access.reasons.map((x, i) => <li key={i}>{x}</li>)}</ul>
-        </div>
-      )}
+      {/* GUEST-08: only what the guest can do is listed; the desk's own steps are said once, in the guest's words */}
+      {!data.access.allowed && data.access.reasons.length > 0 && !delivered && !departed && !(arrived && !hasKeybox) && (() => {
+        const mine = data.access.reasons.filter(guestCanAct);
+        const desk = data.access.reasons.length - mine.length;
+        return (
+          <div className="mt-4 rounded-xl bg-ink-50 p-4 text-xs text-ink-600" data-testid="guest-reasons">
+            {mine.length > 0 && <><p className="mb-1 font-medium text-ink-700">{arrived ? "قبل تسليم الرمز:" : "مطلوب منك قبل الوصول:"}</p><ul className="list-disc space-y-0.5 pr-4">{mine.map((x, i) => <li key={i}>{x}</li>)}</ul></>}
+            {desk > 0 && <p className={mine.length ? "mt-2" : ""}>بقية الخطوات يُنجزها الاستقبال عند وصولك.</p>}
+          </div>
+        );
+      })()}
 
       {error && <div className="mt-4"><ErrorBanner message={error} /></div>}
 
@@ -155,6 +169,7 @@ export default function BookingStatus() {
         )}
         <button onClick={() => navigate(`/reception?token=${token}`)} className="btn-outline"><MessageCircle className="h-4 w-4" /> محادثة المساعد (متحقق)</button>
         <Link to={`/booking/summary/${token}`} className="btn-outline" data-testid="summary-link"><FileText className="h-4 w-4" /> ملخص الإقامة{r.summary_accepted ? " (مُقرّ)" : ""}</Link>
+        {branch?.phone && <a href={`tel:${branch.phone.replace(/[^0-9+]/g, "")}`} className="btn-outline" data-testid="call-reception"><Phone className="h-4 w-4" /> اتصل بالاستقبال <span className="font-mono text-xs" dir="ltr">{branch.phone}</span></a>}
         {branch?.map_url && <a href={branch.map_url} target="_blank" rel="noopener noreferrer" className="btn-outline" data-testid="map-link"><MapPin className="h-4 w-4" /> الموقع على الخريطة</a>}
       </div>
 
