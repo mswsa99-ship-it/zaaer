@@ -141,7 +141,8 @@ do $$ declare f record; want uuid[]; got uuid[]; r jsonb; n int := 0; bad text :
     ('check_in window', jsonb_build_object('check_in_from', t_today() - 3, 'check_in_to', t_today() + 3), format('check_in between %L and %L', t_today() - 3, t_today() + 3)),
     ('check_out window', jsonb_build_object('check_out_from', t_today(), 'check_out_to', t_today() + 7), format('check_out between %L and %L', t_today(), t_today() + 7)),
     ('created today (branch day)', jsonb_build_object('created_from', t_today(), 'created_to', t_today()), format('(created_at at time zone ''Asia/Riyadh'')::date = %L', t_today())),
-    ('stay_on', jsonb_build_object('stay_on', t_today()), format('check_in <= %L and check_out > %L', t_today(), t_today())),
+    -- 0057 (FRONT-09): a stay in the unit that day — never cancelled, rejected or no-show; a guest past departure still counts today
+    ('stay_on', jsonb_build_object('stay_on', t_today()), format('status not in (''cancelled'', ''rejected'', ''no_show'', ''draft'') and check_in <= %L and (check_out > %L or status = ''checked_in'')', t_today(), t_today())),
     ('source', '{"source_id":"00000000-0000-0000-0000-000000000020"}', 'source_id = ''00000000-0000-0000-0000-000000000020'''),
     ('category', '{"category_id":"00000000-0000-0000-0000-000000000030"}', 'room_category_id = ''00000000-0000-0000-0000-000000000030'''),
     ('room number', '{"room_number":"101"}', 'room_id = ''00000000-0000-0000-0000-000000000100'''),
@@ -149,7 +150,7 @@ do $$ declare f record; want uuid[]; got uuid[]; r jsonb; n int := 0; bad text :
     ('price_basis', '{"price_basis":"nightly"}', 'price_basis = ''nightly'''),
     ('payment_status', '{"payment_status":"paid"}', 'payment_status = ''paid'''),
     ('has_discount', '{"has_discount":"true"}', 'discount_halalas > 0'),
-    ('has_balance (money role)', '{"has_balance":"true"}', 'balance_due_halalas > 0'),
+    ('has_balance (money role)', '{"has_balance":"true"}', 'balance_due_halalas > 0 and status not in (''cancelled'', ''rejected'', ''no_show'')'),
     ('platform_collects', '{"platform_collects":"true"}', 'platform_collects = true'),
     ('q by number', jsonb_build_object('q', t_text('select internal_ref from reservations where branch_id = ''00000000-0000-0000-0000-000000000010'' order by created_at limit 1')),
                     format('internal_ref ilike %L', '%' || t_text('select internal_ref from reservations where branch_id = ''00000000-0000-0000-0000-000000000010'' order by created_at limit 1') || '%')),

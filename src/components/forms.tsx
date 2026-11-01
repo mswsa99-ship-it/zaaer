@@ -83,11 +83,11 @@ export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placehol
   );
 }
 
-export function SubmitRow({ busy, label, onCancel, danger }: { busy: boolean; label: string; onCancel?: () => void; danger?: boolean }) {
+export function SubmitRow({ busy, label, onCancel, danger, cancelLabel = "إلغاء" }: { busy: boolean; label: string; onCancel?: () => void; danger?: boolean; cancelLabel?: string }) {
   return (
     <div className="mt-5 flex gap-2">
       <button type="submit" disabled={busy} className={danger ? "btn-danger" : "btn-primary"}>{busy ? <Spinner className="h-4 w-4" /> : null} {label}</button>
-      {onCancel && <button type="button" onClick={onCancel} className="btn-outline">إلغاء</button>}
+      {onCancel && <button type="button" onClick={onCancel} className="btn-outline">{cancelLabel}</button>}
     </div>
   );
 }
@@ -110,9 +110,9 @@ export function ActionForm({ onSubmit, children, error }: { onSubmit: () => Prom
 const FormBusy = createContext(false);
 export const useFormBusy = () => useContext(FormBusy);
 
-export function Submit({ label, onCancel, danger }: { label: string; onCancel?: () => void; danger?: boolean }) {
+export function Submit({ label, onCancel, danger, cancelLabel }: { label: string; onCancel?: () => void; danger?: boolean; cancelLabel?: string }) {
   const busy = useFormBusy();
-  return <SubmitRow busy={busy} label={label} onCancel={onCancel} danger={danger} />;
+  return <SubmitRow busy={busy} label={label} onCancel={onCancel} danger={danger} cancelLabel={cancelLabel} />;
 }
 
 export function ReasonInput({ value, onChange, label = "السبب (إلزامي)", placeholder }: { value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {

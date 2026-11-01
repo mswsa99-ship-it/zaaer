@@ -1,3 +1,5 @@
+import { nextStep } from "./StayProgress";
+import { todayISO } from "../lib/utils";
 import { Link } from "react-router-dom";
 import { Card, Badge } from "./ui";
 import {
@@ -42,14 +44,11 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
   );
 }
 
-/** The stay's next step (0033): the arrival at reception first, then the code as its own step, then the departure. */
+/** The stay's next step on a card (FRONT-07): the same engine as the booking page. */
 export function nextAction(r: import("../lib/hooks").ReservationCard): string {
   if (r.status === "closed") return "مغلق";
-  if (r.status === "checked_out") return "فحص المغادرة وتسوية التأمين";
   if (["cancelled", "rejected", "no_show"].includes(r.status)) return "—";
-  if (r.status === "checked_in") return r.access_status === "approved" || r.access_status === "delivery_pending" ? "تسليم الرمز" : "متابعة الإقامة والمغادرة";
-  if (r.identity_status !== "verified") return "مطابقة الهوية";
-  if (!r.government_registration) return "التسجيل في شموس";
-  if (!r.shomoos_accepted_at) return "تأكيد قبول شموس";
-  return "تسجيل الوصول";
+  const step = nextStep({ status: r.status, identity_status: r.identity_status, has_room: !!r.room, total_halalas: null, paid_halalas: null,
+    check_out: r.check_out, today: todayISO(), government_registration: !!r.government_registration, shomoos_accepted_at: r.shomoos_accepted_at, access_status: r.access_status });
+  return step ? step.title : "متابعة الإقامة";
 }

@@ -22,6 +22,9 @@ const ERROR_AR: Record<string, string> = {
   DUPLICATE_BRANCH_NAME: "يوجد فرع بالاسم نفسه. اختر اسمًا مختلفًا.",
   DUPLICATE_RULE: "لهذا النوع قاعدة كشف من قبل؛ عدّلها بدل إضافة أخرى.",
   DUPLICATE_EMAIL: "هذا البريد مستخدم لموظف آخر.",
+  // 0057 (Phase 3a): the front desk
+  PAST_STAY: "مدة هذا الحجز انتهت قبل اليوم؛ يُدخله المشرف أو المدير مع سبب الإدخال المتأخر.",
+  "FORBIDDEN: late entry": "الإدخال المتأخر لحجز انتهت مدته للمشرف أو المدير أو المالك.",
   // 0056 (Phase 2b): the branch's lists and guide
   DUPLICATE_SOURCE_NAME: "يوجد مصدر حجز بالاسم نفسه.",
   "SOURCE_IN_USE: kind": "لهذا المصدر حجوزات مسجّلة، فلا يتغيّر نوعه (مباشر/خارجي). أنشئ مصدرًا جديدًا وأوقف هذا.",
@@ -199,6 +202,7 @@ export const VALIDATION_AR: Record<string, string> = {
   release_rule: "أدخل أعدادًا صحيحة.", release_increment: "الزيادة 1 على الأقل ولا تتجاوز وحدات النوع.", release_trigger: "اختر شرط الكشف.",
   email: "البريد الإلكتروني غير صحيح (مثال: name@example.com).", branch_required: "اختر فرعًا واحدًا على الأقل لهذا الدور.",
   phone: "رقم الهاتف غير صحيح (مثال: 05xxxxxxxx أو 011xxxxxxx أو + ثم رمز الدولة).",
+  code_weak: "الرمز سهل التخمين (أرقام مكررة مثل 1111 أو متتالية مثل 1234). اختر رمزًا مختلطًا.",
   iban: "رقم الآيبان غير صحيح: يبدأ بـ SA ويتكون من 24 خانة.", bank_details: "اكتب اسم البنك واسم المستفيد مع رقم الآيبان.",
   bank_name: "اسم البنك حتى 80 حرفًا.", bank_beneficiary: "اسم المستفيد حتى 120 حرفًا.", arrival_instructions: "تعليمات الوصول حتى 4000 حرف.",
   video_url: "رابط الفيديو يبدأ بـ https:// (حتى 500 حرف).", caption: "الوصف حتى 160 حرفًا.", sort_order: "الترتيب رقم صحيح.",

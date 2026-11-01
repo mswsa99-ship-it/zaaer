@@ -13,6 +13,9 @@ test.describe("housekeeping role", () => {
     const complete = page.getByRole("button", { name: "إتمام" }).first();
     await expect(complete).toBeVisible();
     await complete.click();
+    // FRONT-18: a task never started asks once more
+    const confirm = page.getByRole("button", { name: "لم تبدأ بعد — تأكيد الإتمام" });
+    if (await confirm.count()) await confirm.first().click();
     const notice = page.locator("div.bg-success-500\\/10").first();
     await expect(notice).toBeVisible();
     await expect(notice).toContainText("تم الإتمام");

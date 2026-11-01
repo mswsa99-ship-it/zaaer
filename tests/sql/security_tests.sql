@@ -299,7 +299,7 @@ do $$ declare r jsonb; begin
     perform fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','1234',true);
     perform t_record('T20a rotation to the same code rejected', false);
   exception when others then perform t_record('T20a rotation to the same code rejected', sqlerrm like '%CODE_MUST_DIFFER%', sqlerrm); end;
-  r := fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','4321',true);
+  r := fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','4831',true);
   perform t_record('T20b rotation succeeds with new code + version bump', (r->>'ok')::boolean and (r->>'code_version')::int = 2, r::text);
 end $$;
 do $$ declare r jsonb; begin
@@ -328,7 +328,7 @@ set role anon;
 do $$ declare r jsonb; tok text; begin
   r := t_lookup('BK-DEMO-1002','0222',null,'fp9'); tok := r->>'token';
   r := fn_guest_access_code(tok);
-  perform t_record('T16a guest receives code for own reservation after delivery', (r->>'allowed')::boolean and r->>'code' = '4321', r::text);
+  perform t_record('T16a guest receives code for own reservation after delivery', (r->>'allowed')::boolean and r->>'code' = '4831', r::text);
   r := t_lookup('BK-DEMO-1003','0333',null,'fp9'); tok := r->>'token';
   r := fn_guest_access_code(tok);
   perform t_record('T16b other guest cannot get that code', (r->>'allowed')::boolean = false and r->>'code' is null, r::text);
@@ -354,7 +354,7 @@ do $$ declare r jsonb; tok text; n0 bigint; n1 bigint; st0 text; st1 text; msgs 
   reset role;
   update reservations set access_status = st0::access_status where external_ref = 'BK-DEMO-1002';
   perform t_record('QS03 a staff session on the guest page: the branch supervisor gets the code audited as them and it stays «delivered»; finance and another organisation are refused',
-    (r->>'allowed')::boolean and r->>'code' = '4321' and n1 = n0 + 1 and st1 = 'delivered' and ok_fin and ok_other, r::text || ' ' || n0 || '→' || n1 || ' ' || st1 || ' ' || msgs);
+    (r->>'allowed')::boolean and r->>'code' = '4831' and n1 = n0 + 1 and st1 = 'delivered' and ok_fin and ok_other, r::text || ' ' || n0 || '→' || n1 || ' ' || st1 || ' ' || msgs);
 exception when others then perform t_record('QS03 a staff session on the guest page: the branch supervisor gets the code audited as them and it stays «delivered»; finance and another organisation are refused', false, sqlerrm);
 end $$;
 reset role;
@@ -375,7 +375,7 @@ do $$ declare r jsonb; tid uuid; st text; begin
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ declare r jsonb; st text; begin
-  r := fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','8765',true);
+  r := fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000100','8265',true);
   st := t_room_status('00000000-0000-0000-0000-000000000100');
   perform t_record('Room ready only after cleaning + rotation + test', st = 'ready', 'room='||st);
 end $$;

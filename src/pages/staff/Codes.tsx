@@ -1,3 +1,4 @@
+import { weakKeyboxCode } from "../../lib/validation";
 /**
  * «الرموز» — the key-box codes of the branch's units on one screen (the supervisor and housekeeping; management too).
  *
@@ -17,7 +18,7 @@ import { SectionTitle, LoadingScreen, EmptyState, Card, Badge, ErrorBanner, Spin
 import { Field } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { CodeLight } from "../../components/KeyboxAlert";
-import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, type RoomStatus } from "../../lib/types";
+import { ROOM_STATUS_LABELS, roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, type RoomStatus } from "../../lib/types";
 import { cn, formatDateTime, sinceArabic } from "../../lib/utils";
 
 const CODE_RE = /^\d{4,8}$/;
@@ -174,7 +175,7 @@ function UnitCard({ u, shownCode, editing, busy, onReveal, onHide, onEdit, onCan
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
-            <Badge className={ROOM_STATUS_COLORS[u.room_status as RoomStatus] ?? "bg-ink-100 text-ink-500"}>{ROOM_STATUS_LABELS[u.room_status as RoomStatus] ?? u.room_status}</Badge>
+            <Badge className={ROOM_STATUS_COLORS[u.room_status as RoomStatus] ?? "bg-ink-100 text-ink-500"}>{roomStatusLabel(u.room_status, u.cleanliness)}</Badge>
             <Badge className={CLEANLINESS_COLORS[u.cleanliness] ?? "bg-ink-100 text-ink-500"}>{CLEANLINESS_LABELS[u.cleanliness] ?? u.cleanliness}</Badge>
           </div>
         </div>
@@ -235,6 +236,7 @@ function ChangeForm({ u, onCancel, onSaved }: { u: KeyboxUnit; onCancel: () => v
     e.preventDefault();
     setError(null);
     if (!CODE_RE.test(code1)) { setError("الرمز من 4 إلى 8 أرقام."); return; }
+    if (weakKeyboxCode(code1)) { setError("الرمز سهل التخمين (أرقام مكررة مثل 1111 أو متتالية مثل 1234). اختر رمزًا مختلطًا."); return; }
     if (code1 !== code2) { setError("الرمزان غير متطابقين."); return; }
     if (!tested) { setError("اضبط الرمز على الصندوق وجرّبه أولًا، ثم أكّد ذلك."); return; }
     setBusy(true);

@@ -397,7 +397,7 @@ do $$ declare res uuid; r jsonb; m text := ''; begin
     m = 'ok ok' and (r->>'ok')::boolean and (t_res(res)).status = 'confirmed' and (t_res(res)).actual_check_in is null and (t_unit(t_id('k2'))).status = 'reserved'
     and (t_box(t_id('k2'))).code_status = 'needs_change' and (r->>'code_needs_change')::boolean
     and t_count(format('select count(*) from review_items where entity_id = %L and kind = %L and reviewed_at is null', res, 'check_in_undone')) = 1, m || ' ' || r::text);
-  perform fn_staff_rotate_keybox_code(t_id('k2'), '9999', true);
+  perform fn_staff_rotate_keybox_code(t_id('k2'), '9419', true);
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   r := fn_staff_check_in(jsonb_build_object('reservation_id', res));
   perform fn_staff_deliver_access_code(res, 'screen');

@@ -75,7 +75,8 @@ export default function StaffDashboard() {
             { l: "الإشغال", v: `${sum.occupancy_pct}%`, to: "/staff/rooms" },
             { l: "جاهزة للدخول", v: sum.units.ready, to: "/staff/rooms" },
             { l: "تحتاج تنظيفًا", v: sum.units.dirty, to: "/staff/housekeeping" },
-            { l: "مغادرة اليوم", v: `${sum.departures.done}/${sum.departures.expected}`, to: "/staff/reservations" },
+            // FRONT-05: «تمت من المجموع» — a guest still in the unit keeps the tile from reading as finished
+            { l: sum.departures.expected > 0 ? `مغادرة اليوم — ${sum.departures.expected} لم يغادر بعد` : "مغادرة اليوم", v: `${sum.departures.done}/${sum.departures.done + sum.departures.expected}`, to: "/staff/reservations" },
             // 0052 (PERM-01): the money tiles only for a role that sees money (the server leaves finance out otherwise)
             ...(sum.finance ? [
               { l: "متبقٍ على المقيمين", v: formatCurrency(sum.finance.outstanding_in_house / 100), to: "/staff/reservations" },

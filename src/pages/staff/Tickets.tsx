@@ -36,6 +36,7 @@ const KIND_LABELS: Record<string, string> = {
   escalation: "تصعيد",
   ai_guardrail: "حماية الذكاء الاصطناعي",
   ai_fallback: "تعطل المساعد",
+  guest_request: "طلب النزيل",
 };
 
 const KIND_COLORS: Record<string, string> = {
@@ -48,8 +49,9 @@ const KIND_COLORS: Record<string, string> = {
 
 const HANDOFF_STATUS: Record<string, string> = { open: "مفتوح", in_progress: "قيد المعالجة", resolved: "تم الحل" };
 
-function detailsText(d: Record<string, unknown> | null): string {
+function detailsText(d: Record<string, unknown> | string | null): string {
   if (!d) return "";
+  if (typeof d === "string") return d.slice(0, 300);   // FRONT-17: a plain sentence, not one letter per entry
   const parts: string[] = [];
   for (const [k, v] of Object.entries(d)) {
     if (v === null || v === undefined || v === "") continue;

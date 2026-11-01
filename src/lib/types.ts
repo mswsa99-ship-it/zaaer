@@ -97,6 +97,12 @@ export const ROOM_STATUS_LABELS: Record<RoomStatus, string> = {
   ready: "جاهزة",
 };
 
+/** FRONT-10: a clean unit that waits only for its key-box code is not «تحت التنظيف» — it says what it waits for. */
+export function roomStatusLabel(status: string, cleanliness?: string | null): string {
+  if (status === "cleaning" && cleanliness === "clean") return "نظيفة — بانتظار تغيير الرمز";
+  return ROOM_STATUS_LABELS[status as RoomStatus] ?? status;
+}
+
 export const ROOM_STATUS_COLORS: Record<RoomStatus, string> = {
   available: "bg-success-500/10 text-success-600",
   reserved: "bg-brand-500/10 text-brand-700",
@@ -154,3 +160,6 @@ export const CLEANLINESS_COLORS: Record<string, string> = { clean: "bg-success-5
 export const TASK_STATUS_LABELS: Record<string, string> = { pending: "معلقة", in_progress: "قيد التنفيذ", completed: "مكتملة", cancelled: "ملغاة" };
 export const TASK_PRIORITY_LABELS: Record<string, string> = { low: "منخفضة", medium: "متوسطة", high: "مرتفعة" };
 export const BILLING_UNIT_LABELS: Record<string, string> = { once: "مرة واحدة", night: "لكل ليلة", person: "لكل شخص", quantity: "بالكمية" };
+
+/** FRONT-11: a companion's relationship to the main guest, in Arabic (the stored codes are English). */
+export const RELATIONSHIP_LABELS: Record<string, string> = { self: "النزيل الرئيسي", spouse: "زوج/زوجة", child: "ابن/ابنة", parent: "والد/والدة", sibling: "أخ/أخت", other: "مرافق" };

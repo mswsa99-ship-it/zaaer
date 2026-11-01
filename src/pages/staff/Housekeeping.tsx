@@ -7,7 +7,7 @@ import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Ba
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { Modal, Field, ActionForm, Submit, ReasonInput, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
-import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
+import { ROOM_STATUS_LABELS, roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
 import { formatDateTime } from "../../lib/utils";
 
 interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; scheduled_end: string | null; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
@@ -27,6 +27,7 @@ export default function Housekeeping() {
   const canManage = can("task.manage");
 
   const [acting, setActing] = useState<string | null>(null);
+  const [confirmDone, setConfirmDone] = useState<string | null>(null);   // FRONT-18: a task never started asks once before «إتمام»
   const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<"open" | "done" | "board">("open");
   // decision 28: the task's start (required, «الآن» by default) and its end (optional); no reminder, no automatic end
@@ -99,7 +100,7 @@ export default function Housekeeping() {
                 {t.room && t.reservation_id && t.description === DEPARTURE_CLEANING && !inspected[t.reservation_id] && <button onClick={() => { setInspect(t); setInspResult("ok"); setInspNotes(""); setInspSuggested(null); }} className="btn-outline text-xs"><ClipboardCheck className="h-3.5 w-3.5" /> فحص المغادرة</button>}
                 {t.room && <button onClick={() => { setMaintTarget({ id: t.room_id!, room_number: t.room!.room_number, status: t.room!.status, cleanliness: t.room!.cleanliness }); setMaintTitle(""); setMaintDesc(""); }} className="btn-outline text-xs"><Wrench className="h-3.5 w-3.5" /> بلاغ صيانة</button>}
                 {t.status === "pending" && mine(t) && <button onClick={() => act(t.id, async () => { await opsApi.startTask(t.id); })} disabled={acting === t.id} className="btn-outline text-xs"><Play className="h-3.5 w-3.5" /> بدء</button>}
-                {mine(t) && <button onClick={() => act(t.id, async () => { const r = await opsApi.completeTask(t.id, undefined, t.version); return r.room_status ? `تم الإتمام. حالة الوحدة الآن: ${ROOM_STATUS_LABELS[r.room_status as RoomStatus] ?? r.room_status} (الإشغال لا يتغير بالتنظيف)` : "تم الإتمام."; })} disabled={acting === t.id} className="btn-accent text-xs">{acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} إتمام</button>}
+                {mine(t) && <button onClick={() => { if (t.status === "pending" && confirmDone !== t.id) { setConfirmDone(t.id); return; } setConfirmDone(null); act(t.id, async () => { const r = await opsApi.completeTask(t.id, undefined, t.version); return r.room_status === "cleaning" ? "تم الإتمام. الوحدة نظيفة وتنتظر تغيير رمز الصندوق من «الرموز» (الإشغال لا يتغير بالتنظيف)." : r.room_status ? `تم الإتمام. حالة الوحدة الآن: ${roomStatusLabel(r.room_status, "clean")} (الإشغال لا يتغير بالتنظيف)` : "تم الإتمام."; }); }} disabled={acting === t.id} className="btn-accent text-xs">{acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {confirmDone === t.id ? "لم تبدأ بعد — تأكيد الإتمام" : "إتمام"}</button>}
                 {canManage && <button onClick={() => { setCancelTask(t); setCancelReason(""); }} className="btn-ghost text-xs text-danger-600" aria-label="إلغاء المهمة" title="إلغاء المهمة"><XCircle className="h-3.5 w-3.5" /></button>}
               </div>
             </Card>
@@ -111,11 +112,11 @@ export default function Housekeeping() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {rooms.map((r) => (
             <Card key={r.id}>
-              <div className="flex items-start justify-between"><p className="font-semibold text-ink-800">{r.room_number}</p><Badge className={ROOM_STATUS_COLORS[r.status]}>{ROOM_STATUS_LABELS[r.status]}</Badge></div>
+              <div className="flex items-start justify-between"><p className="font-semibold text-ink-800">{r.room_number}</p><Badge className={ROOM_STATUS_COLORS[r.status]}>{roomStatusLabel(r.status, r.cleanliness)}</Badge></div>
               <div className="mt-2 flex items-center justify-between">
                 <Badge className={CLEANLINESS_COLORS[r.cleanliness]}>الحالة الحالية: {CLEANLINESS_LABELS[r.cleanliness]}</Badge>
                 {r.cleanliness === "clean" ? <button onClick={() => act("c" + r.id, async () => { await opsApi.setCleanliness(r.id, "dirty", "علامة يدوية"); })} className="btn-ghost px-2 py-1 text-[11px]">وضع علامة متسخة</button>
-                  : <button onClick={() => act("c" + r.id, async () => { const x = await opsApi.setCleanliness(r.id, "clean", "علامة يدوية"); return `الوحدة الآن ${ROOM_STATUS_LABELS[x.room_status as RoomStatus] ?? x.room_status}`; })} className="btn-ghost px-2 py-1 text-[11px]">وضع علامة نظيفة</button>}
+                  : <button onClick={() => act("c" + r.id, async () => { const x = await opsApi.setCleanliness(r.id, "clean", "علامة يدوية"); return `الوحدة الآن ${roomStatusLabel(x.room_status, "clean")}`; })} className="btn-ghost px-2 py-1 text-[11px]">وضع علامة نظيفة</button>}
               </div>
             </Card>
           ))}

@@ -1,3 +1,4 @@
+import { latinDigits } from "../../lib/validation";
 /**
  * The reservations list (decision 14, 10.1): every filter of the reference (arrival, departure and creation dates,
  * individual or company, the company, unit type and number, rent type, source, a discount, status, payment and
@@ -115,7 +116,15 @@ export default function StaffReservations() {
 
   const visibleColumns = useMemo(() => COLUMNS.filter((c) => columns.includes(c.key) && (moneyRole || !c.money)), [columns, moneyRole]);
 
-  const list = useBranchQuery((b) => opsApi.list(b, filters, PAGE, page * PAGE), [filters, page], NO_ROWS);
+  // FRONT-15: «٠٥٠…» finds what «050…» finds; an arrival or departure range typed backwards is read the right way round
+  const swapped = (["check_in", "check_out", "created"] as const).filter((k) => filters[`${k}_from`] && filters[`${k}_to`] && String(filters[`${k}_from`]) > String(filters[`${k}_to`]));
+  const serverFilters = useMemo(() => {
+    const out: Record<string, unknown> = { ...filters };
+    if (typeof out.q === "string") out.q = latinDigits(out.q).trim();
+    for (const k of swapped) { const a = out[`${k}_from`]; out[`${k}_from`] = out[`${k}_to`]; out[`${k}_to`] = a; }
+    return out as Filters;
+  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  const list = useBranchQuery((b) => opsApi.list(b, serverFilters, PAGE, page * PAGE), [serverFilters, page], NO_ROWS);
   const options = useBranchQuery<ReportFilterOptions | null>(async (b) => { const o = await listsApi.filterOptions(b); return o && "sources" in o ? (o as ReportFilterOptions) : null; }, [], null);
   const { data, branchId, reload } = list;
   useEffect(() => {
@@ -135,10 +144,11 @@ export default function StaffReservations() {
 
   function applyView(v: SavedView) { setViewId(v.id); setFilters((v.filters ?? {}) as Filters); if (v.columns?.length) setColumns(v.columns); setPage(0); }
   const set = (k: keyof Filters, v: string | boolean) => { setPage(0); setViewId(""); setFilters((f) => { const n: Record<string, unknown> = { ...f, [k]: v }; if (v === "" || v === false) delete n[k]; return n as Filters; }); };
-  const clearFilters = () => { setFilters({}); setPage(0); setViewId(""); };
+  // FRONT-14: «مسح المرشحات» returns to the screen's default (the open bookings), not to everything
+  const clearFilters = () => { setFilters(DEFAULT_FILTERS); setPage(0); setViewId(""); };
   const pages = Math.max(1, Math.ceil(data.total / PAGE));
   const words = filterWords(filters, options.data);
-  const activeCount = Object.keys(filters).filter((k) => k !== "sort").length;
+  const activeCount = Object.keys(filters).filter((k) => k !== "sort" && !(k === "open_only" && isOn(filters.open_only))).length + (isOn(filters.open_only) ? 0 : 1);
 
   const statement = (scope: ExportScope): ExportStatement => ({
     title: "الحجوزات", branch: branch?.name_ar ?? null,
@@ -147,7 +157,7 @@ export default function StaffReservations() {
   });
   const table = async (scope: ExportScope) => {
     const cols = visibleColumns;
-    const rows = scope.kind === "page" ? data.rows : (await fetchAllPages((limit, offset) => opsApi.list(branchId!, filters, limit, offset), 500)).rows;
+    const rows = scope.kind === "page" ? data.rows : (await fetchAllPages((limit, offset) => opsApi.list(branchId!, serverFilters, limit, offset), 500)).rows;
     return { columns: cols.map((c) => c.label), rows: rows.map((r) => cols.map((c) => c.out(r))), widths: cols.map((c) => c.width ?? 14) };
   };
 
@@ -158,7 +168,11 @@ export default function StaffReservations() {
     const r = await listsApi.saveView({ id: saveOpen.update && current ? current.id : undefined, screen: "reservations", name, filters: filters as Record<string, unknown>, columns, is_default: saveOpen.asDefault });
     setSaveOpen(null); const v = await loadViews(); setViewId(r.id); void v;
   }
+  // FRONT-18: removing a saved view asks once more in the page
+  const [confirmRemove, setConfirmRemove] = useState(false);
   async function removeView(id: string) {
+    if (!confirmRemove) { setConfirmRemove(true); return; }
+    setConfirmRemove(false);
     try { await listsApi.removeView(id); if (viewId === id) setViewId(""); await loadViews(); } catch (e) { setError(toArabicError(e)); }
   }
 
@@ -168,7 +182,7 @@ export default function StaffReservations() {
     </label>
   );
   const dateRange = (label: string, from: keyof Filters, to: keyof Filters) => (
-    <div className="flex items-center gap-1.5 text-xs text-ink-600"><span className="w-20">{label}</span>
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-600"><span className="w-20">{label}</span>
       <input type="date" className="input w-auto py-1 text-xs" dir="ltr" aria-label={`${label} من`} value={String(filters[from] ?? "")} onChange={(e) => set(from, e.target.value)} />
       <span>→</span>
       <input type="date" className="input w-auto py-1 text-xs" dir="ltr" aria-label={`${label} إلى`} value={String(filters[to] ?? "")} onChange={(e) => set(to, e.target.value)} />
@@ -189,14 +203,14 @@ export default function StaffReservations() {
       <div className="card mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 pr-9" placeholder="مرجع / ضيف / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
-          <select className="input w-auto" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); if (e.target.value) set("open_only", false); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+          <select className="input w-auto" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); set("open_only", !e.target.value); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.open_only)} onChange={(e) => set("open_only", e.target.checked)} /> المفتوحة فقط</label>
           {moneyRole && <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.has_balance)} onChange={(e) => set("has_balance", e.target.checked)} /> عليها متبقٍ</label>}
-          <button type="button" onClick={() => setAdvanced(!advanced)} className={`btn-ghost text-sm ${advanced ? "text-brand-700" : ""}`} data-testid="toggle-advanced" aria-expanded={advanced}><SlidersHorizontal className="h-4 w-4" /> مرشحات زائر{activeCount ? ` (${activeCount})` : ""}</button>
+          <button type="button" onClick={() => setAdvanced(!advanced)} className={`btn-ghost text-sm ${advanced ? "text-brand-700" : ""}`} data-testid="toggle-advanced" aria-expanded={advanced}><SlidersHorizontal className="h-4 w-4" /> مرشحات إضافية{activeCount ? ` (${activeCount})` : ""}</button>
           <div className="relative">
             <button type="button" onClick={() => setPickerOpen(!pickerOpen)} className="btn-ghost text-sm" data-testid="column-picker" aria-expanded={pickerOpen}><Columns3 className="h-4 w-4" /> الأعمدة ({visibleColumns.length})</button>
             {pickerOpen && (
-              <div className="absolute right-0 z-20 mt-1 grid w-72 grid-cols-2 gap-1 rounded-xl border border-ink-100 bg-white p-2 text-xs shadow-lg" data-testid="column-picker-menu">
+              <div className="absolute end-0 z-20 mt-1 grid w-72 max-w-[calc(100vw-2rem)] grid-cols-2 gap-1 rounded-xl border border-ink-100 bg-white p-2 text-xs shadow-lg" data-testid="column-picker-menu">
                 {COLUMNS.filter((c) => moneyRole || !c.money).map((c) => (
                   <label key={c.key} className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-ink-50"><input type="checkbox" checked={columns.includes(c.key)} onChange={(e) => setColumns((cs) => e.target.checked ? [...cs, c.key] : cs.length > 1 ? cs.filter((x) => x !== c.key) : cs)} /> {c.label}</label>
                 ))}
@@ -211,13 +225,14 @@ export default function StaffReservations() {
               {views.map((v) => <option key={v.id} value={v.id}>{v.is_default ? "★ " : ""}{v.name}</option>)}
             </select>
             <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => setSaveOpen({ name: views.find((v) => v.id === viewId)?.name ?? "", asDefault: views.find((v) => v.id === viewId)?.is_default ?? false, update: !!viewId })} data-testid="save-view">حفظ العرض</button>
-            {viewId && <button type="button" className="btn-ghost px-2 py-1 text-xs text-danger-600" onClick={() => removeView(viewId)} aria-label="حذف العرض المحفوظ" title="إزالة العرض (يُؤرشف)"><Trash2 className="h-3.5 w-3.5" /></button>}
+            {viewId && <button type="button" className="btn-ghost min-h-[44px] px-2 py-1 text-xs text-danger-600" onClick={() => removeView(viewId)} onBlur={() => setConfirmRemove(false)} aria-label={confirmRemove ? "اضغط مرة أخرى لتأكيد حذف العرض" : "حذف العرض المحفوظ"} title="إزالة العرض (يُؤرشف)"><Trash2 className="h-3.5 w-3.5" />{confirmRemove && " تأكيد الحذف"}</button>}
           </div>
           {activeCount > 0 && <button type="button" onClick={clearFilters} className="btn-ghost text-xs text-ink-500" data-testid="clear-filters"><X className="h-3.5 w-3.5" /> مسح المرشحات</button>}
         </div>
         {viewsError && <p className="mt-2 text-xs text-danger-600">{viewsError}</p>}
         {advanced && (
-          <div className="mt-3 grid gap-2 border-t border-ink-50 pt-3 md:grid-cols-2 xl:grid-cols-3" data-testid="advanced-filters">
+          <div className="mt-3 grid min-w-0 gap-2 border-t border-ink-50 pt-3 md:grid-cols-2 xl:grid-cols-3" data-testid="advanced-filters">
+            {swapped.length > 0 && <p className="text-xs text-warning-700 md:col-span-2 xl:col-span-3">بداية المدى بعد نهايته؛ قُرئ بالترتيب الصحيح.</p>}
             {dateRange("الوصول", "check_in_from", "check_in_to")}
             {dateRange("المغادرة", "check_out_from", "check_out_to")}
             {dateRange("تاريخ الإنشاء", "created_from", "created_to")}

@@ -96,3 +96,12 @@ export function numericText(s: string, opts: { decimals?: boolean } = {}): strin
   const d = latinDigits(s).replace(/[٫,]/g, ".");
   return opts.decimals ? d.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1") : d.replace(/\D/g, "");
 }
+
+/** 0057 (FRONT-16): one repeated digit, or a straight run up or down («1234», «9876», «8901») */
+export function weakKeyboxCode(c: string): boolean {
+  if (c.length < 2) return false;
+  if (/^(\d)\1+$/.test(c)) return true;
+  let up = true, dn = true;
+  for (let i = 1; i < c.length; i++) { const a = Number(c[i - 1]), b = Number(c[i]); if (b !== (a + 1) % 10) up = false; if (b !== (a + 9) % 10) dn = false; }
+  return up || dn;
+}

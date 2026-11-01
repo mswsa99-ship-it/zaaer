@@ -83,7 +83,9 @@ function ShomoosCard({ s, id, done, fail, canAct, money }: Common & { canAct: bo
     setBusy(key);
     try { await fn(); setReference(""); setAllGuests(false); setEditing(false); await done(message); } catch (e) { fail(toArabicError(e)); } finally { setBusy(null); }
   };
-  const showForm = canAct && open && (!sh.registered || changed || editing);
+  // FRONT-13: Shomoos takes the guests once their identity is matched — the form waits for it instead of being refused
+  const identityPending = !!s.checkin?.blockers?.some((b) => b.includes("مطابقة الهوية"));
+  const showForm = canAct && open && !identityPending && (!sh.registered || changed || editing);
   return (
     <Card data-testid="shomoos">
       <Head icon={FileCheck} title="التسجيل في شموس" badge={sh.accepted_at && !changed ? <Badge className="bg-success-500/10 text-success-600">مقبول</Badge> : sh.registered && !changed ? <Badge className="bg-warning-500/10 text-warning-700">بانتظار القبول</Badge> : <Badge className="bg-ink-100 text-ink-500">لم يُسجَّل</Badge>} />
@@ -93,6 +95,7 @@ function ShomoosCard({ s, id, done, fail, canAct, money }: Common & { canAct: bo
         <Step ok={!!sh.accepted_at && !changed} label="قبول شموس للتسجيل"
           detail={sh.accepted_at ? [sh.accepted_by, when(sh.accepted_at)].filter(Boolean).join(" · ") : sh.registered ? "بانتظار تأكيد القبول" : "بعد التسجيل"} />
       </div>
+      {canAct && open && identityPending && !sh.registered && <p className="mt-3 text-xs text-ink-500" data-testid="shomoos-waits">يُسجَّل النزلاء في شموس بعد اعتماد مطابقة الهوية لجميع النزلاء.</p>}
       {changed && <Warn>تغيّر عدد النزلاء بعد التسجيل ({sh.guest_count ?? 0} ← {sh.guests_now})؛ حدِّث التسجيل في شموس ثم سجّله هنا من جديد.</Warn>}
       {showForm && (
         <form className="mt-3 space-y-2" onSubmit={(e) => { e.preventDefault(); run("register", () => stayApi.shomoos({ reservation_id: id, action: "register", reference: reference.trim(), all_guests: allGuests }), "سُجِّل النزلاء في شموس؛ أكّد قبول شموس حين يصل."); }}>
@@ -254,7 +257,7 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
         </Section>
       )}
 
-      {s.inspection ? <InspectionView s={s} money={money} /> : s.inspection_due && canInspect && <InspectionForm id={id} done={done} />}
+      {s.inspection ? <InspectionView s={s} money={money} /> : s.inspection_due && canInspect && <InspectionForm id={id} done={done} deposit={s.checkin?.deposit_balance ?? null} />}
 
       {canAct && (
         <Section icon={LogOut} title="المغادرة">
@@ -291,7 +294,7 @@ function DepartedCard({ s, id, done, canInspect, money, isMgr }: Common & { canI
       {closed
         ? <div className="mt-3"><Ok>أُغلقت الإقامة{s.closure?.closed_at ? ` في ${formatDateTime(s.closure.closed_at)}` : ""}: لا مستحق ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.</Ok></div>
         : <div className="mt-3"><Reasons tone="info" title="تُغلق الإقامة وحدها حين يكتمل ما يلي:" items={money && s.closure?.missing.length ? s.closure.missing : ["تسوية المال والتأمين وإصدار الفاتورة"]} /></div>}
-      {s.inspection ? <InspectionView s={s} money={money} /> : canInspect && s.inspection_due && <InspectionForm id={id} done={done} />}
+      {s.inspection ? <InspectionView s={s} money={money} /> : canInspect && s.inspection_due && <InspectionForm id={id} done={done} deposit={s.checkin?.deposit_balance ?? null} />}
       {money && s.deposit_refund_blocker && <p className="mt-3 flex items-center gap-1.5 text-xs text-warning-700"><ShieldAlert className="h-3.5 w-3.5" /> رد التأمين: {s.deposit_refund_blocker}</p>}
       {isMgr && s.corrections.reopen_until && (
         <button onClick={() => setReopen(true)} className="btn-ghost mt-3 text-xs text-danger-600"><RotateCcw className="h-3.5 w-3.5" /> إعادة فتح الإقامة (حتى {hhmm(s.corrections.reopen_until)})</button>
@@ -316,7 +319,7 @@ function UndoCancel({ id, done, until }: Common & { until: string }) {
 }
 
 // ---------------------------------------------------------------- the check-out inspection (decision 5)
-function InspectionForm({ id, done }: { id: string; done: Done }) {
+function InspectionForm({ id, done, deposit }: { id: string; done: Done; deposit?: number | null }) {
   const [result, setResult] = useState<"ok" | "notes">("ok");
   const [notes, setNotes] = useState("");
   const [suggested, setSuggested] = useState<number | null>(null);
@@ -337,6 +340,7 @@ function InspectionForm({ id, done }: { id: string; done: Done }) {
           <div className="mt-3 space-y-3">
             <Field label="الملاحظات (إلزامية)"><textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ما الذي وُجد في الوحدة؟" /></Field>
             <Field label="خصم مقترح من التأمين (اختياري)" hint="يقرّر الخصم من يسوّي التأمين، برسم ضرر بسبب."><MoneyInput valueHalalas={suggested} onChange={setSuggested} /></Field>
+            {deposit != null && (suggested ?? 0) > deposit && <p className="text-xs text-warning-700" role="alert">الخصم المقترح أكبر من التأمين المستلم ({sar(deposit)})؛ ما يزيد يُحصَّل من النزيل برسم ضرر.</p>}
           </div>
         )}
         <Submit label="حفظ الفحص" />

@@ -13,7 +13,7 @@ import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, validHttpsUrl } from "./guests";
 import { phase6Rpcs } from "./phase6";
 import { phase2Rpcs } from "./phase2";
-import { checkMinAge, checkPersonName, checkPhone, latinDigits, normalizePhone, validEmail } from "../lib/validation";
+import { checkMinAge, checkPersonName, checkPhone, latinDigits, normalizePhone, validEmail, weakKeyboxCode } from "../lib/validation";
 import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v8";
@@ -647,14 +647,19 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_staff_create_reservation: ({ p }) => {
     requireCap("res.create");
     const units: any[] | null = Array.isArray(p.units) && p.units.length > 0 ? p.units : null;
-    if (!units) return createReservationUnit(p, null);
+    // 0057 (FRONT-08): a stay already over is a late entry — the owner, a manager or a supervisor, with a reason
+    const lateReason = String(p.late_entry_reason ?? "").trim();
+    const late = (units ?? [{}]).some((u) => { const co = String(u.check_out ?? p.check_out ?? ""); return !!co && co <= branchToday(p.branch_id); });
+    if (late) { if (!lateReason) throw new Error("PAST_STAY"); if (!hasRole("owner", "manager", "supervisor")) throw new Error("FORBIDDEN: late entry"); }
+    const lateAudit = (r: any, u: any) => { if (late) audit(p.branch_id, "reservation.late_entry", "reservation", r.id, { after: { check_in: u.check_in ?? p.check_in, check_out: u.check_out ?? p.check_out }, reason: lateReason }); return r; };
+    if (!units) return lateAudit(createReservationUnit(p, null), {});
     if (units.length > 20) throw new Error("VALIDATION: too many units");
     const g = units.length > 1 ? "G-" + Math.random().toString(16).slice(2, 10).toUpperCase() : null;
     const tables = ["reservations", "reservation_guests", "reservation_charges", "reservation_allocations", "rooms", "audit_events", "guest_profiles", "financial_vouchers", "reservation_nights"];
     const snapshot = Object.fromEntries(tables.map((t) => [t, JSON.parse(JSON.stringify(T(t)))]));
     try {
       const { units: _u, ...base } = p; void _u;
-      const results = units.map((u) => createReservationUnit({ ...base, ...u }, g));
+      const results = units.map((u) => lateAudit(createReservationUnit({ ...base, ...u }, g), u));
       return { ...results[0], ids: results.map((x) => x.id), internal_refs: results.map((x) => x.internal_ref), group_ref: g, units: units.length };
     } catch (e) { for (const t of tables) S[t] = snapshot[t]; emitAll(); throw e; }
   },
@@ -1041,12 +1046,14 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (T("keyboxes").some((k) => k.branch_id === rm.branch_id && k.room_id !== p_room && k.code_plain === p_new_code)) throw new Error("CODE_IN_USE");
     const tested = !!p_field_tested; let kb = T("keyboxes").find((k) => k.room_id === p_room); let before: Row;
     if (!kb) {
+      if (weakKeyboxCode(p_new_code)) throw new Error("VALIDATION: code_weak");   // 0057 (FRONT-16)
       before = { code_status: "none" };
       kb = { id: uid(), room_id: p_room, branch_id: rm.branch_id, code_encrypted: null, code_plain: p_new_code, code_version: 1, code_status: "active", needs_change_since: null, last_changed_at: nowISO(), last_changed_by: staffId(), field_tested: tested, last_reservation_id: null, requires_rotation: true, last_delivered_at: null, created_at: nowISO() };
       T("keyboxes").push(kb); T("code_rotation_events").unshift({ id: uid(), keybox_id: kb.id, room_id: p_room, from_version: null, to_version: 1, rotated_by: staffId(), field_tested: tested, created_at: nowISO() });
     } else {
       before = { code_version: kb.code_version, code_status: kb.code_status, field_tested: kb.field_tested, needs_change_since: kb.needs_change_since ?? null };
       if (kb.code_plain && kb.code_plain === p_new_code) throw new Error("CODE_MUST_DIFFER_FROM_PREVIOUS");
+      if (weakKeyboxCode(p_new_code)) throw new Error("VALIDATION: code_weak");   // 0057 (FRONT-16)
       T("code_rotation_events").unshift({ id: uid(), keybox_id: kb.id, room_id: p_room, from_version: kb.code_version, to_version: kb.code_version + 1, rotated_by: staffId(), field_tested: tested, created_at: nowISO() });
       Object.assign(kb, { code_plain: p_new_code, code_version: kb.code_version + 1, code_status: "active", needs_change_since: null, field_tested: tested, last_changed_at: nowISO(), last_changed_by: staffId(), last_reservation_id: null });
     }

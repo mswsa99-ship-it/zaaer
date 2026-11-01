@@ -7,7 +7,7 @@ import { useAuth } from "../../lib/auth";
 import { staffApi, toArabicError } from "../../lib/api";
 import { Card, Spinner, EmptyState, ErrorBanner, Badge } from "../../components/ui";
 import {
-  RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, IDENTITY_TYPE_LABELS, ROOM_STATUS_LABELS,
+  RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, RELATIONSHIP_LABELS, IDENTITY_TYPE_LABELS, ROOM_STATUS_LABELS,
   type ReservationStatus, type PaymentStatus, type GuestVerificationStatus, type AccessStatus, type IdentityType, type RoomStatus,
 } from "../../lib/types";
 import { formatCurrency, maskId, formatDateTime, todayISO } from "../../lib/utils";
@@ -24,7 +24,7 @@ interface Detail {
   expected_arrival_time: string | null; expected_departure_time: string | null; group_ref: string | null;
   rent_amount_halalas: number; total_halalas: number; paid_halalas: number;
   payment_status: PaymentStatus; identity_status: GuestVerificationStatus;
-  government_registration: boolean; gov_registration_ref: string | null; access_status: AccessStatus; keybox_delivered: boolean;
+  government_registration: boolean; shomoos_accepted_at?: string | null; gov_registration_ref: string | null; access_status: AccessStatus; keybox_delivered: boolean;
   security_hold: boolean; security_hold_reason: string | null;
   checkin_approved_by: string | null; checkin_approved_at: string | null; actual_check_in: string | null; actual_check_out: string | null;
   notes: string | null;
@@ -46,7 +46,7 @@ const RESERVATION_SELECT = `
   id, internal_ref, external_ref, status, branch_id, room_id, room_category_id,
   check_in, check_out, adults, companions,
   payment_status, identity_status, expected_arrival_time, expected_departure_time, group_ref,
-  government_registration, gov_registration_ref, access_status, keybox_delivered,
+  government_registration, shomoos_accepted_at, gov_registration_ref, access_status, keybox_delivered,
   security_hold, security_hold_reason,
   checkin_approved_by, checkin_approved_at, actual_check_in, actual_check_out, notes,
   source:booking_sources(name), room:rooms(room_number, status), room_category:room_categories(name_ar), branch:branches(name_ar)
@@ -173,7 +173,8 @@ export default function StaffReservationDetail() {
 
   return (
     <div>
-      <button onClick={() => navigate("/staff/reservations")} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600">
+      {/* FRONT-18: back to where the user came from (the board, the arrivals…), a full touch target */}
+      <button onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate("/staff/reservations"))} className="mb-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-ink-500 hover:text-ink-700">
         <ArrowLeft className="h-4 w-4" /> رجوع
       </button>
 
@@ -211,7 +212,8 @@ export default function StaffReservationDetail() {
       )}
 
       <StayProgress canMoney={canMoney} onJump={jump}
-        r={{ status: detail.status, identity_status: detail.identity_status, has_room: !!detail.room, total_halalas: detail.total_halalas, paid_halalas: detail.paid_halalas, check_out: detail.check_out, today: todayISO() }} />
+        r={{ status: detail.status, identity_status: detail.identity_status, has_room: !!detail.room, total_halalas: detail.total_halalas, paid_halalas: detail.paid_halalas, check_out: detail.check_out, today: todayISO(),
+          government_registration: !!detail.government_registration, shomoos_accepted_at: detail.shomoos_accepted_at ?? null, access_status: detail.access_status }} />
 
       {loadError && <div className="mb-4"><ErrorBanner message={loadError} /></div>}
       {actionError && <div className="mb-4"><ErrorBanner message={actionError} /></div>}
@@ -222,7 +224,7 @@ export default function StaffReservationDetail() {
             <div className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-brand-600" /><h2 className="text-base font-semibold text-ink-800">النزلاء ومطابقة الهوية</h2></div>
             <div className="flex flex-wrap gap-2">
               {canMoney && <button onClick={() => setSummaryOpen(true)} className="btn-outline text-xs" data-testid="stay-summary-btn"><Printer className="h-3.5 w-3.5" /> ملخص الإقامة</button>}
-              {canOffice && guests.length < detail.adults + detail.companions && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: null })} className="btn-outline text-xs" data-testid="office-add-guest"><UserPlus className="h-3.5 w-3.5" /> مرافق من الوثيقة</button>}
+              {canOffice && guests.length < detail.adults + detail.companions && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: null })} className="btn-outline text-xs" data-testid="office-add-guest"><UserPlus className="h-3.5 w-3.5" /> إضافة نزيل من الوثيقة</button>}
             </div>
           </div>
           <div className="space-y-3">
@@ -236,7 +238,7 @@ export default function StaffReservationDetail() {
                     </div>
                     <p className="mt-0.5 text-xs text-ink-400">
                       {g.identity_type ? IDENTITY_TYPE_LABELS[g.identity_type] : "—"} · {maskId(g.identity_number_last4 ?? undefined)} · {g.nationality ?? "—"}
-                      {g.relationship && ` · ${g.relationship}`}
+                      {g.relationship && !g.is_primary && ` · ${RELATIONSHIP_LABELS[g.relationship] ?? g.relationship}`}
                     </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">الحالة: {GUEST_VERIFICATION_LABELS[g.verification_status]}{!g.data_submitted && " · لم تُدخل البيانات"}{extraGuest(extra, g.id) && <GuestEntryBadge g={extraGuest(extra, g.id)!} />}</p>
                   </div>
@@ -271,6 +273,16 @@ export default function StaffReservationDetail() {
                     </div>
                   </div>
                 )}
+              </div>
+            ))}
+            {/* FRONT-11: each guest the booking counts but has not recorded yet has its own row and its own action */}
+            {!["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && Array.from({ length: Math.max(0, detail.adults + detail.companions - guests.length) }, (_, k) => (
+              <div key={`missing-${k}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-warning-500/40 bg-warning-500/5 p-3" data-testid="missing-guest">
+                <div>
+                  <p className="text-sm font-medium text-ink-800">النزيل {guests.length + k + 1} — لم تُدخل بياناته</p>
+                  <p className="mt-0.5 text-xs text-ink-500">عدد نزلاء الحجز {detail.adults + detail.companions}؛ يُسجَّل كل نزيل ببيانات وثيقته كاملة (15 سنة فأكثر) قبل الوصول.</p>
+                </div>
+                {canOffice && k === 0 && <button onClick={() => setOfficeGuest({ open: true, guest: null })} className="btn-outline text-xs"><IdCard className="h-3.5 w-3.5" /> إدخال من الوثيقة</button>}
               </div>
             ))}
             {guests.length === 0 && <p className="text-sm text-ink-400">لم تُسجّل بيانات النزلاء بعد.</p>}

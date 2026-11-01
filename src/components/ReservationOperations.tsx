@@ -91,7 +91,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
             {open && can("voucher.receipt") && <button onClick={() => setDialog("receipt")} className="btn-accent text-xs"><Receipt className="h-3.5 w-3.5" /> سند قبض إقامة</button>}
             {open && can("voucher.receipt") && <button onClick={() => setDialog("deposit")} className="btn-outline text-xs"><Receipt className="h-3.5 w-3.5" /> قبض تأمين</button>}
             {canRefund && f.received - f.refunded > 0 && <button onClick={() => setDialog("refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> استرداد إقامة</button>}
-            {can("deposit.refund") && f.deposit_balance > 0 && <button onClick={() => setDialog("deposit_refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> رد تأمين</button>}
+            {can("deposit.refund") && f.deposit_balance > 0 && r.status !== "checked_in" && <button onClick={() => setDialog("deposit_refund")} className="btn-outline text-xs"><Undo2 className="h-3.5 w-3.5" /> رد تأمين</button>}
             {can("deposit.apply") && f.deposit_balance > 0 && f.balance_due > 0 && <button onClick={() => setDialog("deposit_apply")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تغطية رسوم من التأمين</button>}
             {can("damage.charge") && ["checked_in", "checked_out", "closed"].includes(r.status) && <button onClick={() => setDialog("damage")} className="btn-outline text-xs"><Hammer className="h-3.5 w-3.5" /> رسم ضرر</button>}
             {can("charges.add") && open && <button onClick={() => setDialog("service")} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> إضافة خدمة</button>}

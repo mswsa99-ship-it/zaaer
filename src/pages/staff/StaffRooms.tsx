@@ -6,8 +6,12 @@ import { opsApi, listsApi, type UnitCard, type DailySummary, type ReservationCal
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, LoadErrorCard, ErrorBanner, DataState } from "../../components/ui";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { BranchPicker } from "../../components/BranchPicker";
-import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, type RoomStatus, type ReservationStatus } from "../../lib/types";
+import { roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, type RoomStatus, type ReservationStatus } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../../lib/utils";
+import { latinDigits } from "../../lib/validation";
+import { useReservations } from "../../lib/hooks";
+
+const unitKey = (s: string) => latinDigits(s).toLowerCase().replace(/[\s\-_]/g, "");
 
 const NO_BOARD: { units: UnitCard[]; summary: DailySummary | null } = { units: [], summary: null };
 
@@ -16,7 +20,8 @@ const NO_BOARD: { units: UnitCard[]; summary: DailySummary | null } = { units: [
 export default function StaffRooms() {
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "calendar" ? "calendar" : "board";
-  const setView = (v: "board" | "calendar") => { const p = new URLSearchParams(params); if (v === "calendar") p.set("view", "calendar"); else p.delete("view"); setParams(p, { replace: true }); };
+  // FRONT-12: the board's chips are not drawn on the calendar, so the calendar never keeps a chip's filter hidden
+  const setView = (v: "board" | "calendar") => { const p = new URLSearchParams(params); if (v === "calendar") { p.set("view", "calendar"); setFilter("all"); } else p.delete("view"); setParams(p, { replace: true }); };
   const [filter, setFilter] = useState<"all" | "free" | "occupied" | "ready" | "dirty" | "maintenance" | "arriving" | "departing" | "attention">("all");
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
@@ -36,7 +41,8 @@ export default function StaffRooms() {
   const floors = useMemo(() => [...new Set(units.map((u) => (u.block ? `${u.block} / ${u.floor ?? "—"}` : u.floor ?? "")).filter(Boolean))].sort(), [units]);
   const floorOf = (u: UnitCard) => (u.block ? `${u.block} / ${u.floor ?? "—"}` : u.floor ?? "");
   const visible = useMemo(() => units.filter((u) => {
-    if (q && !u.room_number.includes(q)) return false;
+    // FRONT-15: «u-1», «U1» and «١٠١» find the unit — digits and letter case do not matter
+    if (q && !unitKey(u.room_number).includes(unitKey(q))) return false;
     if (category && u.category !== category) return false;
     if (floor && floorOf(u) !== floor) return false;
     switch (filter) {
@@ -64,8 +70,14 @@ export default function StaffRooms() {
   };
   const ordered = useMemo(() => [...visible].sort((a, b) => urgency(a) - urgency(b) || a.room_number.localeCompare(b.room_number, "en", { numeric: true })),
     [visible, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  // FRONT-06: an arrival with no unit yet (today or overdue) is not on any unit card, so it is listed here too
+  const { data: bookings } = useReservations({ status: ["confirmed", "pending_verification"] });
   const now = useMemo(() => {
     const out: Array<{ key: string; text: string; to?: string }> = [];
+    for (const r of bookings) {
+      if (r.room || r.check_in > today || r.check_out <= today) continue;
+      out.push({ key: `nounit-${r.id}`, text: r.check_in < today ? `${r.internal_ref}: وصول متأخر بلا وحدة` : `${r.internal_ref}: وصول اليوم بلا وحدة — خصّص وحدة`, to: `/staff/reservations/${r.id}` });
+    }
     for (const x of units) {
       if (!x.is_active) continue;
       if (x.current && x.current.check_in < today && x.current.status !== "checked_in") out.push({ key: `late-${x.room_id}`, text: `${x.room_number}: وصول متأخر لم يُسجَّل`, to: `/staff/reservations/${x.current.reservation_id}` });
@@ -75,7 +87,7 @@ export default function StaffRooms() {
       if (arrivingToday && !x.keybox_ready) out.push({ key: `code-${x.room_id}`, text: `${x.room_number}: رمز الصندوق يحتاج تغييرًا قبل الوصول`, to: "/staff/codes" });
     }
     return out;
-  }, [units, today]);
+  }, [units, bookings, today]);
 
   if (board.loading) return <LoadingScreen />;
   if (board.error && units.length === 0) return <div><SectionTitle title="لوحة الوحدات" action={<BranchPicker />} /><LoadErrorCard message={board.error} onRetry={reload} /></div>;
@@ -139,7 +151,7 @@ export default function StaffRooms() {
               <Card key={x.room_id} className={!x.is_active ? "opacity-60" : ""} data-testid="unit-card" data-room={x.room_number} data-urgency={urgency(x)}>
                 <div className="flex items-start justify-between">
                   <div><p className="text-lg font-bold text-ink-800">{x.room_number}</p><p className="text-[11px] text-ink-400">{x.category}{x.block ? ` · ${x.block}` : ""}{x.floor ? ` / ${x.floor}` : ""}</p></div>
-                  <Badge className={ROOM_STATUS_COLORS[x.status as RoomStatus] ?? "bg-ink-100"}>{ROOM_STATUS_LABELS[x.status as RoomStatus] ?? x.status}</Badge>
+                  <Badge className={ROOM_STATUS_COLORS[x.status as RoomStatus] ?? "bg-ink-100"}>{roomStatusLabel(x.status, x.cleanliness)}</Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Badge className={CLEANLINESS_COLORS[x.cleanliness]}><Sparkles className="h-3 w-3" /> {CLEANLINESS_LABELS[x.cleanliness]}</Badge>

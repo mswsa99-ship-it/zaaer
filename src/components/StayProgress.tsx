@@ -10,7 +10,8 @@ export type StaySection = "guests" | "room" | "stay" | "ops";
 
 export interface StayProgressInput {
   status: string; identity_status: string; has_room: boolean;
-  total_halalas: number; paid_halalas: number; check_out: string; today: string;
+  total_halalas: number | null; paid_halalas: number | null; check_out: string; today: string;
+  government_registration?: boolean | null; shomoos_accepted_at?: string | null; access_status?: string | null;
 }
 
 const STAGES = ["الحجز", "الهوية", "الوصول", "الإقامة", "المغادرة"] as const;
@@ -26,26 +27,34 @@ export function stagesDone(r: StayProgressInput): number {
   return 0;
 }
 
-/** The next step and the section that does it; null when nothing is left (or the booking ended). */
+/**
+ * The next step and the section that does it; null when nothing is left (or the booking ended). FRONT-07: the one
+ * engine for the booking page and every arrival card, in the arrival's own order — a unit, the identity (a booking
+ * waiting for verification is confirmed by it, 0053), Shomoos, the arrival, the code, the money, the departure.
+ */
 export function nextStep(r: StayProgressInput): { title: string; why?: string; label: string; section: StaySection } | null {
   if (ENDED.includes(r.status) || r.status === "closed" || r.status === "draft") return null;
-  const remaining = Math.max(0, r.total_halalas - r.paid_halalas);
+  const remaining = Math.max(0, (r.total_halalas ?? 0) - (r.paid_halalas ?? 0));
   if (r.status === "checked_out") return { title: "فحص الوحدة ورد التأمين", why: "تُغلق الإقامة بعد الفحص ورد التأمين أو خصمه بسبب.", label: "فتح دورة الإقامة", section: "stay" };
   if (r.status === "checked_in") {
-    if (remaining > 0) return { title: "تحصيل المتبقي", why: `على النزيل ${formatCurrency(remaining / 100)}.`, label: "فتح الملخص المالي", section: "ops" };
-    if (r.check_out <= r.today) return { title: "تسجيل المغادرة", why: "موعد المغادرة اليوم أو مضى.", label: "فتح دورة الإقامة", section: "stay" };
+    if (r.access_status === "approved" || r.access_status === "delivery_pending") return { title: "تسليم الرمز", why: "سُجّل الوصول؛ يُسلَّم رمز الصندوق أو المفتاح الآن.", label: "فتح دورة الإقامة", section: "stay" };
+    if (r.total_halalas != null && remaining > 0) return { title: "تحصيل المتبقي", why: `على النزيل ${formatCurrency(remaining / 100)}.`, label: "فتح الملخص المالي", section: "ops" };
+    if (r.check_out <= r.today) return { title: "تسجيل المغادرة", why: r.check_out < r.today ? "تجاوز النزيل موعد المغادرة؛ الوحدة مشغولة حتى تُسجَّل مغادرته." : "موعد المغادرة اليوم.", label: "فتح دورة الإقامة", section: "stay" };
     return null;
   }
   if (!r.has_room) return { title: "تخصيص وحدة", why: "لا وحدة لهذا الحجز بعد.", label: "اختيار وحدة", section: "room" };
-  if (r.identity_status !== "verified") return { title: "مطابقة الهوية", why: "يُسلَّم الرمز بعد مطابقة الهوية مع الوثيقة الأصلية وتسجيل الوصول.", label: "مطابقة الهوية", section: "guests" };
-  return { title: "تسجيل الوصول", why: "التأمين أو سببه، ثم شموس، ثم الرمز في خطوته.", label: "فتح دورة الإقامة", section: "stay" };
+  if (r.identity_status !== "verified") return { title: "مطابقة الهوية", why: r.status === "pending_verification" ? "يتأكد الحجز تلقائيًا عند اعتماد مطابقة الهوية مع الوثيقة الأصلية." : "يُسلَّم الرمز بعد مطابقة الهوية مع الوثيقة الأصلية وتسجيل الوصول.", label: "مطابقة الهوية", section: "guests" };
+  if (r.government_registration === false) return { title: "التسجيل في شموس", label: "فتح دورة الإقامة", section: "stay" };
+  if (r.government_registration && !r.shomoos_accepted_at) return { title: "تأكيد قبول شموس", label: "فتح دورة الإقامة", section: "stay" };
+  return { title: "تسجيل الوصول", why: "التأمين أو سببه، ثم الرمز في خطوته.", label: "فتح دورة الإقامة", section: "stay" };
 }
 
 export function StayProgress({ r, canMoney, onJump }: { r: StayProgressInput; canMoney: boolean; onJump: (s: StaySection) => void }) {
   const done = stagesDone(r);
   const step = nextStep(r);
   const ended = ENDED.includes(r.status);
-  const remaining = Math.max(0, r.total_halalas - r.paid_halalas);
+  // FRONT-09: a cancelled, rejected or no-show booking owes nothing; its money stays in the financial summary
+  const remaining = ended ? 0 : Math.max(0, (r.total_halalas ?? 0) - (r.paid_halalas ?? 0));
   return (
     <div className="mb-4 space-y-3">
       {!ended && (
@@ -76,9 +85,9 @@ export function StayProgress({ r, canMoney, onJump }: { r: StayProgressInput; ca
       )}
       {canMoney && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3" data-testid="stay-amounts">
-          <Amount label="إجمالي الإقامة" v={r.total_halalas} />
-          <Amount label="المدفوع" v={r.paid_halalas} />
-          <Amount label="المتبقي على النزيل" v={remaining} warn={remaining > 0} testId="amount-remaining" />
+          <Amount label={ended ? "إجمالي الحجز" : "إجمالي الإقامة"} v={r.total_halalas ?? 0} />
+          <Amount label="المدفوع" v={r.paid_halalas ?? 0} />
+          <Amount label={ended ? "المستحق (الحجز منتهٍ)" : "المتبقي على النزيل"} v={remaining} warn={remaining > 0} testId="amount-remaining" />
         </div>
       )}
     </div>

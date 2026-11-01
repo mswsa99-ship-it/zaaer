@@ -196,7 +196,7 @@ export function CancelDialog({ open, d, group, onClose, onDone }: { open: boolea
           )}
           {group && unitsInGroup > 1 && <div className="mb-3"><Toggle checked={whole} onChange={setWhole} label={`إلغاء كل وحدات المجموعة (${unitsInGroup})`} /></div>}
           <ReasonInput value={reason} onChange={setReason} />
-          <Submit label="تأكيد الإلغاء" onCancel={onClose} danger />
+          <Submit label="تأكيد الإلغاء" onCancel={onClose} danger cancelLabel="رجوع" />
         </ActionForm>
       )}
     </Modal>

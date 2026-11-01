@@ -72,6 +72,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await loginAs("owner");
     await go("/staff/reservations");
     await page.getByLabel("حذف العرض المحفوظ").click();
+    await page.getByLabel("اضغط مرة أخرى لتأكيد حذف العرض").click();   // FRONT-18: asked once more
     await expect(page.getByLabel("العروض المحفوظة").locator("option")).toHaveCount(1);
   });
 

@@ -1669,7 +1669,8 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
       ["check_in window", { check_in_from: day(-3), check_in_to: day(3) }, (r) => r.check_in >= day(-3) && r.check_in <= day(3)],
       ["check_out window", { check_out_from: today, check_out_to: day(7) }, (r) => r.check_out >= today && r.check_out <= day(7)],
       ["created today (branch day)", { created_from: today, created_to: today }, (r) => dayOf(r.created_at) === today],
-      ["stay_on", { stay_on: today }, (r) => r.check_in <= today && r.check_out > today],
+      // 0057 (FRONT-09): a stay in a unit that day; a guest past departure still counts today
+      ["stay_on", { stay_on: today }, (r) => !["cancelled", "rejected", "no_show", "draft"].includes(r.status) && r.check_in <= today && (r.check_out > today || r.status === "checked_in")],
       ["source", { source_id: BOOKING_COM }, (r) => r.source_id === BOOKING_COM],
       ["category", { category_id: STUDIO }, (r) => r.room_category_id === STUDIO],
       ["room number", { room_number: "101" }, (r) => rooms.find((x) => x.id === r.room_id)?.room_number === "101"],
@@ -1678,7 +1679,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
       ["payment_status", { payment_status: "paid" }, (r) => r.payment_status === "paid"],
       ["identity_status", { identity_status: "verified" }, (r) => r.identity_status === "verified"],
       ["has_discount", { has_discount: "true" }, (r) => r.discount_halalas > 0],
-      ["has_balance (money role)", { has_balance: true }, (r) => r.balance_due_halalas > 0],
+      ["has_balance (money role)", { has_balance: true }, (r) => r.balance_due_halalas > 0 && !["cancelled", "rejected", "no_show"].includes(r.status)],
       ["platform_collects", { platform_collects: "true" }, (r) => r.platform_collects === true],
       ["q by number", { q: res[0].internal_ref }, (r) => qMatch(r, res[0].internal_ref)],
       ["q by guest phone", { q: "0501110001" }, (r) => qMatch(r, "0501110001")],
@@ -2519,5 +2520,25 @@ describe("Review Phase 2b — the branch's guide, gallery, sources, policies and
     expect(JSON.stringify(s)).not.toContain("sk_live_secret9876");
     await login("manager@demo.sa");
     expect(await fails(rpc("fn_admin_payment_settings", { p_branch: BRANCH }))).toMatch(/^FORBIDDEN/);
+  });
+});
+
+describe("Review Phase 3a — the front desk in the demo (0057)", () => {
+  const fails = async (p: Promise<unknown>) => { try { await p; return "accepted"; } catch (e) { return (e as Error).message; } };
+  const back = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" }); };
+
+  it("QR08 a stay already over needs a reason (and is audited); one that started yesterday and ends tomorrow does not", async () => {
+    const base = { branch_id: BRANCH, category_id: CATEGORY, source_id: SOURCE, guest_name: "ضيف متأخر", guest_phone: "0551000381", check_in: back(5), check_out: back(3) };
+    expect(await fails(rpc("fn_staff_create_reservation", { p: base }))).toBe("PAST_STAY");
+    const r = await rpc<any>("fn_staff_create_reservation", { p: { ...base, late_entry_reason: "حجز منصة أُدخل بعد المغادرة" } });
+    const a = (await client.from("audit_events").select("action, entity_id").eq("action", "reservation.late_entry")).data as any[];
+    expect(a.some((x) => x.entity_id === r.id)).toBe(true);
+    expect(await fails(rpc("fn_staff_create_reservation", { p: { ...base, guest_phone: "0551000382", check_in: back(1), check_out: fut(1) } }))).not.toBe("PAST_STAY");
+  });
+
+  it("QR09 «1111», «1234» and «9876» are refused as key-box codes; «7319» is accepted", async () => {
+    const room = ((await client.from("rooms").select("id, room_number").eq("branch_id", BRANCH)).data as any[]).find((x) => x.room_number === "103") ?? ((await client.from("rooms").select("id").eq("branch_id", BRANCH)).data as any[])[0];
+    for (const c of ["1111", "1234", "9876"]) expect(await fails(rpc("fn_staff_rotate_keybox_code", { p_room: room.id, p_new_code: c, p_field_tested: true }))).toBe("VALIDATION: code_weak");
+    expect(await fails(rpc("fn_staff_rotate_keybox_code", { p_room: room.id, p_new_code: "7319", p_field_tested: true }))).toBe("accepted");
   });
 });

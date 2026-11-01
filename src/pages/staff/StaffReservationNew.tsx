@@ -67,6 +67,10 @@ export default function StaffReservationNew() {
     setExtraUnits([]);
   }, [cats, sources]);
 
+  // FRONT-08: a stay already over is a late entry — the owner, a manager or a supervisor, with a reason
+  const [lateReason, setLateReason] = useState("");
+  const pastStay = f.check_out <= todayISO();
+  const canLate = ["owner", "manager", "supervisor"].includes(profile?.role ?? "");
   const nights = useMemo(() => Math.max(0, Math.round((new Date(f.check_out).getTime() - new Date(f.check_in).getTime()) / 86400000)), [f.check_in, f.check_out]);
   const source = sources.find((s) => s.id === f.source_id);
   const cat = cats.find((c) => c.id === f.category_id);
@@ -95,6 +99,7 @@ export default function StaffReservationNew() {
       const named = companionRows.filter((c) => c.full_name.trim()).map((c) => ({ full_name: c.full_name.trim(), relationship: c.relationship.trim() || null }));
       const main = { category_id: f.category_id, room_id: f.room_id || null, adults: f.adults, companions: Math.max(f.companions, named.length), companions_details: named, nightly_rate_halalas: f.override ? f.nightly_rate : null };
       const r = await opsApi.createReservation({ branch_id: branchId, ...main, check_in: f.check_in, check_out: f.check_out, source_id: f.source_id, external_ref: f.external_ref || null,
+        ...(pastStay ? { late_entry_reason: lateReason.trim() } : {}),
         arrival_time: times.arrival || null, departure_time: times.departure || null,
         ...(source?.kind === "external" ? { platform_collects: f.platform_collects, platform_booked_on: f.platform_booked_on } : {}),
         guest_profile_id: guest?.id ?? null, new_profile: newProfile,
@@ -138,6 +143,15 @@ export default function StaffReservationNew() {
                 </select>
               </Field>
             </div>
+            {/* FRONT-15 / FRONT-08: say why the booking cannot be made yet, instead of a silent disabled button */}
+            {nights <= 0 && <p className="mt-2 text-sm text-danger-600" role="alert">المغادرة يجب أن تكون بعد الوصول.</p>}
+            {nights > 0 && f.check_in < todayISO() && !pastStay && <p className="mt-2 text-sm text-warning-700">تاريخ الوصول قبل اليوم — تأكد من الشهر.</p>}
+            {nights > 0 && pastStay && (canLate ? (
+              <div className="mt-3 rounded-xl border border-warning-500/30 bg-warning-500/10 p-3" data-testid="late-entry">
+                <p className="mb-2 text-sm text-warning-700">مدة هذا الحجز انتهت قبل اليوم. يُقبل إدخالًا متأخرًا بسبب يُسجَّل في سجل الإجراءات (مثل حجز منصة أُدخل بعد المغادرة).</p>
+                <Field label="سبب الإدخال المتأخر (إلزامي)"><input className="input" value={lateReason} onChange={(e) => setLateReason(e.target.value)} /></Field>
+              </div>
+            ) : <p className="mt-2 text-sm text-danger-600" role="alert">مدة هذا الحجز انتهت قبل اليوم؛ يُدخله المشرف أو المدير بسبب. تأكد من التاريخ.</p>)}
             {extraUnits.map((u, i) => (
               <div key={i} className="mt-3 grid items-end gap-3 rounded-xl border border-ink-100 p-3 sm:grid-cols-[1fr_6rem_6rem_auto]">
                 <Field label={`الوحدة ${i + 2} — النوع`}><select className="input" value={u.category_id} onChange={(e) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, category_id: e.target.value } : x)))}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name_ar} — حتى {c.max_capacity}</option>)}</select></Field>
@@ -241,7 +255,7 @@ export default function StaffReservationNew() {
           <Card>
             <Toggle checked={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} label="تأكيد الحجز مباشرة" />
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
-            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !guestDataOk || !capacityOk || nights <= 0 || (source?.kind === "external" && f.platform_collects == null)} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
+            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !guestDataOk || !capacityOk || nights <= 0 || (pastStay && (!canLate || !lateReason.trim())) || (source?.kind === "external" && f.platform_collects == null)} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
           </Card>
         </div>
       </form>

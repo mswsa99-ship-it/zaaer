@@ -198,7 +198,7 @@ do $$ declare r jsonb; s2 text; begin
 exception when others then perform t_record('KC13 a new code not yet tried on the box is amber and keeps the unit not ready; housekeeping confirms the test → green and ready', false, sqlerrm); end $$;
 
 do $$ declare r jsonb; kb keyboxes; n int; begin
-  r := fn_staff_rotate_keybox_code(t_id('k3'), '5678', true);
+  r := fn_staff_rotate_keybox_code(t_id('k3'), '5698', true);
   kb := t_kb(t_id('k3'));
   select count(*) into n from keyboxes;      -- housekeeping still reads no key box row itself (RLS); the screen goes through the functions
   perform t_record('KC14 housekeeping gives a unit without a key box its first code; the keyboxes table itself stays unreadable to housekeeping',

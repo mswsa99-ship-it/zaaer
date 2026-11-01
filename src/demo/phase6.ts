@@ -115,7 +115,8 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
         && (!a("check_in_from") || r.check_in >= a("check_in_from")) && (!a("check_in_to") || r.check_in <= a("check_in_to"))
         && (!a("check_out_from") || r.check_out >= a("check_out_from")) && (!a("check_out_to") || r.check_out <= a("check_out_to"))
         && (!a("created_from") || dayIn(r.created_at, tz) >= a("created_from")) && (!a("created_to") || dayIn(r.created_at, tz) <= a("created_to"))
-        && (!a("stay_on") || (r.check_in <= a("stay_on") && r.check_out > a("stay_on")))
+        // 0057 (FRONT-09): a stay in a unit that day; a guest past departure still counts up to today
+        && (!a("stay_on") || (!["cancelled", "rejected", "no_show", "draft"].includes(r.status) && r.check_in <= a("stay_on") && (r.check_out > a("stay_on") || (r.status === "checked_in" && a("stay_on") <= branchToday(p_branch)))))
         && (!a("source_id") || r.source_id === a("source_id")) && (!a("category_id") || r.room_category_id === a("category_id")) && (!a("room_id") || r.room_id === a("room_id"))
         && (!a("room_number") || byId("rooms", r.room_id)?.room_number === a("room_number"))
         && (!a("booking_type") || r.booking_type === a("booking_type"))
@@ -125,7 +126,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
         && (!a("group_ref") || r.group_ref === a("group_ref"))
         && (a("has_discount") !== "true" || Number(r.discount_halalas) > 0)
         && (!pc || r.platform_collects === boolArg(pc))
-        && (a("has_balance") !== "true" || (money && Number(r.balance_due_halalas) > 0))
+        && (a("has_balance") !== "true" || (money && Number(r.balance_due_halalas) > 0 && !["cancelled", "rejected", "no_show"].includes(r.status)))
         && (!q || ilike(r.internal_ref, q) || ilike(r.external_ref, q) || ilike(r.cancel_reference, q) || ilike(r.company_name, q)
             || guests.some((g) => g.reservation_id === r.id && (ilike(g.full_name, q) || String(g.phone ?? "").includes(q)))));
       const sort = a("sort");
@@ -139,7 +140,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
         platform_booked_on: r.platform_booked_on ?? null, platform_collects: r.platform_collects ?? null, created_by_name: staffName(r.created_by),
         actual_check_in: r.actual_check_in ?? null, actual_check_out: r.actual_check_out ?? null, cancelled_at: r.cancelled_at ?? null, cancel_reference: r.cancel_reference ?? null,
         total_halalas: money ? r.total_halalas : null, paid_halalas: money ? r.paid_halalas : null, discount_halalas: money ? r.discount_halalas : null, nightly_rate_halalas: money ? r.nightly_rate_halalas : null,
-        balance_due_halalas: money ? r.balance_due_halalas : null, deposit_balance_halalas: money ? r.deposit_balance_halalas : null,
+        balance_due_halalas: money ? (["cancelled", "rejected", "no_show"].includes(r.status) ? 0 : r.balance_due_halalas) : null, deposit_balance_halalas: money ? r.deposit_balance_halalas : null,
         payment_status: r.payment_status, identity_status: r.identity_status, access_status: r.access_status, created_at: r.created_at, group_ref: r.group_ref ?? null, hold: !!r.security_hold,
         ban: money ? banMatches(r.id).length > 0 : null,
         rating: hasRole("owner", "manager", "supervisor") ? primaryRating(r.id) : null }));
