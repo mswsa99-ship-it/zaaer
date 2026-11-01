@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BranchGuideEditor } from "../../components/BranchGuideEditor";
 import { Building2, Plus, Pencil, Image as ImageIcon, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
@@ -96,6 +97,7 @@ export default function AdminBranches() {
           </ActionForm>
         )}
         {draft?.id && <BranchMedia branchId={draft.id} />}
+        {draft?.id && <BranchGuideEditor branchId={draft.id} />}
         {draft?.id && isOwner && <DefinitionLifecycle entity="branch" id={draft.id} archived={!!draft.archived_at} onDone={() => { setDraft(null); load(); }} />}
       </Modal>
     </div>

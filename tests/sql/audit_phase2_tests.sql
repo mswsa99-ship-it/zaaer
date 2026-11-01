@@ -1,5 +1,5 @@
 -- =====================================================================
--- The review of 31 October, Phase 2a as the owner decided it (QD*; migration 0055): the organisation's record, the
+-- The review of 31 October, Phase 2 as the owner decided it (QD*; migrations 0055–0056): the organisation's record, the
 -- price range of each role, the inventory and release rules, unit numbers, staff invites, branches, knowledge.
 -- A branch of its own, «فرع الإعدادات»: the supervisor a…02 and the manager a…08 are members.
 -- =====================================================================
@@ -29,6 +29,11 @@ end $$;
 create or replace function t_png() returns text language sql as $$
   select 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 $$;
+
+-- reads of tables no signed-in role may read (the checks run as the API roles)
+create or replace function t_media_archived(p_id uuid) returns boolean language sql security definer as $$ select archived_at is not null from branch_media_items where id = p_id $$;
+create or replace function t_payment_secret_hidden(p_branch uuid) returns boolean language sql security definer as $$
+  select secret_key_encrypted is not null and position('sk_test' in encode(secret_key_encrypted, 'escape')) = 0 from branch_payment_settings where branch_id = p_branch $$;
 
 -- ---------------------------------------------------------------- fixtures (the owner)
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
@@ -235,11 +240,109 @@ exception when others then perform t_record('QD13 a contradicting answer to the 
 end $$;
 reset role;
 
+-- ---------------------------------------------------------------- QD14–QD16 the branch's guide and media (SETUP-05, 0056)
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare g jsonb; begin
+  perform fn_admin_set_branch_guide(jsonb_build_object('branch_id', t_id('b'), 'arrival_instructions', 'ادخل من البوابة الشمالية ثم المصعد الثاني.',
+    'bank_name', 'مصرف الراجحي', 'bank_beneficiary', 'فايف اورز للشقق', 'bank_iban', 'SA03 8000 0000 6080 1016 7519'));
+  reset role;
+  g := fn_public_branch_guide(t_id('b'));
+  set role authenticated;
+  perform t_record('QD14 the branch keeps its arrival instructions and the bank details guests see (IBAN checked, all three or none); a wrong IBAN and an IBAN without the bank are refused',
+    g->>'arrival_instructions' like 'ادخل من البوابة%' and g->'bank'->>'iban' = 'SA0380000000608010167519' and g->'bank'->>'beneficiary' = 'فايف اورز للشقق'
+    and t_err(format('select fn_admin_set_branch_guide(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'bank_iban', 'SA0380000000608010167518')), 'VALIDATION: iban%') = 'ok'
+    and t_err(format('select fn_admin_set_branch_guide(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'bank_name', '')), 'VALIDATION: bank_details%') = 'ok', g::text);
+exception when others then perform t_record('QD14 the branch keeps its arrival instructions and the bank details guests see (IBAN checked, all three or none); a wrong IBAN and an IBAN without the bank are refused', false, sqlerrm);
+end $$;
+do $$ declare ph jsonb; vd jsonb; g jsonb; photo text; begin
+  ph := fn_admin_upsert_media_item(jsonb_build_object('branch_id', t_id('b'), 'kind', 'photo', 'caption', 'الواجهة', 'data_base64', t_png()));
+  vd := fn_admin_upsert_media_item(jsonb_build_object('branch_id', t_id('b'), 'kind', 'video', 'caption', 'طريق الدخول', 'url', 'https://example.com/entry.mp4', 'room_id', t_id('r101')));
+  reset role;
+  g := fn_public_branch_guide(t_id('b')); photo := fn_branch_photo((ph->>'id')::uuid);
+  set role authenticated;
+  perform t_record('QD15 the gallery takes a photo (PNG/JPG/WebP up to 1 MB) and an entry video by https link, for a unit too; an SVG, a plain-http link and a unit of another branch are refused; guests read them',
+    jsonb_array_length(g->'photos') = 1 and g->'photos'->0->>'caption' = 'الواجهة' and g->'videos'->0->>'url' = 'https://example.com/entry.mp4'
+    and photo like 'data:image/png;base64,%'
+    and t_err(format('select fn_admin_upsert_media_item(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'kind', 'photo', 'data_base64', 'PHN2Zz48L3N2Zz4=')), 'VALIDATION: image_type%') = 'ok'
+    and t_err(format('select fn_admin_upsert_media_item(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'kind', 'video', 'url', 'http://example.com/x.mp4')), 'VALIDATION: video_url%') = 'ok'
+    and t_err(format('select fn_admin_upsert_media_item(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'kind', 'video', 'url', 'https://example.com/y.mp4', 'room_id', '00000000-0000-0000-0000-000000000101')), 'BRANCH_MISMATCH%') = 'ok', g::text);
+  insert into ids values ('photo', (ph->>'id')::uuid);
+exception when others then perform t_record('QD15 the gallery takes a photo (PNG/JPG/WebP up to 1 MB) and an entry video by https link, for a unit too; an SVG, a plain-http link and a unit of another branch are refused; guests read them', false, sqlerrm);
+end $$;
+do $$ declare g jsonb; begin
+  perform fn_admin_archive_media_item(t_id('photo'), 'صورة قديمة');
+  reset role;
+  g := fn_public_branch_guide(t_id('b'));
+  set role authenticated;
+  perform t_record('QD16 a photo is archived with a reason (never erased) and leaves the guest page; without a reason it is refused; it is restored',
+    jsonb_array_length(g->'photos') = 0 and t_media_archived(t_id('photo'))
+    and t_err(format('select fn_admin_archive_media_item(%L, '' '')', t_id('photo')), 'VALIDATION: reason%') = 'ok'
+    and (fn_admin_archive_media_item(t_id('photo'), null, false)->>'ok')::boolean
+    and not t_media_archived(t_id('photo')), g::text);
+exception when others then perform t_record('QD16 a photo is archived with a reason (never erased) and leaves the guest page; without a reason it is refused; it is restored', false, sqlerrm);
+end $$;
+
+-- ---------------------------------------------------------------- QD17 booking sources (SETUP-14, 0056)
+do $$ declare s jsonb; s2 jsonb; src booking_sources; begin
+  s := fn_admin_upsert_source('{"name":"منصة جديدة","kind":"external","external_reference_required":true,"commission_bp":1200}');
+  s2 := fn_admin_upsert_source(jsonb_build_object('id', s->>'id', 'name', 'منصة جديدة (معدّلة)', 'commission_bp', 1000));
+  select * into src from booking_sources where id = (s->>'id')::uuid;
+  perform t_record('QD17 a booking source is added and edited (name, kind, platform number, commission); a duplicate name is refused; switching one off needs a reason; a used source keeps its kind',
+    src.name = 'منصة جديدة (معدّلة)' and src.commission_bp = 1000 and src.kind = 'external' and src.code like 'custom_%' and src.is_active
+    and t_err($q$select fn_admin_upsert_source('{"name":"منصة جديدة (معدّلة)"}')$q$, 'DUPLICATE_SOURCE_NAME%') = 'ok'
+    and t_err(format('select fn_admin_set_source_active(%L::jsonb)', jsonb_build_object('id', s->>'id', 'is_active', false)), 'VALIDATION: reason%') = 'ok'
+    and (fn_admin_set_source_active(jsonb_build_object('id', s->>'id', 'is_active', false, 'reason', 'توقف التعاقد'))->>'changed')::boolean
+    and t_err(format('select fn_admin_upsert_source(%L::jsonb)', jsonb_build_object('id', '00000000-0000-0000-0000-000000000021', 'kind', 'external')), 'SOURCE_IN_USE%') = 'ok', s::text);
+exception when others then perform t_record('QD17 a booking source is added and edited (name, kind, platform number, commission); a duplicate name is refused; switching one off needs a reason; a used source keeps its kind', false, sqlerrm);
+end $$;
+
+-- ---------------------------------------------------------------- QD18 policies (SETUP-10/14, 0056)
+do $$ declare pid uuid; p property_policies; erased text; begin
+  insert into property_policies(organization_id, branch_id, topic, topic_label, title, content_ar, is_public)
+  values ('00000000-0000-0000-0000-000000000001', t_id('b'), 'other', 'الحيوانات الأليفة', 'الحيوانات', 'لا يُسمح بالحيوانات الأليفة.', true) returning id into pid;
+  begin delete from property_policies where id = pid; erased := 'erased'; exception when insufficient_privilege then erased := 'refused'; end;
+  update property_policies set archived_at = now(), archive_reason = 'لم تعد سارية' where id = pid;
+  select * into p from property_policies where id = pid;
+  perform t_record('QD18 a policy of topic «أخرى» keeps its own label; a policy is archived with a reason, never erased, and an archived policy is not public',
+    erased = 'refused' and p.topic_label = 'الحيوانات الأليفة' and p.archived_at is not null and not p.is_public
+    and t_err(format('update property_policies set archived_at = now(), archive_reason = null where id = %L and archived_at is null', (select id from property_policies where branch_id = t_id('b') and archived_at is null limit 1)), '%') in ('ok', 'accepted')
+    and t_err(format('insert into property_policies(organization_id, branch_id, topic, title, content_ar) values (%L, %L, ''stay'', ''  '', ''x'')', '00000000-0000-0000-0000-000000000001', t_id('b')), 'VALIDATION: policy_required%') = 'ok', erased);
+exception when others then perform t_record('QD18 a policy of topic «أخرى» keeps its own label; a policy is archived with a reason, never erased, and an archived policy is not public', false, sqlerrm);
+end $$;
+do $$ declare pid uuid; begin
+  insert into property_policies(organization_id, branch_id, topic, title, content_ar) values ('00000000-0000-0000-0000-000000000001', t_id('b'), 'stay', 'الهدوء', 'الهدوء بعد 11 مساءً.') returning id into pid;
+  perform t_record('QD18b archiving a policy without a reason is refused',
+    t_err(format('update property_policies set archived_at = now() where id = %L', pid), 'VALIDATION: reason%') = 'ok');
+exception when others then perform t_record('QD18b archiving a policy without a reason is refused', false, sqlerrm);
+end $$;
+
+-- ---------------------------------------------------------------- QD19 payment provider settings (SETUP-02, 0056)
+do $$ declare s jsonb; r jsonb; begin
+  r := fn_admin_save_payment_settings(jsonb_build_object('branch_id', t_id('b'), 'provider', 'moyasar', 'merchant_id', 'mch_123', 'publishable_key', 'pk_test_abc', 'pos_terminal_id', '٧٧٠٠١٢'));
+  perform t_record('QD19 the branch''s payment provider is set in the settings; online payment cannot be switched on until the secret key is kept',
+    t_err(format('select fn_admin_save_payment_settings(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'online_enabled', true)), 'VALIDATION: payment_incomplete%') = 'ok'
+    and t_err(format('select fn_admin_save_payment_settings(%L::jsonb)', jsonb_build_object('branch_id', t_id('b'), 'provider', 'stripe')), 'VALIDATION: provider%') = 'ok', r::text);
+  r := fn_admin_save_payment_settings(jsonb_build_object('branch_id', t_id('b'), 'secret_key', 'sk_test_secret_9876', 'online_enabled', true));
+  s := fn_admin_payment_settings(t_id('b'));
+  perform t_record('QD19b with the secret key kept (encrypted; only its last four shown) online payment is switched on; the secret never comes back',
+    (s->>'has_secret')::boolean and s->>'secret_last4' = '9876' and (s->>'online_enabled')::boolean and (s->>'complete')::boolean
+    and s->>'pos_terminal_id' = '770012' and s::text not like '%sk_test_secret%'
+    and t_payment_secret_hidden(t_id('b')), s::text);
+exception when others then perform t_record('QD19b with the secret key kept (encrypted; only its last four shown) online payment is switched on; the secret never comes back', false, sqlerrm);
+end $$;
+reset role;
+select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
+set role authenticated;
+select t_record('QD19c the payment provider is the owner''s (a manager is refused)',
+  t_err(format('select fn_admin_payment_settings(%L)', t_id('b')), '%FORBIDDEN%') = 'ok');
+reset role;
+
 -- a check that comes out NULL counts as a failure here
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),160) as detail from test_results order by ok nulls first, name;
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin
   if exists (select 1 from test_results where ok is not true) then raise exception 'REVIEW PHASE 2 TESTS FAILED'; end if;
-  if (select count(*) from test_results) < 15 then raise exception 'REVIEW PHASE 2 TESTS INCOMPLETE: % of 15 checks ran', (select count(*) from test_results); end if;
+  if (select count(*) from test_results) < 24 then raise exception 'REVIEW PHASE 2 TESTS INCOMPLETE: % of 24 checks ran', (select count(*) from test_results); end if;
 end $$;

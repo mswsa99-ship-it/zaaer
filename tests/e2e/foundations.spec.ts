@@ -59,13 +59,13 @@ test.describe("load and save states (U01, U04 — decision 42)", () => {
     const name = dialog.locator("div:has(> label:has-text('اسم البلوك')) input");
     await name.fill("بلوك تجربة الحفظ");
     await page.evaluate(() => { (window as unknown as { __demoFail: unknown }).__demoFail = (t: string) => (t === "rpc:fn_admin_upsert_block" ? "network down" : null); });
-    await dialog.getByRole("button", { name: "حفظ" }).click();
+    await dialog.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dialog.getByText(/تعذّر تنفيذ العملية.*\(رمز التتبع: [A-Z0-9]{8}\)/)).toBeVisible();
     await expect(name).toHaveValue("بلوك تجربة الحفظ");                     // nothing typed is lost
     await expect(page.getByText("بلوك تجربة الحفظ", { exact: true })).toHaveCount(0);   // and nothing claims it was saved
 
     await page.evaluate(() => { (window as unknown as { __demoFail: unknown }).__demoFail = undefined; });
-    await dialog.getByRole("button", { name: "حفظ" }).click();
+    await dialog.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByText("بلوك تجربة الحفظ", { exact: true })).toBeVisible();
   });

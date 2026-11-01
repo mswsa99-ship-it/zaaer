@@ -315,6 +315,8 @@ export function seed(): Store {
   put("guest_bans", banned ? [{ id: uid(), organization_id: ORG, guest_profile_id: banned.id, name_snapshot: banned.full_name, phones: ["966501110017"], fingerprints: [banned.identity_fingerprint].filter(Boolean), reason: "لم يحضر مرتين دون إشعار وأساء للموظفين", created_by: STAFF.manager.id, created_at: ts(-1), lifted_at: null, lifted_by: null, lift_reason: null }] : []);
   put("stay_acknowledgements", []);
   put("branch_media", []);
+  put("branch_media_items", []);
+  put("branch_payment_settings", []);
   put("payment_transactions", []);
 
   // housekeeping tasks

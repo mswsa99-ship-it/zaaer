@@ -37,7 +37,7 @@ test.describe("rates (phase 2)", () => {
     await page.getByRole("button", { name: "تعديل المحدد" }).click();
     const dlg = page.getByRole("dialog");
     await dlg.locator("input[data-money]").first().fill("650");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg).toBeHidden();
     await expect(page.getByText("حُدِّثت 3 خانة.")).toBeVisible();
     await expect(page.getByRole("button", { name: `شقة بغرفتين السعر ${nights[1]}` })).toHaveText("650");
@@ -46,7 +46,7 @@ test.describe("rates (phase 2)", () => {
     await page.getByRole("button", { name: `شقة بغرفتين السعر ${plus(t, 14)}` }).click();
     await page.getByRole("button", { name: "تعديل المحدد" }).click();
     await dlg.locator("input[data-money]").first().fill("300");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg.getByText("السعر أقل من الحد الأدنى لليلة في هذا النوع.")).toBeVisible();
     await dlg.getByRole("button", { name: "إغلاق" }).click();
     await expect(dlg).toBeHidden();
@@ -117,7 +117,7 @@ test.describe("rates (phase 2)", () => {
     await page.getByRole("button", { name: "تعديل استوديو مريح" }).click();
     const dlg = page.getByRole("dialog");
     await dlg.getByLabel("السعة القصوى").fill("2");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg.getByTestId("capacity-impact")).toContainText("حجز قادم فيه نزلاء أكثر من السعة الجديدة");
     await dlg.getByRole("button", { name: "حفظ رغم ذلك" }).click();
     await expect(dlg).toBeHidden();

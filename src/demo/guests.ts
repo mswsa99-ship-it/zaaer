@@ -402,6 +402,7 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
     fn_admin_set_source_active: ({ p }) => {
       requireCap("definitions"); if (p.is_active == null) throw new Error("VALIDATION: is_active"); const s = byId("booking_sources", p.id); if (!s) throw new Error("NOT_FOUND");
       if (!!s.is_active === !!p.is_active) return { ok: true, changed: false };
+      if (!p.is_active && !String(p.reason ?? "").trim()) throw new Error("VALIDATION: reason");
       const was = !!s.is_active; s.is_active = !!p.is_active; emit("booking_sources");
       audit(null, s.is_active ? "source.enabled" : "source.disabled", "booking_source", s.id, { before: { code: s.code, is_active: was }, after: { code: s.code, is_active: s.is_active }, reason: String(p.reason ?? "").trim() || null });
       return { ok: true, changed: true };

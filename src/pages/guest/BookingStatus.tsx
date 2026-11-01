@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserCheck, FileCheck, MessageCircle, MapPin, LogIn, FileText, XCircle } from "lucide-react";
 import { guestApi, toArabicError, type GuestSession, type PublicBranch, type GuestStaySummary } from "../../lib/api";
 import { Card, Spinner, EmptyState, ErrorBanner } from "../../components/ui";
+import { GuestBranchGuide } from "../../components/GuestBranchGuide";
 import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
 import { formatCurrency, formatHijri, todayISO } from "../../lib/utils";
 
@@ -156,6 +157,8 @@ export default function BookingStatus() {
         <Link to={`/booking/summary/${token}`} className="btn-outline" data-testid="summary-link"><FileText className="h-4 w-4" /> ملخص الإقامة{r.summary_accepted ? " (مُقرّ)" : ""}</Link>
         {branch?.map_url && <a href={branch.map_url} target="_blank" rel="noopener noreferrer" className="btn-outline" data-testid="map-link"><MapPin className="h-4 w-4" /> الموقع على الخريطة</a>}
       </div>
+
+      {branchId && <GuestBranchGuide branchId={branchId} showBank={dueHalalas > 0 && !["checked_out", "closed", "cancelled"].includes(r.status)} />}
 
       {rules && rules.length > 0 && (
         <Card className="mt-6" data-testid="guest-rules">

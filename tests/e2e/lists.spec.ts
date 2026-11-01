@@ -56,7 +56,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await page.getByTestId("save-view").click();
     await page.getByRole("dialog").getByRole("textbox").fill("المؤكدة");
     await page.getByRole("dialog").getByLabel(/اجعله العرض الافتراضي/).check();
-    await page.getByRole("dialog").getByRole("button", { name: "حفظ" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(page.getByLabel("العروض المحفوظة")).toContainText("★ المؤكدة");
     await go("/staff/reservations");
     await expect(page.getByLabel("العروض المحفوظة")).toHaveValue(/.+/);

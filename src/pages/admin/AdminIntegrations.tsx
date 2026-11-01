@@ -25,11 +25,17 @@ export default function AdminIntegrations() {
   // per-branch numbers (owner only — other roles see the generic state)
   useEffect(() => {
     whatsappApi.channels().then((rows) => {
-      const live = rows.filter((r) => r.enabled && (r.status === "active" || r.status === "configured")).length;
+      // 0055 (SETUP-07, the owner's decision): a branch counts as «متصل» only when every step works — for the reception
+      // computer that is the program online and WhatsApp linked on it, not only a saved and enabled channel
+      const working = (r: typeof rows[number]) => r.enabled && (r.status === "active" || r.status === "configured")
+        && (r.mode !== "web_bridge" || (r.bridge_online && r.bridge_status === "connected"));
+      const live = rows.filter(working).length;
+      const waiting = rows.filter((r) => r.enabled && !working(r) && r.status !== "error").length;
       const broken = rows.filter((r) => r.status === "error").length;
+      const allLive = rows.length > 0 && live === rows.filter((r) => r.enabled).length && live > 0;
       setWa({ name: "واتساب الفروع (WhatsApp Business)", link: "/admin/whatsapp",
-        status: broken ? "error" : live ? "connected" : "awaiting",
-        description: `${live} من ${rows.length} فرع مفعّل للنزلاء${broken ? ` — ${broken} بخطأ اتصال` : ""}` });
+        status: broken ? "error" : allLive && !waiting ? "connected" : "awaiting",
+        description: `${live} من ${rows.length} فرع يعمل الآن للنزلاء${waiting ? ` — ${waiting} بانتظار الربط (كمبيوتر الاستقبال غير متصل أو واتساب غير مربوط)` : ""}${broken ? ` — ${broken} بخطأ اتصال` : ""}` });
     }).catch(() => setWa({ name: "واتساب الفروع (WhatsApp Business)", link: "/admin/whatsapp", status: "awaiting", description: "يضبطه المالك لكل فرع" }));
   }, []);
 

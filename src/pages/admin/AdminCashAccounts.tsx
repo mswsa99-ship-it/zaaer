@@ -11,6 +11,7 @@ import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { moneyApi, type CashAccount } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { accountLabel, last4Text } from "../../lib/useCashAccounts";
+import { latinDigits } from "../../lib/validation";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, ArchivedBadge, Toggle, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
@@ -99,7 +100,7 @@ export default function AdminCashAccounts() {
               <Field label="الاسم (مطلوب)"><input className="input" aria-label="الاسم" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={draft.kind === "cash_box" ? "مثال: صندوق الاستقبال" : "مثال: حساب الشبكة"} /></Field>
               {draft.kind === "bank_account" && <>
                 <Field label="البنك"><input className="input" aria-label="البنك" value={draft.bank_name ?? ""} onChange={(e) => setDraft({ ...draft, bank_name: e.target.value })} /></Field>
-                <Field label="آخر أربعة أرقام من الحساب" hint="للتمييز فقط؛ لا يُحفظ رقم الحساب كاملًا."><input className="input" aria-label="آخر أربعة أرقام" dir="ltr" inputMode="numeric" maxLength={4} value={draft.account_last4 ?? ""} onChange={(e) => setDraft({ ...draft, account_last4: e.target.value.replace(/\D/g, "") })} /></Field>
+                <Field label="آخر أربعة أرقام من الحساب" hint="للتمييز فقط؛ لا يُحفظ رقم الحساب كاملًا."><input className="input" aria-label="آخر أربعة أرقام" dir="ltr" inputMode="numeric" maxLength={4} value={draft.account_last4 ?? ""} onChange={(e) => setDraft({ ...draft, account_last4: latinDigits(e.target.value).replace(/\D/g, "").slice(0, 4) })} /></Field>
               </>}
             </div>
             <div className="mt-3 flex flex-wrap gap-4">

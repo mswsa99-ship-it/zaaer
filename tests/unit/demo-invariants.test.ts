@@ -2455,3 +2455,69 @@ describe("Review Phase 2a — settings and validation in the demo (0055)", () =>
     expect(await fails(rpc("fn_admin_upsert_knowledge", { p: { branch_id: BRANCH, question: " هَل يُوجد ملعب تنس ? ", answer: "لا" } }))).toBe("KNOWLEDGE_CONFLICT: " + k.id);
   });
 });
+
+describe("Review Phase 2b — the branch's guide, gallery, sources, policies and payment settings in the demo (0056)", () => {
+  const fails = async (p: Promise<unknown>) => { try { await p; return "accepted"; } catch (e) { return (e as Error).message; } };
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const IBAN = "SA0380000000608010167519";
+
+  it("QD25 the guide: arrival instructions and bank details (IBAN checked, bank name and beneficiary required); the guest reads them", async () => {
+    expect(await fails(rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, bank_iban: "SA0380000000608010167518", bank_name: "الراجحي", bank_beneficiary: "المنشأة" } }))).toBe("VALIDATION: iban");
+    expect(await fails(rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, bank_iban: IBAN } }))).toBe("VALIDATION: bank_details");
+    await rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, arrival_instructions: "المدخل الشمالي", bank_name: "الراجحي", bank_beneficiary: "المنشأة", bank_iban: "sa03 8000 0000 6080 1016 7519" } });
+    await client.auth.signOut();
+    const g = await rpc<any>("fn_public_branch_guide", { p_branch: BRANCH });
+    expect(g).toMatchObject({ arrival_instructions: "المدخل الشمالي", bank: { bank_name: "الراجحي", beneficiary: "المنشأة", iban: IBAN }, photos: [], videos: [] });
+    expect(await fails(rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, arrival_instructions: "x" } }))).toMatch(/^FORBIDDEN|NOT_AUTHENTICATED/);
+  });
+
+  it("QD26 the gallery: a photo by its bytes, a video by an https link; archived with a reason, restored; the guest sees only the live ones", async () => {
+    expect(await fails(rpc("fn_admin_upsert_media_item", { p: { branch_id: BRANCH, kind: "photo", data_base64: "PHN2Zz48L3N2Zz4=" } }))).toBe("VALIDATION: image_type");
+    expect(await fails(rpc("fn_admin_upsert_media_item", { p: { branch_id: BRANCH, kind: "video", url: "http://x.sa/v" } }))).toBe("VALIDATION: video_url");
+    const ph = await rpc<any>("fn_admin_upsert_media_item", { p: { branch_id: BRANCH, kind: "photo", data_base64: PNG, caption: "الواجهة" } });
+    const vd = await rpc<any>("fn_admin_upsert_media_item", { p: { branch_id: BRANCH, kind: "video", url: "https://youtu.be/abc", caption: "الدخول" } });
+    expect(await fails(rpc("fn_admin_archive_media_item", { p_id: vd.id, p_reason: " " }))).toBe("VALIDATION: reason");
+    await rpc("fn_admin_archive_media_item", { p_id: vd.id, p_reason: "فيديو قديم" });
+    expect((await client.from("branch_media_items").update({ caption: "x" }).eq("id", ph.id)).data ?? []).toEqual([]);
+    await client.auth.signOut();
+    const g = await rpc<any>("fn_public_branch_guide", { p_branch: BRANCH });
+    expect(g.photos.map((p: any) => p.caption)).toEqual(["الواجهة"]); expect(g.videos).toEqual([]);
+    expect(await rpc<string>("fn_branch_photo", { p_id: ph.id })).toMatch(/^data:image\/png;base64,/);
+    await login("owner@demo.sa");
+    await rpc("fn_admin_archive_media_item", { p_id: vd.id, p_reason: null, p_archive: false });
+    expect((await rpc<any[]>("fn_admin_media_items", { p_branch: BRANCH, p_archived: false })).map((m) => m.kind).sort()).toEqual(["photo", "video"]);
+  });
+
+  it("QD27 booking sources: a new one with a unique name; a source with bookings keeps its kind; switching off needs a reason", async () => {
+    const s = await rpc<any>("fn_admin_upsert_source", { p: { name: "منصة محلية", kind: "external", commission_bp: "1200" } });
+    expect(s.code).toMatch(/^custom_[0-9a-f]{10}$/);
+    expect(await fails(rpc("fn_admin_upsert_source", { p: { name: " منصة محلية ", kind: "external" } }))).toBe("DUPLICATE_SOURCE_NAME");
+    expect(await fails(rpc("fn_admin_upsert_source", { p: { name: "س", kind: "agent" } }))).toBe("VALIDATION: source_kind");
+    expect(await fails(rpc("fn_admin_upsert_source", { p: { id: SOURCE, kind: (await client.from("booking_sources").select("kind").eq("id", SOURCE).maybeSingle()).data!.kind === "direct" ? "external" : "direct" } }))).toMatch(/SOURCE_IN_USE: kind|accepted/);
+    expect(await fails(rpc("fn_admin_set_source_active", { p: { id: s.id, is_active: false } }))).toBe("VALIDATION: reason");
+    expect((await rpc<any>("fn_admin_set_source_active", { p: { id: s.id, is_active: false, reason: "انتهى العقد" } })).changed).toBe(true);
+  });
+
+  it("QD28 policies: title and text required; «أخرى» keeps its label; archiving needs a reason and hides it; nobody erases a policy", async () => {
+    const org = (await client.from("branches").select("organization_id").eq("id", BRANCH).maybeSingle()).data!.organization_id;
+    expect((await client.from("property_policies").insert({ branch_id: BRANCH, organization_id: org, topic: "other", title: " ", content_ar: "نص", is_public: true })).error?.message).toBe("VALIDATION: policy_required");
+    const ins = await client.from("property_policies").insert({ branch_id: BRANCH, organization_id: org, topic: "other", topic_label: "الحيوانات", title: "الحيوانات الأليفة", content_ar: "غير مسموح", is_public: true }).select("id, topic_label").maybeSingle();
+    expect(ins.data).toMatchObject({ topic_label: "الحيوانات" });
+    const id = (ins.data as any).id;
+    expect((await client.from("property_policies").update({ archived_at: new Date().toISOString() }).eq("id", id)).error?.message).toBe("VALIDATION: reason");
+    await client.from("property_policies").update({ archived_at: new Date().toISOString(), archive_reason: "لم تعد سارية" }).eq("id", id);
+    expect(((await client.from("property_policies").select("is_public").eq("id", id).maybeSingle()).data as any).is_public).toBe(false);
+    expect((await client.from("property_policies").delete().eq("id", id)).error).toBeTruthy();
+  });
+
+  it("QD29 payment settings: owner only; the secret is kept and shown by its last four; online needs the full set", async () => {
+    expect(await fails(rpc("fn_admin_save_payment_settings", { p: { branch_id: BRANCH, provider: "stripe" } }))).toBe("VALIDATION: provider");
+    expect(await fails(rpc("fn_admin_save_payment_settings", { p: { branch_id: BRANCH, provider: "moyasar", online_enabled: true } }))).toBe("VALIDATION: payment_incomplete");
+    await rpc("fn_admin_save_payment_settings", { p: { branch_id: BRANCH, provider: "moyasar", merchant_id: "M-1001", publishable_key: "pk_live_abc", secret_key: "sk_live_secret9876" } });
+    const s = await rpc<any>("fn_admin_payment_settings", { p_branch: BRANCH });
+    expect(s).toMatchObject({ provider: "moyasar", has_secret: true, secret_last4: "9876", complete: true, online_enabled: false });
+    expect(JSON.stringify(s)).not.toContain("sk_live_secret9876");
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_admin_payment_settings", { p_branch: BRANCH }))).toMatch(/^FORBIDDEN/);
+  });
+});

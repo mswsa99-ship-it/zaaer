@@ -55,7 +55,7 @@ test.describe("core money (phase 1)", () => {
     await dlg.getByLabel("البنك").fill("بنك تجريبي");
     await dlg.getByLabel("آخر أربعة أرقام").fill("9876");
     await dlg.getByLabel(/الافتراضي لكل/).check();
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg).toBeHidden();
     await expect(cards).toHaveCount(3);
     await expect(cards.filter({ hasText: "حساب التحويلات" })).toContainText("الافتراضي");
@@ -149,7 +149,7 @@ test.describe("core money (phase 1)", () => {
     await expect(page.getByText(/بلا ضريبة/).first()).toBeVisible();
     await page.getByRole("button", { name: /^تعديل فرع الرياض/ }).click();
     await page.getByLabel("نسبة الضريبة").fill("15");
-    await page.getByRole("dialog").getByRole("button", { name: "حفظ" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(page.getByText(/ضريبة 15\.00%/).first()).toBeVisible();
 
@@ -166,10 +166,10 @@ test.describe("the commission of each booking source (0051)", () => {
     await page.getByTestId("edit-commission-booking_com").click();
     const dlg = page.getByRole("dialog");
     await dlg.getByTestId("commission-input").fill("150");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg.getByText("العمولة نسبة من 0 إلى 100%")).toBeVisible();
     await dlg.getByTestId("commission-input").fill("10");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(page.getByTestId("commission-booking_com")).toContainText("10%");
 
     await go("/admin/platform-payouts");

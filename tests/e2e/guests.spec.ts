@@ -145,7 +145,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     const rate = page.getByRole("dialog");
     await rate.getByTestId("rate-stars").getByLabel("4 من 5").click();
     await rate.getByLabel("ملاحظة داخلية").fill("تحسّن الالتزام بالمواعيد");
-    await rate.getByRole("button", { name: "حفظ" }).click();
+    await rate.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(rate).toBeHidden();
     await expect(page.getByTestId("guest-rating").getByLabel("4 من 5")).toBeVisible();
     await expect(page.getByTestId("guest-rating")).toContainText("تحسّن الالتزام بالمواعيد");
@@ -344,11 +344,11 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     const dlg = page.getByRole("dialog");
     await expect(dlg.getByLabel("الاسم الإنجليزي")).toHaveValue("Riyadh - King Fahd Rd");
     await dlg.getByLabel("رابط الموقع").fill("http://maps.google.com/?q=1");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg.getByText("رابط الموقع يجب أن يكون رابط خرائط Google يبدأ بـ https.")).toBeVisible();
     await dlg.getByLabel("رابط الموقع").fill("https://maps.app.goo.gl/e2e-riyadh");
     await dlg.getByLabel("رابط منصة الحجز").fill("javascript:alert(1)");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg.getByText("رابط منصة الحجز يجب أن يبدأ بـ https.")).toBeVisible();
     await dlg.getByLabel("رابط منصة الحجز").fill("https://www.booking.com/hotel/sa/e2e.html");
     // the logo: an SVG is refused by its bytes; a PNG is kept with its type and size
@@ -357,7 +357,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(media.getByText("الشعار والصورة بصيغة PNG أو JPG أو WebP فقط (لا SVG).")).toBeVisible();
     await media.getByLabel("رفع الشعار").setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: PNG_1x1 });
     await expect(media.getByText(/PNG · 0 كيلوبايت · عبدالله المالك/)).toBeVisible();
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg).toBeHidden();
     await signOut(page);
     await go("/booking/new");
@@ -378,6 +378,11 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(page.getByTestId("source-airport")).toContainText("رقم المنصة اختياري");
     await expect(page.getByTestId("source-agoda")).toContainText("نشط");
     await page.getByTestId("source-agoda").getByRole("button", { name: "إيقاف" }).click();
+    const stop = page.getByRole("dialog");
+    await stop.getByRole("button", { name: "إيقاف" }).click();
+    await expect(stop.getByText("يجب كتابة سبب.")).toBeVisible();   // 0056: switching a source off needs a reason
+    await stop.getByRole("textbox").fill("انتهى العقد مع المنصة");
+    await stop.getByRole("button", { name: "إيقاف" }).click();
     await expect(page.getByTestId("source-agoda")).toContainText("متوقف");
     await page.getByTestId("source-agoda").getByRole("button", { name: "تفعيل" }).click();
     await expect(page.getByTestId("source-agoda")).toContainText("نشط");

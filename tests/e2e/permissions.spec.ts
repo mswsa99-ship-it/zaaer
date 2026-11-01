@@ -12,7 +12,7 @@ const cell = (page: Page, code: string, role: string) => page.locator(`[data-tes
 async function save(page: Page, reason: string) {
   await page.getByTestId("perm-save").click();
   await page.getByRole("dialog").getByRole("textbox").fill(reason);
-  await page.getByRole("dialog").getByRole("button", { name: "حفظ" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "حفظ", exact: true }).click();
   await expect(page.getByTestId("perm-notice")).toContainText("حُفظ");
 }
 /** the demo keeps one session per browser: sign out, then in as another role (same tab) */
@@ -102,7 +102,7 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     await expect(page.getByTestId("perm-review")).toContainText("يُسمح لـمالية");
     await expect(page.getByTestId("perm-review")).toContainText("يُمنع لـمشرف استقبال");
     await page.getByRole("dialog").getByRole("textbox").fill("توزيع جديد للعمل");
-    await page.getByRole("dialog").getByRole("button", { name: "حفظ" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(page.getByTestId("perm-notice")).toContainText("حُفظ 2 تغيير");
     await go("/admin/audit-logs");
     const row = page.getByTestId("audit-table").locator("tr", { hasText: "تعديل مصفوفة الصلاحيات" }).first();

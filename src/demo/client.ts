@@ -12,6 +12,7 @@ import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_share
 import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, validHttpsUrl } from "./guests";
 import { phase6Rpcs } from "./phase6";
+import { phase2Rpcs } from "./phase2";
 import { checkMinAge, checkPersonName, checkPhone, latinDigits, normalizePhone, validEmail } from "../lib/validation";
 import { makePermissions, permissionRpcs } from "./permissions";
 
@@ -235,7 +236,7 @@ type Filter = (r: Row) => boolean;
  *  0043: the matrix's rows decide the rest — «السياسات» (property_policies), «تولّي محادثة واتساب» (a staff reply and taking
  *  a conversation); role_permissions is written only through fn_admin_set_permissions / fn_admin_reset_permissions. */
 const WRITE_RULES: Record<string, () => boolean> = {
-  booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
+  booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
@@ -320,11 +321,20 @@ class QB implements PromiseLike<any> {
         if (this.table === "whatsapp_inbound_messages") {
           for (const p of list) { p.received_at ??= nowISO(); if (rows.some((r) => r.wa_message_id === p.wa_message_id)) return { data: null, error: { message: "duplicate key value violates unique constraint", code: "23505" }, count: null }; }
         }
+        // 0056 (SETUP-10/14): a policy's rules, as trg_policy_rules
+        if (this.table === "property_policies") { try { for (const p of list) policyRules(p, null); } catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" }, count: null }; } }
         for (const p of list) { const i = this.mode === "upsert" ? rows.findIndex((r) => r.id === p.id || (this.table === "ai_usage_daily" && r.organization_id === p.organization_id && r.day === p.day)) : -1; if (i >= 0) rows[i] = { ...rows[i], ...p }; else rows.push(p); }
         emit(this.table);
         const data = list.map((r: Row) => project(this.table, r, this.sel, this.service));
         return { data: this.one ? data[0] : data, error: null, count: null };
       }
+      if (this.mode === "update" && this.table === "property_policies") {
+        const hit = rows.filter(match); try { const next = hit.map((r) => { const m = { ...r, ...this.payload }; policyRules(m, r); return m; }); hit.forEach((r, i) => Object.assign(r, next[i])); }
+        catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" }, count: null }; }
+        emit(this.table); return { data: hit.map((r) => project(this.table, r, this.sel, this.service)), error: null, count: null };
+      }
+      // 0056: a policy is archived, never erased
+      if (this.mode === "delete" && this.table === "property_policies" && !this.service) return { data: null, error: { message: "permission denied for table property_policies", code: "42501" }, count: null };
       if (this.mode === "update") { const hit = rows.filter(match); for (const r of hit) Object.assign(r, this.payload); emit(this.table); return { data: hit.map((r) => project(this.table, r, this.sel, this.service)), error: null, count: null }; }
       if (this.mode === "delete") { const keep = rows.filter((r) => !match(r)); S[this.table] = keep; emit(this.table); return { data: [], error: null, count: null }; }
       let out = rows.filter(match).filter((r) => this.service || visible(this.table, r));   // RLS emulation (read side)
@@ -1954,6 +1964,8 @@ const phase6Ctx = {
   banMatches: (resId: string): Row[] => rpcs.fn_reservation_ban_matches({ p_reservation: resId }),
 };
 Object.assign(rpcs, phase6Rpcs(phase6Ctx));
+// review Phase 2b (0056): the branch guide, gallery and videos, booking sources, payment provider settings
+Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, validHttpsUrl }));
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));
@@ -2117,6 +2129,15 @@ function checkDiscount(categoryId: string, branchId: string, nights: number, ren
   if (existing + add > Math.floor((rent * bp) / 10000)) throw new Error("VALIDATION: discount_percent");
   const mn = byId("room_categories", categoryId)?.min_nightly_halalas;
   if (mn != null && rent - existing - add < mn * nights) throw new Error("VALIDATION: discount_minimum");
+}
+/** 0056 (trg_policy_rules): a title and content within bounds, «أخرى» with its own label, an archived policy never public and archived with a reason */
+function policyRules(p: Row, old: Row | null) {
+  p.title = String(p.title ?? "").trim(); p.content_ar = String(p.content_ar ?? "").trim();
+  if (!p.title || !p.content_ar) throw new Error("VALIDATION: policy_required");
+  if (p.title.length > 120 || p.content_ar.length > 4000) throw new Error("VALIDATION: policy_length");
+  p.topic_label = String(p.topic_label ?? "").trim() || null; if (p.topic !== "other") p.topic_label = null; if (p.topic_label && p.topic_label.length > 60) throw new Error("VALIDATION: topic_label");
+  if (p.archived_at) { p.is_public = false; if (old && !old.archived_at && !String(p.archive_reason ?? "").trim()) throw new Error("VALIDATION: reason"); }
+  else { p.archive_reason = null; p.archived_by = null; }
 }
 /** 0055: the organisation as the screens read it (fn_organization_info) and as the log keeps it */
 function orgInfo(o: Row) { return { id: o.id, name_ar: o.name_ar, name_en: o.name_en ?? null, license_number: o.license_number ?? null, logo: o.logo ?? null, version: o.version ?? 1,

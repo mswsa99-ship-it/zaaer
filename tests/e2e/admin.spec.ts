@@ -14,7 +14,7 @@ test.describe("admin definitions", () => {
     await page.getByRole("button", { name: "مرفق جديد" }).click();
     const dlg = page.getByRole("dialog");
     await dlg.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("صالة اختبار E2E");
-    await dlg.getByRole("button", { name: "حفظ" }).click();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg).toBeHidden();
     const card = page.locator(".card", { has: page.getByRole("heading", { name: "صالة اختبار E2E" }) }).first();
     await expect(card).toBeVisible();
@@ -50,14 +50,25 @@ test.describe("admin definitions", () => {
     await expect(edit.getByRole("button", { name: "تأكيد الحذف" })).toHaveCount(0);
   });
 
-  test("AD03 policies use an in-page two-step delete (no native confirm)", async ({ page, loginAs }) => {
+  test("AD03 a policy is archived with a reason in the page (no native confirm), hidden from guests, and restored", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/admin/policies", { waitUntil: "networkidle" });
     page.on("dialog", (d) => { throw new Error(`native dialog opened: ${d.message()}`); });
-    const del = page.getByRole("button", { name: /حذف/ }).first();
-    await expect(del).toBeVisible();
-    await del.click();
-    await expect(page.getByText("تأكيد حذف السياسة؛ لن يتمكن المساعد الذكي من ذكرها بعد الحذف.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /حذف/ })).toHaveCount(0);                  // 0056: never erased
+    const arch = page.getByRole("button", { name: /^أرشفة / }).first();
+    const title = (await arch.getAttribute("aria-label"))!.replace(/^أرشفة /, "");
+    await arch.click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByRole("button", { name: "أرشفة", exact: true }).click();
+    await expect(dlg.getByText("يجب كتابة سبب.")).toBeVisible();
+    await dlg.getByRole("textbox").fill("لم تعد سارية");
+    await dlg.getByRole("button", { name: "أرشفة", exact: true }).click();
+    await expect(dlg).toBeHidden();
+    await page.getByRole("tab", { name: /المؤرشفة/ }).click();
+    await expect(page.getByText("سبب الأرشفة: لم تعد سارية")).toBeVisible();
+    await page.getByRole("button", { name: "استعادة" }).first().click();
+    await page.getByRole("tab", { name: /النشطة/ }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
   });
 
   test("AD04 tax policy and AI settings are settings pages, not code", async ({ page, loginAs }) => {

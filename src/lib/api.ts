@@ -22,6 +22,10 @@ const ERROR_AR: Record<string, string> = {
   DUPLICATE_BRANCH_NAME: "يوجد فرع بالاسم نفسه. اختر اسمًا مختلفًا.",
   DUPLICATE_RULE: "لهذا النوع قاعدة كشف من قبل؛ عدّلها بدل إضافة أخرى.",
   DUPLICATE_EMAIL: "هذا البريد مستخدم لموظف آخر.",
+  // 0056 (Phase 2b): the branch's lists and guide
+  DUPLICATE_SOURCE_NAME: "يوجد مصدر حجز بالاسم نفسه.",
+  "SOURCE_IN_USE: kind": "لهذا المصدر حجوزات مسجّلة، فلا يتغيّر نوعه (مباشر/خارجي). أنشئ مصدرًا جديدًا وأوقف هذا.",
+  "BRANCH_MISMATCH: block": "المبنى المختار ليس من هذا الفرع.", "BRANCH_MISMATCH: room": "الوحدة المختارة ليست من هذا الفرع.",
   "LIMIT: saved_views": "الحد عشرون عرضًا محفوظًا لكل شاشة؛ احذف عرضًا قديمًا.",
   "NOT_FOUND: view": "العرض المحفوظ غير موجود.",
   "NOT_FOUND: staff": "الموظف غير موجود.",
@@ -195,6 +199,14 @@ export const VALIDATION_AR: Record<string, string> = {
   release_rule: "أدخل أعدادًا صحيحة.", release_increment: "الزيادة 1 على الأقل ولا تتجاوز وحدات النوع.", release_trigger: "اختر شرط الكشف.",
   email: "البريد الإلكتروني غير صحيح (مثال: name@example.com).", branch_required: "اختر فرعًا واحدًا على الأقل لهذا الدور.",
   phone: "رقم الهاتف غير صحيح (مثال: 05xxxxxxxx أو 011xxxxxxx أو + ثم رمز الدولة).",
+  iban: "رقم الآيبان غير صحيح: يبدأ بـ SA ويتكون من 24 خانة.", bank_details: "اكتب اسم البنك واسم المستفيد مع رقم الآيبان.",
+  bank_name: "اسم البنك حتى 80 حرفًا.", bank_beneficiary: "اسم المستفيد حتى 120 حرفًا.", arrival_instructions: "تعليمات الوصول حتى 4000 حرف.",
+  video_url: "رابط الفيديو يبدأ بـ https:// (حتى 500 حرف).", caption: "الوصف حتى 160 حرفًا.", sort_order: "الترتيب رقم صحيح.",
+  source_kind: "اختر نوع المصدر: مباشر أو خارجي.",
+  policy_required: "عنوان السياسة ونصها مطلوبان.", policy_length: "العنوان حتى 120 حرفًا والنص حتى 4000 حرف.", topic_label: "اسم الموضوع حتى 60 حرفًا.",
+  provider: "اختر مزوّد الدفع من القائمة.", provider_label: "اسم المزوّد حتى 60 حرفًا.", merchant_id: "رقم التاجر أحرف إنجليزية وأرقام فقط (حتى 80).",
+  publishable_key: "المفتاح العام بلا مسافات (حتى 200 حرف).", secret_key: "المفتاح السري بين 8 و300 خانة وبلا مسافات.",
+  pos_terminal_id: "رقم جهاز نقاط البيع أحرف إنجليزية وأرقام فقط (حتى 40).", payment_incomplete: "لا يُفعَّل الدفع الإلكتروني قبل إكمال: المزوّد ورقم التاجر والمفتاح العام والمفتاح السري.",
   question: "السؤال مطلوب (3 أحرف على الأقل).", answer: "الإجابة مطلوبة (حرفان على الأقل).",
   reference_required: "رقم المرجع أو رقم العملية مطلوب.",
   idempotency_key: "مفتاح العملية مفقود.",
@@ -852,6 +864,27 @@ export const guestReportsApi = {
   identities: (branchId: string, from: string, to: string, path: "office" | "guest" | "all" = "office", filters: ReportFilters = {}) => rpc<{ count: number; by_staff: Array<{ staff: string; office: number; guest: number }>; rows: Array<{ guest_id: string; reservation_id: string; internal_ref: string; full_name: string; is_primary: boolean; identity_type: string | null; identity_last4: string | null; entry_path: string | null; entered_by: string | null; entered_at: string | null; verified_by: string | null; verified_at: string }> }>("fn_reports_identities", { p_branch: branchId, p_from: from, p_to: to, p_path: path, p_filters: filters }),
 };
 /** The branch's media (decision 31): the logo (≤200 KB) and the image (≤1 MB), kept with the branch's settings. */
+export interface BranchGuide {
+  arrival_instructions: string | null;
+  bank: { bank_name: string; beneficiary: string; iban: string } | null;
+  photos: Array<{ id: string; caption: string | null; version: string }>;
+  videos: Array<{ id: string; caption: string | null; url: string; block_id: string | null; room_id: string | null }>;
+}
+export interface MediaItem { id: string; kind: "photo" | "video"; caption: string | null; url: string | null; size_bytes: number; sort_order: number; block_id: string | null; room_id: string | null; archived_at: string | null; archive_reason: string | null; version: string }
+export type PaymentProvider = "moyasar" | "tap" | "hyperpay" | "paytabs" | "other";
+export interface PaymentSettings { branch_id: string; provider: PaymentProvider | null; provider_label: string | null; merchant_id: string | null; publishable_key: string | null; has_secret: boolean; secret_last4: string | null; pos_terminal_id: string | null; online_enabled: boolean; updated_at: string | null; updated_by: string | null; complete: boolean }
+/** 0056 (SETUP-05, SETUP-14, SETUP-02): the branch's guide, its gallery and videos, booking sources, the payment provider. */
+export const branchGuideApi = {
+  publicGuide: (branchId: string) => rpc<BranchGuide | null>("fn_public_branch_guide", { p_branch: branchId }),
+  photo: (id: string) => rpc<string | null>("fn_branch_photo", { p_id: id }),
+  setGuide: (p: { branch_id: string; arrival_instructions?: string | null; bank_name?: string | null; bank_beneficiary?: string | null; bank_iban?: string | null }) => rpc<{ ok: boolean }>("fn_admin_set_branch_guide", { p }),
+  media: (branchId: string, archived = false) => rpc<MediaItem[]>("fn_admin_media_items", { p_branch: branchId, p_archived: archived }),
+  upsertMedia: (p: Record<string, unknown>) => rpc<{ ok: boolean; id: string }>("fn_admin_upsert_media_item", { p }),
+  archiveMedia: (id: string, reason: string | null, archive = true) => rpc<{ ok: boolean }>("fn_admin_archive_media_item", { p_id: id, p_reason: reason, p_archive: archive }),
+  upsertSource: (p: { id?: string; name?: string; kind?: "direct" | "external"; external_reference_required?: boolean; commission_bp?: string; reason?: string | null }) => rpc<{ ok: boolean; id: string; code: string }>("fn_admin_upsert_source", { p }),
+  paymentSettings: (branchId: string) => rpc<PaymentSettings>("fn_admin_payment_settings", { p_branch: branchId }),
+  savePaymentSettings: (p: Record<string, unknown>) => rpc<{ ok: boolean; changed: string[] }>("fn_admin_save_payment_settings", { p }),
+};
 export const branchMediaApi = {
   set: (branchId: string, kind: "logo" | "image", dataBase64: string | null) => rpc<{ ok: boolean; changed: boolean; media: { mime: string; size_bytes: number; sha256: string } | null }>("fn_admin_set_branch_media", { p: { branch_id: branchId, kind, data_base64: dataBase64 ?? "" } }),
   info: (branchId: string) => rpc<Record<"logo" | "image", { mime: string; size_bytes: number; updated_at: string; updated_by: string | null } | undefined>>("fn_admin_branch_media_info", { p_branch: branchId }),
