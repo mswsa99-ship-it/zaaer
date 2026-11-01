@@ -7,7 +7,7 @@ import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi, guestProfileApi, toArabicError, type Quote, type PriceRun, type GuestProfileRow } from "../../lib/api";
 import { Stars } from "../../components/Guests";
 import { Card, SectionTitle, ErrorBanner, Spinner, LoadErrorCard } from "../../components/ui";
-import { Field, MoneyInput, Toggle } from "../../components/forms";
+import { Field, MoneyInput, Toggle , NumberInput} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { checkPersonName, checkPhone, fieldError } from "../../lib/validation";
@@ -141,8 +141,8 @@ export default function StaffReservationNew() {
             {extraUnits.map((u, i) => (
               <div key={i} className="mt-3 grid items-end gap-3 rounded-xl border border-ink-100 p-3 sm:grid-cols-[1fr_6rem_6rem_auto]">
                 <Field label={`الوحدة ${i + 2} — النوع`}><select className="input" value={u.category_id} onChange={(e) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, category_id: e.target.value } : x)))}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name_ar} — حتى {c.max_capacity}</option>)}</select></Field>
-                <Field label="بالغون"><input type="number" min={1} className="input" dir="ltr" value={u.adults} onChange={(e) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, adults: Number(e.target.value) } : x)))} /></Field>
-                <Field label="مرافقون"><input type="number" min={0} className="input" dir="ltr" value={u.companions} onChange={(e) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, companions: Number(e.target.value) } : x)))} /></Field>
+                <Field label="بالغون"><NumberInput value={u.adults} onChange={(v) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, adults: (v ?? 0) } : x)))} /></Field>
+                <Field label="مرافقون"><NumberInput value={u.companions} onChange={(v) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, companions: (v ?? 0) } : x)))} /></Field>
                 <button type="button" onClick={() => setExtraUnits(extraUnits.filter((_, j) => j !== i))} className="btn-ghost mb-0.5 p-2 text-ink-400" aria-label="إزالة الوحدة"><X className="h-4 w-4" /></button>
               </div>
             ))}
@@ -177,8 +177,8 @@ export default function StaffReservationNew() {
               <Field label={guest ? "الجوال" : "الجوال (مطلوب)"} error={phoneErr} hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف الضيف بالجوال نفسه ما لم تُعلّم «ضيف جديد»"}><input className="input" dir="ltr" inputMode="tel" autoComplete="tel" value={f.guest_phone} aria-invalid={!!phoneErr} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
               <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="بالغون"><input type="number" min={1} className="input" dir="ltr" value={f.adults} onChange={(e) => setF({ ...f, adults: Number(e.target.value) })} /></Field>
-                <Field label="مرافقون"><input type="number" min={0} className="input" dir="ltr" value={f.companions} onChange={(e) => setF({ ...f, companions: Number(e.target.value) })} /></Field>
+                <Field label="بالغون"><NumberInput value={f.adults} onChange={(v) => setF({ ...f, adults: (v ?? 0) })} /></Field>
+                <Field label="مرافقون"><NumberInput value={f.companions} onChange={(v) => setF({ ...f, companions: (v ?? 0) })} /></Field>
               </div>
               {!capacityOk && <p className="text-xs text-danger-600 sm:col-span-2">عدد النزلاء يتجاوز سعة نوع الوحدة.</p>}
               <div className="space-y-2 sm:col-span-2">

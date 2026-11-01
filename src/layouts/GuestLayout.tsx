@@ -1,8 +1,10 @@
 import { DemoBanner } from "../components/DemoBanner";
 import { Outlet, Link } from "react-router-dom";
 import { Hotel, ShieldCheck, LogIn } from "lucide-react";
+import { useOrganizationName } from "../lib/organization";
 
 export default function GuestLayout() {
+  const orgName = useOrganizationName();
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-brand-50 via-ink-50 to-white">
       <DemoBanner />
@@ -13,7 +15,7 @@ export default function GuestLayout() {
               <Hotel className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <p className="text-sm font-semibold text-ink-800">فايف اورز</p>
+              <p className="text-sm font-semibold text-ink-800">{orgName}</p>
               <p className="text-[11px] text-ink-400">مساعد الاستقبال الذكي</p>
             </div>
           </Link>
@@ -27,7 +29,7 @@ export default function GuestLayout() {
         <Outlet />
       </main>
       <footer className="border-t border-ink-100 bg-white/60 py-4 text-center text-xs text-ink-400">
-        فايف اورز © {new Date().getFullYear()} — جميع الحقوق محفوظة ·{" "}
+        {orgName} © {new Date().getFullYear()} — جميع الحقوق محفوظة ·{" "}
         <Link to="/privacy" className="hover:text-ink-600">سياسة الخصوصية</Link> ·{" "}
         <Link to="/terms" className="hover:text-ink-600">شروط الاستخدام</Link> ·{" "}
         <Link to="/staff/login" className="hover:text-ink-600">بوابة الموظفين والإدارة</Link>

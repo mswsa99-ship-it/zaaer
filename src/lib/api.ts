@@ -17,7 +17,11 @@ const ERROR_AR: Record<string, string> = {
   // the staff editor and the forced sign-out (decisions 34, 35)
   SELF_NOT_ALLOWED: "لا يُطبَّق هذا الإجراء على حسابك أنت.",
   SELF_ROLE_OR_BRANCHES: "لا يغيّر أحد دوره أو فروعه بنفسه؛ يفعل ذلك مالك آخر.",
-  EMAIL_NOT_EDITABLE: "البريد هو هوية الدخول ولا يُعدَّل؛ ادعُ الموظف ببريد جديد.",
+  EMAIL_NOT_EDITABLE: "سجّل الموظف دخوله بهذا البريد، فلا يُعدَّل الآن؛ ادعُه ببريد جديد إن لزم.",
+  // 0055 (Phase 2): settings and validation
+  DUPLICATE_BRANCH_NAME: "يوجد فرع بالاسم نفسه. اختر اسمًا مختلفًا.",
+  DUPLICATE_RULE: "لهذا النوع قاعدة كشف من قبل؛ عدّلها بدل إضافة أخرى.",
+  DUPLICATE_EMAIL: "هذا البريد مستخدم لموظف آخر.",
   "LIMIT: saved_views": "الحد عشرون عرضًا محفوظًا لكل شاشة؛ احذف عرضًا قديمًا.",
   "NOT_FOUND: view": "العرض المحفوظ غير موجود.",
   "NOT_FOUND: staff": "الموظف غير موجود.",
@@ -182,6 +186,16 @@ export const VALIDATION_AR: Record<string, string> = {
   phone_format: "رقم الجوال: سعودي يبدأ بـ 05 ويتكون من 10 أرقام، أو دولي يبدأ بـ + ثم رمز الدولة.",
   minimum_age_15: "لا يُسجَّل من عمره أقل من 15 سنة.",
   amount: "المبلغ غير صحيح.",
+  amount_too_large: "المبلغ كبير جدًا؛ تأكد من عدد الأصفار.",
+  base_price: "السعر الأساسي مطلوب ويجب أن يكون أكبر من صفر.",
+  service_price: "سعر الخدمة مطلوب وأكبر من صفر، إلا إذا كانت مجانية.",
+  price_limits: "حدود السعر نسبة من السعر الأساسي: الأدنى بين 1% و100%، والأعلى بين 100% و1000%.",
+  license_number: "رقم الترخيص أحرف إنجليزية وأرقام فقط (حتى 40).",
+  inventory: "أدخل عددًا صحيحًا (0 أو أكثر).", inventory_blocked: "الوحدات المحجوبة لا تزيد عن الإجمالي.", inventory_public: "المعروض للعامة لا يزيد عن الإجمالي ناقص المحجوب.",
+  release_rule: "أدخل أعدادًا صحيحة.", release_increment: "الزيادة 1 على الأقل ولا تتجاوز وحدات النوع.", release_trigger: "اختر شرط الكشف.",
+  email: "البريد الإلكتروني غير صحيح (مثال: name@example.com).", branch_required: "اختر فرعًا واحدًا على الأقل لهذا الدور.",
+  phone: "رقم الهاتف غير صحيح (مثال: 05xxxxxxxx أو 011xxxxxxx أو + ثم رمز الدولة).",
+  question: "السؤال مطلوب (3 أحرف على الأقل).", answer: "الإجابة مطلوبة (حرفان على الأقل).",
   reference_required: "رقم المرجع أو رقم العملية مطلوب.",
   idempotency_key: "مفتاح العملية مفقود.",
   code_must_be_4_to_8_digits: "الرمز يجب أن يكون من 4 إلى 8 أرقام.",
@@ -237,6 +251,12 @@ function arabicMessage(msg: string): string {
   // 0054: a warning that names the other booking, and a refund in another method
   const dup = msg.match(/DUPLICATE_REFERENCE:\s*(\S*)\s*(\S*)/);
   if (dup) return `رقم العملية مسجّل من قبل${dup[1] ? ` في الحجز ${dup[1]}` : ""}${dup[2] ? ` (السند ${dup[2]})` : ""}. تأكّد منه، ثم أكّد التسجيل إن كان صحيحًا.`;
+  // 0055: the price range of the caller's role, the units of a type, a contradicting answer
+  const band = msg.match(/PRICE_(BELOW|ABOVE)_LIMIT:\s*(\d+)/);
+  if (band) return `السعر ${band[1] === "BELOW" ? "أقل من أدنى" : "أعلى من أقصى"} سعر مسموح لدورك: ${(Number(band[2]) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س لليلة. يحدد المالك النطاق من «المنشأة».`;
+  const units = msg.match(/INVENTORY_OVER_UNITS:\s*(\d+)/);
+  if (units) return `العدد أكبر من وحدات هذا النوع الفعلية (${units[1]}).`;
+  if (/KNOWLEDGE_CONFLICT/.test(msg)) return "توجد إجابة مفعّلة لهذا السؤال نفسه. عدّل الإجابة الموجودة بدل إضافة إجابة تخالفها.";
   if (/REFUND_METHOD_DIFFERS/.test(msg)) return "الاسترداد يكون بطريقة الدفع نفسها. لطريقة أخرى اكتب سبب الاختلاف.";
   for (const k of Object.keys(ERROR_AR)) if (msg.includes(k)) return ERROR_AR[k];
   if (/permission denied|row-level security/i.test(msg)) return ERROR_AR.FORBIDDEN;
@@ -925,7 +945,9 @@ export interface StaffListRow { id: string; full_name: string; email: string; ph
 /** The staff screens (decisions 34, 35): the owner edits, activates and signs out; the manager reads and signs out non-managers. */
 export const staffAdminApi = {
   list: () => rpc<StaffListRow[]>("fn_admin_staff_list", {}),
-  update: (p: { staff_id: string; reason: string; full_name?: string; phone?: string | null; role?: string; branch_ids?: string[] }) => rpc<{ ok: boolean; changed?: string[]; unchanged?: boolean }>("fn_admin_update_staff", { p }),
+  update: (p: { staff_id: string; reason: string; email?: string; full_name?: string; phone?: string | null; role?: string; branch_ids?: string[] }) => rpc<{ ok: boolean; changed?: string[]; unchanged?: boolean }>("fn_admin_update_staff", { p }),
+  /** 0055 (SETUP-08): the invite with every check — the email, a branch for every role but the owner, an optional phone */
+  invite: (p: { email: string; full_name: string; role: string; branch_ids: string[]; phone?: string | null }) => rpc<{ ok: boolean; staff_id: string }>("fn_admin_invite_staff", { p }),
   setActive: (staffId: string, active: boolean, reason: string) => rpc<{ ok: boolean; is_active?: boolean; sessions_ended?: number; unchanged?: boolean }>("fn_admin_set_staff_active", { p_staff: staffId, p_active: active, p_reason: reason }),
   forceLogout: (staffId: string, reason: string) => rpc<{ ok: boolean; sessions_ended: number }>("fn_admin_force_logout", { p_staff: staffId, p_reason: reason }),
 };
@@ -992,3 +1014,21 @@ export async function aiOpsBriefing(branchId: string, date?: string): Promise<Br
 
 export const newIdempotencyKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now()) + Math.random());
 export const toHalalas = (sar: string | number) => Math.round(Number(sar) * 100);
+
+// ---------------------------------------------------------------------------
+// 0055 (Phase 2a): «المنشأة», the price range of each role, the inventory and the release rules
+// ---------------------------------------------------------------------------
+export interface OrganizationSettings {
+  id: string; name_ar: string; name_en: string | null; license_number: string | null; logo: string | null; version: number;
+  price_min_bp_supervisor: number | null; price_max_bp_supervisor: number | null; price_min_bp_manager: number | null; price_max_bp_manager: number | null;
+}
+export interface PriceLimits { role: "owner" | "manager" | "supervisor"; base: number; min_bp: number | null; max_bp: number | null; min: number | null; max: number | null }
+export const organizationApi = {
+  info: () => rpc<OrganizationSettings | null>("fn_organization_info", {}),
+  update: (p: Record<string, unknown>) => rpc<{ ok: boolean; version: number }>("fn_admin_update_organization", { p }),
+  priceLimits: (categoryId: string) => rpc<PriceLimits | null>("fn_price_limits", { p_category: categoryId }),
+};
+export const inventoryApi = {
+  set: (p: { id: string; total_units?: number; publicly_visible_units?: number; blocked_units?: number; reason?: string }) => rpc<{ ok: boolean; unchanged: boolean }>("fn_admin_set_inventory", { p }),
+  upsertRule: (p: { id?: string; category_id?: string; enabled?: boolean; initial_public_release?: number; release_increment?: number; release_trigger?: string; reason?: string }) => rpc<{ ok: boolean; id: string }>("fn_admin_upsert_release_rule", { p }),
+};

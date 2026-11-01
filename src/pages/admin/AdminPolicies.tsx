@@ -6,6 +6,7 @@ import { useBranch } from "../../lib/branch";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
 import { FileText, Plus, Pencil, Trash2, Bot } from "lucide-react";
+import { NumberInput } from "../../components/forms";
 
 const TOPICS: Record<string, string> = {
   checkin: "الوصول والمغادرة", cancellation: "الإلغاء", wifi: "الإنترنت", parking: "المواقف", location: "الموقع",
@@ -109,7 +110,7 @@ export default function AdminPolicies() {
                   {Object.entries(TOPICS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
-              <div><label className="label">الترتيب</label><input type="number" className="input" dir="ltr" value={draft.sort_order ?? 0} onChange={(e) => setDraft({ ...draft, sort_order: Number(e.target.value) })} /></div>
+              <div><label className="label">الترتيب</label><NumberInput value={draft.sort_order ?? 0} onChange={(v) => setDraft({ ...draft, sort_order: (v ?? 0) })} /></div>
               <div className="sm:col-span-2"><label className="label">العنوان</label><input className="input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></div>
               <div className="sm:col-span-2"><label className="label">المحتوى (عربي)</label><textarea className="input min-h-[120px]" value={draft.content_ar} onChange={(e) => setDraft({ ...draft, content_ar: e.target.value })} /></div>
               <label className="flex items-center gap-2 text-sm text-ink-700 sm:col-span-2">

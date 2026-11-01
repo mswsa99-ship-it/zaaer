@@ -3,6 +3,7 @@ import { DoorClosed, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi } from "../../lib/api";
+import { latinDigits } from "../../lib/validation";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
@@ -33,7 +34,7 @@ export default function AdminRooms() {
   }, [], NO_DATA);
   const { rooms, cats, blocks, floors } = q.data; const load = q.reload; const branchId = q.branchId;
 
-  const visible = useMemo(() => rooms.filter((r) => (filter.archived || !r.archived_at) && (filter.status === "all" || r.status === filter.status) && (filter.block === "all" || r.block_id === filter.block) && (filter.category === "all" || r.category_id === filter.category) && (!filter.q || r.room_number.includes(filter.q))), [rooms, filter]);
+  const visible = useMemo(() => rooms.filter((r) => (filter.archived || !r.archived_at) && (filter.status === "all" || r.status === filter.status) && (filter.block === "all" || r.block_id === filter.block) && (filter.category === "all" || r.category_id === filter.category) && (!filter.q || latinDigits(r.room_number).includes(latinDigits(filter.q).trim()))), [rooms, filter]);
   const counts = useMemo(() => ({ active: rooms.filter((r) => r.is_active && !r.archived_at).length, total: rooms.filter((r) => !r.archived_at).length }), [rooms]);
   const draftFloors = floors.filter((f) => !draft?.block_id || f.block_id === draft.block_id);
 

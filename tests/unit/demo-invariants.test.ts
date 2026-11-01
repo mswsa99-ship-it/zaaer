@@ -1976,7 +1976,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
     const trail = async (action: string) => (await rpc<any>("fn_audit_list", { p: { entity_id: SUP, action } })).rows as any[];
     const [a1] = await trail("staff.updated");
     expect(a1).toMatchObject({ category: "security", branch_id: null, entity_ref: "فهد الاستقبال الجديد", actor_name: "عبدالله المالك", reason: "نقل جزئي إلى جدة" });
-    expect(a1.details).toEqual({ changed: ["full_name", "phone", "branches"], before: { full_name: "فهد الاستقبال", phone: null, role: "supervisor", branch_ids: [A] }, after: { full_name: "فهد الاستقبال الجديد", phone: "••••4567", role: "supervisor", branch_ids: [A, B] }, reason: "نقل جزئي إلى جدة" });
+    expect(a1.details).toEqual({ changed: ["full_name", "phone", "branches"], before: { email: "reception@demo.sa", full_name: "فهد الاستقبال", phone: null, role: "supervisor", branch_ids: [A] }, after: { email: "reception@demo.sa", full_name: "فهد الاستقبال الجديد", phone: "••••4567", role: "supervisor", branch_ids: [A, B] }, reason: "نقل جزئي إلى جدة" });
     expect(JSON.stringify(a1.details)).not.toContain("+966501234567");
     // the branch taken away is retired (the row stays) and gone from the person's branches at their next request
     const memberships = async () => ((await client.from("branch_memberships").select("*").eq("staff_id", SUP)).data as any[]).sort((x, y) => String(x.branch_id).localeCompare(String(y.branch_id)));
@@ -2365,5 +2365,93 @@ describe("Permissions matrix in the demo (0043)", () => {
     // the owner gives any role
     await login(EMAIL.owner);
     expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-mgr@demo.sa", p_full_name: "مدير جديد", p_role: "manager", p_branch_ids: [A] })).ok).toBe(true);
+  });
+});
+
+// ---- 0055: Phase 2a of the 31 October review in the demo, with the server's rules (QD*)
+describe("Review Phase 2a — settings and validation in the demo (0055)", () => {
+  const fails = async (p: Promise<unknown>) => { try { await p; return "accepted"; } catch (e) { return (e as Error).message; } };
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  it("QD20 the owner edits «المنشأة» (names, licence in Latin digits, logo); the guest pages read it; a manager is refused; bad values are refused", async () => {
+    const v = (await rpc<any>("fn_organization_info", {})).version;
+    await rpc("fn_admin_update_organization", { p: { name_ar: "فايف اورز للشقق", name_en: "Five Hours Suites", license_number: "٧٣١٠٠٢", logo_base64: "data:image/png;base64," + PNG, version: v } });
+    const o = await rpc<any>("fn_organization_info", {});
+    expect(o).toMatchObject({ name_ar: "فايف اورز للشقق", name_en: "Five Hours Suites", license_number: "731002", version: v + 1 });
+    expect(o.logo).toMatch(/^data:image\/png;base64,/);
+    expect(await fails(rpc("fn_admin_update_organization", { p: { logo_base64: "PHN2Zz48L3N2Zz4=" } }))).toBe("VALIDATION: image_type");
+    expect(await fails(rpc("fn_admin_update_organization", { p: { price_min_bp_supervisor: "12000" } }))).toBe("VALIDATION: price_limits");
+    expect(await fails(rpc("fn_admin_update_organization", { p: { name_ar: " " } }))).toBe("VALIDATION: name_ar");
+    await client.auth.signOut();
+    expect(await rpc<any>("fn_public_organization", {})).toMatchObject({ name_ar: "فايف اورز للشقق", name_en: "Five Hours Suites" });
+    await login("manager@demo.sa");
+    expect(await fails(rpc("fn_admin_update_organization", { p: { name_ar: "آخر" } }))).toMatch(/^FORBIDDEN/);
+  });
+
+  it("QD21 the price range of each role: the owner is free; the manager's calendar price, manual nightly price, discount and adjustment stay within the range", async () => {
+    await rpc("fn_admin_update_organization", { p: { price_min_bp_supervisor: "8000", price_max_bp_supervisor: "15000", price_min_bp_manager: "6000", price_max_bp_manager: "20000" } });
+    const base = (await client.from("room_categories").select("name_ar, base_price_halalas, version").eq("id", CATEGORY).maybeSingle()).data as any;
+    const b = base.base_price_halalas as number;
+    // the type's own minimum aside, so the range is what refuses
+    await rpc("fn_admin_upsert_room_category", { p: { id: CATEGORY, name_ar: base.name_ar, min_nightly_halalas: "", version: base.version } });
+    expect((await rpc<any>("fn_rate_calendar_set", { p: { branch_id: BRANCH, cells: [{ category_id: CATEGORY, night: fut(40) }], price_halalas: b * 5 } })).changed).toBe(1);
+    await login("manager@demo.sa");
+    const lim = await rpc<any>("fn_price_limits", { p_category: CATEGORY });
+    expect(lim).toMatchObject({ role: "manager", min: Math.ceil(b * 0.6), max: Math.floor(b * 2) });
+    expect(await fails(rpc("fn_rate_calendar_set", { p: { branch_id: BRANCH, cells: [{ category_id: CATEGORY, night: fut(41) }], price_halalas: Math.floor(b * 0.5) } }))).toBe("PRICE_BELOW_LIMIT: " + lim.min);
+    expect(await fails(rpc("fn_rate_calendar_set", { p: { branch_id: BRANCH, cells: [{ category_id: CATEGORY, night: fut(41) }], price_halalas: b * 3 } }))).toBe("PRICE_ABOVE_LIMIT: " + lim.max);
+    expect(await fails(rpc("fn_staff_create_reservation", { p: { branch_id: BRANCH, category_id: CATEGORY, source_id: SOURCE, check_in: fut(50), check_out: fut(52), guest_name: "ضيف السعر", guest_phone: "0551000071", nightly_rate_halalas: b * 3 } }))).toBe("PRICE_ABOVE_LIMIT: " + lim.max);
+    const r = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: BRANCH, category_id: CATEGORY, source_id: SOURCE, check_in: fut(50), check_out: fut(52), guest_name: "ضيف السعر", guest_phone: "0551000071", nightly_rate_halalas: b } });
+    const ver = async () => ((await client.from("reservations").select("version").eq("id", r.id).maybeSingle()).data as any).version;
+    expect(await fails(rpc("fn_staff_adjust_price", { p_reservation: r.id, p_kind: "discount", p_amount_halalas: Math.ceil(b * 1.5), p_description: "خصم", p_reason: "اختبار", p_expected_version: await ver() }))).toBe("PRICE_BELOW_LIMIT: " + lim.min);
+    expect(await fails(rpc("fn_staff_adjust_price", { p_reservation: r.id, p_kind: "adjustment", p_amount_halalas: b * 3, p_description: "زيادة", p_reason: "اختبار", p_expected_version: await ver() }))).toBe("PRICE_ABOVE_LIMIT: " + lim.max);
+  });
+
+  it("QD22 a unit type needs a base price above zero; a service is priced above zero unless free; a nightly amount over a million SAR is refused", async () => {
+    expect(await fails(rpc("fn_admin_upsert_room_category", { p: { branch_id: BRANCH, name_ar: "نوع بلا سعر" } }))).toBe("VALIDATION: base_price");
+    expect(await fails(rpc("fn_admin_upsert_room_category", { p: { branch_id: BRANCH, name_ar: "نوع بصفر", base_price_halalas: 0 } }))).toBe("VALIDATION: base_price");
+    expect(await fails(rpc("fn_admin_upsert_room_category", { p: { branch_id: BRANCH, name_ar: "نوع خيالي", base_price_halalas: 1000000000000 } }))).toBe("VALIDATION: amount_too_large");
+    expect(await fails(rpc("fn_admin_upsert_service", { p: { branch_id: BRANCH, name_ar: "خدمة صفر" } }))).toBe("VALIDATION: service_price");
+    expect((await rpc<any>("fn_admin_upsert_service", { p: { branch_id: BRANCH, name_ar: "خدمة مجانية جديدة", is_free: true } })).ok).toBe(true);
+  });
+
+  it("QD23 the inventory and release rules go through the checked functions only: no direct write; impossible values refused; a rule created and its trigger set", async () => {
+    const units = ((await client.from("rooms").select("id").eq("category_id", CATEGORY).is("archived_at", null)).data as any[]).length;
+    const iv = (await client.from("inventory_periods").select("id, total_units").eq("category_id", CATEGORY).limit(1).maybeSingle()).data as any;
+    if (iv) {
+      await client.from("inventory_periods").update({ total_units: -5 }).eq("id", iv.id);   // no direct write: nothing changes
+      expect(((await client.from("inventory_periods").select("total_units").eq("id", iv.id).maybeSingle()).data as any).total_units).toBe(iv.total_units);
+      expect(await fails(rpc("fn_admin_set_inventory", { p: { id: iv.id, total_units: -5 } }))).toBe("VALIDATION: inventory");
+      expect(await fails(rpc("fn_admin_set_inventory", { p: { id: iv.id, total_units: units + 1 } }))).toBe("INVENTORY_OVER_UNITS: " + units);
+      expect(await fails(rpc("fn_admin_set_inventory", { p: { id: iv.id, total_units: 1, blocked_units: 2 } }))).toBe("VALIDATION: inventory_blocked");
+    }
+    const rules = (await client.from("release_rules").select("id, category_id").eq("branch_id", BRANCH)).data as any[];
+    const cats = (await client.from("room_categories").select("id").eq("branch_id", BRANCH).is("archived_at", null)).data as any[];
+    const free = cats.find((c) => !rules.some((x) => x.category_id === c.id));
+    if (rules.length) {
+      expect(await fails(rpc("fn_admin_upsert_release_rule", { p: { id: rules[0].id, release_trigger: "weather" } }))).toBe("VALIDATION: release_trigger");
+      expect(await fails(rpc("fn_admin_upsert_release_rule", { p: { id: rules[0].id, release_increment: 0 } }))).toBe("VALIDATION: release_increment");
+      expect(await fails(rpc("fn_admin_upsert_release_rule", { p: { category_id: rules[0].category_id } }))).toBe("DUPLICATE_RULE");
+    }
+    if (free) {
+      const r = await rpc<any>("fn_admin_upsert_release_rule", { p: { category_id: free.id, release_trigger: "manual", initial_public_release: 0, release_increment: 1 } });
+      expect(((await client.from("release_rules").select("release_trigger").eq("id", r.id).maybeSingle()).data as any).release_trigger).toBe("manual");
+    }
+    expect(iv || rules.length || free).toBeTruthy();
+  });
+
+  it("QD24 unit numbers in Latin digits; the invite and the staff edit check the email, the branch and the phone; branches have one name each; a contradicting answer is refused", async () => {
+    const r = await rpc<any>("fn_admin_upsert_room", { p: { branch_id: BRANCH, category_id: CATEGORY, room_number: "٩٠١" } });
+    expect(((await client.from("rooms").select("room_number").eq("id", r.id).maybeSingle()).data as any).room_number).toBe("901");
+    expect(await fails(rpc("fn_admin_upsert_room", { p: { branch_id: BRANCH, category_id: CATEGORY, room_number: "901" } }))).toBe("DUPLICATE_ROOM_NUMBER");
+    expect(await fails(rpc("fn_admin_invite_staff", { p: { email: "not-an-email", full_name: "س", role: "supervisor", branch_ids: [BRANCH] } }))).toBe("VALIDATION: email");
+    expect(await fails(rpc("fn_admin_invite_staff", { p: { email: "nobranch@demo.sa", full_name: "بلا فرع", role: "supervisor", branch_ids: [] } }))).toBe("VALIDATION: branch_required");
+    expect(await fails(rpc("fn_admin_invite_staff", { p: { email: "badphone@demo.sa", full_name: "هاتف خطأ", role: "supervisor", branch_ids: [BRANCH], phone: "abc" } }))).toBe("VALIDATION: phone");
+    const inv = await rpc<any>("fn_admin_invite_staff", { p: { email: "new.one@demo.sa", full_name: "موظف جديد", role: "supervisor", branch_ids: [BRANCH], phone: "٠٥٥١٢٣٤٥٦٧" } });
+    expect((await rpc<any>("fn_admin_update_staff", { p: { staff_id: inv.staff_id, email: "new.two@demo.sa", reason: "تصحيح" } })).changed).toEqual(["email"]);
+    const branch = (await client.from("branches").select("name_ar").eq("id", BRANCH).maybeSingle()).data as any;
+    expect(await fails(rpc("fn_admin_upsert_branch", { p: { name_ar: "  " + branch.name_ar + " ", name_en: "Copy" } }))).toBe("DUPLICATE_BRANCH_NAME");
+    const k = await rpc<any>("fn_admin_upsert_knowledge", { p: { branch_id: BRANCH, question: "هل يوجد ملعب تنس؟", answer: "نعم" } });
+    expect(await fails(rpc("fn_admin_upsert_knowledge", { p: { branch_id: BRANCH, question: " هَل يُوجد ملعب تنس ? ", answer: "لا" } }))).toBe("KNOWLEDGE_CONFLICT: " + k.id);
   });
 });

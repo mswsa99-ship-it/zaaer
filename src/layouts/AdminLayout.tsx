@@ -12,8 +12,10 @@ import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 import { useReviewSummary } from "../lib/reviewAlerts";
 import { ReviewNavCount } from "../components/ReviewBanner";
 import { BottomTabs, pickTabs } from "../components/BottomTabs";
+import { useOrganizationName } from "../lib/organization";
 
 export default function AdminLayout() {
+  const orgName = useOrganizationName();
   const { profile, signOut, can, canFull } = useAuth();
   const allows = { can, canFull };
   const navigate = useNavigate();
@@ -48,7 +50,7 @@ export default function AdminLayout() {
             <Hotel className="h-5 w-5" />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-ink-800">فايف اورز</p>
+            <p className="text-sm font-semibold text-ink-800">{orgName}</p>
             <p className="text-[11px] text-ink-400">لوحة الإدارة</p>
           </div>
         </div>
@@ -114,7 +116,7 @@ export default function AdminLayout() {
             <button type="button" onClick={() => setMenuOpen(true)} className="flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium text-ink-700 hover:bg-ink-50" aria-expanded={menuOpen} data-testid="admin-menu-button">
               <Menu className="h-5 w-5" /> القائمة
             </button>
-            <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة — فايف اورز</Link>
+            <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة{orgName ? ` — ${orgName}` : ""}</Link>
           </header>
           <KeyboxAlertBanner alerts={codeAlerts} />
         </div>

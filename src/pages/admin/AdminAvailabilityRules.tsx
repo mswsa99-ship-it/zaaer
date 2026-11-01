@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { staffApi, toArabicError } from "../../lib/api";
+import { inventoryApi, staffApi, toArabicError } from "../../lib/api";
+import { Modal, NumberInput } from "../../components/forms";
 import { useBranch } from "../../lib/branch";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { SectionTitle, LoadingScreen, Card, Spinner, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
@@ -13,8 +14,9 @@ interface RuleRow {
 }
 interface SlotRow { date: string; released_count: number; category_id: string }
 
-interface RulesData { rules: RuleRow[]; slots: SlotRow[] }
-const NO_RULES: RulesData = { rules: [], slots: [] };
+interface RulesData { rules: RuleRow[]; slots: SlotRow[]; categories: Array<{ id: string; name_ar: string }> }
+const NO_RULES: RulesData = { rules: [], slots: [], categories: [] };
+const TRIGGERS: Array<[string, string]> = [["access_delivered", "تسليم الرمز"], ["confirmed", "تأكيد الحجز"], ["manual", "يدوي"]];
 
 function catName(r: RuleRow) { const c = Array.isArray(r.category) ? r.category[0] : r.category; return c?.name_ar ?? "—"; }
 
@@ -26,29 +28,30 @@ export default function AdminAvailabilityRules() {
 
   // G24 (decision 40): the active branch's rules only
   const q = useBranchQuery<RulesData>(async (branchId) => {
-    const [r, s] = await Promise.all([
+    const [r, s, c] = await Promise.all([
       supabase.from("release_rules").select("id, category_id, enabled, initial_public_release, release_increment, release_trigger, category:room_categories(name_ar)").eq("branch_id", branchId),
       supabase.from("released_slots").select("date, released_count, category_id").eq("branch_id", branchId).gte("date", todayISO()).lte("date", addDaysISO(todayISO(), 14)).order("date"),
+      supabase.from("room_categories").select("id, name_ar").eq("branch_id", branchId).is("archived_at", null).order("sort_order"),
     ]);
-    return { rules: must(r) as unknown as RuleRow[], slots: must(s) as SlotRow[] };
+    return { rules: must(r) as unknown as RuleRow[], slots: must(s) as SlotRow[], categories: must(c) as Array<{ id: string; name_ar: string }> };
   }, [], NO_RULES);
-  const { rules, slots } = q.data; const branchId = q.branchId; const load = q.reload;
+  const { rules, slots, categories } = q.data;
+  const [newCat, setNewCat] = useState("");
+  const withoutRule = categories.filter((c) => !rules.some((r) => r.category_id === c.id)); const branchId = q.branchId; const load = q.reload;
 
-  async function toggle(r: RuleRow) {
-    setActing(r.id); setError(null);
-    const { error: e } = await supabase.from("release_rules").update({ enabled: !r.enabled }).eq("id", r.id);
-    if (e) setError(toArabicError(e));
+  // 0055 (SETUP-01): through fn_admin_upsert_release_rule — initial ≥ 0 and ≤ the type's units, increment ≥ 1, a known trigger
+  async function saveRule(key: string, p: Parameters<typeof inventoryApi.upsertRule>[0]) {
+    setActing(key); setError(null);
+    try { await inventoryApi.upsertRule(p); } catch (e) { setError(toArabicError(e)); }
     load();
     setActing(null);
   }
-
-  async function updateField(id: string, field: "initial_public_release" | "release_increment", value: number) {
-    setActing(id + field); setError(null);
-    const { error: e } = await supabase.from("release_rules").update({ [field]: value }).eq("id", id);
-    if (e) setError(toArabicError(e));
-    load();
-    setActing(null);
-  }
+  const toggle = (r: RuleRow) => saveRule(r.id, { id: r.id, enabled: !r.enabled });
+  const updateField = (r: RuleRow, field: "initial_public_release" | "release_increment", value: number | null) => {
+    if (value === r[field]) return;
+    if (value == null) { setError("أدخل عددًا صحيحًا."); return; }
+    return saveRule(r.id + field, { id: r.id, [field]: value });
+  };
 
   if (q.loading) return <LoadingScreen />;
 
@@ -81,15 +84,17 @@ export default function AdminAvailabilityRules() {
               <div className="flex flex-wrap items-center gap-4">
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">العدد الابتدائي</label>
-                  <input type="number" min={0} defaultValue={r.initial_public_release} onBlur={(e) => updateField(r.id, "initial_public_release", Number(e.target.value))} className="input w-20 text-center" aria-label="الإتاحة الأولى للعامة" disabled={acting === r.id + "initial_public_release"} />
+                  <NumberInput value={r.initial_public_release} onCommit={(v) => updateField(r, "initial_public_release", v)} className="w-20 text-center" label="الإتاحة الأولية" disabled={acting === r.id + "initial_public_release"} />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">الزيادة</label>
-                  <input type="number" min={1} defaultValue={r.release_increment} onBlur={(e) => updateField(r.id, "release_increment", Number(e.target.value))} className="input w-20 text-center" aria-label="زيادة الإتاحة" disabled={acting === r.id + "release_increment"} />
+                  <NumberInput value={r.release_increment} onCommit={(v) => updateField(r, "release_increment", v)} className="w-20 text-center" label="زيادة الإتاحة" disabled={acting === r.id + "release_increment"} />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">الشرط</label>
-                  <p className="text-xs text-ink-600">{r.release_trigger === "access_delivered" ? "تسليم الرمز" : r.release_trigger === "confirmed" ? "تأكيد الحجز" : "يدوي"}</p>
+                  <select className="input w-auto text-xs" value={r.release_trigger} aria-label="شرط الكشف" disabled={acting === r.id} onChange={(e) => saveRule(r.id, { id: r.id, release_trigger: e.target.value })}>
+                    {TRIGGERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
                 </div>
                 <button onClick={() => toggle(r)} disabled={acting === r.id} className="btn-outline text-sm">
                   {acting === r.id ? <Spinner /> : r.enabled ? "إيقاف" : "تفعيل"}
@@ -99,6 +104,21 @@ export default function AdminAvailabilityRules() {
             </Card>
           ))}
           {rules.length === 0 && !q.error && <p className="text-sm text-ink-400">لا توجد قواعد لهذا الفرع.</p>}
+          {withoutRule.length > 0 && (
+            <Card className="flex flex-wrap items-end gap-3">
+              <div className="flex-1">
+                <label className="mb-0.5 block text-xs text-ink-400">قاعدة جديدة لنوع</label>
+                <select className="input" value={newCat} onChange={(e) => setNewCat(e.target.value)} aria-label="نوع الوحدة للقاعدة الجديدة">
+                  <option value="">اختر النوع…</option>
+                  {withoutRule.map((c) => <option key={c.id} value={c.id}>{c.name_ar}</option>)}
+                </select>
+              </div>
+              <button className="btn-primary text-sm" disabled={!newCat || acting === "new"} onClick={async () => { await saveRule("new", { category_id: newCat, initial_public_release: 1, release_increment: 1, release_trigger: "access_delivered" }); setNewCat(""); }}>
+                {acting === "new" ? <Spinner /> : "إضافة القاعدة"}
+              </button>
+              <p className="w-full text-xs text-ink-400">تبدأ القاعدة متوقفة بعدد ابتدائي 1 وزيادة 1 عند تسليم الرمز؛ عدّلها ثم فعّلها.</p>
+            </Card>
+          )}
         </div>
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-ink-700">الغرف المُفرج عنها — 14 يومًا القادمة</h3>
@@ -137,9 +157,8 @@ function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; bran
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-md">
-        <h3 className="mb-1 text-base font-semibold text-ink-800">إفراج يدوي — {catName(rule)}</h3>
+    <Modal open title={`إفراج يدوي — ${catName(rule)}`} onClose={onClose}>
+      <div>
         <p className="mb-4 text-xs text-ink-400">يُفتح عدد "الزيادة" ({rule.release_increment}) من الرصيد المتبقي لهذا التاريخ، ويُسجَّل السبب في سجل التدقيق.</p>
         {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
         {result !== null ? (
@@ -154,7 +173,7 @@ function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; bran
           <button onClick={onClose} className="btn-outline text-sm" disabled={busy}>{result !== null ? "إغلاق" : "إلغاء"}</button>
           {result === null && <button onClick={submit} className="btn-primary text-sm" disabled={busy}>{busy ? <Spinner className="h-4 w-4" /> : "تنفيذ الإفراج"}</button>}
         </div>
-      </Card>
-    </div>
+      </div>
+    </Modal>
   );
 }

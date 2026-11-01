@@ -5,7 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { opsApi, branchMediaApi, guestApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
 import { formatCurrency, COUNT } from "../../lib/utils";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput} from "../../components/forms";
 
 interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean; default_deposit_halalas: number; supervisor_max_discount_bp: number; tax_number: string | null; commercial_register: string | null; archived_at: string | null; version: number; rooms?: number;
   // decision 31
@@ -79,14 +79,14 @@ export default function AdminBranches() {
               <Field label="رابط الموقع (خرائط Google)" hint="https فقط؛ يرسله المساعد للضيف ويظهر في صفحاته" className="sm:col-span-2"><input className="input" dir="ltr" value={draft.map_url ?? ""} onChange={(e) => setDraft({ ...draft, map_url: e.target.value })} placeholder="https://maps.app.goo.gl/…" aria-label="رابط الموقع" /></Field>
               <Field label="رابط منصة الحجز" hint="الطريقة الوحيدة لحجز جديد (القرار 23): يُحال إليه من لا حجز له، في الموقع وواتساب" className="sm:col-span-2"><input className="input" dir="ltr" value={draft.booking_platform_url ?? ""} onChange={(e) => setDraft({ ...draft, booking_platform_url: e.target.value })} placeholder="https://www.booking.com/hotel/sa/…" aria-label="رابط منصة الحجز" /></Field>
               <Field label="أقصى خصم للمشرف %" hint="من إيجار الإقامة، قبل الوصول، ولا ينزل تحت أدنى سعر للنوع. صفر = لا يخصم المشرف؛ ما فوقه للمالك أو المدير.">
-                <input type="number" min={0} max={100} step="0.5" className="input" dir="ltr" aria-label="أقصى خصم للمشرف" value={((draft.supervisor_max_discount_bp ?? 0) / 100).toString()} onChange={(e) => setDraft({ ...draft, supervisor_max_discount_bp: Math.round(Number(e.target.value) * 100) })} />
+                <NumberInput decimals value={((draft.supervisor_max_discount_bp ?? 0) / 100)} onChange={(v) => setDraft({ ...draft, supervisor_max_discount_bp: Math.round((v ?? 0) * 100) })} label="أقصى خصم للمشرف" />
               </Field>
             </div>
             {/* decision 68: the tax policy is the owner's alone (the server refuses anyone else's change too) */}
             <fieldset className="mt-4 rounded-xl border border-ink-100 p-3" disabled={!can("branch.tax")} data-testid="branch-tax">
               <legend className="px-1 text-xs font-semibold text-ink-600">الضريبة {can("branch.tax") ? "" : "— يعدّلها المالك فقط"}</legend>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="نسبة الضريبة %" hint="صفر يعني لا ضريبة على الحجوزات الجديدة؛ أي تغيير يسري على الحجوزات الجديدة فقط، ويُسجَّل."><input type="number" step="0.01" min={0} max={100} className="input" dir="ltr" aria-label="نسبة الضريبة" value={((draft.tax_rate_bp ?? 0) / 100).toString()} onChange={(e) => setDraft({ ...draft, tax_rate_bp: Math.round(Number(e.target.value) * 100) })} /></Field>
+                <Field label="نسبة الضريبة %" hint="صفر يعني لا ضريبة على الحجوزات الجديدة؛ أي تغيير يسري على الحجوزات الجديدة فقط، ويُسجَّل."><NumberInput decimals value={((draft.tax_rate_bp ?? 0) / 100)} onChange={(v) => setDraft({ ...draft, tax_rate_bp: Math.round((v ?? 0) * 100) })} label="نسبة الضريبة" /></Field>
                 <Field label="الرقم الضريبي"><input className="input" dir="ltr" value={draft.tax_number ?? ""} onChange={(e) => setDraft({ ...draft, tax_number: e.target.value })} /></Field>
                 {(draft.tax_rate_bp ?? 0) > 0 && <div className="sm:col-span-2"><Toggle checked={draft.prices_include_tax ?? false} onChange={(v) => setDraft({ ...draft, prices_include_tax: v })} label="الأسعار شاملة الضريبة" /></div>}
               </div>

@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi, ratesApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, COUNT } from "../../lib/utils";
 
@@ -39,7 +39,7 @@ export default function AdminRoomCategories() {
   return (
     <div>
       <SectionTitle title="أنواع الوحدات" subtitle="السعة والأسعار — تغيير أي سعر لا يعيد تسعير الحجوزات القائمة؛ أسعار الليالي في «تقويم الأسعار»" action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", base_capacity: 2, max_capacity: 4, base_price_halalas: 0, weekly_price_halalas: null, monthly_price_halalas: null, min_nightly_halalas: null, price_mode: "unified", is_public: true, sort_order: cats.length + 1, amenities: [] })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> نوع جديد</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", base_capacity: 2, max_capacity: 4, base_price_halalas: null as unknown as number, weekly_price_halalas: null, monthly_price_halalas: null, min_nightly_halalas: null, price_mode: "unified", is_public: true, sort_order: cats.length + 1, amenities: [] })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> نوع جديد</button></div>} />
       {q.error && cats.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && cats.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<BedDouble className="h-10 w-10" />} title="لا توجد أنواع" /> : (
@@ -78,14 +78,14 @@ export default function AdminRoomCategories() {
               <Field label="الاسم العربي (مطلوب)"><input className="input" value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} /></Field>
               <Field label="الوصف" className="sm:col-span-2"><textarea className="input" rows={2} value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
-              <Field label="السعة الأساسية"><input type="number" min={1} className="input" dir="ltr" value={draft.base_capacity ?? 2} onChange={(e) => setDraft({ ...draft, base_capacity: Number(e.target.value) })} /></Field>
-              <Field label="السعة القصوى"><input type="number" min={1} className="input" dir="ltr" aria-label="السعة القصوى" value={draft.max_capacity ?? 4} onChange={(e) => setDraft({ ...draft, max_capacity: Number(e.target.value) })} /></Field>
-              <Field label="السعر الأساسي لليلة" hint="لكل ليلة ليس لها سعر في التقويم."><MoneyInput valueHalalas={draft.base_price_halalas ?? 0} onChange={(h) => setDraft({ ...draft, base_price_halalas: h ?? 0 })} /></Field>
+              <Field label="السعة الأساسية"><NumberInput value={draft.base_capacity ?? 2} onChange={(v) => setDraft({ ...draft, base_capacity: (v ?? 0) })} /></Field>
+              <Field label="السعة القصوى"><NumberInput value={draft.max_capacity ?? 4} onChange={(v) => setDraft({ ...draft, max_capacity: (v ?? 0) })} label="السعة القصوى" /></Field>
+              <Field label="السعر الأساسي لليلة (إلزامي)" hint="لكل ليلة ليس لها سعر في التقويم، وأساس نطاق السعر لكل دور. أكبر من صفر."><MoneyInput valueHalalas={draft.base_price_halalas ?? null} onChange={(h) => setDraft({ ...draft, base_price_halalas: h as number })} /></Field>
               <Field label="أدنى سعر لليلة" hint="لا يُسعَّر التقويم تحته، ولا يخصم المشرف تحته."><MoneyInput valueHalalas={draft.min_nightly_halalas ?? null} onChange={(h) => setDraft({ ...draft, min_nightly_halalas: h })} placeholder="بلا حد" /></Field>
               <Field label="السعر الأسبوعي (7 ليالٍ)" hint="يُطبَّق على إقامة 7 ليالٍ فأكثر عند إنشائها."><MoneyInput valueHalalas={draft.weekly_price_halalas ?? null} onChange={(h) => setDraft({ ...draft, weekly_price_halalas: h })} placeholder="بلا سعر أسبوعي" /></Field>
               <Field label="السعر الشهري (30 ليلة)" hint="يُطبَّق على إقامة 30 ليلة فأكثر عند إنشائها."><MoneyInput valueHalalas={draft.monthly_price_halalas ?? null} onChange={(h) => setDraft({ ...draft, monthly_price_halalas: h })} placeholder="بلا سعر شهري" /></Field>
               <Field label="تصنيف السعر"><select className="input" value={draft.price_mode ?? "unified"} onChange={(e) => setDraft({ ...draft, price_mode: e.target.value as Cat["price_mode"] })}><option value="unified">موحد — سعر واحد لكل الحجوزات</option><option value="by_channel">مختلف للمنصات — سعر النظام وسعر المنصات</option></select></Field>
-              <Field label="الترتيب"><input type="number" className="input" dir="ltr" value={draft.sort_order ?? 0} onChange={(e) => setDraft({ ...draft, sort_order: Number(e.target.value) })} /></Field>
+              <Field label="الترتيب"><NumberInput value={draft.sort_order ?? 0} onChange={(v) => setDraft({ ...draft, sort_order: (v ?? 0) })} /></Field>
               <Field label="المزايا (افصل بفاصلة)" className="sm:col-span-2" hint="وصف تسويقي؛ لا يُنشئ مهام أو مرافق"><input className="input" value={(draft.amenities ?? []).join("، ")} onChange={(e) => setDraft({ ...draft, amenities: e.target.value.split(/[،,]/).map((x) => x.trim()).filter(Boolean) })} /></Field>
             </div>
             <div className="mt-3 flex gap-4"><Toggle checked={draft.is_public ?? true} onChange={(v) => setDraft({ ...draft, is_public: v })} label="معلن للنزلاء" />{draft.id && <Toggle checked={draft.is_active ?? true} onChange={(v) => setDraft({ ...draft, is_active: v })} label="فعال" />}</div>

@@ -5,7 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle , NumberInput} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 
 interface Floor { id: string; block_id: string; name: string; sort_order: number; is_active: boolean; archived_at: string | null; version: number; rooms: number; facilities: number }
@@ -95,7 +95,7 @@ export default function AdminStructure() {
             <div className="space-y-3">
               <Field label="اسم البلوك (مطلوب)"><input className="input" value={blockDraft.name ?? ""} onChange={(e) => setBlockDraft({ ...blockDraft, name: e.target.value })} placeholder="مثال: B أو المبنى الشرقي" /></Field>
               <Field label="الوصف"><input className="input" value={blockDraft.description ?? ""} onChange={(e) => setBlockDraft({ ...blockDraft, description: e.target.value })} /></Field>
-              <Field label="الترتيب"><input type="number" className="input" dir="ltr" value={blockDraft.sort_order ?? 0} onChange={(e) => setBlockDraft({ ...blockDraft, sort_order: Number(e.target.value) })} /></Field>
+              <Field label="الترتيب"><NumberInput value={blockDraft.sort_order ?? 0} onChange={(v) => setBlockDraft({ ...blockDraft, sort_order: (v ?? 0) })} /></Field>
               {blockDraft.id && <Toggle checked={blockDraft.is_active ?? true} onChange={(v) => setBlockDraft({ ...blockDraft, is_active: v })} label="فعال" />}
             </div>
             <Submit label="حفظ" onCancel={() => setBlockDraft(null)} />
@@ -109,7 +109,7 @@ export default function AdminStructure() {
           <ActionForm onSubmit={async () => { await opsApi.upsertFloor({ id: floorDraft.id, block_id: floorDraft.block_id, name: floorDraft.name, sort_order: floorDraft.sort_order, is_active: floorDraft.is_active, version: floorDraft.version }); setFloorDraft(null); await load(); }}>
             <div className="space-y-3">
               <Field label="اسم الطابق (نصي، مطلوب)" hint="يمكن أن يكون حرفًا أو كلمة: B، الأرضي، 1"><input className="input" value={floorDraft.name ?? ""} onChange={(e) => setFloorDraft({ ...floorDraft, name: e.target.value })} /></Field>
-              <Field label="الترتيب"><input type="number" className="input" dir="ltr" value={floorDraft.sort_order ?? 0} onChange={(e) => setFloorDraft({ ...floorDraft, sort_order: Number(e.target.value) })} /></Field>
+              <Field label="الترتيب"><NumberInput value={floorDraft.sort_order ?? 0} onChange={(v) => setFloorDraft({ ...floorDraft, sort_order: (v ?? 0) })} /></Field>
               {floorDraft.id && <Toggle checked={floorDraft.is_active ?? true} onChange={(v) => setFloorDraft({ ...floorDraft, is_active: v })} label="فعال" />}
             </div>
             <Submit label="حفظ" onCancel={() => setFloorDraft(null)} />

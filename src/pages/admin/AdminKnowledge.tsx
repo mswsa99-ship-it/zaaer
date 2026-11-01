@@ -11,7 +11,7 @@ import { useAuth } from "../../lib/auth";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { knowledgeApi, suggestKeywords, KNOWLEDGE_CATEGORY_LABELS, type KnowledgeRow, type UnansweredRow, type KnowledgeDraft, type KnowledgeCategory } from "../../lib/knowledgeApi";
 import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge , NumberInput} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatDateTime } from "../../lib/utils";
 import { BookOpen, Plus, Pencil, Search, MessageCircleQuestion, Archive, RotateCcw, FileText, Building2, Globe, Lock, Sparkles } from "lucide-react";
@@ -50,8 +50,10 @@ export default function AdminKnowledge() {
     return rows.filter((r) => r.question.includes(q) || r.answer.includes(q) || r.keywords.some((k) => k.includes(q)));
   }, [rows, search]);
 
-  const startNew = (prefill?: Partial<KnowledgeDraft>) => { setDraft({ ...EMPTY(branchId), ...prefill }); setKwInput(""); };
-  const startEdit = (r: KnowledgeRow) => { setDraft({ id: r.id, version: r.version, branch_id: r.branch_id, category: r.category, question: r.question, keywords: r.keywords, answer: r.answer, answer_en: r.answer_en, is_public: r.is_public, is_active: r.is_active, priority: r.priority }); setKwInput(""); };
+  // 0055 (SETUP-13, the owner's decision): a contradicting answer is refused; the existing entry opens for editing instead
+  const [conflict, setConflict] = useState<KnowledgeRow | null>(null);
+  const startNew = (prefill?: Partial<KnowledgeDraft>) => { setConflict(null); setDraft({ ...EMPTY(branchId), ...prefill }); setKwInput(""); };
+  const startEdit = (r: KnowledgeRow) => { setConflict(null); setDraft({ id: r.id, version: r.version, branch_id: r.branch_id, category: r.category, question: r.question, keywords: r.keywords, answer: r.answer, answer_en: r.answer_en, is_public: r.is_public, is_active: r.is_active, priority: r.priority }); setKwInput(""); };
   const answerUnanswered = (u: UnansweredRow) => startNew({ question: u.question, keywords: suggestKeywords(u.question), unanswered_id: u.id });
 
   const addKeyword = () => {
@@ -153,10 +155,22 @@ export default function AdminKnowledge() {
             const pending = kwInput.trim() ? [...new Set([...draft.keywords, ...kwInput.split(/[,،\n]/).map((s) => s.trim()).filter(Boolean)])] : draft.keywords;
             if (!draft.question.trim() || draft.question.trim().length < 3) throw new Error("VALIDATION: question");
             if (!draft.answer.trim()) throw new Error("VALIDATION: answer");
-            await knowledgeApi.upsert({ ...draft, keywords: pending, question: draft.question.trim(), answer: draft.answer.trim() });
-            setDraft(null); load();
+            try {
+              await knowledgeApi.upsert({ ...draft, keywords: pending, question: draft.question.trim(), answer: draft.answer.trim() });
+            } catch (e) {
+              const id = String((e as Error)?.message ?? "").match(/KNOWLEDGE_CONFLICT:\s*([0-9a-f-]{36})/)?.[1];
+              setConflict(id ? rows.find((r) => r.id === id) ?? null : null);
+              throw e;
+            }
+            setDraft(null); setConflict(null); load();
           }}>
             <div className="space-y-3">
+              {conflict && (
+                <div className="rounded-xl border border-warning-500/40 bg-warning-500/10 p-3 text-sm text-ink-700" data-testid="knowledge-conflict">
+                  <p>الإجابة الموجودة لهذا السؤال: «{conflict.answer}»</p>
+                  <button type="button" className="btn-outline mt-2 min-h-[44px] text-xs" onClick={() => startEdit(conflict)}>تعديل الإجابة الموجودة</button>
+                </div>
+              )}
               <Field label="السؤال كما يطرحه النزيل (مطلوب)"><input className="input" value={draft.question} onChange={(e) => setDraft({ ...draft, question: e.target.value })} placeholder="مثال: هل يوجد مسبح؟" /></Field>
               <Field label="الكلمات المفتاحية والمرادفات" hint="يُطابق المساعد سؤال النزيل بهذه الكلمات (مع مراعاة الهمزة والتاء المربوطة). افصل بينها بفاصلة.">
                 <div className="flex flex-wrap gap-1.5 rounded-xl border border-ink-200 p-2">
@@ -169,7 +183,7 @@ export default function AdminKnowledge() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="التصنيف"><select className="input" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value as KnowledgeCategory })}>{(Object.keys(KNOWLEDGE_CATEGORY_LABELS) as KnowledgeCategory[]).map((c) => <option key={c} value={c}>{KNOWLEDGE_CATEGORY_LABELS[c]}</option>)}</select></Field>
                 <Field label="النطاق"><select className="input" value={draft.branch_id ? "branch" : "org"} disabled={!canOrgWide && !draft.branch_id} onChange={(e) => setDraft({ ...draft, branch_id: e.target.value === "org" ? null : branchId })}><option value="branch">هذا الفرع فقط</option>{canOrgWide && <option value="org">كل الفروع</option>}</select></Field>
-                <Field label="الأولوية" hint="تحسم التعارض بين إجابتين"><input type="number" className="input" dir="ltr" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) || 0 })} /></Field>
+                <Field label="الأولوية" hint="تحسم التعارض بين إجابتين"><NumberInput value={draft.priority} onChange={(v) => setDraft({ ...draft, priority: (v ?? 0) })} /></Field>
               </div>
               <div className="flex flex-wrap gap-4">
                 <Toggle checked={draft.is_public} onChange={(v) => setDraft({ ...draft, is_public: v })} label="تُرسل للنزلاء (وإلا فللموظفين فقط)" />

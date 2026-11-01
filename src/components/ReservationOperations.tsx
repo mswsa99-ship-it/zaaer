@@ -12,7 +12,7 @@ import { CancelDialog } from "./Guests";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
-import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
+import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput , NumberInput} from "./forms";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, ACTIVE_PAYMENT_METHODS, METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
 import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
 import type { CashAccount } from "../lib/api";
@@ -461,7 +461,7 @@ function ServiceDialog({ open, reservationId, branchId, onClose, onDone }: { ope
         {services.length === 0 ? <p className="text-sm text-ink-500">لا توجد خدمات معرّفة لهذا الفرع. أضفها من إدارة الخدمات.</p> : (
           <div className="space-y-3">
             <Field label="الخدمة"><select className="input" value={svc} onChange={(e) => setSvc(e.target.value)}>{services.map((x) => <option key={x.id} value={x.id}>{x.name_ar} — {x.is_free ? "مجانية" : sar(x.price_halalas)}</option>)}</select></Field>
-            {s?.billing_unit === "quantity" && <Field label="الكمية"><input type="number" min={1} className="input" dir="ltr" value={qty} onChange={(e) => setQty(Number(e.target.value))} /></Field>}
+            {s?.billing_unit === "quantity" && <Field label="الكمية"><NumberInput value={qty} onChange={(v) => setQty((v ?? 0))} /></Field>}
             {s?.late_checkout_until && <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">مغادرة متأخرة: ينتقل موعد مغادرة هذه الإقامة إلى الساعة <span dir="ltr">{s.late_checkout_until.slice(0, 5)}</span>.</p>}
             {/* 0053 (FRONT-04): a once-only service added a second time needs its reason here */}
             <Field label="ملاحظة أو سبب (اختياري)"><input className="input" value={note} maxLength={120} onChange={(e) => setNote(e.target.value)} placeholder="إلزامي إذا كانت الخدمة مضافة من قبل لهذا الحجز" data-testid="service-note" /></Field>

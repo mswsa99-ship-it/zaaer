@@ -10,8 +10,10 @@ import { BottomTabs, pickTabs } from "../components/BottomTabs";
 import { OpsCopilot } from "../components/OpsCopilot";
 import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
+import { useOrganizationName } from "../lib/organization";
 
 export default function StaffLayout() {
+  const orgName = useOrganizationName();
   const { profile, signOut, can, canFull } = useAuth();
   const allows = { can, canFull };
   const navigate = useNavigate();
@@ -45,7 +47,7 @@ export default function StaffLayout() {
             <Hotel className="h-5 w-5" />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-ink-800">فايف اورز</p>
+            <p className="text-sm font-semibold text-ink-800">{orgName}</p>
             <p className="text-[11px] text-ink-400">مركز العمليات</p>
           </div>
         </div>
@@ -92,7 +94,7 @@ export default function StaffLayout() {
           {/* phones/tablets only: a compact bar; the pages are in the bottom bar and «المزيد» */}
           <header className="flex items-center gap-2 border-b border-ink-100 bg-white/90 px-3 py-1.5 backdrop-blur lg:hidden">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white"><Hotel className="h-4 w-4" aria-hidden="true" /></div>
-            <span className="text-sm font-semibold text-ink-800">فايف اورز</span>
+            <span className="text-sm font-semibold text-ink-800">{orgName}</span>
             {adminHome && <Link to={adminHome} className="mr-auto flex min-h-[44px] items-center rounded-lg px-3 text-xs font-medium text-ink-600 hover:bg-ink-100">الإدارة ↗</Link>}
             <button onClick={handleSignOut} className={cn("flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100", !adminHome && "mr-auto")} aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />

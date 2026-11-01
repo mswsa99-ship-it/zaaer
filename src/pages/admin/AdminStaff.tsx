@@ -1,12 +1,14 @@
 /**
  * «الموظفون» (decisions 34, 35): the list from fn_admin_staff_list; «تعديل موظف» for the owner only — name, phone, role
- * and branches, with a reason, before and after in the log (the email is the login identity and is not edited; no one
+ * and branches, with a reason, before and after in the log (the email is the login identity: corrected only until the
+ * person first signs in, 0055; no one
  * changes their own role or branches; the last owner is never demoted); activation with a reason (deactivation ends the
  * person's sessions); «تسجيل خروج إجباري» for the owner and the manager, with a reason — every session on every device
  * ends at once and the account stays active; the manager signs out neither an owner nor a manager.
  */
 import { useEffect, useState, useCallback } from "react";
-import { staffApi, staffAdminApi, toArabicError, type StaffListRow } from "../../lib/api";
+import { staffAdminApi, toArabicError, VALIDATION_AR, type StaffListRow } from "../../lib/api";
+import { normalizePhone, validEmail } from "../../lib/validation";
 import { useAuth } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, Spinner, ErrorBanner, LoadErrorCard } from "../../components/ui";
@@ -35,11 +37,12 @@ export default function AdminStaff() {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<string>("supervisor");
   const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [phone, setPhone] = useState("");
   const [inviting, setInviting] = useState(false);
   const [invited, setInvited] = useState<string | null>(null);
 
   // dialogs
-  const [edit, setEdit] = useState<null | { s: StaffListRow; full_name: string; phone: string; role: string; branch_ids: string[]; reason: string }>(null);
+  const [edit, setEdit] = useState<null | { s: StaffListRow; email: string; full_name: string; phone: string; role: string; branch_ids: string[]; reason: string }>(null);
   const [activate, setActivate] = useState<null | { s: StaffListRow; reason: string }>(null);
   const [signOut, setSignOut] = useState<null | { s: StaffListRow; reason: string }>(null);
 
@@ -51,12 +54,16 @@ export default function AdminStaff() {
 
   async function invite() {
     setError(null); setInvited(null);
+    // 0055 (SETUP-08): the same checks as the server, before sending
     if (!email.trim() || !fullName.trim()) { setError("البريد والاسم مطلوبان."); return; }
+    if (!validEmail(email)) { setError(VALIDATION_AR.email); return; }
+    if (role !== "owner" && branchIds.length === 0) { setError(VALIDATION_AR.branch_required); return; }
+    if (phone.trim() && !normalizePhone(phone)) { setError(VALIDATION_AR.phone); return; }
     setInviting(true);
     try {
-      await staffApi.invite(email.trim(), fullName.trim(), role, branchIds);
+      await staffAdminApi.invite({ email: email.trim(), full_name: fullName.trim(), role, branch_ids: branchIds, phone: phone.trim() || null });
       setInvited(email.trim());
-      setEmail(""); setFullName(""); setBranchIds([]);
+      setEmail(""); setFullName(""); setBranchIds([]); setPhone("");
       await load();
     } catch (e) { setError(toArabicError(e)); }
     setInviting(false);
@@ -78,9 +85,10 @@ export default function AdminStaff() {
         <Card className="mb-5">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-700"><UserPlus className="h-4 w-4 text-brand-600" /> دعوة موظف</h3>
           <p className="mb-3 text-xs text-ink-400">يُنشأ ملف الموظف الآن ويرتبط تلقائيًا بحسابه عند أول تسجيل دخول بنفس البريد. لا يمكن للموظف اختيار دوره بنفسه.</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div><label className="label">البريد الإلكتروني</label><input className="input" dir="ltr" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-            <div><label className="label">الاسم الكامل</label><input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
+            <div><label className="label">الاسم الكامل</label><input className="input" value={fullName} maxLength={120} onChange={(e) => setFullName(e.target.value)} /></div>
+            <div><label className="label">الهاتف (اختياري)</label><input className="input" dir="ltr" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="05xxxxxxxx" data-testid="invite-phone" /></div>
             <div>
               <label className="label">الدور</label>
               <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
@@ -88,7 +96,7 @@ export default function AdminStaff() {
               </select>
             </div>
             <div>
-              <label className="label">الفروع</label>
+              <label className="label">الفروع{role !== "owner" ? " (فرع واحد على الأقل)" : ""}</label>
               <div className="flex flex-wrap gap-2 rounded-xl border border-ink-100 p-2">
                 {branches.map((b) => (
                   <label key={b.id} className="flex items-center gap-1.5 text-xs text-ink-700">
@@ -127,7 +135,7 @@ export default function AdminStaff() {
                 <Badge className="bg-brand-50 text-brand-700">{ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role}</Badge>
                 <Badge className={s.is_active ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-400"}>{s.is_active ? "نشط" : "موقوف"}</Badge>
                 <div className="mt-1 flex flex-wrap justify-end gap-1">
-                  {canManage && touches(s) && <button onClick={() => setEdit({ s, full_name: s.full_name, phone: s.phone ?? "", role: s.role, branch_ids: s.branch_ids, reason: "" })} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-edit"><Pencil className="h-3 w-3" /> تعديل</button>}
+                  {canManage && touches(s) && <button onClick={() => setEdit({ s, email: s.email, full_name: s.full_name, phone: s.phone ?? "", role: s.role, branch_ids: s.branch_ids, reason: "" })} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-edit"><Pencil className="h-3 w-3" /> تعديل</button>}
                   {canManage && touches(s) && !s.is_me && <button onClick={() => setActivate({ s, reason: "" })} className={`btn-ghost px-2 py-1 text-xs ${s.is_active ? "text-danger-600" : "text-success-600"}`} data-testid="staff-toggle-active"><Power className="h-3 w-3" /> {s.is_active ? "إيقاف" : "تفعيل"}</button>}
                   {canSignOut(s) && <button onClick={() => setSignOut({ s, reason: "" })} className="btn-ghost px-2 py-1 text-xs text-warning-700" data-testid="staff-force-logout"><LogOut className="h-3 w-3" /> تسجيل خروج إجباري</button>}
                 </div>
@@ -142,11 +150,16 @@ export default function AdminStaff() {
         {edit && (
           <ActionForm onSubmit={async () => {
             if (!edit.reason.trim()) throw new Error("VALIDATION: reason");
-            const r = await staffAdminApi.update({ staff_id: edit.s.id, reason: edit.reason.trim(), full_name: edit.full_name.trim(), phone: edit.phone.trim() || null, ...(edit.s.is_me ? {} : edit.role === "owner" ? { role: edit.role } : { role: edit.role, branch_ids: edit.branch_ids }) });
-            setEdit(null); setNotice(r.unchanged ? "لا تغيير." : `حُفظ التعديل (${(r.changed ?? []).map((c) => ({ full_name: "الاسم", phone: "الهاتف", role: "الدور", branches: "الفروع" })[c] ?? c).join("، ")}). يسري تغيير الدور أو الفروع من العملية التالية للموظف.`); await load();
+            if (edit.phone.trim() && !normalizePhone(edit.phone)) throw new Error("VALIDATION: phone");
+            const emailChanged = !edit.s.linked && edit.email.trim().toLowerCase() !== edit.s.email;
+            if (emailChanged && !validEmail(edit.email)) throw new Error("VALIDATION: email");
+            const r = await staffAdminApi.update({ staff_id: edit.s.id, reason: edit.reason.trim(), ...(emailChanged ? { email: edit.email.trim() } : {}), full_name: edit.full_name.trim(), phone: edit.phone.trim() || null, ...(edit.s.is_me ? {} : edit.role === "owner" ? { role: edit.role } : { role: edit.role, branch_ids: edit.branch_ids }) });
+            setEdit(null); setNotice(r.unchanged ? "لا تغيير." : `حُفظ التعديل (${(r.changed ?? []).map((c) => ({ email: "البريد", full_name: "الاسم", phone: "الهاتف", role: "الدور", branches: "الفروع" })[c] ?? c).join("، ")}). يسري تغيير الدور أو الفروع من العملية التالية للموظف.`); await load();
           }}>
             <div className="space-y-3">
-              <Field label="البريد الإلكتروني" hint="هوية الدخول؛ لا يُعدَّل. لبريد جديد ادعُ الموظف من جديد."><input className="input" dir="ltr" value={edit.s.email} disabled /></Field>
+              {edit.s.linked
+                ? <Field label="البريد الإلكتروني" hint="سجّل الموظف دخوله بهذا البريد، فلا يُعدَّل الآن. لبريد جديد ادعُ الموظف من جديد."><input className="input" dir="ltr" value={edit.s.email} disabled /></Field>
+                : <Field label="البريد الإلكتروني" hint="يُصحَّح البريد ما دام الموظف لم يسجّل دخوله بعد."><input className="input" dir="ltr" type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} data-testid="edit-email" /></Field>}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="الاسم الكامل"><input className="input" value={edit.full_name} onChange={(e) => setEdit({ ...edit, full_name: e.target.value })} data-testid="edit-name" /></Field>
                 <Field label="الهاتف"><input className="input" dir="ltr" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="05xxxxxxxx" data-testid="edit-phone" /></Field>

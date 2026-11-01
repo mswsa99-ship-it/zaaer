@@ -12,6 +12,7 @@ import { cn } from "../lib/utils";
 import { aiChat, type AiReply } from "../lib/api";
 import { useBranch } from "../lib/branch";
 import { supabase } from "../lib/supabase";
+import { useOrganizationName } from "../lib/organization";
 import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
 
 interface Message { id: string; sender: "assistant" | "guest"; content: string; mode?: "ai" | "scripted"; actions?: { label: string; route?: string; value?: string }[] }
@@ -36,7 +37,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { branchId, branch } = useBranch();
-  const propertyName = "فايف اورز";
+  const propertyName = useOrganizationName();
   const [messages, setMessages] = useState<Message[]>([WELCOME(propertyName)]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);

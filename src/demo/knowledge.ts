@@ -13,6 +13,8 @@ import type { Permissions } from "./permissions";
 export const DEMO_ZERO_BRANCH = "00000000-0000-0000-0000-000000000000";
 
 const normKeyword = (k: string) => normalizeArabic(String(k ?? ""));
+/** the question as compared (fn_knowledge_question_key): normalised Arabic without punctuation */
+export const questionKey = (q: string) => normalizeArabic(q).replace(/[؟?!.,،؛;:"'«»()\-]/g, " ").replace(/\s+/g, " ").trim();
 
 export function seedKnowledge(T: (t: string) => Row[], staffId: string) {
   const mk = (c: string, q: string, k: string[], a: string, p: number, used = 0): Row => ({
@@ -66,6 +68,16 @@ export function knowledgeRpcs(ctx: Permissions & {
       if (branch) requireBranch(branch); else if (!hasRole("owner", "manager")) throw new Error("FORBIDDEN: org-wide entries require manager");
       const q = String(p.question ?? "").trim(), a = String(p.answer ?? "").trim();
       if (q.length < 3) throw new Error("VALIDATION: question"); if (a.length < 2) throw new Error("VALIDATION: answer");
+      // 0055 (SETUP-13, the owner's decision): another active answer to the same question, for the same guests, is refused;
+      // the existing entry is edited instead
+      const cur = p.id ? byId("knowledge_entries", p.id) : undefined;
+      const scope = "branch_id" in p || !cur ? branch : cur.branch_id ?? null;
+      if ((p.is_active ?? cur?.is_active ?? true) !== false) {
+        const key = questionKey(q);
+        const other = T("knowledge_entries").find((x) => x.organization_id === m.organization_id && !x.archived_at && x.is_active && x.id !== cur?.id
+          && (x.branch_id == null || scope == null || x.branch_id === scope) && questionKey(String(x.question ?? "")) === key);
+        if (other) throw new Error("KNOWLEDGE_CONFLICT: " + other.id);
+      }
       const kw = [...new Set((p.keywords ?? []).map(normKeyword).filter((w: string) => w.length >= 2))].sort();
       let k: Row;
       if (!p.id) {

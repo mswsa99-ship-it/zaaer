@@ -32,7 +32,7 @@ export default function AdminServices() {
   return (
     <div>
       <SectionTitle title="الخدمات" subtitle="كتالوج الخدمات الاختيارية على الحجز — يُحفظ الاسم والسعر لحظة الإضافة ولا تتغير الحجوزات السابقة بتعديله" action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", billing_unit: "once", price_halalas: 0, is_free: false, taxable: true })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> خدمة جديدة</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", billing_unit: "once", price_halalas: null as unknown as number, is_free: false, taxable: true })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> خدمة جديدة</button></div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<ConciergeBell className="h-10 w-10" />} title="لا توجد خدمات" description="أضف خدمات مثل الإفطار أو التنظيف الإضافي أو الدخول المبكر." /> : (
@@ -59,7 +59,7 @@ export default function AdminServices() {
               <Field label="الاسم العربي (مطلوب)"><input className="input" value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} /></Field>
               <Field label="وحدة الاحتساب"><select className="input" value={draft.billing_unit ?? "once"} onChange={(e) => setDraft({ ...draft, billing_unit: e.target.value })}>{Object.entries(BILLING_UNIT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-              <Field label="السعر"><MoneyInput valueHalalas={draft.price_halalas ?? 0} onChange={(h) => setDraft({ ...draft, price_halalas: h ?? 0 })} disabled={draft.is_free} /></Field>
+              <Field label={draft.is_free ? "السعر (مجانية)" : "السعر (إلزامي)"} hint={draft.is_free ? undefined : "أكبر من صفر؛ للخدمة بلا مقابل اختر «مجانية»."}><MoneyInput valueHalalas={draft.is_free ? null : draft.price_halalas ?? null} onChange={(h) => setDraft({ ...draft, price_halalas: h as number })} disabled={draft.is_free} /></Field>
               {(draft.billing_unit ?? "once") === "once" && (
                 <Field label="مغادرة متأخرة حتى الساعة (اختياري)" className="sm:col-span-2" hint="خدمة مغادرة متأخرة: تنقل موعد مغادرة الإقامة إلى هذه الساعة، وتكون بعد موعد المغادرة في الفرع. تُحتسب مرة واحدة.">
                   <input type="time" className="input" dir="ltr" value={draft.late_checkout_until?.slice(0, 5) ?? ""} onChange={(e) => setDraft({ ...draft, late_checkout_until: e.target.value || null })} aria-label="مغادرة متأخرة حتى الساعة" />

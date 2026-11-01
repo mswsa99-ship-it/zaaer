@@ -19,6 +19,7 @@ import { uid, nowISO, addDays, ORG, type Row } from "./data";
 import { auditActionLabel, auditEntityLabel } from "../lib/auditLabels";
 import { CAPABILITY_CATALOG } from "../lib/capabilityCatalog";
 import type { Permissions } from "./permissions";
+import { latinDigits, normalizePhone, validEmail } from "../lib/validation";
 
 export interface Phase6Ctx extends Permissions {
   T: (t: string) => Row[];
@@ -268,9 +269,16 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       const sp = orgStaffRow(q.staff_id);
       // decision 44 (0043): no one but the owner edits an owner or makes someone an owner
       if ((sp.role === "owner" || (q.role == null ? "" : String(q.role)) === "owner") && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");
-      if (has("email") && (q.email == null ? null : String(q.email).trim().toLowerCase()) !== (sp.email ?? null)) throw new Error("EMAIL_NOT_EDITABLE");
-      const vName: string | null = has("full_name") ? String(q.full_name ?? "").trim() || null : sp.full_name; if (!vName) throw new Error("VALIDATION: full_name");
-      const vPhone: string | null = has("phone") ? String(q.phone ?? "").replace(/[^0-9+]/g, "") || null : sp.phone ?? null;
+      // 0055 (SETUP-08): the email is corrected until the person has signed in for the first time; a phone is checked
+      let vEmail: string | null = sp.email ?? null;
+      if (has("email") && (q.email == null ? null : String(q.email).trim().toLowerCase()) !== (sp.email ?? null)) {
+        if (sp.auth_user_id != null) throw new Error("EMAIL_NOT_EDITABLE");
+        vEmail = String(q.email ?? "").trim().toLowerCase(); if (!validEmail(vEmail)) throw new Error("VALIDATION: email");
+        if (orgStaff().some((s) => s.id !== sp.id && String(s.email ?? "").toLowerCase() === vEmail)) throw new Error("DUPLICATE_EMAIL");
+      }
+      const vName: string | null = has("full_name") ? String(q.full_name ?? "").trim() || null : sp.full_name; if (!vName || vName.length > 120) throw new Error("VALIDATION: full_name");
+      let vPhone: string | null = sp.phone ?? null;
+      if (has("phone")) { const raw = String(q.phone ?? "").trim(); vPhone = raw ? latinDigits(raw).replace(/[^0-9+]/g, "") || null : null; if (raw && !normalizePhone(vPhone)) throw new Error("VALIDATION: phone"); }
       const vRole: string = has("role") ? String(q.role) : sp.role; if (!STAFF_ROLES.includes(vRole)) throw new Error("INVALID_ROLE");
       const beforeB = liveBranches(sp.id);
       const vBranches: string[] = has("branch_ids") ? [...new Set<string>((Array.isArray(q.branch_ids) ? q.branch_ids : []).map(String))] : beforeB;
@@ -281,14 +289,15 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       for (const b of vBranches) requireBranch(b);
       for (const b of beforeB) if (!vBranches.includes(b)) requireBranch(b);   // 0046: a branch is taken away only by someone in it
       const changed: string[] = [];
+      if (vEmail !== (sp.email ?? null)) changed.push("email");
       if (vName !== sp.full_name) changed.push("full_name"); if (vPhone !== (sp.phone ?? null)) changed.push("phone"); if (vRole !== sp.role) changed.push("role"); if (!sameSet(vBranches, beforeB)) changed.push("branches");
       if (!changed.length) return { ok: true, unchanged: true };
-      const before = { full_name: sp.full_name, phone: maskPhone(sp.phone), role: sp.role, branch_ids: beforeB };
-      Object.assign(sp, { full_name: vName, phone: vPhone, role: vRole, updated_at: nowISO() });
+      const before = { email: sp.email ?? null, full_name: sp.full_name, phone: maskPhone(sp.phone), role: sp.role, branch_ids: beforeB };
+      Object.assign(sp, { email: vEmail, full_name: vName, phone: vPhone, role: vRole, updated_at: nowISO() });
       // memberships: retire what is gone, re-open or add what is new (effective from the person's next operation)
       for (const m of T("branch_memberships")) if (m.staff_id === sp.id && !m.removed_at && !vBranches.includes(m.branch_id)) { m.removed_at = nowISO(); m.removed_by = mine; c.staffLeftBranch?.(m.branch_id, sp.id, "أُزيل من الفرع"); }
       for (const b of vBranches) { const m = T("branch_memberships").find((x) => x.staff_id === sp.id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: sp.id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
-      const after = { full_name: vName, phone: maskPhone(vPhone), role: vRole, branch_ids: liveBranches(sp.id) };
+      const after = { email: vEmail, full_name: vName, phone: maskPhone(vPhone), role: vRole, branch_ids: liveBranches(sp.id) };
       emit("staff_profiles"); emit("branch_memberships");
       audit(null, changed.includes("role") ? "staff.role_changed" : "staff.updated", "staff_profile", sp.id, { changed, before, after, reason });
       return { ok: true, changed };

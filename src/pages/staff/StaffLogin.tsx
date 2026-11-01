@@ -5,8 +5,10 @@ import { useAuth, takeSignOutReason } from "../../lib/auth";
 import { isDemo } from "../../lib/supabase";
 import { homeFor } from "../../lib/nav";
 import { ErrorBanner, Spinner } from "../../components/ui";
+import { useOrganizationName } from "../../lib/organization";
 
 export default function StaffLogin() {
+  const orgName = useOrganizationName();
   const { signIn, signUp, session, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -56,7 +58,7 @@ export default function StaffLogin() {
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
             <Hotel className="h-7 w-7" />
           </div>
-          <h1 className="text-xl font-bold">فايف اورز — بوابة الموظفين</h1>
+          <h1 className="text-xl font-bold">{orgName ? `${orgName} — ` : ""}بوابة الموظفين</h1>
           <p className="mt-1 text-sm text-white/60">مركز عمليات الاستقبال</p>
         </div>
 

@@ -15,8 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins, ClipboardList, BellRing, ClipboardCheck, Activity,
-} from "lucide-react";
+  Calculator, Vault, HandCoins, ClipboardList, BellRing, ClipboardCheck, Activity, Building } from "lucide-react";
 import type { Role } from "./types";
 
 export type StaffRole = Exclude<Role, "guest">;
@@ -82,6 +81,7 @@ export const PAGES: readonly NavPage[] = [
   // ---- admin — order within a group = navigation order ----
   { path: "/admin/dashboard", label: "لوحة الإدارة", icon: LayoutDashboard, area: "admin", group: "نظرة عامة", roles: ADMIN_ROLES },
 
+  { path: "/admin/organization", label: "المنشأة", icon: Building, area: "admin", group: "المنشآت", roles: ["owner"], scope: "org" },
   { path: "/admin/branches", label: "الفروع", icon: Building2, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, scope: "org", cap: ["branch.settings"] },
   { path: "/admin/structure", label: "البلوكات والطوابق", icon: Layers, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
   { path: "/admin/room-categories", label: "أنواع الوحدات", icon: BedDouble, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },

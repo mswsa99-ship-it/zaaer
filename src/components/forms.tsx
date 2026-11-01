@@ -4,6 +4,7 @@ import { cn } from "../lib/utils";
 import { ErrorBanner, Spinner } from "./ui";
 import { opsApi, toArabicError, type DefinitionEntity } from "../lib/api";
 import { formatMoneyInput, moneyTextToHalalas, sanitizeMoneyText } from "../lib/money";
+import { numericText } from "../lib/validation";
 
 /** Modal that never closes on its own after a failed save — the form keeps its values. */
 export function Modal({ open, title, onClose, children, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
@@ -40,6 +41,26 @@ export function Field({ label, children, hint, className, error }: { label: stri
       {children}
       {error ? <p className="mt-1 text-xs text-danger-600" role="alert">{error}</p> : hint && <p className="mt-1 text-xs text-ink-400">{hint}</p>}
     </div>
+  );
+}
+
+/**
+ * 0055 (SETUP-11): the number field of the system. A text field with a numeric keyboard, so Arabic digits are read
+ * («٥» is 5) instead of being dropped by the browser and saved as 0. Empty is null; the value is checked on the server.
+ */
+export function NumberInput({ value, onChange, onCommit, decimals, disabled, placeholder, label, className, testId }: {
+  value: number | null; onChange?: (v: number | null) => void; onCommit?: (v: number | null) => void; decimals?: boolean;
+  disabled?: boolean; placeholder?: string; label?: string; className?: string; testId?: string;
+}) {
+  const [text, setText] = useState(value == null ? "" : String(value));
+  const sent = useRef<number | null>(value);
+  useEffect(() => { if (value !== sent.current) { sent.current = value; setText(value == null ? "" : String(value)); } }, [value]);
+  const parse = (s: string) => (s === "" || s === "." ? null : Number(s));
+  return (
+    <input type="text" inputMode={decimals ? "decimal" : "numeric"} autoComplete="off" value={text} disabled={disabled} placeholder={placeholder} aria-label={label}
+      data-testid={testId} dir="ltr" className={cn("input tabular-nums", className)}
+      onChange={(e) => { const s = numericText(e.target.value, { decimals }); setText(s); const v = parse(s); sent.current = v; onChange?.(v); }}
+      onBlur={() => onCommit?.(parse(text))} />
   );
 }
 

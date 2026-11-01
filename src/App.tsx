@@ -49,6 +49,7 @@ import AdminStaff from "./pages/admin/AdminStaff";
 import AdminRoles from "./pages/admin/AdminRoles";
 import AdminBookingSources from "./pages/admin/AdminBookingSources";
 import AdminAiSettings from "./pages/admin/AdminAiSettings";
+import AdminOrganization from "./pages/admin/AdminOrganization";
 import AdminWhatsapp from "./pages/admin/AdminWhatsapp";
 import AdminPaymentProviders from "./pages/admin/AdminPaymentProviders";
 import AdminPolicies from "./pages/admin/AdminPolicies";
@@ -129,6 +130,7 @@ export default function App() {
       <Route element={<ProtectedStaff><AdminLayout /></ProtectedStaff>}>
         <Route element={<RequireRole />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/organization" element={<AdminOrganization />} />
           <Route path="/admin/branches" element={<AdminBranches />} />
           <Route path="/admin/room-categories" element={<AdminRoomCategories />} />
           <Route path="/admin/rooms" element={<AdminRooms />} />

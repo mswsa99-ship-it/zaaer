@@ -550,9 +550,9 @@ do $$ declare l jsonb; me jsonb; p6 jsonb; begin
     (me->>'is_me')::boolean and me ? 'phone' and p6->'branch_ids' @> '["00000000-0000-0000-0000-000000000010","00000000-0000-0000-0000-000000000012"]'::jsonb and not (p6->>'linked')::boolean
     and not exists (select 1 from jsonb_array_elements(l) x where x->>'id' = '10000000-0000-0000-0000-000000000005'), jsonb_array_length(l) || ' staff');
 exception when others then perform t_record('ST01 the owner''s staff list: everyone of the organisation with role, activity, link state, branches, and «أنا» on the owner''s own row', false, sqlerrm); end $$;
-select t_record('ST02 the editor refuses: no reason, an email change, the guest role, an unknown staff member',
+select t_record('ST02 the editor refuses: no reason, an email change once the person has signed in (0055: correctable before), the guest role, an unknown staff member',
   t_fails(format('select fn_admin_update_staff(%L::jsonb)', jsonb_build_object('staff_id', t_id('p6'), 'full_name', 'x')), 'VALIDATION: reason%') = 'ok'
-  and t_fails(format('select fn_admin_update_staff(%L::jsonb)', jsonb_build_object('staff_id', t_id('p6'), 'email', 'other@test.local', 'reason', 'اختبار')), 'EMAIL_NOT_EDITABLE%') = 'ok'
+  and t_fails(format('select fn_admin_update_staff(%L::jsonb)', jsonb_build_object('staff_id', '10000000-0000-0000-0000-000000000006', 'email', 'other@test.local', 'reason', 'اختبار')), 'EMAIL_NOT_EDITABLE%') = 'ok'
   and t_fails(format('select fn_admin_update_staff(%L::jsonb)', jsonb_build_object('staff_id', t_id('p6'), 'role', 'guest', 'reason', 'اختبار')), 'INVALID_ROLE%') = 'ok'
   and t_fails(format('select fn_admin_update_staff(%L::jsonb)', jsonb_build_object('staff_id', gen_random_uuid(), 'full_name', 'x', 'reason', 'اختبار')), 'NOT_FOUND%') = 'ok');
 do $$ declare r jsonb; sp staff_profiles; a audit_events; m record; begin

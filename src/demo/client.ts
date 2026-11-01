@@ -7,12 +7,12 @@
  * like the real system. Nothing here talks to a server.
  */
 import { seed, uid, todayISO, addDays, nowISO, ORG, STAFF, type Row, type Store } from "./data";
-import { scriptedReply } from "../../supabase/functions/_shared/guardrails";
+import { scriptedReply, normalizeArabic } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
 import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, validHttpsUrl } from "./guests";
 import { phase6Rpcs } from "./phase6";
-import { checkMinAge, checkPersonName, checkPhone, latinDigits } from "../lib/validation";
+import { checkMinAge, checkPersonName, checkPhone, latinDigits, normalizePhone, validEmail } from "../lib/validation";
 import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v8";
@@ -235,7 +235,8 @@ type Filter = (r: Row) => boolean;
  *  0043: the matrix's rows decide the rest — «السياسات» (property_policies), «تولّي محادثة واتساب» (a staff reply and taking
  *  a conversation); role_permissions is written only through fn_admin_set_permissions / fn_admin_reset_permissions. */
 const WRITE_RULES: Record<string, () => boolean> = {
-  booking_sources: () => false, staff_profiles: () => false, branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
+  booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
+  branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
@@ -469,15 +470,20 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_user_branch_ids: () => myBranches(),
   fn_claim_staff_profile: () => ({ ok: true, claimed: true }),
   // 0040: a guest is no staff role; the invite re-opens a retired membership instead of a duplicate, and is logged
-  fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => { requireCap("staff.manage"); if (p_role === "guest") throw new Error("INVALID_ROLE"); if (!["owner", "manager", "supervisor", "finance", "housekeeping"].includes(String(p_role))) throw new Error("INVALID_ROLE");
-    if (p_role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
-    if (!perm.roleWithinMine(String(p_role))) throw new Error("FORBIDDEN: a role beyond your own");                 // 0046
-    const email = String(p_email ?? "").trim().toLowerCase(), name = String(p_full_name ?? "").trim(); if (!email || !name) throw new Error("VALIDATION: email_and_name");
+  fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => rpcs.fn_admin_invite_staff({ p: { email: p_email, full_name: p_full_name, role: p_role, branch_ids: p_branch_ids ?? [] } }),
+  // 0055 (SETUP-08): the email checked, a branch for every role but the owner, the phone checked and kept normalised
+  fn_admin_invite_staff: ({ p }) => { requireCap("staff.manage"); const q: Row = p ?? {}; const role = String(q.role ?? ""); if (role === "guest" || !["owner", "manager", "supervisor", "finance", "housekeeping"].includes(role)) throw new Error("INVALID_ROLE");
+    if (role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
+    if (!perm.roleWithinMine(role)) throw new Error("FORBIDDEN: a role beyond your own");                       // 0046
+    const email = String(q.email ?? "").trim().toLowerCase(), name = String(q.full_name ?? "").trim(); if (!email || !name) throw new Error("VALIDATION: email_and_name");
+    if (!validEmail(email)) throw new Error("VALIDATION: email"); if (name.length > 120) throw new Error("VALIDATION: full_name");
+    const rawPhone = String(q.phone ?? "").trim(); const phone = rawPhone ? latinDigits(rawPhone).replace(/[^0-9+]/g, "") || null : null; if (rawPhone && !normalizePhone(phone)) throw new Error("VALIDATION: phone");
+    const branches: string[] = [...new Set<string>((Array.isArray(q.branch_ids) ? q.branch_ids : []).map(String))]; if (role !== "owner" && !branches.length) throw new Error("VALIDATION: branch_required");
     if (T("staff_profiles").some((x) => x.organization_id === ORG && String(x.email ?? "").toLowerCase() === email)) throw new Error("DUPLICATE_EMAIL");   // 0046
-    const branches: string[] = Array.isArray(p_branch_ids) ? p_branch_ids : []; for (const b of branches) requireBranch(b);   // all or nothing, as the transaction
-    const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone: null, role: p_role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
+    for (const b of branches) requireBranch(b);   // all or nothing, as the transaction
+    const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone, role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
     for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
-    emit("staff_profiles"); emit("branch_memberships"); audit(null, "staff_invited", "staff_profile", id, { role: p_role, branch_ids: branches }); return { ok: true, staff_id: id }; },
+    emit("staff_profiles"); emit("branch_memberships"); audit(null, "staff_invited", "staff_profile", id, { role, branch_ids: branches, phone: !!phone }); return { ok: true, staff_id: id }; },
   fn_admin_update_ai_settings: ({ p }) => { requireCap("security");
     // 0052 (SEC-02): the guard's four numbers keep their ranges
     const rng: Record<string, [number, number]> = { guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
@@ -487,6 +493,10 @@ const rpcs: Record<string, (a: any) => any> = {
 
   // ---- definitions ----
   fn_admin_upsert_branch: ({ p }) => { requireCap("branch.settings"); nonEmpty(p.name_ar, "name_ar");
+    // 0055 (SETUP-09): one branch per name (archived ones aside); a phone and an email that work
+    if (T("branches").some((x) => x.organization_id === ORG && !x.archived_at && x.id !== p.id && normalizeArabic(String(x.name_ar).trim()) === normalizeArabic(String(p.name_ar).trim()))) throw new Error("DUPLICATE_BRANCH_NAME");
+    if (p.phone !== undefined) { const ph = latinDigits(String(p.phone ?? "")).trim() || null; if (ph && !normalizePhone(ph)) throw new Error("VALIDATION: phone"); p = { ...p, phone: ph }; }
+    if (p.email !== undefined) { const em = String(p.email ?? "").trim().toLowerCase() || null; if (em && !validEmail(em)) throw new Error("VALIDATION: email"); p = { ...p, email: em }; }
     // decision 31: the English name is required; the map link is a Google Maps https link; the platform link is https
     if ((!p.id || p.name_en !== undefined) && !String(p.name_en ?? "").trim()) throw new Error("VALIDATION: name_en");
     if (p.country_code != null && !/^[A-Z]{2}$/.test(String(p.country_code))) throw new Error("VALIDATION: country");
@@ -513,7 +523,11 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_admin_upsert_floor: ({ p }) => { if (!p.id) { const blk = byId("blocks", p.block_id); if (!blk) throw new Error("NOT_FOUND: block"); p.branch_id = blk.branch_id; } return upsertDef("floors", "floor", p, ["name", "sort_order", "is_active", "block_id"], (x) => nonEmpty(x.name, "name"), ["name"], "block_id"); },
   fn_admin_upsert_room_category: ({ p }) => {
     requireCap("definitions"); const cur = p.id ? byId("room_categories", p.id) : null;
+    // 0055 (SETUP-12): a base price above zero, required for a new type; no price past the technical bound
+    if (p.base_price_halalas === "") delete p.base_price_halalas;
+    if ((!cur && p.base_price_halalas == null) || (p.base_price_halalas != null && !(Number(p.base_price_halalas) > 0))) throw new Error("VALIDATION: base_price");
     for (const k of ["weekly_price_halalas", "monthly_price_halalas", "min_nightly_halalas"]) { if (p[k] === "") p[k] = null; if (p[k] != null && !(Number(p[k]) > 0)) throw new Error("VALIDATION: amount"); }
+    if (Number(p.base_price_halalas ?? 0) > 100000000 || Number(p.min_nightly_halalas ?? 0) > 100000000 || Number(p.weekly_price_halalas ?? 0) > 700000000 || Number(p.monthly_price_halalas ?? 0) > 3000000000) throw new Error("VALIDATION: amount_too_large");
     if (p.price_mode !== undefined && !["unified", "by_channel"].includes(p.price_mode)) throw new Error("VALIDATION: price_mode");
     const pick = (k: string) => (p[k] !== undefined ? p[k] : cur?.[k]); const num = (k: string) => (pick(k) == null ? null : Number(pick(k)));
     const mn = num("min_nightly_halalas"), wk = num("weekly_price_halalas"), mo = num("monthly_price_halalas"), mode = pick("price_mode") ?? "unified";
@@ -528,13 +542,15 @@ const rpcs: Record<string, (a: any) => any> = {
     return { ...res, stays_over_capacity: cur && oldMax != null && row.max_capacity < oldMax ? capacityImpact(row.id, row.max_capacity).length : 0 };
   },
   fn_admin_upsert_room: ({ p }) => { requireCap("definitions"); const rows = T("rooms"); let r = p.id ? byId("rooms", p.id) : null; if (p.id && !r) throw new Error("NOT_FOUND");
+    // 0055 (SETUP-06): a unit number is kept with Latin digits — «١٠١» is «101»
+    if (p.room_number != null) { p = { ...p, room_number: latinDigits(String(p.room_number)).trim() }; if (p.room_number.length > 20) throw new Error("VALIDATION: room_number"); }
     const branch = r ? r.branch_id : p.branch_id; requireBranch(branch); const cat = p.category_id ?? r?.category_id; const blk = p.block_id === undefined ? r?.block_id ?? null : p.block_id; const flr = p.floor_id === undefined ? r?.floor_id ?? null : p.floor_id;
     if (!cat || byId("room_categories", cat)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: category"); if (blk && byId("blocks", blk)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: block"); if (flr && (byId("floors", flr)?.branch_id !== branch || (blk && byId("floors", flr)?.block_id !== blk))) throw new Error("BRANCH_MISMATCH: floor");
-    if (!r) { nonEmpty(p.room_number, "room_number"); if (rows.some((x) => x.branch_id === branch && x.room_number === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER"); r = { id: uid(), branch_id: branch, organization_id: ORG, category_id: cat, block_id: blk, floor_id: flr, room_number: p.room_number.trim(), floor: 1, status: "available", cleanliness: "clean", is_active: p.is_active ?? true, notes: p.notes ?? null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: nowISO(), updated_at: nowISO() }; rows.push(r); emit("rooms"); audit(branch, "room.created", "room", r.id, { after: r }); return { ok: true, id: r.id, version: 1 }; }
+    if (!r) { nonEmpty(p.room_number, "room_number"); if (rows.some((x) => x.branch_id === branch && latinDigits(String(x.room_number)) === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER"); r = { id: uid(), branch_id: branch, organization_id: ORG, category_id: cat, block_id: blk, floor_id: flr, room_number: p.room_number.trim(), floor: 1, status: "available", cleanliness: "clean", is_active: p.is_active ?? true, notes: p.notes ?? null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: nowISO(), updated_at: nowISO() }; rows.push(r); emit("rooms"); audit(branch, "room.created", "room", r.id, { after: r }); return { ok: true, id: r.id, version: 1 }; }
     checkVersion(r.version, p.version); const before = { ...r };
     if (p.is_active === false && r.is_active && guestInHouse(r.id)) throw new Error("ROOM_HAS_GUEST: a guest is in house");
     if (p.is_active === false && r.is_active && T("reservation_allocations").some((a) => a.room_id === r!.id && a.status === "active" && a.to_date > branchToday() && ["confirmed", "checked_in", "pending_verification"].includes(byId("reservations", a.reservation_id)?.status))) throw new Error("HAS_FUTURE_COMMITMENTS");
-    if (p.room_number && p.room_number.trim() !== r.room_number && rows.some((x) => x.id !== r!.id && x.branch_id === branch && x.room_number === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER");
+    if (p.room_number && p.room_number.trim() !== r.room_number && rows.some((x) => x.id !== r!.id && x.branch_id === branch && latinDigits(String(x.room_number)) === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER");
     Object.assign(r, { room_number: p.room_number?.trim() || r.room_number, category_id: cat, block_id: blk, floor_id: flr, notes: p.notes ?? r.notes, is_active: p.is_active ?? r.is_active, version: r.version + 1, updated_at: nowISO() });
     if (!r.is_active) r.status = "out_of_service"; else if (r.status === "out_of_service") r.status = "available";
     emit("rooms"); audit(branch, "room.updated", "room", r.id, { before, after: r }); return { ok: true, id: r.id, version: r.version }; },
@@ -542,6 +558,9 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_admin_upsert_task_type: ({ p }) => upsertDef("task_types", "task_type", p, ["name", "description", "is_active"], (x) => nonEmpty(x.name, "name"), ["name"]),
   // a late check-out service moves the departure to its hour: after the branch's check-out time, billed once (0033)
   fn_admin_upsert_service: ({ p }) => { requireCap("definitions"); const cur = p.id ? byId("service_definitions", p.id) : null;
+    // 0055 (SETUP-12): a service is priced above zero unless it is free
+    if (p.price_halalas === "") delete p.price_halalas; if (p.price_halalas != null && Number(p.price_halalas) > 100000000) throw new Error("VALIDATION: amount_too_large");
+    { const free = !!(p.is_free ?? cur?.is_free ?? false), price = Number(p.price_halalas ?? cur?.price_halalas ?? 0); if (p.price_halalas != null && Number(p.price_halalas) < 0) throw new Error("VALIDATION: amount"); if (!free && !(price > 0)) throw new Error("VALIDATION: service_price"); if (free) p.price_halalas = 0; }
     if ("late_checkout_until" in p) { const t = String(p.late_checkout_until ?? "").trim(); if (t && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(t)) throw new Error("VALIDATION: late_checkout_until"); p.late_checkout_until = t ? t.slice(0, 5) + ":00" : null; }
     const late = "late_checkout_until" in p ? p.late_checkout_until : cur?.late_checkout_until ?? null;
     if (late) { const b = byId("branches", cur?.branch_id ?? p.branch_id); const cot = String(b?.check_out_time ?? "12:00").slice(0, 5) + ":00"; if (late <= cot) throw new Error("VALIDATION: late_checkout_until"); if ((p.billing_unit ?? cur?.billing_unit ?? "once") !== "once") throw new Error("VALIDATION: late_checkout_unit"); }
@@ -598,6 +617,8 @@ const rpcs: Record<string, (a: any) => any> = {
       if (setP && c.min_nightly_halalas != null && Number(p.price_halalas) < c.min_nightly_halalas) throw new Error("VALIDATION: below_minimum");
       if (setPP && c.price_mode === "by_channel" && c.min_nightly_halalas != null && Number(p.platform_price_halalas) < c.min_nightly_halalas) throw new Error("VALIDATION: below_minimum");
     }
+    // 0055 (SETUP-12): each price within the range of whoever sets it
+    for (const c of new Set(cells.map((x) => x.c))) { if (setP) checkPriceBand(c.id, Number(p.price_halalas)); if (setPP && c.price_mode === "by_channel") checkPriceBand(c.id, Number(p.platform_price_halalas)); }
     for (const { c, night } of cells) {
       let rc = T("rate_calendar").find((x) => x.category_id === c.id && x.night === night); const oldP = rc?.price_halalas ?? null, oldPP = rc?.platform_price_halalas ?? null;
       const newP = clear === "both" || clear === "price" ? null : setP ? Number(p.price_halalas) : oldP; const newPP = clear === "both" || clear === "platform" ? null : setPP && c.price_mode === "by_channel" ? Number(p.platform_price_halalas) : oldPP;
@@ -649,6 +670,7 @@ function createReservationUnit(p: any, groupRef: string | null) { requireCap("re
     // a manual nightly price under what the stay would cost is a discount by another name: the owner's or a manager's (0030)
     if (ovr != null && q.rent_gross < q.computed_rent && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: rate below the quoted price requires manager");
     if (disc > 0 && !String(p.discount_reason ?? "").trim()) throw new Error("VALIDATION: discount_reason");
+    if (ovr != null) checkPriceBand(cat.id, ovr, "both");   // 0055 (SETUP-12): a manual nightly price within the booker's range
     checkDiscount(cat.id, p.branch_id, q.nights, q.rent_gross, 0, disc, false);
     const id = uid(); const ref = "R-" + Math.random().toString(16).slice(2, 10).toUpperCase();
     const r: Row = { id, organization_id: ORG, branch_id: p.branch_id, tax_rate_bp: br?.tax_rate_bp ?? 0, prices_include_tax: !!br?.prices_include_tax, internal_ref: ref, external_ref: ext, source_id: src.id, platform_booked_on: bookedOn, platform_collects: collects, platform_verified_at: null, platform_verified_by: null, cancel_reference: null, security_hold_by: null, security_hold_at: null, status: p.confirm === false ? "pending_verification" : "confirmed", booking_type: p.booking_type ?? "individual", company_name: p.company_name ?? null, visit_purpose: p.visit_purpose ?? null, check_in: p.check_in, check_out: p.check_out, adults, companions: comp, room_category_id: cat.id, room_id: null, rent_amount_halalas: 0, discount_halalas: 0, addons_halalas: 0, taxes_halalas: 0, total_halalas: 0, paid_halalas: 0, payment_status: "pending", identity_status: "not_started", government_registration: false, access_status: "locked", keybox_delivered: false, checkin_approved_by: null, checkin_approved_at: null, actual_check_in: null, actual_check_out: null, notes: p.notes ?? null, created_at: nowISO(), created_by: staffId(), security_hold: false, security_hold_reason: null, gov_registration_ref: null, updated_at: nowISO(), version: 1, rate_type: "daily", nightly_rate_halalas: q.nightly_rate, price_basis: q.basis, cancelled_at: null, cancel_reason: null, cancel_source: null, no_show_at: null, deposit_balance_halalas: 0, refunded_halalas: 0, balance_due_halalas: 0, expected_arrival_time: arrival, expected_departure_time: departure, group_ref: groupRef,
@@ -756,7 +778,12 @@ const rpcsMore: Record<string, (a: any) => any> = {
     const keptReason = reprice ? null : fromCat === rm.category_id ? "same_type" : "in_house"; const newKb = hasKeybox(p_room); if (r.status === "checked_in") { rm.status = "occupied"; Object.assign(r, { access_status: newKb ? "approved" : "key_handed", keybox_delivered: false }); }
     r.version++; r.updated_at = nowISO(); emit("rooms"); emit("reservations"); audit(r.branch_id, "reservation.room_switched", "reservation", r.id, { before: { room_id: oldRoom, category_id: fromCat, total_halalas: total0 }, after: { room_id: p_room, effective: eff, category_id: rm.category_id, repriced: reprice, old_nights_halalas: oldSum, new_nights_halalas: newSum, total_halalas: r.total_halalas }, reason: p_reason }); return { ok: true, from_room: oldRoom, to_room: p_room, effective: eff, entry_code_review_required: r.status === "checked_in", code_delivery_required: r.status === "checked_in" && newKb, repriced: reprice, price_delta_halalas: newSum - oldSum, price_kept_reason: keptReason }; }),
   fn_staff_adjust_price: ({ p_reservation, p_kind, p_amount_halalas, p_description, p_reason, p_expected_version }) => { if (!["discount", "adjustment", "penalty", "addon"].includes(p_kind)) throw new Error("VALIDATION: kind"); if (p_kind === "adjustment") requireCap("price.adjust"); else if (p_kind === "discount") requireAnyCap(["disc.before", "disc.after"]); else requireCap("charges.add"); nonEmpty(p_reason, "reason"); if (!p_amount_halalas || (p_kind !== "adjustment" && p_amount_halalas < 0)) throw new Error("VALIDATION: amount"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID");
+    if (Math.abs(Number(p_amount_halalas)) > 10000000000) throw new Error("VALIDATION: amount_too_large");
     if (p_kind === "discount") { ensureNights(r.id); const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active"); checkDiscount(r.room_category_id, r.branch_id, act.length, act.reduce((s, x) => s + x.price_halalas, 0), discountsOf(r.id), p_amount_halalas, ["checked_in", "checked_out"].includes(r.status)); }
+    // 0055 (SETUP-12): an adjustment moves the nights' average up to the caller's highest, down to their lowest
+    if (p_kind === "adjustment") { ensureNights(r.id); const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
+      if (act.length) { const adj = T("reservation_charges").filter((c) => c.reservation_id === r.id && c.kind === "adjustment").reduce((s, c) => s + roundHalfUp(Number(c.quantity) * c.unit_price_halalas), 0);
+        checkPriceBand(r.room_category_id, (act.reduce((s, x) => s + x.price_halalas, 0) - discountsOf(r.id) + adj + Number(p_amount_halalas)) / act.length, Number(p_amount_halalas) > 0 ? "max" : "min"); } }
     const before = { total_halalas: r.total_halalas }; addCharge(r.id, p_kind, p_description || p_kind, 1, p_amount_halalas, true, p_reason); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.total_changed", "reservation", r.id, { before, after: { total_halalas: r.total_halalas, kind: p_kind, amount_halalas: p_amount_halalas }, reason: p_reason }); return { ok: true, finance: f }; },
   fn_staff_add_service: ({ p_reservation, p_service, p_quantity, p_note }) => { requireCap("charges.add"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); const s = byId("service_definitions", p_service); if (!s || s.branch_id !== r.branch_id || s.archived_at || !s.is_active) throw new Error("SERVICE_NOT_AVAILABLE");
     // 0053 (FRONT-04): a once-only service already on the stay is added again only with a written reason
@@ -919,7 +946,45 @@ const rpcsMore: Record<string, (a: any) => any> = {
       by_source: [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], "ar")).map(([k, rows]) => ({ source: k.split("|")[0], account: k.split("|")[1], payouts: rows.length, expected_halalas: sum(rows, "expected_halalas"), commission_halalas: sum(rows, "commission_halalas"), received_halalas: sum(rows, "received_halalas"), difference_halalas: sum(rows, "difference_halalas") })),
       still_owed_halalas: T("financial_vouchers").filter((v) => v.branch_id === p_branch && v.status === "approved" && v.method === "ota_deferred" && v.kind === "receipt" && !v.payout_id).reduce((a, v) => a + v.amount_halalas, 0) }; },
   // 0054 (MONEY-07): the organisation's own name, for the printed documents
-  fn_organization_info: () => { const m = me(); if (!m) throw new Error("FORBIDDEN"); const o = byId("organizations", m.organization_id); return o ? { name_ar: o.name_ar, name_en: o.name_en ?? null, license_number: o.license_number ?? null } : null; },
+  // 0055 (SETUP-04): the organisation's record — names, licence, logo and the price range of each role
+  fn_organization_info: () => { const m = me(); if (!m) throw new Error("FORBIDDEN"); const o = byId("organizations", m.organization_id); return o ? orgInfo(o) : null; },
+  fn_public_organization: () => { const o = T("organizations").find((x) => T("branches").some((b) => b.organization_id === x.id && b.is_active !== false && !b.archived_at)); return o ? { name_ar: o.name_ar, name_en: o.name_en ?? null, logo: o.logo ?? null } : null; },
+  fn_admin_update_organization: ({ p }) => { requireRole("owner"); const q: Row = p ?? {}; const o = byId("organizations", me()!.organization_id); if (!o) throw new Error("NOT_FOUND"); if (q.version != null) checkVersion(o.version ?? 1, q.version);
+    const before = orgAudit(o); const next: Row = { ...o };
+    if ("name_ar" in q) { const v = String(q.name_ar ?? "").trim(); if (!v || v.length > 120) throw new Error("VALIDATION: name_ar"); next.name_ar = v; }
+    if ("name_en" in q) { const v = String(q.name_en ?? "").trim() || null; if (v && v.length > 120) throw new Error("VALIDATION: name_en"); next.name_en = v; }
+    if ("license_number" in q) { const v = latinDigits(String(q.license_number ?? "")).trim() || null; if (v && (v.length > 40 || !/^[0-9A-Za-z/-]+$/.test(v))) throw new Error("VALIDATION: license_number"); next.license_number = v; }
+    for (const k of ["price_min_bp_supervisor", "price_max_bp_supervisor", "price_min_bp_manager", "price_max_bp_manager"]) if (k in q) { const v = String(q[k] ?? "").trim(); if (v && !/^[0-9]{1,6}$/.test(v)) throw new Error("VALIDATION: price_limits"); next[k] = v ? Number(v) : null; }
+    for (const [k, lo, hi] of [["price_min_bp_supervisor", 1, 10000], ["price_max_bp_supervisor", 10000, 100000], ["price_min_bp_manager", 1, 10000], ["price_max_bp_manager", 10000, 100000]] as const) if (next[k] != null && (next[k] < lo || next[k] > hi)) throw new Error("VALIDATION: price_limits");
+    if ("logo_base64" in q) { const raw = String(q.logo_base64 ?? "").replace(/^data:[^,]*,/, "").replace(/\s/g, "");
+      if (!raw) { next.logo = null; next.logo_sha256 = null; }
+      else { let bin = ""; try { bin = atob(raw); } catch { throw new Error("VALIDATION: image"); } if (bin.length > 204800) throw new Error("VALIDATION: image_too_large");
+        const b = (i: number) => bin.charCodeAt(i); const mime = b(0) === 0x89 && bin.slice(1, 4) === "PNG" ? "image/png" : b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff ? "image/jpeg" : bin.slice(0, 4) === "RIFF" && bin.slice(8, 12) === "WEBP" ? "image/webp" : null;
+        if (!mime) throw new Error("VALIDATION: image_type"); next.logo = `data:${mime};base64,${raw}`; next.logo_sha256 = String(raw.length) + ":" + raw.slice(-16); } }
+    Object.assign(o, next, { version: (o.version ?? 1) + 1, updated_at: nowISO() }); emit("organizations");
+    const after = orgAudit(o); if (JSON.stringify(after) !== JSON.stringify(before)) audit(null, "organization.updated", "organization", o.id, { before, after });
+    return { ok: true, version: o.version }; },
+  // 0055 (SETUP-12): the caller's nightly range for a unit type
+  fn_price_limits: ({ p_category }) => priceLimits(p_category),
+  // 0055 (SETUP-01): the daily inventory and the release rules, checked (0 ≤ blocked ≤ total ≤ the type's units, public ≤ total − blocked)
+  fn_admin_set_inventory: ({ p }) => { requireRole("owner", "manager"); const q: Row = p ?? {}; const iv = byId("inventory_periods", q.id); if (!iv) throw new Error("NOT_FOUND"); requireBranch(iv.branch_id);
+    for (const k of ["total_units", "publicly_visible_units", "blocked_units"]) if (k in q && !/^[0-9]{1,5}$/.test(String(q[k] ?? ""))) throw new Error("VALIDATION: inventory");
+    const total = Number(q.total_units ?? iv.total_units), pub = Number(q.publicly_visible_units ?? iv.publicly_visible_units), blk = Number(q.blocked_units ?? iv.blocked_units); const units = categoryUnits(iv.category_id);
+    if (total > units) throw new Error("INVENTORY_OVER_UNITS: " + units); if (blk > total) throw new Error("VALIDATION: inventory_blocked"); if (pub > total - blk) throw new Error("VALIDATION: inventory_public");
+    if (total === iv.total_units && pub === iv.publicly_visible_units && blk === iv.blocked_units) return { ok: true, unchanged: true };
+    const before = { total_units: iv.total_units, publicly_visible_units: iv.publicly_visible_units, blocked_units: iv.blocked_units, date: iv.date, category_id: iv.category_id };
+    Object.assign(iv, { total_units: total, publicly_visible_units: pub, blocked_units: blk }); emit("inventory_periods");
+    audit(iv.branch_id, "inventory.updated", "inventory_period", iv.id, { before, after: { total_units: total, publicly_visible_units: pub, blocked_units: blk }, reason: String(q.reason ?? "").trim() || null }); return { ok: true, unchanged: false }; },
+  fn_admin_upsert_release_rule: ({ p }) => { requireRole("owner", "manager"); const q: Row = p ?? {}; let rr: Row | undefined; let cat: string; let branch: string;
+    if (q.id) { rr = byId("release_rules", q.id); if (!rr) throw new Error("NOT_FOUND"); cat = rr.category_id; branch = rr.branch_id; }
+    else { cat = String(q.category_id ?? ""); const c = byId("room_categories", cat); if (!c || c.archived_at) throw new Error("NOT_FOUND: category"); branch = c.branch_id; if (T("release_rules").some((x) => x.category_id === cat)) throw new Error("DUPLICATE_RULE"); }
+    requireBranch(branch);
+    if (("initial_public_release" in q && !/^[0-9]{1,5}$/.test(String(q.initial_public_release ?? ""))) || ("release_increment" in q && !/^[0-9]{1,5}$/.test(String(q.release_increment ?? "")))) throw new Error("VALIDATION: release_rule");
+    const init = Number(q.initial_public_release ?? rr?.initial_public_release ?? 1), inc = Number(q.release_increment ?? rr?.release_increment ?? 1); const trig = String(q.release_trigger || rr?.release_trigger || "access_delivered"); const en = !!(q.enabled ?? rr?.enabled ?? false); const units = categoryUnits(cat);
+    if (!["access_delivered", "confirmed", "manual"].includes(trig)) throw new Error("VALIDATION: release_trigger"); if (init > units) throw new Error("INVENTORY_OVER_UNITS: " + units); if (inc < 1 || inc > Math.max(units, 1)) throw new Error("VALIDATION: release_increment");
+    if (!rr) { rr = { id: uid(), branch_id: branch, category_id: cat, enabled: en, initial_public_release: init, release_increment: inc, release_trigger: trig, created_at: nowISO() }; T("release_rules").push(rr); audit(branch, "release_rule.created", "release_rule", rr.id, { after: { ...rr } }); }
+    else { const before = { ...rr }; Object.assign(rr, { enabled: en, initial_public_release: init, release_increment: inc, release_trigger: trig }); if (JSON.stringify(before) !== JSON.stringify(rr)) audit(branch, "release_rule.updated", "release_rule", rr.id, { before, after: { ...rr }, reason: String(q.reason ?? "").trim() || null }); }
+    emit("release_rules"); return { ok: true, id: rr.id }; },
   fn_platform_payout_cancel: ({ p_payout, p_reason }) => { requireCapFull("platform.payouts"); nonEmpty(p_reason, "reason"); const pay = byId("platform_payouts", p_payout); if (!pay) throw new Error("NOT_FOUND"); requireBranch(pay.branch_id); if (pay.status !== "confirmed") throw new Error("VALIDATION: payout_status");
     const before = { ...pay }; for (const v of T("financial_vouchers")) if (v.payout_id === pay.id) v.payout_id = null; Object.assign(pay, { status: "cancelled", cancelled_by: staffId(), cancelled_at: nowISO(), cancel_reason: p_reason });
     emit("platform_payouts"); emit("financial_vouchers"); audit(pay.branch_id, "platform.payout_cancelled", "platform_payout", pay.id, { before, after: { ...pay }, reason: p_reason }); return { ok: true }; },
@@ -2044,6 +2109,7 @@ function ensureNights(resId: string) {
 function checkDiscount(categoryId: string, branchId: string, nights: number, rent: number, existing: number, add: number, afterArrival: boolean) {
   if (!(add > 0)) return;
   if (existing + add > rent) throw new Error("VALIDATION: discount_exceeds_rent");
+  if (nights > 0) checkPriceBand(categoryId, (rent - existing - add) / nights, "min");   // 0055 (SETUP-12)
   if (can("disc.after")) return;
   if (!can("disc.before")) throw new Error("FORBIDDEN: discount");
   if (afterArrival) throw new Error("FORBIDDEN: post-arrival discount");
@@ -2051,6 +2117,28 @@ function checkDiscount(categoryId: string, branchId: string, nights: number, ren
   if (existing + add > Math.floor((rent * bp) / 10000)) throw new Error("VALIDATION: discount_percent");
   const mn = byId("room_categories", categoryId)?.min_nightly_halalas;
   if (mn != null && rent - existing - add < mn * nights) throw new Error("VALIDATION: discount_minimum");
+}
+/** 0055: the organisation as the screens read it (fn_organization_info) and as the log keeps it */
+function orgInfo(o: Row) { return { id: o.id, name_ar: o.name_ar, name_en: o.name_en ?? null, license_number: o.license_number ?? null, logo: o.logo ?? null, version: o.version ?? 1,
+  price_min_bp_supervisor: o.price_min_bp_supervisor ?? null, price_max_bp_supervisor: o.price_max_bp_supervisor ?? null, price_min_bp_manager: o.price_min_bp_manager ?? null, price_max_bp_manager: o.price_max_bp_manager ?? null }; }
+function orgAudit(o: Row) { const { logo: _l, id: _i, version: _v, ...rest } = orgInfo(o); void _l; void _i; void _v; return { ...rest, logo_sha256: o.logo_sha256 ?? null }; }
+/** fn_category_units: a type's active, not archived units */
+const categoryUnits = (categoryId: string) => T("rooms").filter((r) => r.category_id === categoryId && !r.archived_at && r.is_active !== false).length;
+/** 0055 (SETUP-12, fn_price_limits): the caller's nightly range for a unit type — a percentage of its base price per role; none for the owner. */
+function priceLimits(categoryId: string): Row | null {
+  const c = byId("room_categories", categoryId); if (!c || !myBranches().includes(c.branch_id)) return null; const o = byId("organizations", c.organization_id) ?? {};
+  const role = hasRole("owner") ? "owner" : hasRole("manager") ? "manager" : "supervisor";
+  const mn = role === "manager" ? o.price_min_bp_manager ?? null : role === "supervisor" ? o.price_min_bp_supervisor ?? null : null;
+  const mx = role === "manager" ? o.price_max_bp_manager ?? null : role === "supervisor" ? o.price_max_bp_supervisor ?? null : null;
+  const base = Number(c.base_price_halalas ?? 0);
+  return { role, base, min_bp: mn, max_bp: mx, min: mn != null && base > 0 ? Math.ceil((base * mn) / 10000) : null, max: mx != null && base > 0 ? Math.floor((base * mx) / 10000) : null };
+}
+/** fn_check_price_band: a nightly price outside the caller's range is refused ("min" / "max": that bound only) */
+function checkPriceBand(categoryId: string, nightly: number | null, dir: "both" | "min" | "max" = "both") {
+  if (nightly == null) return; if (nightly > 100000000) throw new Error("VALIDATION: amount_too_large");
+  const lim = priceLimits(categoryId); if (!lim) return;
+  if (dir !== "max" && lim.min != null && nightly < lim.min) throw new Error("PRICE_BELOW_LIMIT: " + lim.min);
+  if (dir !== "min" && lim.max != null && nightly > lim.max) throw new Error("PRICE_ABOVE_LIMIT: " + lim.max);
 }
 const discountsOf = (resId: string) => T("reservation_charges").filter((c) => c.reservation_id === resId && c.kind === "discount").reduce((s, c) => s + roundHalfUp(Math.abs(Number(c.quantity) * c.unit_price_halalas)), 0);
 /** The quote of a stay, exactly as the reservation would store it, and how much discount the caller may give (fn_quote_stay). */

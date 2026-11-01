@@ -73,3 +73,26 @@ export function fieldError(check: () => unknown, messages: Record<string, string
     return messages[code] ?? null;
   }
 }
+
+/** 0055: an email that can be a login (mirrors fn_valid_email). */
+export function validEmail(s: string | null | undefined): boolean {
+  const v = (s ?? "").trim();
+  return v.length > 0 && v.length <= 254 && /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(v);
+}
+
+/** A phone as the server keeps it (mirrors fn_normalize_phone): 9665XXXXXXXX for a Saudi mobile, the digits otherwise; null when it is not a phone. */
+export function normalizePhone(p: string | null | undefined): string | null {
+  let d = latinDigits(String(p ?? "")).replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (/^05\d{8}$/.test(d)) return "966" + d.slice(1);
+  if (/^5\d{8}$/.test(d)) return "966" + d;
+  if (/^9665\d{8}$/.test(d)) return d;
+  if (d.startsWith("966")) return null;
+  return d.length >= 8 && d.length <= 15 ? d : null;
+}
+
+/** 0055 (SETUP-11): what a numeric field holds — Arabic digits read as Latin, every other character dropped. */
+export function numericText(s: string, opts: { decimals?: boolean } = {}): string {
+  const d = latinDigits(s).replace(/[٫,]/g, ".");
+  return opts.decimals ? d.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1") : d.replace(/\D/g, "");
+}

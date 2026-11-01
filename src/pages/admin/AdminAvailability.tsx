@@ -4,7 +4,8 @@ import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard } from ".
 import { todayISO } from "../../lib/utils";
 import { useBranch } from "../../lib/branch";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
-import { toArabicError } from "../../lib/api";
+import { inventoryApi, toArabicError } from "../../lib/api";
+import { NumberInput } from "../../components/forms";
 
 interface InventoryRow {
   id: string; date: string; total_units: number; publicly_visible_units: number; blocked_units: number;
@@ -16,6 +17,8 @@ export default function AdminAvailability() {
   const { branches, setBranchId } = useBranch();
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
+  // 0055 (SETUP-01): what happened to each row's last change — «حُفظ» or the reason it was refused
+  const [rowState, setRowState] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [startDate, setStartDate] = useState(todayISO());
 
   // G24 (decision 40): the active branch's rows only; a failed load shows an error, never an empty table
@@ -28,10 +31,15 @@ export default function AdminAvailability() {
       .limit(60)) as unknown as InventoryRow[], [startDate], NO_ROWS);
   const rows = q.data; const branchId = q.branchId; const load = q.reload;
 
-  async function updateField(id: string, field: "total_units" | "publicly_visible_units" | "blocked_units", value: number) {
-    setActing(id + field); setError(null);
-    const { error: e } = await supabase.from("inventory_periods").update({ [field]: value }).eq("id", id);
-    if (e) setError(toArabicError(e));
+  // 0055 (SETUP-01): through fn_admin_set_inventory — 0 ≤ blocked ≤ total ≤ the type's units, public ≤ total − blocked
+  async function updateField(r: InventoryRow, field: "total_units" | "publicly_visible_units" | "blocked_units", value: number | null) {
+    if (value === r[field]) return;
+    setActing(r.id + field); setError(null);
+    try {
+      if (value == null) throw new Error("VALIDATION: inventory");
+      const res = await inventoryApi.set({ id: r.id, [field]: value });
+      setRowState((s) => ({ ...s, [r.id]: { ok: true, text: res.unchanged ? "لا تغيير" : "حُفظ" } }));
+    } catch (e) { setRowState((s) => ({ ...s, [r.id]: { ok: false, text: toArabicError(e) } })); }
     load();
     setActing(null);
   }
@@ -58,6 +66,7 @@ export default function AdminAvailability() {
               <th className="py-2 text-center font-medium">الإجمالي</th>
               <th className="py-2 text-center font-medium">المعروض للعامة</th>
               <th className="py-2 text-center font-medium">المحجوب</th>
+              <th className="py-2 text-right font-medium">الحفظ</th>
             </tr>
           </thead>
           <tbody>
@@ -66,21 +75,22 @@ export default function AdminAvailability() {
                 <td className="py-2.5 text-ink-700">{r.date}</td>
                 <td className="py-2.5 text-ink-600">{r.category?.name_ar}</td>
                 <td className="py-2.5 text-center">
-                  <input type="number" defaultValue={r.total_units} onBlur={(e) => updateField(r.id, "total_units", Number(e.target.value))} className="input mx-auto w-16 text-center" aria-label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting === r.id + "total_units"} />
+                  <NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting === r.id + "total_units"} />
                 </td>
                 <td className="py-2.5 text-center">
-                  <input type="number" defaultValue={r.publicly_visible_units} onBlur={(e) => updateField(r.id, "publicly_visible_units", Number(e.target.value))} className="input mx-auto w-16 text-center" aria-label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting === r.id + "publicly_visible_units"} />
+                  <NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting === r.id + "publicly_visible_units"} />
                 </td>
                 <td className="py-2.5 text-center">
-                  <input type="number" defaultValue={r.blocked_units} onBlur={(e) => updateField(r.id, "blocked_units", Number(e.target.value))} className="input mx-auto w-16 text-center" aria-label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting === r.id + "blocked_units"} />
+                  <NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting === r.id + "blocked_units"} />
                 </td>
+                <td className="py-2.5 text-xs" aria-live="polite">{rowState[r.id] && <span className={rowState[r.id].ok ? "text-success-600" : "text-danger-600"}>{rowState[r.id].text}</span>}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {rows.length === 0 && <div className="py-8 text-center text-sm text-ink-400">لا توجد سجلات توفر لهذه الفترة.</div>}
       </Card>}
-      <p className="mt-3 text-xs text-ink-400">عدّل القيم مباشرة — تُحفظ تلقائيًا عند الخروج من الحقل. لتعديل قاعدة الكشف التدريجي انتقل إلى صفحة "قواعد الكشف".</p>
+      <p className="mt-3 text-xs text-ink-400">عدّل القيم مباشرة — تُحفظ عند الخروج من الحقل، وتظهر نتيجة الحفظ في آخر السطر. المحجوب لا يزيد عن الإجمالي، والمعروض للعامة لا يزيد عن الإجمالي ناقص المحجوب، والإجمالي لا يزيد عن وحدات النوع. لتعديل قاعدة الكشف التدريجي انتقل إلى صفحة "قواعد الكشف".</p>
     </div>
   );
 }
