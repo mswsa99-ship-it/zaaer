@@ -166,6 +166,19 @@ export function maskName(name: string | undefined): string {
   return `${parts[0]} ${parts[1][0]}••`;
 }
 
+/**
+ * GUEST-17: one way to say a time of day on the guest's pages — «4:00 عصرًا», «12:00 ظهرًا», «4:00 PM» — from the
+ * branch's "16:00:00". Empty when the time is not set.
+ */
+export function formatClock(t: string | null | undefined, en = false): string {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  if (!Number.isFinite(h)) return "";
+  const hh = h % 12 || 12, mm = String(m || 0).padStart(2, "0");
+  if (en) return `${hh}:${mm} ${h >= 12 ? "PM" : "AM"}`;
+  return `${hh}:${mm} ${h >= 12 ? (h >= 18 ? "مساءً" : h === 12 ? "ظهرًا" : "عصرًا") : "صباحًا"}`;
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat(UI_LOCALE, { style: "currency", currency: "SAR", maximumFractionDigits: 2 }).format(amount);
 }

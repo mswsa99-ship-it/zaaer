@@ -12,7 +12,7 @@
  * Secrets: GEMINI_API_KEY, SUPABASE_SERVICE_ROLE_KEY, APP_BASE_URL (Edge secrets).
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { gateInput, gateOutput, scriptedReply, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
+import { gateInput, gateOutput, scriptedReply, isEnglishMessage, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
 import { localDay } from "../_shared/dates.ts";
@@ -46,6 +46,8 @@ Deno.serve(async (req) => {
   let guestToken = typeof body.guest_token === "string" && body.guest_token.length >= 8 ? body.guest_token : null;
   if (!message) return json({ error: "empty_message" }, 400);
   if (message.length > 2000) return json({ error: "message_too_long" }, 413);
+  // GUEST-10: a question in English is answered in English
+  const english = isEnglishMessage(message);
 
   // ---- organization / branch / settings -----------------------------------
   const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", DEFAULT_ORG).maybeSingle();
@@ -89,7 +91,7 @@ Deno.serve(async (req) => {
   const { count: msgCount } = await db.from("conversation_messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversationId).eq("sender", "guest");
   if ((msgCount ?? 0) >= s.per_session_message_limit) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "session_message_limit" });
-    return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: handedOff, reply: "وصلت المحادثة إلى الحد الأقصى للرسائل. للمتابعة، تواصل مع الاستقبال أو ابدأ جلسة جديدة.", actions: [{ label: "البدء من جديد", route: "/reception" }] });
+    return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: handedOff, reply: english ? "This chat has reached its message limit. To continue, contact the reception or start a new chat." : "وصلت المحادثة إلى الحد الأقصى للرسائل. للمتابعة، تواصل مع الاستقبال أو ابدأ جلسة جديدة.", actions: [{ label: english ? "Start again" : "البدء من جديد", route: "/reception" }] });
   }
 
   // ---- persist guest message (PII-redacted) --------------------------------
@@ -128,11 +130,14 @@ Deno.serve(async (req) => {
     const r = scriptedReply(message, org.name_ar, undefined, await loadKnowledge());
     await noteScripted(r);
     const informative = ["policy", "knowledge", "existing_booking", "new_booking", "access_code"].includes(r.intent);
-    const reply = informative
+    const reply = english
+      ? (informative ? r.text + "\n\nYour chat is still with the reception supervisor, who will reply here when available."
+        : "Your chat has been passed to the reception supervisor, who will reply here shortly. Meanwhile you can ask me about check-in and check-out times, internet, parking or the location, or start a new chat.")
+      : informative
       ? r.text + "\n\nمحادثتك ما زالت محوّلة إلى مشرف الاستقبال وسيرد عليك هنا عند توفره."
       : "تم تحويل محادثتك إلى مشرف الاستقبال وسيرد عليك هنا قريبًا. أثناء الانتظار يمكنك سؤالي عن مواعيد الوصول والمغادرة أو الإنترنت أو المواقف أو الموقع، أو بدء محادثة جديدة.";
     await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "assistant", content: reply, meta: { mode: "scripted", reason: "handed_off" } });
-    return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: true, reply, intent: r.intent, actions: [...(informative ? r.actions.filter((a) => !a.value) : []), { label: "محادثة جديدة", route: "/reception?new=1" }] });
+    return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: true, reply, intent: r.intent, actions: [...(informative ? r.actions.filter((a) => !a.value) : []), { label: english ? "New chat" : "محادثة جديدة", route: "/reception?new=1" }] });
   }
 
   // ---- INPUT GATE -----------------------------------------------------------
@@ -173,7 +178,8 @@ Deno.serve(async (req) => {
   {
     const k = await loadKnowledge();
     const pre = scriptedReply(message, org.name_ar, undefined, k);
-    if (pre.intent === "knowledge" && pre.knowledgeId && matchKnowledge(message, k.entries)?.strong) {
+    // GUEST-10: an English question with the model on goes to the model, which answers from the same approved text in English
+    if (pre.intent === "knowledge" && pre.knowledgeId && matchKnowledge(message, k.entries)?.strong && !(english && s.enabled)) {
       await noteScripted(pre);
       await db.from("conversation_messages").insert({ conversation_id: conversationId, sender: "assistant", content: pre.text, meta: { mode: "scripted", reason: "knowledge", entry: pre.knowledgeId } });
       await bump({ requests: 1 });
@@ -205,7 +211,7 @@ Deno.serve(async (req) => {
   // the prompt states the branch's own date (dayKey is the UTC day the usage counters use)
   // the property's own facts go into the prompt, so most questions are answered in ONE model call (no tool round trip)
   const system = buildSystemPrompt({ propertyName: org.name_ar, branchName: branch.name_ar, verified: !!guestToken, extra: s.strict_scope ? s.extra_instructions : s.extra_instructions, today: localDay(branch.timezone), facts: propertyFacts(await loadKnowledge()) });
-  const userWroteEnglish = /[A-Za-z]{3,}/.test(message) && !/[\u{600}-\u{6FF}]/u.test(message);
+  const userWroteEnglish = english;
 
   let tokensIn = 0, tokensOut = 0;
   let finalText: string | null = null;
@@ -235,10 +241,10 @@ Deno.serve(async (req) => {
           try {
             const args = validateToolArgs(call.name, call.args);
             result = await executeTool(call.name, args, ctx());
-            if (call.name === "request_booking_verification") actions.push({ label: "حجوزاتي", route: "/booking/lookup" });
-            if (call.name === "create_registration_session" && guestToken) actions.push({ label: "تسجيل بيانات النزلاء", route: `/booking/registration/${guestToken}` });
-            if (call.name === "get_verified_booking_summary" && guestToken) actions.push({ label: "حالة الحجز", route: `/booking/status/${guestToken}` });
-            if (call.name === "get_booking_link") actions.push({ label: "احجز الآن", route: "/booking/new" });
+            if (call.name === "request_booking_verification") actions.push({ label: english ? "My bookings" : "حجوزاتي", route: "/booking/lookup" });
+            if (call.name === "create_registration_session" && guestToken) actions.push({ label: english ? "Guests' details" : "تسجيل بيانات النزلاء", route: `/booking/registration/${guestToken}` });
+            if (call.name === "get_verified_booking_summary" && guestToken) actions.push({ label: english ? "Booking status" : "حالة الحجز", route: `/booking/status/${guestToken}` });
+            if (call.name === "get_booking_link") actions.push({ label: english ? "Book now" : "احجز الآن", route: "/booking/new" });
           } catch (e) {
             status = "error"; result = { error: String((e as Error).message).slice(0, 120) };
           }

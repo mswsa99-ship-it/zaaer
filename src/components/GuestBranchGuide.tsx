@@ -6,11 +6,13 @@ import { useEffect, useState } from "react";
 import { Navigation, Video, Landmark, Copy, Check } from "lucide-react";
 import { Card } from "./ui";
 import { branchGuideApi, type BranchGuide } from "../lib/api";
+import { useGuestLang } from "../lib/guestLang";
 
 export function GuestBranchGuide({ branchId, showBank }: { branchId: string; showBank: boolean }) {
   const [g, setG] = useState<BranchGuide | null>(null);
   const [photos, setPhotos] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
+  const { t: tr } = useGuestLang();
   useEffect(() => {
     let live = true;
     branchGuideApi.publicGuide(branchId).then(async (x) => {
@@ -32,34 +34,34 @@ export function GuestBranchGuide({ branchId, showBank }: { branchId: string; sho
     <Card className="mt-6 space-y-4" data-testid="guest-branch-guide">
       {g.arrival_instructions && (
         <section>
-          <h2 className="mb-1 flex items-center gap-2 text-base font-semibold text-ink-800"><Navigation className="h-4 w-4 text-brand-600" /> الوصول</h2>
-          <p className="whitespace-pre-line text-sm leading-7 text-ink-600">{g.arrival_instructions}</p>
+          <h2 className="mb-1 flex items-center gap-2 text-base font-semibold text-ink-800"><Navigation className="h-4 w-4 text-brand-600" /> {tr("الوصول", "Getting here")}</h2>
+          <p className="whitespace-pre-line text-sm leading-7 text-ink-600" dir="auto">{g.arrival_instructions}</p>
         </section>
       )}
       {videos.length > 0 && (
         <section>
-          <h2 className="mb-2 flex items-center gap-2 text-base font-semibold text-ink-800"><Video className="h-4 w-4 text-brand-600" /> فيديو الدخول</h2>
-          <ul className="space-y-2">{videos.map((v) => <li key={v.id}><a href={v.url} target="_blank" rel="noopener noreferrer" className="btn-outline w-full justify-start text-sm"><Video className="h-4 w-4" /> {v.caption || "مشاهدة الفيديو"}</a></li>)}</ul>
+          <h2 className="mb-2 flex items-center gap-2 text-base font-semibold text-ink-800"><Video className="h-4 w-4 text-brand-600" /> {tr("فيديو الدخول", "Entry video")}</h2>
+          <ul className="space-y-2">{videos.map((v) => <li key={v.id}><a href={v.url} target="_blank" rel="noopener noreferrer" className="btn-outline w-full justify-start text-sm"><Video className="h-4 w-4" /> {v.caption || tr("مشاهدة الفيديو", "Watch the video")}</a></li>)}</ul>
         </section>
       )}
       {g.photos.length > 0 && Object.keys(photos).length > 0 && (
         <section>
-          <h2 className="mb-2 text-base font-semibold text-ink-800">صور المكان</h2>
+          <h2 className="mb-2 text-base font-semibold text-ink-800">{tr("صور المكان", "Photos")}</h2>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {g.photos.filter((p) => photos[p.id]).map((p) => <figure key={p.id}><img src={photos[p.id]} alt={p.caption ?? "صورة الفرع"} loading="lazy" className="aspect-[4/3] w-full rounded-lg object-cover" />{p.caption && <figcaption className="mt-1 text-xs text-ink-500">{p.caption}</figcaption>}</figure>)}
+            {g.photos.filter((p) => photos[p.id]).map((p) => <figure key={p.id}><img src={photos[p.id]} alt={p.caption ?? tr("صورة الفرع", "Photo of the property")} loading="lazy" className="aspect-[4/3] w-full rounded-lg object-cover" />{p.caption && <figcaption className="mt-1 text-xs text-ink-500">{p.caption}</figcaption>}</figure>)}
           </div>
         </section>
       )}
       {bank && (
         <section className="rounded-xl bg-ink-50 p-3" data-testid="guest-bank">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-800"><Landmark className="h-4 w-4 text-brand-600" /> الدفع بالتحويل البنكي</h2>
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-800"><Landmark className="h-4 w-4 text-brand-600" /> {tr("الدفع بالتحويل البنكي", "Pay by bank transfer")}</h2>
           <dl className="space-y-1 text-sm text-ink-700">
-            <div className="flex gap-2"><dt className="text-ink-500">البنك:</dt><dd>{bank.bank_name}</dd></div>
-            <div className="flex gap-2"><dt className="text-ink-500">المستفيد:</dt><dd>{bank.beneficiary}</dd></div>
-            <div className="flex flex-wrap items-center gap-2"><dt className="text-ink-500">الآيبان:</dt><dd className="select-all font-mono" dir="ltr">{bank.iban.replace(/(.{4})/g, "$1 ").trim()}</dd>
-              <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => copy(bank.iban)}>{copied ? <><Check className="h-3.5 w-3.5" /> نُسخ</> : <><Copy className="h-3.5 w-3.5" /> نسخ</>}</button></div>
+            <div className="flex gap-2"><dt className="text-ink-500">{tr("البنك:", "Bank:")}</dt><dd>{bank.bank_name}</dd></div>
+            <div className="flex gap-2"><dt className="text-ink-500">{tr("المستفيد:", "Beneficiary:")}</dt><dd>{bank.beneficiary}</dd></div>
+            <div className="flex flex-wrap items-center gap-2"><dt className="text-ink-500">{tr("الآيبان:", "IBAN:")}</dt><dd className="select-all font-mono" dir="ltr">{bank.iban.replace(/(.{4})/g, "$1 ").trim()}</dd>
+              <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => copy(bank.iban)}>{copied ? <><Check className="h-3.5 w-3.5" /> {tr("نُسخ", "Copied")}</> : <><Copy className="h-3.5 w-3.5" /> {tr("نسخ", "Copy")}</>}</button></div>
           </dl>
-          <p className="mt-2 text-xs text-ink-500">بعد التحويل أرسل الإيصال للاستقبال ليُسجَّل الدفع برقم العملية.</p>
+          <p className="mt-2 text-xs text-ink-500">{tr("بعد التحويل أرسل الإيصال للاستقبال ليُسجَّل الدفع برقم العملية.", "After the transfer, send the receipt to the reception so the payment is recorded with its reference.")}</p>
         </section>
       )}
     </Card>

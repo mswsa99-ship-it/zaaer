@@ -10,12 +10,10 @@ import { guestApi, type PublicBranch } from "../../lib/api";
 import { useOrganizationName } from "../../lib/organization";
 import { policyTopic } from "../../lib/policies";
 import { Spinner } from "../../components/ui";
+import { formatClock } from "../../lib/utils";
 
 interface Policy { branch_id: string; topic: string; topic_label: string | null; title: string; content_ar: string; sort_order: number | null }
-const time12 = (t: string | null | undefined) => {
-  if (!t) return ""; const [h, m] = t.split(":").map(Number); const pm = h >= 12; const hh = h % 12 || 12;
-  return `${hh}:${String(m).padStart(2, "0")} ${pm ? (h >= 18 ? "مساءً" : h === 12 ? "ظهرًا" : "عصرًا") : "صباحًا"}`;
-};
+const time12 = (t: string | null | undefined) => formatClock(t);   // GUEST-17: the one guest time format
 
 export default function Terms() {
   const org = useOrganizationName();

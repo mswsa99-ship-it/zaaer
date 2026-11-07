@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Hotel, Send, BookCheck, ArrowLeft, ShieldCheck, UserRound, Bot, CalendarDays, Clock, Headset, RotateCcw } from "lucide-react";
-import { cn } from "../lib/utils";
+import { cn, formatClock } from "../lib/utils";
 import { aiChat, type AiReply } from "../lib/api";
 import { useBranch } from "../lib/branch";
 import { supabase } from "../lib/supabase";
@@ -102,7 +102,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-white"><Hotel className="h-6 w-6" /></div>
             <div className="leading-tight"><p className="font-semibold text-ink-800">{branch?.name_ar ?? propertyName}</p><p className="text-[11px] text-ink-400">الاستقبال الذكي · على مدار الساعة</p></div>
           </div>
-          {branch?.check_in_time && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-500"><Clock className="h-3.5 w-3.5" /> الوصول {branch.check_in_time.slice(0, 5)} · المغادرة {branch.check_out_time?.slice(0, 5)}</p>}
+          {branch?.check_in_time && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-500"><Clock className="h-3.5 w-3.5" /> الوصول {formatClock(branch.check_in_time)} · المغادرة {formatClock(branch.check_out_time)}</p>}
         </div>
         <div className="card p-3">
                     <div className="space-y-1">

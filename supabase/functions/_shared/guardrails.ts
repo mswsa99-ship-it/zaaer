@@ -438,7 +438,75 @@ export function newBookingReply(k?: PropertyKnowledge | null): ScriptedReply {
   };
 }
 
+/**
+ * GUEST-10: the deterministic answer in the language of the question. A message written in English (Latin letters, no
+ * Arabic) gets the English version of the same answer; the property's own texts (policies, knowledge answers) are
+ * written in Arabic and are passed on as written, introduced in English.
+ */
 export function scriptedReply(raw: string, propertyName = PROPERTY_NAME_DEFAULT, reason?: Scope, knowledge?: PropertyKnowledge): ScriptedReply {
+  const r = scriptedReplyAr(raw, propertyName, reason, knowledge);
+  return isEnglishMessage(raw) ? englishReply(r, raw, propertyName, knowledge) : r;
+}
+
+/** Latin letters and no Arabic: the guest wrote in English. */
+export function isEnglishMessage(raw: string): boolean {
+  return /[A-Za-z]{3,}/.test(raw ?? "") && !/[\u{600}-\u{6FF}]/u.test(raw ?? "");
+}
+
+const ACTION_EN: Record<string, string> = {
+  "حجوزاتي": "My bookings", "احجز الآن": "Book now", "التحدث مع موظف": "Talk to the reception", "البدء من جديد": "Start again",
+  "محادثة جديدة": "New chat", "تسجيل بيانات النزلاء": "Guests' details", "حالة الحجز": "Booking status",
+};
+export const TALK_TO_RECEPTION_EN = "I would like to talk to the reception";
+const POLICY_LABEL_EN: Record<string, string> = {
+  checkin: "check-in and check-out times", wifi: "the internet", parking: "parking", location: "the location", cancellation: "the cancellation policy",
+  children: "children and companions", stay: "the house rules", contact: "contacting the reception",
+};
+const ACCESS_CODE_REFUSAL_EN = "The key-box code is never given in the chat. It shows only on your verified booking page, after the reception has approved every entry condition (ID check, payment, unit ready).";
+
+function englishReply(r: ScriptedReply, raw: string, propertyName: string, k?: PropertyKnowledge): ScriptedReply {
+  const actions = r.actions.map((a) => ({ ...a, label: ACTION_EN[a.label] ?? a.label, ...(a.value ? { value: TALK_TO_RECEPTION_EN } : {}) }));
+  const phone = k?.phone ? ` or call the reception on ${k.phone}` : "";
+  const en = (text: string): ScriptedReply => ({ ...r, text, actions });
+  switch (r.intent) {
+    case "access_code": return en(ACCESS_CODE_REFUSAL_EN);
+    case "injection": return en("Sorry, I cannot do that. I am the property's digital receptionist, for bookings and arrival only. How can I help with your booking?");
+    case "off_scope": return en(`Sorry, that is outside what I can help with. I can only help with your stay at ${propertyName}: your booking, the link for a new booking, the guests' details, payment, and the entry code.`);
+    case "existing_booking": return en("Open «My bookings» and enter the mobile number you booked with; your bookings appear after a short check.");
+    case "privacy": return en("Please do not send your ID or iqama number in the chat. It goes in the secure registration page: open «My bookings», then «Complete details».");
+    case "maintenance": return en(`I have logged your report and passed it to the reception supervisor, who will reply here.${phone ? ` If it is urgent${phone}.` : ""}`);
+    case "extension": return en("Extending your stay needs the reception to confirm availability and price. I have passed your request to the reception supervisor, who will reply here shortly.");
+    case "arrival": return en(`Welcome! I have told the reception you have arrived. If you have a booking, open «My bookings» to follow the arrival steps${phone}.`);
+    case "human": return en("Your request has been sent to the reception supervisor, who will contact you shortly. Meanwhile, would you like to check your booking?");
+    case "greeting": return en(`Welcome to ${propertyName}. I am the digital receptionist. Do you already have a booking, or would you like to make a new one?`);
+    case "thanks": return en("You are welcome. We wish you a pleasant stay.");
+    case "new_booking": return en(k?.bookingUrl
+      ? `New bookings, prices and availability are on the booking platform only: ${k.bookingUrl}\nAfter booking, come back with your booking number to «My bookings» to complete the arrival steps.`
+      : "New bookings, prices and availability are on the booking platforms only; I cannot show them here. Ask the reception for the booking link, then come back with your booking number to «My bookings».");
+    case "knowledge": {
+      const entry = (k?.entries ?? []).find((e) => e.id === r.knowledgeId);
+      return en(`The reception's answer (in Arabic): ${entry?.answer ?? r.text}`);
+    }
+    case "policy": {
+      const t = normalizeArabic(raw);
+      const topic = POLICY_TOPICS.find(([re]) => re.test(t))?.[1] ?? "";
+      const pol = k?.policies?.find((p) => p.topic === topic);
+      if (topic === "checkin" && (k?.checkInTime || k?.checkOutTime)) {
+        return en(`${k.branchName ? `At ${k.branchName}: ` : ""}check-in is from ${(k.checkInTime ?? "").slice(0, 5)} and check-out is until ${(k.checkOutTime ?? "").slice(0, 5)}. Early check-in or late check-out depends on availability and the reception's approval.`);
+      }
+      if (topic === "location" && (k?.address || k?.mapUrl || pol)) {
+        return en([k?.address ? `Address: ${k.address}.` : "", k?.mapUrl ? `Map: ${k.mapUrl}` : "", pol ? `Directions (in Arabic): ${pol.content}` : ""].filter(Boolean).join(" "));
+      }
+      if (topic === "contact" && (k?.phone || pol)) return en(`Contact the reception${k?.phone ? ` on ${k.phone}` : ""}. I can also hand this chat to the reception supervisor now.`);
+      if (pol) return en(`The property's rule (in Arabic): ${pol.content}`);
+      return en(`I do not have confirmed information about ${POLICY_LABEL_EN[topic] ?? "this"} for this property, and I do not want to guess. I can pass your question to the reception supervisor.`);
+    }
+    default:
+      return en("I did not fully understand. I can help with: checking your booking, the link for a new booking, check-in and check-out times, internet, parking and location, the guests' details, payment, and the entry code once the reception approves it. I have noted your question for the reception team. Tell me what you need, or ask to talk to the reception.");
+  }
+}
+
+function scriptedReplyAr(raw: string, propertyName = PROPERTY_NAME_DEFAULT, reason?: Scope, knowledge?: PropertyKnowledge): ScriptedReply {
   const t = normalizeArabic(raw);
   const both = [
     { label: "حجوزاتي", route: "/booking/lookup" },

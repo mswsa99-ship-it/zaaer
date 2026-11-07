@@ -10,7 +10,7 @@ import { numericText } from "../lib/validation";
  * Modal that never closes on its own after a failed save — the form keeps its values. GUEST-11 / A11Y: focus moves into
  * the dialog when it opens, Tab stays inside it, Escape closes it, and focus returns to the opener afterwards.
  */
-export function Modal({ open, title, onClose, children, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function Modal({ open, title, onClose, children, wide, closeLabel = "إغلاق" }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean; closeLabel?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const close = useRef(onClose); close.current = onClose;
@@ -18,7 +18,7 @@ export function Modal({ open, title, onClose, children, wide }: { open: boolean;
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
     const focusables = () => Array.from(box.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []).filter((el) => el.offsetParent !== null || el === document.activeElement);
-    const first = focusables().find((el) => el.getAttribute("aria-label") !== "إغلاق") ?? focusables()[0];
+    const first = focusables().find((el) => !el.hasAttribute("data-modal-close")) ?? focusables()[0];
     (first ?? box.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { close.current(); return; }
@@ -37,7 +37,7 @@ export function Modal({ open, title, onClose, children, wide }: { open: boolean;
       <div ref={box} tabIndex={-1} className={cn("card max-h-[92vh] w-full overflow-y-auto p-5 outline-none sm:p-6", wide ? "sm:max-w-3xl" : "sm:max-w-lg")} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="mb-4 flex items-center justify-between">
           <h3 id={titleId} className="text-base font-semibold text-ink-800">{title}</h3>
-          <button onClick={onClose} className="rounded-lg p-2 text-ink-400 hover:bg-ink-50 hover:text-ink-700" aria-label="إغلاق"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="rounded-lg p-2 text-ink-400 hover:bg-ink-50 hover:text-ink-700" aria-label={closeLabel} data-modal-close=""><X className="h-4 w-4" /></button>
         </div>
         {children}
       </div>
