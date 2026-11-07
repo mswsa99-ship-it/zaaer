@@ -75,7 +75,7 @@ test("L01 landing page renders under the site path and links to the staff portal
   // the guest entry: the branch's WhatsApp QR, or «soon» with the branch phone until the owner connects the number
   await expect(page.getByTestId("wa-qr").or(page.getByTestId("wa-soon"))).toBeVisible();
   await expect(page.locator("input.input")).toHaveCount(0);
-  await page.getByRole("link", { name: "دخول الموظفين" }).first().click();
+  await page.getByRole("link", { name: "بوابة الموظفين والإدارة" }).first().click();
   await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
   await expect(page).toHaveURL(/\/staff\/login$/);
   expect(problems).toEqual([]);
