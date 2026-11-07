@@ -191,7 +191,7 @@ function voucherAccount(branch: string, method: string, account: string | null |
 function bootstrapAccounts(branch: string) {
   for (const [kind, name] of [["cash_box", "الصندوق الرئيسي"], ["bank_account", "الحساب البنكي الرئيسي"]] as const) {
     if (T("cash_accounts").some((a) => a.branch_id === branch && a.kind === kind)) continue;
-    const a = { id: uid(), organization_id: ORG, branch_id: branch, kind, name, bank_name: null, account_last4: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() };
+    const a = { id: uid(), organization_id: ORG, branch_id: branch, kind, name, bank_name: null, account_last4: null, account_prefix: null, account_suffix: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() };
     T("cash_accounts").push(a); audit(branch, "cash_account.created", "cash_account", a.id, { after: a, reason: "حساب أولي للفرع" });
   }
   emit("cash_accounts");
@@ -922,20 +922,42 @@ const rpcsMore: Record<string, (a: any) => any> = {
   // ---- cash boxes and bank accounts (decision 25) ----
   fn_admin_upsert_cash_account: ({ p }) => { requireCap("cash_accounts"); const name = String(p.name ?? "").trim(); if (!name || name.length > 60) throw new Error("VALIDATION: name");
     const last4 = String(p.account_last4 ?? "").trim() || null; if (last4 && !/^[0-9]{4}$/.test(last4)) throw new Error("VALIDATION: account_last4"); const bank = String(p.bank_name ?? "").trim() || null;
+    if (bank && bank.length > 80) throw new Error("VALIDATION: bank_name");
+    // A1 (0062): the start and end of the account number, 2–6 digits each, both or neither; one branch per pair; they agree with the branch's IBAN
+    const prefix = latinDigits(String(p.account_prefix ?? "")).trim() || null; const suffix = latinDigits(String(p.account_suffix ?? "")).trim() || null;
+    if (prefix && !/^[0-9]{2,6}$/.test(prefix)) throw new Error("VALIDATION: account_prefix"); if (suffix && !/^[0-9]{2,6}$/.test(suffix)) throw new Error("VALIDATION: account_suffix");
+    if (!prefix !== !suffix) throw new Error("VALIDATION: account_rule");
     const clash = (branch: string, id?: string) => T("cash_accounts").some((a) => a.branch_id === branch && !a.archived_at && a.id !== id && a.name.toLowerCase() === name.toLowerCase());
-    const unsetDefault = (branch: string, kind: string) => { for (const a of T("cash_accounts")) if (a.branch_id === branch && a.kind === kind && a.is_default && !a.archived_at) { a.is_default = false; a.version++; a.updated_at = nowISO(); } };
-    if (!p.id) { requireBranch(p.branch_id); if (!["cash_box", "bank_account"].includes(p.kind)) throw new Error("VALIDATION: kind"); if (clash(p.branch_id)) throw new Error("DUPLICATE_NAME");
-      const hasDefault = T("cash_accounts").some((a) => a.branch_id === p.branch_id && a.kind === p.kind && a.is_default && !a.archived_at); if (p.is_default) unsetDefault(p.branch_id, p.kind);
-      const a = { id: uid(), organization_id: ORG, branch_id: p.branch_id, kind: p.kind, name, bank_name: p.kind === "bank_account" ? bank : null, account_last4: p.kind === "bank_account" ? last4 : null, is_default: !!p.is_default || !hasDefault, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() };
+    const ruleTaken = (pre: string | null, suf: string | null, id?: string) => !!pre && T("cash_accounts").some((a) => !a.archived_at && a.id !== id && a.account_prefix === pre && a.account_suffix === suf);
+    const ibanDisagrees = (branch: string, suf: string | null) => { const iban = byId("branches", branch)?.bank_iban; return !!suf && !!iban && !String(iban).endsWith(suf); };
+    if (!p.id) { requireBranch(p.branch_id); if (!["cash_box", "bank_account"].includes(p.kind)) throw new Error("VALIDATION: kind");
+      const isBank = p.kind === "bank_account";
+      if (T("cash_accounts").some((a) => a.branch_id === p.branch_id && a.kind === p.kind && !a.archived_at)) throw new Error("ACCOUNT_EXISTS");
+      if (clash(p.branch_id)) throw new Error("DUPLICATE_NAME");
+      if (isBank && ruleTaken(prefix, suffix)) throw new Error("DUPLICATE_ACCOUNT_RULE"); if (isBank && ibanDisagrees(p.branch_id, suffix)) throw new Error("VALIDATION: iban_suffix");
+      const a = { id: uid(), organization_id: ORG, branch_id: p.branch_id, kind: p.kind, name, bank_name: isBank ? bank : null, account_last4: isBank ? last4 ?? (suffix && suffix.length >= 4 ? suffix.slice(-4) : null) : null,
+        account_prefix: isBank ? prefix : null, account_suffix: isBank ? suffix : null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() };
       T("cash_accounts").push(a); emit("cash_accounts"); audit(a.branch_id, "cash_account.created", "cash_account", a.id, { after: a }); return { ok: true, id: a.id, version: 1 }; }
     const a = byId("cash_accounts", p.id); if (!a) throw new Error("NOT_FOUND"); requireBranch(a.branch_id); checkVersion(a.version, p.version); if (a.archived_at) throw new Error("VALIDATION: account_archived"); if (clash(a.branch_id, a.id)) throw new Error("DUPLICATE_NAME");
-    const before = { ...a }; if (p.is_default && !a.is_default) unsetDefault(a.branch_id, a.kind);
-    Object.assign(a, { name, bank_name: a.kind === "bank_account" ? bank : null, account_last4: a.kind === "bank_account" ? last4 : null, is_default: p.is_default ? true : p.is_default === false ? false : a.is_default, is_active: p.is_active ?? a.is_active, version: a.version + 1, updated_at: nowISO() });
+    const isBank = a.kind === "bank_account";
+    if (isBank && ruleTaken(prefix, suffix, a.id)) throw new Error("DUPLICATE_ACCOUNT_RULE");
+    const nextSuffix = isBank ? ("account_suffix" in p ? suffix : a.account_suffix ?? null) : null;
+    if (isBank && ibanDisagrees(a.branch_id, nextSuffix)) throw new Error("VALIDATION: iban_suffix");
+    const before = { ...a };
+    Object.assign(a, { name,
+      bank_name: isBank ? ("bank_name" in p ? bank : a.bank_name) : null,
+      account_last4: isBank ? ("account_last4" in p ? last4 : "account_suffix" in p && suffix && suffix.length >= 4 ? suffix.slice(-4) : a.account_last4) : null,
+      account_prefix: isBank ? ("account_prefix" in p ? prefix : a.account_prefix ?? null) : null, account_suffix: nextSuffix,
+      is_default: true, is_active: p.is_active ?? a.is_active, version: a.version + 1, updated_at: nowISO() });
     emit("cash_accounts"); audit(a.branch_id, "cash_account.updated", "cash_account", a.id, { before, after: { ...a } }); return { ok: true, id: a.id, version: a.version }; },
   fn_admin_archive_cash_account: ({ p_id, p_archive, p_reason }) => { requireCap("cash_accounts"); nonEmpty(p_reason, "reason"); const a = byId("cash_accounts", p_id); if (!a) throw new Error("NOT_FOUND"); requireBranch(a.branch_id); const before = { ...a };
     const used = T("financial_vouchers").filter((v) => v.account_id === a.id).length;
     if (p_archive) { if (a.archived_at) return { ok: true, unchanged: true }; Object.assign(a, { archived_at: nowISO(), archived_by: staffId(), archive_reason: p_reason, is_default: false }); }
-    else { if (!a.archived_at) return { ok: true, unchanged: true }; if (T("cash_accounts").some((x) => x.branch_id === a.branch_id && !x.archived_at && x.id !== a.id && x.name.toLowerCase() === a.name.toLowerCase())) throw new Error("DUPLICATE_NAME"); Object.assign(a, { archived_at: null, archived_by: null, archive_reason: null }); }
+    else { if (!a.archived_at) return { ok: true, unchanged: true };
+      if (T("cash_accounts").some((x) => x.branch_id === a.branch_id && x.kind === a.kind && !x.archived_at)) throw new Error("ACCOUNT_EXISTS");
+      if (T("cash_accounts").some((x) => x.branch_id === a.branch_id && !x.archived_at && x.id !== a.id && x.name.toLowerCase() === a.name.toLowerCase())) throw new Error("DUPLICATE_NAME");
+      if (a.account_prefix && T("cash_accounts").some((x) => !x.archived_at && x.id !== a.id && x.account_prefix === a.account_prefix && x.account_suffix === a.account_suffix)) throw new Error("DUPLICATE_ACCOUNT_RULE");
+      Object.assign(a, { archived_at: null, archived_by: null, archive_reason: null, is_default: true }); }
     a.version++; a.updated_at = nowISO(); emit("cash_accounts"); audit(a.branch_id, p_archive ? "cash_account.archived" : "cash_account.restored", "cash_account", a.id, { before, after: { ...a }, reason: p_reason });
     return { ok: true, used_by_vouchers: used, default_missing: !T("cash_accounts").some((x) => x.branch_id === a.branch_id && x.kind === a.kind && x.is_default && !x.archived_at) }; },
 

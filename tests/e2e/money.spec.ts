@@ -41,28 +41,17 @@ test.describe("core money (phase 1)", () => {
     await expect(dep.locator("input[data-money]").first()).toHaveValue("50");   // whole riyals show without .00 (note 2)
   });
 
-  test("MC07b the manager adds a bank account and makes it the default; archiving needs a reason; a supervisor cannot open the page", async ({ page, loginAs, go }) => {
+  test("MC07b the manager replaces the bank account: one per branch, archiving needs a reason, the new one carries the start and end of its number; a supervisor cannot open the page", async ({ page, loginAs, go }) => {
     await loginAs("manager");
     await go("/admin/cash-accounts");
     const cards = page.getByTestId("cash-account");
     await expect(cards).toHaveCount(2);
     await expect(cards.filter({ hasText: "حساب الشبكة والتحويل" })).toContainText("الافتراضي");
+    // A1: both kinds are in use, so nothing can be added beside them
+    await expect(page.getByRole("button", { name: /إضافة (صندوق|حساب بنكي)/ })).toHaveCount(0);
+    await expect(cards.filter({ hasText: "حساب الشبكة والتحويل" }).getByTestId("account-rule-missing")).toBeVisible();
 
-    await page.getByRole("button", { name: "صندوق أو حساب" }).click();
-    const dlg = page.getByRole("dialog");
-    await dlg.getByLabel("النوع").selectOption("bank_account");
-    await dlg.getByLabel("الاسم").fill("حساب التحويلات");
-    await dlg.getByLabel("البنك").fill("بنك تجريبي");
-    await dlg.getByLabel("آخر أربعة أرقام").fill("9876");
-    await dlg.getByLabel(/الافتراضي لكل/).check();
-    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
-    await expect(dlg).toBeHidden();
-    await expect(cards).toHaveCount(3);
-    await expect(cards.filter({ hasText: "حساب التحويلات" })).toContainText("الافتراضي");
-    await expect(cards.filter({ hasText: "حساب التحويلات" })).toContainText("••9876");
-    await expect(cards.filter({ hasText: "حساب الشبكة والتحويل" })).not.toContainText("الافتراضي");
-
-    // archiving: the reason is required; the archived account leaves the list until «إظهار المؤرشف»
+    // archiving: the reason is required; then «إضافة حساب بنكي» appears for the replacement
     await cards.filter({ hasText: "حساب الشبكة والتحويل" }).getByRole("button", { name: "أرشفة" }).click();
     const arch = page.getByRole("dialog");
     await arch.getByRole("button", { name: "أرشفة" }).click();
@@ -70,9 +59,27 @@ test.describe("core money (phase 1)", () => {
     await arch.locator("textarea").fill("أُغلق الحساب");
     await arch.getByRole("button", { name: "أرشفة" }).click();
     await expect(arch).toBeHidden();
+    await expect(cards).toHaveCount(1);
+
+    await page.getByRole("button", { name: "إضافة حساب بنكي" }).click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByLabel("الاسم").fill("حساب التحويلات");
+    await dlg.getByLabel("البنك").fill("بنك تجريبي");
+    await dlg.getByLabel("بداية رقم الحساب").fill("٣٤٦");
+    await dlg.getByLabel("نهاية رقم الحساب").fill("9876");
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(dlg).toBeHidden();
     await expect(cards).toHaveCount(2);
+    const added = cards.filter({ hasText: "حساب التحويلات" });
+    await expect(added).toContainText("الافتراضي");
+    await expect(added.getByTestId("account-rule")).toHaveText(/يبدأ بـ 346 وينتهي بـ 9876/);
+    await expect(page.getByRole("button", { name: /إضافة (صندوق|حساب بنكي)/ })).toHaveCount(0);
+
+    // the archived one shows with its reason, and cannot come back while the new one is in use
     await page.getByLabel("إظهار المؤرشف").check();
-    await expect(cards.filter({ hasText: "حساب الشبكة والتحويل" })).toContainText("أُغلق الحساب");
+    const old = cards.filter({ hasText: "حساب الشبكة والتحويل" });
+    await expect(old).toContainText("أُغلق الحساب");
+    await expect(old.getByRole("button", { name: "استعادة" })).toHaveCount(0);
 
     await signOut(page);
     await loginAs("supervisor");

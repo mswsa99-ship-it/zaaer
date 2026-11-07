@@ -28,7 +28,7 @@ export default function PosSettlement() {
   // G24 (decision 40): the active branch's bank accounts and its last two weeks of settlements
   const q = useBranchQuery<Data>(async (branchId) => {
     const [a, h] = await Promise.all([
-      supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, is_default, is_active, archived_at, archive_reason, version")
+      supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version")
         .eq("branch_id", branchId).eq("kind", "bank_account").eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("pos_settlements").select("id, account_id, business_date, terminal_total_halalas, system_total_halalas, difference_halalas, voucher_count, status, note, version, updated_at")
         .eq("branch_id", branchId).gte("business_date", addDaysISO(todayISO(), -14)).order("business_date", { ascending: false }),

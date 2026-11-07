@@ -40,7 +40,7 @@ export default function AdminPlatformPayouts() {
     const [u, p, a, s] = await Promise.all([
       moneyApi.platformUnsettled(branchId),
       supabase.from("platform_payouts").select("id, source_id, account_id, expected_halalas, commission_bp, commission_halalas, received_halalas, difference_halalas, voucher_count, received_on, reference, note, status, cancel_reason, created_at").eq("branch_id", branchId).order("received_on", { ascending: false }).limit(50),
-      supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, is_default, is_active, archived_at, archive_reason, version").eq("branch_id", branchId).eq("kind", "bank_account").order("name"),
+      supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version").eq("branch_id", branchId).eq("kind", "bank_account").order("name"),
       supabase.from("booking_sources").select("id, name").order("name"),
     ]);
     return { unsettled: u, payouts: must(p) as Payout[], accounts: must(a) as CashAccount[], sources: (s.data as Data["sources"]) ?? [] };

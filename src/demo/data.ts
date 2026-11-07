@@ -51,7 +51,7 @@ export function seed(): Store {
   ]);
   put("whatsapp_outbox", []);
   // cash boxes and bank accounts per branch, a default for each kind (0028, decision 25)
-  const acct = (id: string, branch: string, kind: string, name: string, bank: string | null, last4: string | null) => ({ id, organization_id: ORG, branch_id: branch, kind, name, bank_name: bank, account_last4: last4, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) });
+  const acct = (id: string, branch: string, kind: string, name: string, bank: string | null, last4: string | null) => ({ id, organization_id: ORG, branch_id: branch, kind, name, bank_name: bank, account_last4: last4, account_prefix: null, account_suffix: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) });
   put("cash_accounts", [
     acct(CASH_A, BRANCH_A, "cash_box", "صندوق الاستقبال", null, null),
     acct(BANK_A, BRANCH_A, "bank_account", "حساب الشبكة والتحويل", "البنك (للتجربة)", "4321"),

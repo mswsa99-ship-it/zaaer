@@ -130,29 +130,33 @@ do $$ declare r1 text; begin
   perform t_record('MC07a a supervisor cannot define cash boxes or bank accounts', r1 = 'ok', r1);
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
-do $$ declare a jsonb; b jsonb; dup text; v_id uuid; begin
-  a := fn_admin_upsert_cash_account(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'kind','bank_account', 'name','حساب الراجحي', 'bank_name','مصرف اختبار', 'account_last4','1234', 'is_default', true));
+do $$ declare a jsonb; b jsonb; dup text; second text; v_id uuid; begin
+  -- A1 (0062): one bank account in use per branch, so a second one is refused; the closed one is archived, then replaced
+  second := t_fails(format('select fn_admin_upsert_cash_account(%L::jsonb)', jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'kind','bank_account', 'name','حساب ثانٍ')), 'ACCOUNT_EXISTS%');
+  perform fn_admin_archive_cash_account(t_id('bank10'), true, 'استُبدل الحساب');
+  a := fn_admin_upsert_cash_account(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'kind','bank_account', 'name','حساب الراجحي', 'bank_name','مصرف اختبار', 'account_last4','1234'));
   v_id := (a->>'id')::uuid; insert into ids values ('bank10b', v_id);
-  dup := t_fails(format('select fn_admin_upsert_cash_account(%L::jsonb)', jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'kind','cash_box', 'name','حساب الراجحي')), 'DUPLICATE%');
+  dup := t_fails(format('select fn_admin_upsert_cash_account(%L::jsonb)', jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'kind','cash_box', 'name','حساب الراجحي')), 'ACCOUNT_EXISTS%');
   b := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit', 'amount_halalas', 5000, 'method','pos', 'reference','TRX-7001', 'idempotency_key','mc-07b'));
-  perform fn_admin_upsert_cash_account(jsonb_build_object('id', v_id, 'name', 'حساب الراجحي — الفرع', 'is_default', true, 'version', t_ver('cash_accounts', v_id), 'bank_name','مصرف اختبار', 'account_last4','1234'));
-  perform t_record('MC07b a manager adds an account and makes it the default; the old default steps down; a duplicate name is refused; renaming keeps the voucher on it',
-    t_account('00000000-0000-0000-0000-000000000010', 'bank_account') = v_id
+  perform fn_admin_upsert_cash_account(jsonb_build_object('id', v_id, 'name', 'حساب الراجحي — الفرع', 'version', t_ver('cash_accounts', v_id), 'bank_name','مصرف اختبار', 'account_last4','1234'));
+  perform t_record('MC07b a manager replaces the bank account: a second one in use is refused, the old one is archived and the new one is the default; renaming keeps the voucher on it',
+    t_account('00000000-0000-0000-0000-000000000010', 'bank_account') = v_id and second = 'ok'
     and (select is_default from cash_accounts where id = t_id('bank10')) = false and dup = 'ok'
     and (t_voucher((b->>'voucher_id')::uuid)).account_id = v_id
-    and (select name from cash_accounts where id = v_id) = 'حساب الراجحي — الفرع', dup);
-exception when others then perform t_record('MC07b a manager adds an account and makes it the default; the old default steps down; a duplicate name is refused; renaming keeps the voucher on it', false, sqlerrm); end $$;
-do $$ declare r jsonb; used bigint; refused text; begin
+    and (select name from cash_accounts where id = v_id) = 'حساب الراجحي — الفرع', second || ' / ' || dup);
+exception when others then perform t_record('MC07b a manager replaces the bank account: a second one in use is refused, the old one is archived and the new one is the default; renaming keeps the voucher on it', false, sqlerrm); end $$;
+do $$ declare r jsonb; used bigint; refused text; back text; begin
+  back := t_fails(format('select fn_admin_archive_cash_account(%L, false, %L)', t_id('bank10'), 'إعادة'), 'ACCOUNT_EXISTS%');
   r := fn_admin_archive_cash_account(t_id('bank10b'), true, 'أُغلق الحساب');
   used := t_count(format('select count(*) from financial_vouchers where account_id = %L', t_id('bank10b')));
   refused := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','pos', 'reference','TRX-7002', 'account_id', t_id('bank10b'), 'idempotency_key','mc-08a')), 'VALIDATION: account_archived%');
-  perform t_record('MC08 a used account is archived with its reason, keeps its vouchers, is no longer offered, and the change is audited',
-    (r->>'used_by_vouchers')::int >= 1 and used >= 1 and refused = 'ok' and (r->>'default_missing')::boolean
+  perform t_record('MC08 a used account is archived with its reason, keeps its vouchers, is no longer offered, and the change is audited; an archived one returns only when none is in use',
+    (r->>'used_by_vouchers')::int >= 1 and used >= 1 and refused = 'ok' and back = 'ok' and (r->>'default_missing')::boolean
     and (select archived_at is not null from cash_accounts where id = t_id('bank10b'))
-    and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''cash_account.archived''', t_id('bank10b'))) = 1, r::text || ' / ' || refused);
-  -- the first bank account becomes the default again
-  perform fn_admin_upsert_cash_account(jsonb_build_object('id', t_id('bank10'), 'name', 'الحساب البنكي الرئيسي', 'is_default', true, 'version', t_ver('cash_accounts', t_id('bank10'))));
-exception when others then perform t_record('MC08 a used account is archived with its reason, keeps its vouchers, is no longer offered, and the change is audited', false, sqlerrm); end $$;
+    and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''cash_account.archived''', t_id('bank10b'))) = 1, r::text || ' / ' || refused || ' / ' || back);
+  -- the first bank account comes back as the one in use
+  perform fn_admin_archive_cash_account(t_id('bank10'), false, 'إعادة الحساب الأول');
+exception when others then perform t_record('MC08 a used account is archived with its reason, keeps its vouchers, is no longer offered, and the change is audited; an archived one returns only when none is in use', false, sqlerrm); end $$;
 do $$ declare a jsonb; b jsonb; c jsonb; r1 text; begin
   a := fn_refund(jsonb_build_object('reservation_id', t_id('res'), 'kind','refund', 'amount_halalas', 1000, 'method','cash', 'reason','رد جزء نقدًا', 'idempotency_key','mc-09a'));
   r1 := t_fails(format('select fn_refund(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit_refund', 'amount_halalas', 1000, 'method','bank_transfer', 'reason','رد تأمين', 'idempotency_key','mc-09b')), 'VALIDATION: reference_required%');

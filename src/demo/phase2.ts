@@ -49,7 +49,11 @@ export function phase2Rpcs(c: Phase2Ctx): Record<string, (a: any) => any> {
       if ("arrival_instructions" in q) { const v = text(q.arrival_instructions); if (v && v.length > 4000) throw new Error("VALIDATION: arrival_instructions"); next.arrival_instructions = v; }
       if ("bank_name" in q) { const v = text(q.bank_name); if (v && v.length > 80) throw new Error("VALIDATION: bank_name"); next.bank_name = v; }
       if ("bank_beneficiary" in q) { const v = text(q.bank_beneficiary); if (v && v.length > 120) throw new Error("VALIDATION: bank_beneficiary"); next.bank_beneficiary = v; }
-      if ("bank_iban" in q) { const v = latinDigits(String(q.bank_iban ?? "")).replace(/\s/g, "").toUpperCase() || null; if (v && !validIban(v)) throw new Error("VALIDATION: iban"); next.bank_iban = v; }
+      if ("bank_iban" in q) { const v = latinDigits(String(q.bank_iban ?? "")).replace(/\s/g, "").toUpperCase() || null; if (v && !validIban(v)) throw new Error("VALIDATION: iban");
+        // A1 (0062): the IBAN ends with the last digits of the branch's bank account
+        const acc = (T("cash_accounts") as Row[]).find((a) => a.branch_id === b.id && a.kind === "bank_account" && !a.archived_at);
+        if (v && acc?.account_suffix && !v.endsWith(acc.account_suffix)) throw new Error("VALIDATION: iban_suffix");
+        next.bank_iban = v; }
       if (next.bank_iban && (!next.bank_name || !next.bank_beneficiary)) throw new Error("VALIDATION: bank_details");
       Object.assign(b, next, { version: (b.version ?? 1) + 1, updated_at: nowISO() }); emit("branches");
       if (JSON.stringify(next) !== JSON.stringify(before)) audit(b.id, "branch.guide_changed", "branch", b.id, { before, after: next });

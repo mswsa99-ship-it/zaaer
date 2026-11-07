@@ -67,6 +67,8 @@ const ERROR_AR: Record<string, string> = {
   VERSION_REQUIRED: "لا يمكن الحفظ دون نسخة السجل المعروضة؛ حدّث الصفحة وأعد المحاولة.",
   BRANCH_MISMATCH: "العنصر المختار لا ينتمي إلى نفس الفرع.",
   DUPLICATE_NAME: "الاسم مستخدم مسبقًا ضمن هذا النطاق.",
+  ACCOUNT_EXISTS: "لهذا الفرع صندوق واحد وحساب بنكي واحد. لاستبدال الحالي: أرشفه بسبب، ثم أضف الجديد.",
+  DUPLICATE_ACCOUNT_RULE: "بداية رقم الحساب ونهايته مسجلتان لحساب فرع آخر؛ كل حساب بنكي لفرع واحد.",
   DUPLICATE_ROOM_NUMBER: "رقم الوحدة مستخدم مسبقًا في هذا الفرع.",
   DUPLICATE_EXTERNAL_REF: "رقم الحجز في المنصة مستخدم في حجز آخر أو مجموعة أخرى.",
   GROUP_NUMBER_PENDING_MIGRATION: "مشاركة رقم المنصة بين وحدات المجموعة غير متاحة بعد؛ أدخل كل وحدة حجزًا مستقلًا برقمها.",
@@ -171,6 +173,10 @@ export const VALIDATION_AR: Record<string, string> = {
   account_archived: "هذا الصندوق أو الحساب مؤرشف ولا يُستخدم لسندات جديدة.",
   account_not_allowed: "الآجل عبر المنصة لا يُقيَّد في صندوق ولا حساب.",
   account_last4: "آخر أربعة أرقام من الحساب: أربعة أرقام فقط.",
+  account_prefix: "بداية رقم الحساب: من 2 إلى 6 أرقام.",
+  account_suffix: "نهاية رقم الحساب: من 2 إلى 6 أرقام.",
+  account_rule: "اكتب بداية رقم الحساب ونهايته معًا، أو اتركهما فارغين.",
+  iban_suffix: "الآيبان في «دليل الفرع» لا ينتهي بنهاية رقم الحساب البنكي للفرع. صحّح أحدهما حتى يتطابقا.",
   reference: "رقم العملية بين 3 و60 حرفًا.",
   note_required: "يوجد فرق: اكتب سببه.",
   commission: "العمولة نسبة من 0 إلى 100%، بخانتين عشريتين على الأكثر.",
@@ -609,7 +615,7 @@ export const supportApi = {
 // ---------------------------------------------------------------------------
 // Core money (0028): cash boxes and bank accounts, the terminal settlement, platform payouts
 // ---------------------------------------------------------------------------
-export interface CashAccount { id: string; branch_id: string; kind: "cash_box" | "bank_account"; name: string; bank_name: string | null; account_last4: string | null; is_default: boolean; is_active: boolean; archived_at: string | null; archive_reason: string | null; version: number }
+export interface CashAccount { id: string; branch_id: string; kind: "cash_box" | "bank_account"; name: string; bank_name: string | null; account_last4: string | null; account_prefix?: string | null; account_suffix?: string | null; is_default: boolean; is_active: boolean; archived_at: string | null; archive_reason: string | null; version: number }
 export interface PosDay {
   in_halalas: number; out_halalas: number; system_total_halalas: number; voucher_count: number;
   vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; reference: string | null; occurred_at: string }>;

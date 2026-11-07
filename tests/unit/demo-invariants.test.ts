@@ -263,19 +263,39 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "cash_box", name: "صندوق جانبي" } })).rejects.toThrow(/FORBIDDEN/);
   });
 
-  it("MC07b a manager adds an account and makes it the default; the old default steps down; a duplicate name is refused; renaming keeps the voucher on it", async () => {
+  it("MC07b a manager replaces the bank account: a second one in use is refused, the old one is archived and the new one is the default; renaming keeps the voucher on it", async () => {
     await login("manager@demo.sa");
     const before = await defaults(BRANCH);
-    const created = await rpc<any>("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "bank_account", name: "حساب التحويلات", bank_name: "بنك تجريبي", account_last4: "9876", is_default: true } });
+    await expect(rpc("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "bank_account", name: "حساب ثانٍ" } })).rejects.toThrow(/ACCOUNT_EXISTS/);
+    await rpc("fn_admin_archive_cash_account", { p_id: before.bank.id, p_archive: true, p_reason: "استُبدل الحساب" });
+    const created = await rpc<any>("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "bank_account", name: "حساب التحويلات", bank_name: "بنك تجريبي", account_last4: "9876" } });
     const now = await defaults(BRANCH);
     expect(now.bank.id).toBe(created.id);
     expect((await accountsOf(BRANCH)).find((x) => x.id === before.bank.id)!.is_default).toBe(false);
-    await expect(rpc("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "cash_box", name: "حساب التحويلات" } })).rejects.toThrow(/DUPLICATE_NAME/);
-    await expect(rpc("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "bank_account", name: "حساب آخر", account_last4: "12a4" } })).rejects.toThrow(/account_last4/);
+    await expect(rpc("fn_admin_upsert_cash_account", { p: { id: created.id, name: "حساب التحويلات", account_last4: "12a4", version: created.version } })).rejects.toThrow(/account_last4/);
     const r = await createRes({ ci: 62, co: 63 });
     const v = await voucher(r.id, { method: "pos", reference: "TRX-6200" });
     await rpc("fn_admin_upsert_cash_account", { p: { id: created.id, name: "حساب التحويلات الرئيسي", version: created.version } });
     expect((await vrow(v.voucher_id)).account_id).toBe(created.id);
+    await expect(rpc("fn_admin_archive_cash_account", { p_id: before.bank.id, p_archive: false, p_reason: "إعادة" })).rejects.toThrow(/ACCOUNT_EXISTS/);
+  });
+
+  it("AC02–AC05 one box and one bank account per branch; the start and end of the account number, one branch per pair, agreeing with the IBAN", async () => {
+    await login("owner@demo.sa");
+    await expect(rpc("fn_admin_upsert_cash_account", { p: { branch_id: BRANCH, kind: "cash_box", name: "صندوق ثانٍ" } })).rejects.toThrow(/ACCOUNT_EXISTS/);
+    const bank = (await defaults(BRANCH)).bank;
+    await expect(rpc("fn_admin_upsert_cash_account", { p: { id: bank.id, name: bank.name, account_prefix: "34", version: bank.version } })).rejects.toThrow(/account_rule/);
+    await expect(rpc("fn_admin_upsert_cash_account", { p: { id: bank.id, name: bank.name, account_prefix: "3a6", account_suffix: "192", version: bank.version } })).rejects.toThrow(/account_prefix/);
+    await rpc("fn_admin_upsert_cash_account", { p: { id: bank.id, name: bank.name, account_prefix: "٣٤٦", account_suffix: "1192", version: bank.version } });
+    const row = (await client.from("cash_accounts").select("account_prefix, account_suffix, account_last4, is_default").eq("id", bank.id).single()).data as any;
+    expect([row.account_prefix, row.account_suffix, row.account_last4, row.is_default]).toEqual(["346", "1192", "1192", true]);
+    // another branch cannot take the same start and end
+    const others = ((await client.from("cash_accounts").select("id, branch_id, kind, name, version, archived_at")).data as any[]).filter((x) => x.branch_id !== BRANCH && x.kind === "bank_account" && !x.archived_at);
+    expect(others.length).toBeGreaterThan(0);
+    await expect(rpc("fn_admin_upsert_cash_account", { p: { id: others[0].id, name: others[0].name, account_prefix: "346", account_suffix: "1192", version: others[0].version } })).rejects.toThrow(/DUPLICATE_ACCOUNT_RULE/);
+    // the branch's IBAN must end with the account's last digits
+    await expect(rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, bank_name: "مصرف", bank_beneficiary: "فايف اورز", bank_iban: "SA9880000000000000005555" } })).rejects.toThrow(/iban_suffix/);
+    await rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, bank_name: "مصرف", bank_beneficiary: "فايف اورز", bank_iban: "SA4480000000000000001192" } });
   });
 
   it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
