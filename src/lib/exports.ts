@@ -16,6 +16,8 @@ export interface ExportStatement {
   /** the active filters, already in the reader's words («الحالة: مؤكد») */
   filters: string[];
   scope: ExportScope;
+  /** OWNER-17: a report (figures and breakdowns, not a list of rows): the scope line says so, with no row count */
+  report?: boolean;
   /** the branch's day and time the export was made (shown as given) */
   generatedAt: string;
   /** who exported (a name, never an id) */
@@ -36,7 +38,7 @@ export function statementLines(s: ExportStatement): string[] {
     `الفرع: ${s.branch ?? "—"}`,
     `الفترة: ${periodText(s.period)}`,
     `المرشحات: ${s.filters.length ? s.filters.join(" · ") : "بلا مرشحات"}`,
-    `النطاق: ${scopeText(s.scope)}`,
+    `النطاق: ${s.report ? "التقرير كاملًا للفترة والمرشحات" : scopeText(s.scope)}`,
     `أُصدر: ${s.generatedAt}${s.by ? ` · بواسطة ${s.by}` : ""}`,
   ];
 }
@@ -70,7 +72,11 @@ export function downloadXlsx(s: ExportStatement, t: ExportTable, extraSheets: Xl
 const escHtml = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const cellText = (c: XlsxCell) => (c == null ? "" : typeof c === "object" ? (c.fmt === "money" ? c.v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : c.v.toLocaleString("en-US")) : String(c));
 
-/** The document that is printed (or saved as PDF from the print dialog): the statement as a header, then the table. Pure, so a test reads it. */
+/**
+ * The document that is printed (or saved as PDF from the print dialog): the statement as a header, then the table, then
+ * (OWNER-17) each further sheet of a report as its own table under its name, so the paper holds what the Excel file holds.
+ * Pure, so a test reads it.
+ */
 export function buildPrintDocument(s: ExportStatement, t: ExportTable): string {
   const [title, ...meta] = statementLines(s);
   const th = t.columns.map((c) => `<th>${escHtml(c)}</th>`).join("");
@@ -93,8 +99,16 @@ export function buildPrintDocument(s: ExportStatement, t: ExportTable): string {
 <h1>${escHtml(title)}</h1>
 <p class="meta">${meta.map((m) => `<span>${escHtml(m)}</span>`).join("")}</p>
 <table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>
-<p class="foot">${escHtml(scopeText(s.scope))} · ${t.count ?? t.rows.length} صفًا في هذه الطباعة</p>
+${(t.sheets ?? []).map((sh) => sheetTable(sh)).join("\n")}
+<p class="foot">${s.report ? "التقرير كاملًا" : `${escHtml(scopeText(s.scope))} · ${t.count ?? t.rows.length} صفًا في هذه الطباعة`}</p>
 </body></html>`;
+}
+
+/** A further sheet as a printed table: its header row as the table head, the rows after it as the body. */
+function sheetTable(sh: XlsxSheet): string {
+  const h = sh.headerRow ?? 0, head = sh.rows[h] ?? [], rows = sh.rows.slice(h + 1);
+  if (!rows.length) return "";
+  return `<h2 style="font-size:13px;margin:14px 0 4px">${escHtml(sh.name)}</h2><table><thead><tr>${head.map((c) => `<th>${escHtml(cellText(c))}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${head.map((_, j) => `<td>${escHtml(cellText(r[j]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 
 /** Prints through a hidden frame so the screen's own layout is untouched; the frame is removed afterwards. */

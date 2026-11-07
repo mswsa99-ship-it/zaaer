@@ -1143,15 +1143,18 @@ const rpcsMore: Record<string, (a: any) => any> = {
   // under a staff, method or account filter (its denominator is the whole stay)
   fn_reports_finance: ({ p_branch, p_from, p_to, p_filters }) => {
     requireCapFull("reports.finance"); requireBranch(p_branch);
-    const from = p_from ?? addDays(branchToday(p_branch), -29), to = p_to ?? branchToday(p_branch); if (to < from) throw new Error("VALIDATION: period");
+    const today0 = branchToday(p_branch); const from = p_from ?? addDays(today0, -29), reqTo = p_to ?? today0; if (reqTo < from) throw new Error("VALIDATION: period");
+    // 0059 (OWNER-08): one period limit; an end after today is read up to today
+    if (dayDiff(from, reqTo) > 366) throw new Error("VALIDATION: period_too_long"); const to = reqTo > today0 ? today0 : reqTo; if (from > to) throw new Error("VALIDATION: period_future");
     const f = p_filters ?? {}; const fStaff: string | null = f.staff_id || null, fMethod: string | null = f.method || null, fAccount: string | null = f.account_id || null, fSource: string | null = f.source_id || null, fCat: string | null = f.category_id || null;
     const filtered = !!(fStaff || fMethod || fAccount || fSource || fCat); const accNone = fAccount === "none", acc = fAccount && fAccount !== "none" ? fAccount : null;
     const inPeriod = (iso: string) => { const d = dayOf(iso); return d >= from && d <= to; };
     const followsBooking = (r: Row | undefined) => (!fSource || r?.source_id === fSource) && (!fCat || r?.room_category_id === fCat);
     const vouchers = T("financial_vouchers").filter((v) => v.branch_id === p_branch && v.status === "approved" && inPeriod(v.occurred_at)
       && (!fStaff || v.created_by === fStaff) && (!fMethod || v.method === fMethod) && (!fAccount || (accNone && v.account_id == null) || v.account_id === acc) && followsBooking(byId("reservations", v.reservation_id)));
-    const sumV = (kind: string) => vouchers.filter((v) => v.kind === kind).reduce((a, v) => a + v.amount_halalas, 0);
-    const receipts = sumV("receipt"), refunds = sumV("refund"), deposits_received = sumV("deposit"), deposits_refunded = sumV("deposit_refund"), deposits_applied = sumV("deposit_apply");
+    // 0059 (OWNER-02): what a platform holds («آجل عبر المنصة») is not collected at the property
+    const sumV = (kind: string, plat?: boolean) => vouchers.filter((v) => v.kind === kind && (plat === undefined || isPlatformMethod(v.method) === plat)).reduce((a, v) => a + v.amount_halalas, 0);
+    const receipts = sumV("receipt", false), refunds = sumV("refund", false), platform_receipts = sumV("receipt", true), platform_refunds = sumV("refund", true), deposits_received = sumV("deposit"), deposits_refunded = sumV("deposit_refund"), deposits_applied = sumV("deposit_apply");
     const net_collected = receipts - refunds + deposits_applied;
     const allRes = T("reservations").filter((r) => r.branch_id === p_branch && r.check_in <= to && r.check_out > from && followsBooking(r));
     const stays = allRes.filter((r) => !["cancelled", "rejected", "no_show"].includes(r.status)); const stayIds = new Set(stays.map((r) => r.id));
@@ -1159,29 +1162,42 @@ const rpcsMore: Record<string, (a: any) => any> = {
     const sumC = (kind: string) => charges.filter((c) => c.kind === kind).reduce((a, c) => a + c.total_halalas, 0);
     const rent = sumC("rent"), addons = sumC("addon") + sumC("penalty") + sumC("adjustment"), discounts = sumC("discount"), tax = sumC("tax");
     const total_charged = rent + addons + discounts + tax;
-    const by_method = Object.values(vouchers.filter((v) => v.kind === "receipt").reduce((acc: Record<string, { method: string; amount_halalas: number }>, v) => { (acc[v.method] ??= { method: v.method, amount_halalas: 0 }).amount_halalas += v.amount_halalas; return acc; }, {})).sort((a, b) => b.amount_halalas - a.amount_halalas || a.method.localeCompare(b.method));
-    const days: Record<string, { day: string; receipts: number; refunds: number }> = {};
-    for (const v of vouchers) { const d = dayOf(v.occurred_at); const row = (days[d] ??= { day: d, receipts: 0, refunds: 0 }); if (v.kind === "receipt" || v.kind === "deposit_apply") row.receipts += v.amount_halalas; if (v.kind === "refund") row.refunds += v.amount_halalas; }
+    const by_method = Object.values(vouchers.filter((v) => v.kind === "receipt").reduce((acc: Record<string, { method: string; amount_halalas: number; platform: boolean }>, v) => { (acc[v.method] ??= { method: v.method, amount_halalas: 0, platform: isPlatformMethod(v.method) }).amount_halalas += v.amount_halalas; return acc; }, {})).sort((a, b) => b.amount_halalas - a.amount_halalas || a.method.localeCompare(b.method));
+    // 0059 (OWNER-10): every calendar day of the period, 0 when nothing moved
+    const days: Record<string, { day: string; receipts: number; refunds: number; platform: number }> = {};
+    for (let d = from; d <= to; d = addDays(d, 1)) days[d] = { day: d, receipts: 0, refunds: 0, platform: 0 };
+    for (const v of vouchers) { const row = days[dayOf(v.occurred_at)]; if (!row) continue; const plat = isPlatformMethod(v.method);
+      if ((v.kind === "receipt" && !plat) || v.kind === "deposit_apply") row.receipts += v.amount_halalas; if (v.kind === "refund" && !plat) row.refunds += v.amount_halalas;
+      if (plat && v.kind === "receipt") row.platform += v.amount_halalas; if (plat && v.kind === "refund") row.platform -= v.amount_halalas; }
     const staffRows = new Map<string | null, { staff_id: string | null; staff: string; receipts: number; refunds: number; count: number }>();
-    for (const v of vouchers.filter((x) => x.kind === "receipt" || x.kind === "refund")) { const k = v.created_by ?? null; const row = staffRows.get(k) ?? { staff_id: k, staff: staffName(k) ?? "—", receipts: 0, refunds: 0, count: 0 }; if (v.kind === "receipt") row.receipts += v.amount_halalas; else row.refunds += v.amount_halalas; row.count++; staffRows.set(k, row); }
+    for (const v of vouchers.filter((x) => (x.kind === "receipt" || x.kind === "refund") && !isPlatformMethod(x.method))) { const k = v.created_by ?? null; const row = staffRows.get(k) ?? { staff_id: k, staff: staffName(k) ?? "—", receipts: 0, refunds: 0, count: 0 }; if (v.kind === "receipt") row.receipts += v.amount_halalas; else row.refunds += v.amount_halalas; row.count++; staffRows.set(k, row); }
     const by_staff = [...staffRows.values()].sort((a, b) => b.receipts - a.receipts);
     const accRows = new Map<string, { account_id: string; account: string; in_halalas: number; out_halalas: number }>();
     for (const v of vouchers.filter((x) => x.account_id != null)) { const row = accRows.get(v.account_id) ?? { account_id: v.account_id, account: byId("cash_accounts", v.account_id)?.name ?? "—", in_halalas: 0, out_halalas: 0 }; if (v.kind === "receipt" || v.kind === "deposit") row.in_halalas += v.amount_halalas; if (v.kind === "refund" || v.kind === "deposit_refund") row.out_halalas += v.amount_halalas; accRows.set(v.account_id, row); }
     const by_account = [...accRows.values()].sort((a, b) => b.in_halalas - a.in_halalas);
-    const by_source = Object.values(allRes.reduce((acc: Record<string, { source: string; count: number; total_halalas: number }>, r) => { const s = byId("booking_sources", r.source_id)?.name ?? "—"; (acc[s] ??= { source: s, count: 0, total_halalas: 0 }); acc[s].count++; acc[s].total_halalas += r.total_halalas ?? 0; return acc; }, {})).sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
+    const by_source = Object.values(allRes.reduce((acc: Record<string, { source_id: string | null; source: string; count: number; total_halalas: number }>, r) => { const s = byId("booking_sources", r.source_id)?.name ?? "—"; (acc[s] ??= { source_id: r.source_id ?? null, source: s, count: 0, total_halalas: 0 }); acc[s].count++; acc[s].total_halalas += r.total_halalas ?? 0; return acc; }, {})).sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
     const nights = stays.reduce((a, r) => a + Math.max(0, (new Date(r.check_out + "T00:00:00Z").getTime() - new Date(r.check_in + "T00:00:00Z").getTime()) / 86400000), 0);
     const openDeposits = T("reservations").filter((r) => r.branch_id === p_branch).reduce((a, r) => a + Math.max(0, r.deposit_balance_halalas ?? 0), 0);
     const filters: Row = {}; if (fStaff) filters.staff_id = fStaff; if (fMethod) filters.method = fMethod; if (fAccount) filters.account_id = fAccount; if (fSource) filters.source_id = fSource; if (fCat) filters.category_id = fCat;
+    // 0059 (OWNER-07): what the period's stays have paid at the property, whatever the voucher's date, over their charges
+    const stayV = T("financial_vouchers").filter((v) => v.branch_id === p_branch && v.status === "approved" && stayIds.has(v.reservation_id));
+    const signed = (v: Row) => (v.kind === "refund" ? -v.amount_halalas : v.amount_halalas);
+    const paidAll = stayV.filter((v) => ["receipt", "refund", "deposit_apply"].includes(v.kind) && !isPlatformMethod(v.method)).reduce((a, v) => a + signed(v), 0);
+    const platAll = stayV.filter((v) => ["receipt", "refund"].includes(v.kind) && isPlatformMethod(v.method)).reduce((a, v) => a + signed(v), 0);
+    const rawPct = total_charged > 0 ? Math.round((paidAll * 1000) / total_charged) / 10 : null;
+    const rateOn = total_charged > 0 && !fStaff && !fMethod && !fAccount;
     return {
-      period: { from, to }, filters, filtered,
-      ledger: { receipts, refunds, net_collected, deposits_received, deposits_refunded, deposits_applied, deposit_balance_open: openDeposits },
+      period: { from, to, requested_to: reqTo }, filters, filtered,
+      ledger: { receipts, refunds, net_collected, platform_receipts, platform_refunds, platform_net: platform_receipts - platform_refunds, deposits_received, deposits_refunded, deposits_applied, deposit_balance_open: openDeposits },
       charges: { total_charged, rent, addons, discounts, tax },
-      collection_rate_pct: total_charged > 0 && !fStaff && !fMethod && !fAccount ? (() => { const pct = Math.round((Math.abs(net_collected) * 1000) / total_charged) / 10; return net_collected < 0 ? -pct || 0 : pct; })() : null,
+      collection: rateOn ? { due: total_charged, paid: paidAll, platform: platAll, rate_pct: Math.min(rawPct!, 100), raw_pct: rawPct } : null,
+      collection_rate_pct: rateOn ? Math.min(rawPct!, 100) : null,
       by_method, by_day: Object.values(days).sort((a, b) => a.day.localeCompare(b.day)), by_staff, by_account,
       reservations: { count: allRes.length, nights, cancelled: allRes.filter((r) => r.status === "cancelled").length, no_show: allRes.filter((r) => r.status === "no_show").length, by_source },
       definitions: {
-        revenue: "صافي التحصيل = سندات قبض الإقامة − الاستردادات + التأمين المستخدم لتغطية رسوم، بتاريخ السند. التأمين المقبوض ليس إيرادًا.",
-        collection_rate: "نسبة التحصيل = صافي التحصيل ÷ إجمالي الرسوم (إيجار + إضافات − خصومات + ضريبة) للإقامات المتقاطعة مع الفترة؛ لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب.",
+        revenue: "المحصّل في المنشأة = سندات قبض الإقامة نقدًا أو شبكة أو تحويلًا − الاستردادات + التأمين المستخدم لتغطية رسوم، بتاريخ السند. ما سُجّل «آجل عبر المنصة» يظهر منفصلًا حتى تحوّله المنصة. التأمين المقبوض ليس إيرادًا.",
+        platform: "آجل عند المنصات = ما سُجّل للفترة بطريقة «آجل عبر المنصة»؛ المنصة تحصّله وتحوّله لاحقًا (تُطابق في «مطابقة المنصات»).",
+        collection_rate: "نسبة التحصيل = ما دُفع في المنشأة لإقامات الفترة (أيًّا كان تاريخ السند) ÷ رسومها (إيجار + إضافات − خصومات + ضريبة)، بحد أقصى 100%؛ ما فوق 100% دفعٌ زائد يُرد أو يُسوّى. ما عند المنصات خارجها. لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب.",
       },
     };
   },
@@ -2229,15 +2245,19 @@ function evaluate(resId: string, _skipSupervisor = false) {
     : ["الإقامة غير قائمة"];
   return { allowed: reasons.length === 0, reasons };
 }
+/** 0059: a receipt recorded «آجل عبر المنصة» (or «منصة الحجز») is the platform's money until it is paid over */
+const isPlatformMethod = (m: string | null | undefined) => m === "ota_deferred" || m === "booking_platform";
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
 function summary(branch: string, date: string) {
   if (!myBranches().includes(branch)) return null; const rooms = T("rooms").filter((r) => r.branch_id === branch && !r.archived_at); const res = T("reservations").filter((r) => r.branch_id === branch); const hk = T("housekeeping_tasks").filter((h) => h.branch_id === branch); const v = T("financial_vouchers").filter((x) => x.branch_id === branch && x.status === "approved");
   const active = rooms.filter((r) => r.is_active).length, occupied = rooms.filter((r) => r.status === "occupied").length;
-  return { date, units: { active, occupied, reserved: rooms.filter((r) => r.status === "reserved").length, ready: rooms.filter((r) => r.status === "ready").length, dirty: rooms.filter((r) => r.is_active && r.cleanliness !== "clean").length, maintenance: rooms.filter((r) => r.status === "maintenance").length, out_of_service: rooms.filter((r) => r.status === "out_of_service" || !r.is_active).length },
-    occupancy_pct: active ? Math.round((1000 * occupied) / active) / 10 : 0,
+  return { date, units: { active, all: rooms.length, occupied, reserved: rooms.filter((r) => r.status === "reserved").length, ready: rooms.filter((r) => r.status === "ready").length, dirty: rooms.filter((r) => r.is_active && r.cleanliness !== "clean").length, maintenance: rooms.filter((r) => r.status === "maintenance").length, out_of_service: rooms.filter((r) => r.status === "out_of_service" || !r.is_active).length },
+    occupancy_pct: active ? Math.round((1000 * occupied) / active) / 10 : 0, occupancy_all_pct: rooms.length ? Math.round((1000 * occupied) / rooms.length) / 10 : 0,
     arrivals: { expected: res.filter((r) => r.check_in === date && ["confirmed", "pending_verification"].includes(r.status)).length, arrived: res.filter((r) => r.check_in === date && r.status === "checked_in").length, pending_identity: res.filter((r) => r.check_in <= date && r.check_out > date && ["confirmed", "pending_verification"].includes(r.status) && r.identity_status !== "verified").length, unpaid: res.filter((r) => r.check_in === date && ["confirmed", "pending_verification"].includes(r.status) && r.balance_due_halalas > 0).length, overdue: res.filter((r) => r.check_in < date && ["confirmed", "pending_verification"].includes(r.status)).length },
     departures: { expected: res.filter((r) => r.check_out === date && r.status === "checked_in").length, done: res.filter((r) => r.check_out === date && ["checked_out", "closed"].includes(r.status)).length, overstay: res.filter((r) => r.check_out < date && r.status === "checked_in").length, with_balance: res.filter((r) => r.check_out === date && r.status === "checked_in" && r.balance_due_halalas > 0).length },
     housekeeping: { open: hk.filter((h) => h.status === "pending").length, in_progress: hk.filter((h) => h.status === "in_progress").length, completed_today: hk.filter((h) => h.status === "completed" && (h.completed_at ?? "").slice(0, 10) === date).length, unassigned: hk.filter((h) => h.status === "pending" && !h.assignee_id).length },
-    finance: { received_today: v.filter((x) => x.kind === "receipt" && x.occurred_at.slice(0, 10) === date).reduce((a, x) => a + x.amount_halalas, 0), refunded_today: v.filter((x) => x.kind === "refund" && x.occurred_at.slice(0, 10) === date).reduce((a, x) => a + x.amount_halalas, 0), deposits_held: res.filter((r) => ["confirmed", "checked_in", "checked_out"].includes(r.status)).reduce((a, r) => a + r.deposit_balance_halalas, 0), outstanding_in_house: res.filter((r) => r.status === "checked_in").reduce((a, r) => a + r.balance_due_halalas, 0), deposit_to_settle_after_checkout: res.filter((r) => r.status === "checked_out" && r.deposit_balance_halalas > 0).reduce((a, r) => a + r.deposit_balance_halalas, 0) },
+    finance: { received_today: v.filter((x) => x.kind === "receipt" && !isPlatformMethod(x.method) && x.occurred_at.slice(0, 10) === date).reduce((a, x) => a + x.amount_halalas, 0), refunded_today: v.filter((x) => x.kind === "refund" && !isPlatformMethod(x.method) && x.occurred_at.slice(0, 10) === date).reduce((a, x) => a + x.amount_halalas, 0),
+      platform_today: v.filter((x) => (x.kind === "receipt" || x.kind === "refund") && isPlatformMethod(x.method) && x.occurred_at.slice(0, 10) === date).reduce((a, x) => a + (x.kind === "refund" ? -x.amount_halalas : x.amount_halalas), 0), deposits_held: res.filter((r) => ["confirmed", "checked_in", "checked_out"].includes(r.status)).reduce((a, r) => a + r.deposit_balance_halalas, 0), outstanding_in_house: res.filter((r) => r.status === "checked_in").reduce((a, r) => a + r.balance_due_halalas, 0), deposit_to_settle_after_checkout: res.filter((r) => r.status === "checked_out" && r.deposit_balance_halalas > 0).reduce((a, r) => a + r.deposit_balance_halalas, 0) },
     tickets_open: T("human_handoff_tickets").filter((t) => t.branch_id === branch && t.status === "open").length, generated_at: nowISO() };
 }
 function opsContext(branch: string, date: string) {

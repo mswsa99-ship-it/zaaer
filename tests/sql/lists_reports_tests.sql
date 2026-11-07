@@ -435,13 +435,13 @@ do $$ declare hk text; supb text; fin int; begin
 exception when others then perform t_record('VL05 housekeeping is refused the ledger; branch B''s supervisor is refused branch 010''s; finance reads it', false, sqlerrm); end $$;
 
 -- =====================================================================
--- RP. Reports with filters (decision 36) and X09d
+-- RP. Reports with filters (decision 36) and X09d. 0059: «receipts» are the money taken at the property; the platforms' apart
 -- =====================================================================
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 do $$ declare d0 date := t_today() - 30; d1 date := t_today(); r jsonb; u jsonb; want bigint; begin
   u := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, '{}'::jsonb);
   r := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, '{"staff_id":"10000000-0000-0000-0000-000000000002"}'::jsonb);
-  want := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and created_by = %L and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L',
+  want := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and method::text not in (''ota_deferred'', ''booking_platform'') and created_by = %L and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L',
                   '00000000-0000-0000-0000-000000000010', '10000000-0000-0000-0000-000000000002', d0, d1));
   perform t_record('RP01 / X09d the finance report by staff member: receipts equal the independent sum, by_staff holds that person only, the collection rate is not claimed, filtered is flagged; unfiltered it is not',
     (r->'ledger'->>'receipts')::bigint = want and want > 0 and (r->'ledger'->>'receipts')::bigint < (u->'ledger'->>'receipts')::bigint
@@ -453,9 +453,9 @@ do $$ declare d0 date := t_today() - 30; d1 date := t_today(); r jsonb; want big
   r := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, '{"method":"cash"}'::jsonb);
   want := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and method = ''cash'' and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', d0, d1));
   a := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, jsonb_build_object('account_id', t_id('box')));
-  want_a := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and account_id = %L and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', t_id('box'), d0, d1));
+  want_a := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and method::text not in (''ota_deferred'', ''booking_platform'') and account_id = %L and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', t_id('box'), d0, d1));
   nn := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, '{"account_id":"none"}'::jsonb);
-  want_n := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and account_id is null and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', d0, d1));
+  want_n := t_count(format('select coalesce(sum(amount_halalas), 0) from financial_vouchers where branch_id = %L and status = ''approved'' and kind = ''receipt'' and method::text not in (''ota_deferred'', ''booking_platform'') and account_id is null and (occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', d0, d1));
   perform t_record('RP02 / X09d by payment method, by box or account, and «بلا صندوق»: each total equals its independent sum; by_method holds the one method',
     (r->'ledger'->>'receipts')::bigint = want and jsonb_array_length(r->'by_method') = 1 and r->'by_method'->0->>'method' = 'cash'
     and (a->'ledger'->>'receipts')::bigint = want_a and jsonb_array_length(a->'by_account') = 1 and (nn->'ledger'->>'receipts')::bigint = want_n and jsonb_array_length(nn->'by_account') = 0,
@@ -464,7 +464,7 @@ exception when others then perform t_record('RP02 / X09d by payment method, by b
 do $$ declare d0 date := t_today() - 30; d1 date := t_today(); r jsonb; want_cnt bigint; want_rc bigint; c jsonb; want_c bigint; begin
   r := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, '{"source_id":"00000000-0000-0000-0000-000000000020"}'::jsonb);
   want_cnt := t_count(format('select count(*) from reservations where branch_id = %L and source_id = ''00000000-0000-0000-0000-000000000020'' and check_in <= %L and check_out > %L', '00000000-0000-0000-0000-000000000010', d1, d0));
-  want_rc := t_count(format('select coalesce(sum(v.amount_halalas), 0) from financial_vouchers v join reservations x on x.id = v.reservation_id where v.branch_id = %L and v.status = ''approved'' and v.kind = ''receipt'' and x.source_id = ''00000000-0000-0000-0000-000000000020'' and (v.occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', d0, d1));
+  want_rc := t_count(format('select coalesce(sum(v.amount_halalas), 0) from financial_vouchers v join reservations x on x.id = v.reservation_id where v.branch_id = %L and v.status = ''approved'' and v.kind = ''receipt'' and v.method::text not in (''ota_deferred'', ''booking_platform'') and x.source_id = ''00000000-0000-0000-0000-000000000020'' and (v.occurred_at at time zone ''Asia/Riyadh'')::date between %L and %L', '00000000-0000-0000-0000-000000000010', d0, d1));
   c := fn_reports_finance('00000000-0000-0000-0000-000000000010', d0, d1, '{"category_id":"00000000-0000-0000-0000-000000000030"}'::jsonb);
   want_c := t_count(format('select count(*) from reservations where branch_id = %L and room_category_id = ''00000000-0000-0000-0000-000000000030'' and check_in <= %L and check_out > %L', '00000000-0000-0000-0000-000000000010', d1, d0));
   perform t_record('RP03 / X09d by booking source and by unit type: the bookings counted and the receipts summed follow the filter (receipts through the voucher''s booking)',

@@ -104,7 +104,7 @@ do $$ declare res uuid := (select v from rf where k='res'); rep jsonb; led jsonb
   led := rep->'ledger';
   perform t_record('RF12 A05 report ledger reconciles: net = receipts − refunds + deposit_apply, read straight from vouchers',
     (led->>'net_collected')::bigint = (led->>'receipts')::bigint - (led->>'refunds')::bigint + (led->>'deposits_applied')::bigint
-    and (led->>'receipts')::bigint = (select coalesce(sum(amount_halalas),0) from financial_vouchers v where v.branch_id = '00000000-0000-0000-0000-000000000010' and v.kind = 'receipt' and v.status = 'approved' and v.occurred_at::date between current_date - 2 and current_date + 1),
+    and (led->>'receipts')::bigint = (select coalesce(sum(amount_halalas),0) from financial_vouchers v where v.branch_id = '00000000-0000-0000-0000-000000000010' and v.kind = 'receipt' and v.status = 'approved' and v.method::text not in ('ota_deferred', 'booking_platform') and v.occurred_at::date between current_date - 2 and current_date + 1),   -- 0059: the platforms' money apart
     led::text);
   perform t_record('RF13 A05 deposits are reported separately and never counted as revenue',
     (led->>'deposits_received')::bigint >= 30000 and (led->>'net_collected')::bigint < (led->>'receipts')::bigint + (led->>'deposits_received')::bigint and rep ? 'definitions', left(rep::text, 200));

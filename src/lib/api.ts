@@ -179,6 +179,8 @@ export const VALIDATION_AR: Record<string, string> = {
   payout_vouchers: "بعض الدفعات المختارة ليست دفعات آجلة غير مطابقة لهذه المنصة في هذا الفرع.",
   payout_status: "هذه المطابقة ملغاة مسبقًا.",
   tax_rate: "نسبة الضريبة بين 0 و100%.",
+  // 0059 (OWNER-08): one limit for the reports' period
+  period_too_long: "الفترة أطول من 366 يومًا؛ اختر فترة أقصر.", period_future: "الفترة كلها بعد اليوم؛ لا حركة فيها بعد.",
   full_name_three_parts: "الاسم الثلاثي مطلوب كما في الوثيقة.",
   full_name_two_parts: "اكتب الاسم كما في الجواز أو الهوية الخليجية (الاسم الأول واسم العائلة على الأقل).",
   identity_number_format_passport: "رقم الجواز من 5 إلى 12 حرفًا ورقمًا إنجليزيًا.",
@@ -918,30 +920,36 @@ export interface ReportsPlatforms {
 }
 /** fn_reports_finance(p_branch, p_from, p_to) — all amounts are halalas (integers). */
 export interface ReportsFinance {
-  period: { from: string; to: string };
-  /** Approved vouchers dated inside the period. */
-  ledger: { receipts: number; refunds: number; net_collected: number; deposits_received: number; deposits_refunded: number; deposits_applied: number; deposit_balance_open: number };
+  /** 0059: `to` is read up to today; requested_to is the end that was asked for */
+  period: { from: string; to: string; requested_to?: string };
+  /** Approved vouchers dated inside the period. 0059 (OWNER-02): receipts / refunds / net are at the property; the platforms' apart. */
+  ledger: { receipts: number; refunds: number; net_collected: number; platform_receipts?: number; platform_refunds?: number; platform_net?: number; deposits_received: number; deposits_refunded: number; deposits_applied: number; deposit_balance_open: number };
   /** Charges of the stays that intersect the period (discounts are negative). */
   charges: { total_charged: number; rent: number; addons: number; discounts: number; tax: number };
-  /** net_collected ÷ total_charged in percent (one decimal); null when nothing was charged. */
+  /** 0059 (OWNER-07): paid at the property for the period's stays ÷ their charges, capped at 100%; null when nothing was charged or a staff/method/account filter is on. */
   collection_rate_pct: number | null;
-  by_method: Array<{ method: string; amount_halalas: number }>;
-  by_day: Array<{ day: string; receipts: number; refunds: number }>;
+  collection?: { due: number; paid: number; platform: number; rate_pct: number; raw_pct: number } | null;
+  by_method: Array<{ method: string; amount_halalas: number; platform?: boolean }>;
+  /** 0059 (OWNER-10): every calendar day of the period */
+  by_day: Array<{ day: string; receipts: number; refunds: number; platform?: number }>;
   /** decision 36: per staff member (receipts and refunds they recorded) and per box or account */
   by_staff?: Array<{ staff_id: string | null; staff: string; receipts: number; refunds: number; count: number }>;
   by_account?: Array<{ account_id: string; account: string; in_halalas: number; out_halalas: number }>;
   filters?: ReportFilters; filtered?: boolean;
-  reservations: { count: number; nights: number; cancelled: number; no_show: number; by_source: Array<{ source: string; count: number; total_halalas: number }> };
-  definitions: { revenue: string; collection_rate: string };
+  reservations: { count: number; nights: number; cancelled: number; no_show: number; by_source: Array<{ source_id?: string | null; source: string; count: number; total_halalas: number }> };
+  definitions: { revenue: string; collection_rate: string; platform?: string };
 }
 export interface DailySummary {
   date: string; occupancy_pct: number;
-  units: { active: number; occupied: number; reserved: number; ready: number; dirty: number; maintenance: number; out_of_service: number };
+  /** 0059 (OWNER-03): the occupied units over every unit that is not archived (the inactive ones included) */
+  occupancy_all_pct?: number;
+  units: { active: number; all?: number; occupied: number; reserved: number; ready: number; dirty: number; maintenance: number; out_of_service: number };
   // 0052: unpaid, with_balance and finance are left out for a role the matrix does not let see money (money_hidden)
   arrivals: { expected: number; arrived: number; pending_identity: number; unpaid?: number; overdue: number };
   departures: { expected: number; done: number; overstay: number; with_balance?: number };
   housekeeping: { open: number; in_progress: number; completed_today: number; unassigned: number };
-  finance?: { received_today: number; refunded_today: number; deposits_held: number; outstanding_in_house: number; deposit_to_settle_after_checkout: number };
+  /** 0059 (OWNER-02/04): received/refunded at the property (cash, POS, transfer); platform_today is the platforms' money of the day */
+  finance?: { received_today: number; refunded_today: number; platform_today?: number; deposits_held: number; outstanding_in_house: number; deposit_to_settle_after_checkout: number };
   money_hidden?: boolean;
   tickets_open: number; generated_at: string;
 }

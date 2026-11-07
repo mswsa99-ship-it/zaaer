@@ -15,6 +15,8 @@ import { formatCurrency, todayISO, COUNT } from "../../lib/utils";
 const sar = (h: number) => formatCurrency(h / 100);
 /** money that came in (+) or went back out (−); applying the deposit moves money between the guest's two balances */
 const SIGN: Record<string, 1 | -1 | 0> = { receipt: 1, deposit: 1, refund: -1, deposit_refund: -1, deposit_apply: 0 };
+/** recorded «آجل عبر المنصة»: the platform holds it, nothing moved in the drawer */
+const PLATFORM = ["ota_deferred", "booking_platform"];
 
 export default function DaySummary() {
   const [date, setDate] = useState(todayISO());
@@ -34,10 +36,11 @@ export default function DaySummary() {
       {sum && staff.size === 0 && <EmptyState icon={<ClipboardList className="h-10 w-10" />} title="لا سندات في هذا اليوم" />}
       <div className="grid gap-4 lg:grid-cols-2" data-testid="day-summary">
         {[...staff.entries()].map(([name, rows]) => {
-          const net = rows.reduce((a, r) => a + (SIGN[r.kind] ?? 0) * r.total, 0);
+          // OWNER-04: the drawer's movement — deposits in and out included, what a platform holds left out
+          const net = rows.reduce((a, r) => a + (PLATFORM.includes(r.method ?? "") ? 0 : (SIGN[r.kind] ?? 0) * r.total), 0);
           return (
             <Card key={name}>
-              <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold text-ink-800">{name}</h2><span className="text-xs text-ink-500">الصافي <span dir="ltr" className="font-medium text-ink-800">{sar(net)}</span></span></div>
+              <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold text-ink-800">{name}</h2><span className="text-xs text-ink-500">صافي حركة الصندوق (يشمل التأمين) <span dir="ltr" className="font-medium text-ink-800">{sar(net)}</span></span></div>
               <div className="divide-y divide-ink-50 text-sm">
                 {rows.map((r, i) => (
                   <div key={i} className="flex items-center justify-between gap-3 py-1.5">

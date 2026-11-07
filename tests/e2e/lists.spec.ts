@@ -200,7 +200,8 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await loginAs("owner");
     await go("/admin/reports");
     await expect(page.getByTestId("report-filters")).toBeVisible();
-    await page.getByLabel("من", { exact: true }).fill("2020-01-01");
+    // 0059 (OWNER-08): the widest period the page takes is 366 days
+    await page.getByLabel("من", { exact: true }).fill(new Date(Date.now() - 360 * 86400000).toISOString().slice(0, 10));
     await page.getByTestId("filter-method").selectOption("cash");
     await expect(page.getByTestId("report-filter-words")).toContainText("طريقة الدفع: نقد");
     await expect(page.getByText("مرشّح").first()).toBeVisible();
@@ -214,7 +215,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     const wb = await workbook(download);
     expect(wb.statement[0]).toBe("التقرير المالي");
     expect(wb.statement[3]).toContain("الموظف:");
-    expect(wb.data.some((r) => r[0] === "صافي التحصيل")).toBe(true);
+    expect(wb.data.some((r) => r[0] === "المحصّل في المنشأة")).toBe(true);
     // the discounts report takes the staff filter too and says «بعد الوصول» when asked
     await page.getByTestId("discounts-report").getByLabel("بعد الوصول فقط").check();
     await expect(page.getByTestId("discounts-report")).toBeVisible();

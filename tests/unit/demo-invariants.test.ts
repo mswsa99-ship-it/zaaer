@@ -1907,6 +1907,8 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
   });
 
   it("DS08 report filters (decision 36): by staff member, payment method, box or account and «بلا صندوق», source and unit type — each total equals an independent sum, by_staff holds that person only, the collection rate is not claimed under a staff, method or account filter; the discounts, late-entries and identities reports echo their filters; the filter options of a branch", async () => {
+    // 0059 (OWNER-02): «receipts» are the money taken at the property; what a platform holds is apart
+    const atProp = (x: { method?: string | null }) => x.method !== "ota_deferred" && x.method !== "booking_platform";
     const r = await book(60, 61, { discount_halalas: 500, discount_reason: "تجربة" });
     await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 9000, method: "cash", idempotency_key: uid() } });
     const from = day(-30), to = riyadh(); const inPeriod = (x: any) => dayOf(x.occurred_at) >= from && dayOf(x.occurred_at) <= to;
@@ -1914,25 +1916,25 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
     const resOf = (x: any) => res.find((y) => y.id === x.reservation_id);
     const fin = (filters: Record<string, unknown>) => rpc<any>("fn_reports_finance", { p_branch: A, p_from: from, p_to: to, p_filters: filters });
     const plain = await fin({});
-    expect(plain.filtered).toBe(false); expect(plain.filters).toEqual({}); expect(plain.collection_rate_pct).not.toBeNull(); expect(plain.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt"));
-    expect(plain.definitions.collection_rate.endsWith("؛ لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب.")).toBe(true);
+    expect(plain.filtered).toBe(false); expect(plain.filters).toEqual({}); expect(plain.collection_rate_pct).not.toBeNull(); expect(plain.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x)));
+    expect(plain.definitions.collection_rate.endsWith("لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب.")).toBe(true);
     expect(plain.by_staff.length).toBe(2); expect(plain.by_account.length).toBe(2);
     const byStaff = await fin({ staff_id: SUP });
     expect(byStaff).toMatchObject({ filtered: true, filters: { staff_id: SUP }, collection_rate_pct: null });
-    expect(byStaff.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.created_by === SUP)); expect(byStaff.ledger.receipts).toBeGreaterThan(0);
-    expect(byStaff.by_staff).toEqual([{ staff_id: SUP, staff: "فهد الاستقبال", receipts: byStaff.ledger.receipts, refunds: sum(vs, (x) => x.kind === "refund" && x.created_by === SUP), count: vs.filter((x) => ["receipt", "refund"].includes(x.kind) && x.created_by === SUP).length }]);
+    expect(byStaff.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x) && x.created_by === SUP)); expect(byStaff.ledger.receipts).toBeGreaterThan(0);
+    expect(byStaff.by_staff).toEqual([{ staff_id: SUP, staff: "فهد الاستقبال", receipts: byStaff.ledger.receipts, refunds: sum(vs, (x) => x.kind === "refund" && atProp(x) && x.created_by === SUP), count: vs.filter((x) => ["receipt", "refund"].includes(x.kind) && atProp(x) && x.created_by === SUP).length }]);
     const byMethod = await fin({ method: "cash" });
-    expect(byMethod.collection_rate_pct).toBeNull(); expect(byMethod.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.method === "cash")); expect(byMethod.by_method).toEqual([{ method: "cash", amount_halalas: byMethod.ledger.receipts }]);
+    expect(byMethod.collection_rate_pct).toBeNull(); expect(byMethod.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x) && x.method === "cash")); expect(byMethod.by_method).toEqual([{ method: "cash", amount_halalas: byMethod.ledger.receipts, platform: false }]);
     const byAccount = await fin({ account_id: CASH_A });
-    expect(byAccount.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.account_id === CASH_A)); expect(byAccount.by_account).toEqual([{ account_id: CASH_A, account: "صندوق الاستقبال", in_halalas: sum(vs, (x) => x.account_id === CASH_A && ["receipt", "deposit"].includes(x.kind)), out_halalas: sum(vs, (x) => x.account_id === CASH_A && ["refund", "deposit_refund"].includes(x.kind)) }]);
+    expect(byAccount.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x) && x.account_id === CASH_A)); expect(byAccount.by_account).toEqual([{ account_id: CASH_A, account: "صندوق الاستقبال", in_halalas: sum(vs, (x) => x.account_id === CASH_A && ["receipt", "deposit"].includes(x.kind)), out_halalas: sum(vs, (x) => x.account_id === CASH_A && ["refund", "deposit_refund"].includes(x.kind)) }]);
     const none = await fin({ account_id: "none" });
-    expect(none.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && x.account_id == null)); expect(none.ledger.receipts).toBeGreaterThan(0); expect(none.by_account).toEqual([]); expect(none.collection_rate_pct).toBeNull();
+    expect(none.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x) && x.account_id == null)); expect(none.ledger.receipts + (none.ledger.platform_receipts ?? 0)).toBeGreaterThan(0); expect(none.by_account).toEqual([]); expect(none.collection_rate_pct).toBeNull();
     const bySource = await fin({ source_id: BOOKING_COM });
-    expect(bySource.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && resOf(x)?.source_id === BOOKING_COM)); expect(bySource.ledger.receipts).toBeGreaterThan(0);
+    expect(bySource.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x) && resOf(x)?.source_id === BOOKING_COM)); expect(bySource.ledger.receipts + (bySource.ledger.platform_receipts ?? 0)).toBeGreaterThan(0);
     const inWin = res.filter((y) => y.branch_id === A && y.check_in <= to && y.check_out > from);
     expect(bySource.reservations.count).toBe(inWin.filter((y) => y.source_id === BOOKING_COM).length); expect(bySource.collection_rate_pct).not.toBeNull(); expect(bySource.filters).toEqual({ source_id: BOOKING_COM });
     const byCat = await fin({ category_id: STUDIO });
-    expect(byCat.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && resOf(x)?.room_category_id === STUDIO)); expect(byCat.reservations.count).toBe(inWin.filter((y) => y.room_category_id === STUDIO).length);
+    expect(byCat.ledger.receipts).toBe(sum(vs, (x) => x.kind === "receipt" && atProp(x) && resOf(x)?.room_category_id === STUDIO)); expect(byCat.reservations.count).toBe(inWin.filter((y) => y.room_category_id === STUDIO).length);
     expect(byCat.charges.rent).toBe((await all("reservation_charges")).filter((c) => c.branch_id === A && c.kind === "rent" && inWin.some((y) => y.id === c.reservation_id && y.room_category_id === STUDIO && !["cancelled", "rejected", "no_show"].includes(y.status))).reduce((s, c) => s + c.total_halalas, 0));
     expect(await fails(rpc("fn_reports_finance", { p_branch: A, p_from: day(1), p_to: day(0), p_filters: {} }))).toBe("VALIDATION: period");
     // the discounts report: by staff member and «بعد الوصول»

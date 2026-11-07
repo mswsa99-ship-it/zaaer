@@ -58,5 +58,7 @@ echo "== running review phase 2 tests (0055: the organisation, price ranges, inv
 psql -d "$DB" -f tests/sql/audit_phase2_tests.sql
 echo "== running review phase 3a tests (0057: past stays, what an ended booking owes, weak key-box codes)"
 psql -d "$DB" -f tests/sql/audit_phase3_tests.sql
+echo "== running review phase 4a tests (0059: the platforms apart, both occupancies, the collection rate, the period limit, every day)"
+psql -d "$DB" -f tests/sql/audit_phase4_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
