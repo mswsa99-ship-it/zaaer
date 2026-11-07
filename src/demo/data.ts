@@ -40,8 +40,8 @@ export function seed(): Store {
 
   put("organizations", [{ id: ORG, name_ar: "فايف اورز", name_en: "Five Hours", license_number: "HSP-DEMO-001", license_status: "active", created_at: ts(-400) }]);
   put("branches", [
-    { id: BRANCH_A, organization_id: ORG, name_ar: "فرع الرياض — طريق الملك فهد", name_en: "Riyadh - King Fahd Rd", city: "الرياض", address: "طريق الملك فهد، حي العليا", map_url: "https://maps.app.goo.gl/demo-riyadh", booking_platform_url: "https://www.booking.com/hotel/sa/demo-riyadh.html", country_code: "SA", default_language: "ar", phone: "+966500000000", email: "riyadh@demo.sa", check_in_time: "16:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, supervisor_max_discount_bp: 1000, tax_number: null, commercial_register: "1010000000", archived_at: null, archived_by: null, archive_reason: null, version: 3, created_at: ts(-400), updated_at: ts(-30) },
-    { id: BRANCH_B, organization_id: ORG, name_ar: "فرع جدة — الكورنيش", name_en: "Jeddah - Corniche", city: "جدة", address: "طريق الكورنيش", map_url: null, booking_platform_url: null, country_code: "SA", default_language: "ar", phone: "+966500000001", email: "jeddah@demo.sa", check_in_time: "15:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, supervisor_max_discount_bp: 0, tax_number: null, commercial_register: null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-200) },
+    { id: BRANCH_A, organization_id: ORG, name_ar: "فرع الرياض — طريق الملك فهد", name_en: "Riyadh - King Fahd Rd", city: "الرياض", address: "طريق الملك فهد، حي العليا", map_url: "https://maps.app.goo.gl/demo-riyadh", booking_platform_url: "https://www.booking.com/hotel/sa/demo-riyadh.html", country_code: "SA", default_language: "ar", phone: "+966500000000", email: "riyadh@demo.sa", check_in_time: "16:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, supervisor_max_discount_bp: 1000, day_close_edit_minutes: 30, tax_number: null, commercial_register: "1010000000", archived_at: null, archived_by: null, archive_reason: null, version: 3, created_at: ts(-400), updated_at: ts(-30) },
+    { id: BRANCH_B, organization_id: ORG, name_ar: "فرع جدة — الكورنيش", name_en: "Jeddah - Corniche", city: "جدة", address: "طريق الكورنيش", map_url: null, booking_platform_url: null, country_code: "SA", default_language: "ar", phone: "+966500000001", email: "jeddah@demo.sa", check_in_time: "15:00:00", check_out_time: "12:00:00", logo_url: null, is_active: true, timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, supervisor_max_discount_bp: 0, day_close_edit_minutes: 30, tax_number: null, commercial_register: null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-200) },
   ]);
   // WhatsApp per branch (0021, 0023): Riyadh answers from the reception computer (a demo number and key — nothing is
   // sent; the WhatsApp simulator plays the program), Jeddah is not set up yet
@@ -60,6 +60,10 @@ export function seed(): Store {
   ]);
   put("pos_settlements", []);
   put("platform_payouts", []);
+  // the closing of the day (0063)
+  put("day_closings", []);
+  put("day_closing_lines", []);
+  put("day_closing_requests", []);
   put("staff_profiles", Object.values(STAFF).map((x) => ({ id: x.id, auth_user_id: x.auth, organization_id: ORG, full_name: x.name, email: x.email, phone: null, role: x.role, is_active: true, created_at: ts(-300), sessions_ended_at: null, updated_at: null })));
   // memberships are retired, never erased (0040, decision 35): removed_at marks one taken away
   const member = (staff_id: string, branch_id: string) => ({ id: uid(), staff_id, branch_id, created_at: ts(-300), removed_at: null, removed_by: null });

@@ -66,5 +66,7 @@ echo "== running review phase 5 tests (0061: Arabic counts and money in server t
 psql -d "$DB" -f tests/sql/audit_phase5_tests.sql
 echo "== running accounting A1 tests (0062: one box and one bank account per branch, the account number rule, no posting on another branch's account)"
 psql -d "$DB" -f tests/sql/accounting_a1_tests.sql
+echo "== running accounting A2/A3 tests (0063: the day's closing computed, the mandatory review, the edit window, the request after it)"
+psql -d "$DB" -f tests/sql/accounting_a2_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

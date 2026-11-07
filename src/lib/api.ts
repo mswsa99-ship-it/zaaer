@@ -67,6 +67,14 @@ const ERROR_AR: Record<string, string> = {
   VERSION_REQUIRED: "لا يمكن الحفظ دون نسخة السجل المعروضة؛ حدّث الصفحة وأعد المحاولة.",
   BRANCH_MISMATCH: "العنصر المختار لا ينتمي إلى نفس الفرع.",
   DUPLICATE_NAME: "الاسم مستخدم مسبقًا ضمن هذا النطاق.",
+  CLOSING_SENT: "أُرسل إقفال هذا اليوم؛ يُعدَّل خلال المهلة من «تعديل الإقفال»، أو بطلب بعدها.",
+  CLOSING_NOT_SENT: "هذا الإقفال لم يُرسل بعد؛ عدّل المسودة وأرسلها.",
+  CLOSING_LOCKED: "انتهت مهلة التعديل بعد الإرسال. اطلب التعديل من الإدارة بسبب.",
+  CLOSING_OPEN: "مهلة التعديل ما زالت مفتوحة؛ عدّل الإقفال مباشرة.",
+  REVIEW_STALE: "تغيّرت أرقام اليوم بعد المراجعة (سند جديد أو تعديل). راجع الملخص من جديد ثم أرسله.",
+  REQUEST_PENDING: "يوجد طلب تعديل لهذا الإقفال بانتظار قرار الإدارة.",
+  REQUEST_DECIDED: "قُرّر هذا الطلب من قبل.",
+  SELF_DECISION: "لا يقرّر الطلب من رفعه؛ يقرّره المالك أو مدير آخر.",
   ACCOUNT_EXISTS: "لهذا الفرع صندوق واحد وحساب بنكي واحد. لاستبدال الحالي: أرشفه بسبب، ثم أضف الجديد.",
   DUPLICATE_ACCOUNT_RULE: "بداية رقم الحساب ونهايته مسجلتان لحساب فرع آخر؛ كل حساب بنكي لفرع واحد.",
   DUPLICATE_ROOM_NUMBER: "رقم الوحدة مستخدم مسبقًا في هذا الفرع.",
@@ -181,6 +189,12 @@ export const VALIDATION_AR: Record<string, string> = {
   note_required: "يوجد فرق: اكتب سببه.",
   commission: "العمولة نسبة من 0 إلى 100%، بخانتين عشريتين على الأكثر.",
   business_date: "لا تُسوّى إلا الأيام التي مضت أو اليوم.",
+  // the closing of the day (0063)
+  entered_amount: "المبلغ المُدخل غير صالح: اكتبه بالريال والهللات.",
+  closing_counts: "أدخل عدّ النقد وإجمالي جهاز الشبكة قبل الإرسال (صفر إن لم يوجد شيء).",
+  closing_reason: "لكل فرق سبب: اكتب سبب كل فرق قبل الإرسال.",
+  edit_minutes: "مهلة التعديل بين 5 و240 دقيقة.",
+  decision: "اختر الموافقة أو الرفض.",
   received_on: "تاريخ الاستلام لا يكون بعد اليوم.",
   vouchers: "اختر دفعة واحدة على الأقل.",
   payout_vouchers: "بعض الدفعات المختارة ليست دفعات آجلة غير مطابقة لهذه المنصة في هذا الفرع.",
@@ -623,6 +637,33 @@ export interface PosDay {
 }
 export interface PosSettlement { id: string; account_id: string; business_date: string; terminal_total_halalas: number; system_total_halalas: number; difference_halalas: number; voucher_count: number; status: "matched" | "difference"; note: string | null; version: number; updated_at: string }
 export interface PlatformPayment { id: string; number: string; kind: "receipt" | "refund"; amount_halalas: number; signed_halalas: number; occurred_at: string; reservation_id: string; internal_ref: string; external_ref: string | null; check_in: string; source_id: string; source_name: string | null; commission_bp?: number }
+/** The closing of a branch-local day (0063: A2 and A3) */
+export type ClosingState = "none" | "draft" | "open" | "locked";
+export interface ClosingBox { key: string; box: "cash" | "pos" | "bank_transfer" | "platform"; sort: string; label: string; source_id: string | null; account_id: string | null; system_halalas: number; required: boolean }
+export interface ClosingCell { box: string; source_id: string | null; source: string; rent_in: number; deposit_in: number; paid_out: number; net: number; vouchers: number }
+export interface ClosingFigures { business_date: string; rooms: { units: number; out_of_service: number; rented: number; arrivals: number; departures: number }; matrix: ClosingCell[]; boxes: ClosingBox[] }
+export interface ClosingLine { key: string; box: string; account_id: string | null; source_id: string | null; system_halalas: number; entered_halalas: number | null; difference_halalas: number | null; reason: string | null }
+export interface ClosingRequest { id: string; status: "pending" | "approved" | "rejected"; reason: string; requested_at: string; requested_by: string | null; decided_at: string | null; decision_note: string | null; decided_by: string | null }
+export interface ClosingDay {
+  closing: { id: string; status: "draft" | "submitted"; version: number; note: string | null; submitted_at: string | null; submitted_by: string | null; edit_until: string | null; figures: ClosingFigures | null } | null;
+  state: ClosingState; live: ClosingFigures; lines: ClosingLine[]; requests: ClosingRequest[]; edit_minutes: number; changed_since_sent: boolean;
+}
+export interface ClosingReview { id: string; version: number; figures: ClosingFigures; lines: ClosingLine[]; missing: string[]; unexplained: string[]; hash: string; edit_minutes: number }
+export interface ClosingListRow { id: string; business_date: string; state: Exclude<ClosingState, "none">; submitted_at: string | null; submitted_by: string | null; edit_until: string | null; system_halalas: number; difference_halalas: number; pending_request: boolean }
+export interface ClosingList { closings: ClosingListRow[]; pending_requests: Array<{ id: string; closing_id: string; business_date: string; reason: string; requested_at: string; requested_by: string | null }>; missing_days: string[] }
+export type ClosingLineInput = { key: string; entered_halalas: number | null; reason: string | null };
+export const closingApi = {
+  get: (branchId: string, date: string) => rpc<ClosingDay>("fn_day_closing_get", { p_branch: branchId, p_date: date }),
+  save: (p: { branch_id: string; business_date: string; version?: number; note?: string | null; lines: ClosingLineInput[] }) => rpc<{ ok: boolean; id: string; version: number }>("fn_day_closing_save", { p }),
+  review: (id: string) => rpc<ClosingReview>("fn_day_closing_review", { p_id: id }),
+  submit: (id: string, version: number, hash: string) => rpc<{ ok: boolean; id: string; version: number; edit_until: string }>("fn_day_closing_submit", { p_id: id, p_version: version, p_hash: hash }),
+  amend: (p: { id: string; version: number; reason: string; lines: ClosingLineInput[] }) => rpc<{ ok: boolean; version: number; unchanged?: boolean }>("fn_day_closing_amend", { p }),
+  requestEdit: (id: string, reason: string) => rpc<{ ok: boolean; request_id: string }>("fn_day_closing_request_edit", { p_id: id, p_reason: reason }),
+  decide: (requestId: string, approve: boolean, note: string | null) => rpc<{ ok: boolean; status: string; edit_until: string | null }>("fn_day_closing_decide", { p_request: requestId, p_approve: approve, p_note: note }),
+  list: (branchId: string, from: string, to: string) => rpc<ClosingList>("fn_day_closing_list", { p_branch: branchId, p_from: from, p_to: to }),
+  setMinutes: (branchId: string, minutes: number) => rpc<{ ok: boolean; minutes: number }>("fn_admin_set_day_close_minutes", { p_branch: branchId, p_minutes: minutes }),
+};
+
 export const moneyApi = {
   upsertAccount: (p: Partial<CashAccount> & { name: string }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_cash_account", { p }),
   archiveAccount: (id: string, archive: boolean, reason: string) => rpc<{ ok: boolean; used_by_vouchers?: number; default_missing?: boolean; unchanged?: boolean }>("fn_admin_archive_cash_account", { p_id: id, p_archive: archive, p_reason: reason }),

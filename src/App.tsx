@@ -66,6 +66,7 @@ const AdminAssistant = lazy(() => import("./pages/admin/AdminAssistant"));
 const AdminDataPurge = lazy(() => import("./pages/admin/AdminDataPurge"));
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
 import PosSettlement from "./pages/staff/PosSettlement";
+import DayClosing from "./pages/staff/DayClosing";
 const AdminCashAccounts = lazy(() => import("./pages/admin/AdminCashAccounts"));
 const AdminPlatformPayouts = lazy(() => import("./pages/admin/AdminPlatformPayouts"));
 const AdminRates = lazy(() => import("./pages/admin/AdminRates"));
@@ -116,6 +117,7 @@ export default function App() {
           <Route path="/staff/identity-verification" element={<IdentityVerification />} />
           <Route path="/staff/payments" element={<StaffPayments />} />
           <Route path="/staff/pos-settlement" element={<PosSettlement />} />
+          <Route path="/staff/day-close" element={<DayClosing />} />
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
           <Route path="/staff/followups" element={<StayFollowups />} />
           <Route path="/staff/platforms" element={<PlatformCheck />} />

@@ -45,6 +45,9 @@ export const PERMISSION_CATALOG: readonly PermissionRow[] = [
   { code: "platform.payouts", label: "مطابقة الآجل عبر المنصات الشهرية", area: "المال", sort: 310, defaultRoles: ["owner", "manager", "finance"], fullRoles: ["owner", "manager"], limitNote: "دون إلغاء إيداع مؤكد", locked: false },
   { code: "invoice.issue", label: "إصدار فاتورة جزئية", area: "المال", sort: 320, defaultRoles: ["owner", "manager", "supervisor", "finance"], fullRoles: null, limitNote: null, locked: false },
   { code: "invoice.edit", label: "تعديل فاتورة بسبب (ينبّه الإدارة)", area: "المال", sort: 330, defaultRoles: ["owner", "manager", "supervisor", "finance"], fullRoles: null, limitNote: null, locked: false },
+  // 0063 (A2/A3): the closing of the day
+  { code: "day.close", label: "إقفال اليوم: العدّ والفروق والإرسال والتعديل خلال المهلة وطلب التعديل بعدها", area: "المال", sort: 334, defaultRoles: ["owner", "manager", "supervisor", "finance"], fullRoles: null, limitNote: null, locked: false },
+  { code: "day.close.approve", label: "الموافقة على طلب تعديل إقفال بعد مهلته", area: "المال", sort: 336, defaultRoles: ["owner", "manager"], fullRoles: null, limitNote: null, locked: false },
   { code: "rates", label: "تقويم الأسعار وأسعار النوع (أساسي، أسبوعي، شهري، أدنى)", area: "الإعدادات", sort: 340, defaultRoles: ["owner", "manager"], fullRoles: null, limitNote: null, locked: false },
   { code: "branch.tax", label: "نسبة الضريبة", area: "الإعدادات", sort: 350, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "branch.settings", label: "إعدادات الفرع الأخرى (التأمين، أقصى خصم، الموقع، الشعار، رابط المنصة…)", area: "الإعدادات", sort: 360, defaultRoles: ["owner", "manager"], fullRoles: null, limitNote: null, locked: false },

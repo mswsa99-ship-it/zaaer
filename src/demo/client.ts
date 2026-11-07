@@ -13,6 +13,7 @@ import { seedKnowledge, knowledgeRpcs } from "./knowledge";
 import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, validHttpsUrl } from "./guests";
 import { phase6Rpcs } from "./phase6";
 import { phase2Rpcs } from "./phase2";
+import { accountingRpcs } from "./accounting";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
@@ -272,6 +273,8 @@ function visible(table: string, r: Row): boolean {
   if (table === "role_permissions") return m.role === "owner" && r.organization_id === m.organization_id;
   if (["cash_accounts", "pos_settlements"].includes(table)) return seesMoney() && branches.includes(r.branch_id);
   if (table === "platform_payouts") return can("platform.payouts") && branches.includes(r.branch_id);
+  if (["day_closings", "day_closing_requests"].includes(table)) return (can("day.close") || can("day.close.approve")) && branches.includes(r.branch_id);
+  if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
   if (table === "reservation_nights") return seesMoney() && branches.includes(r.branch_id);
   // the stay cycle (0033): inspections for the arrival and housekeeping staff, overdue reasons for the money roles, the review list for the owner
@@ -2055,6 +2058,8 @@ const phase6Ctx = {
 Object.assign(rpcs, phase6Rpcs(phase6Ctx));
 // review Phase 2b (0056): the branch guide, gallery and videos, booking sources, payment provider settings
 Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, validHttpsUrl }));
+// the closing of the day (0063: A2 and A3)
+Object.assign(rpcs, accountingRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), role: () => me()?.role ?? null }));
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));

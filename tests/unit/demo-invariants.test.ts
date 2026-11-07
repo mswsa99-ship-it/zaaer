@@ -298,6 +298,47 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, bank_name: "مصرف", bank_beneficiary: "فايف اورز", bank_iban: "SA4480000000000000001192" } });
   });
 
+  it("DC02–DC07 the closing of the day in the demo: computed boxes, the review's hash, the window, the request after it", async () => {
+    const day = today();
+    const box = (g: any, key: string) => (g.live.boxes as any[]).find((b) => b.key === key)?.system_halalas ?? 0;
+    const before = await rpc<any>("fn_day_closing_get", { p_branch: BRANCH, p_date: day });
+    const r = await createRes({ ci: 70, co: 71 });
+    await voucher(r.id, { amount_halalas: 1500, method: "cash" });
+    await voucher(r.id, { amount_halalas: 2500, method: "pos", reference: "DC-U-1" });
+    const g = await rpc<any>("fn_day_closing_get", { p_branch: BRANCH, p_date: day });
+    expect(box(g, "cash") - box(before, "cash")).toBe(1500);
+    expect(box(g, "pos") - box(before, "pos")).toBe(2500);
+    await expect(rpc("fn_day_closing_save", { p: { branch_id: BRANCH, business_date: tomorrow() } })).rejects.toThrow(/business_date/);
+    const saved = await rpc<any>("fn_day_closing_save", { p: { branch_id: BRANCH, business_date: day, lines: [{ key: "cash", entered_halalas: box(g, "cash") - 100 }, { key: "pos", entered_halalas: box(g, "pos") }] } });
+    let rv = await rpc<any>("fn_day_closing_review", { p_id: saved.id });
+    expect(rv.unexplained).toEqual(["cash"]);
+    await expect(rpc("fn_day_closing_submit", { p_id: saved.id, p_version: rv.version, p_hash: rv.hash })).rejects.toThrow(/closing_reason/);
+    await rpc("fn_day_closing_save", { p: { branch_id: BRANCH, business_date: day, version: rv.version, lines: [{ key: "cash", entered_halalas: box(g, "cash") - 100, reason: "فكة" }] } });
+    await expect(rpc("fn_day_closing_submit", { p_id: saved.id, p_version: rv.version + 1, p_hash: rv.hash })).rejects.toThrow(/REVIEW_STALE/);
+    rv = await rpc<any>("fn_day_closing_review", { p_id: saved.id });
+    await rpc("fn_day_closing_submit", { p_id: saved.id, p_version: rv.version, p_hash: rv.hash });
+    let now = await rpc<any>("fn_day_closing_get", { p_branch: BRANCH, p_date: day });
+    expect(now.state).toBe("open");
+    await expect(rpc("fn_day_closing_amend", { p: { id: saved.id, version: now.closing.version, reason: "", lines: [] } })).rejects.toThrow(/reason/);
+    await rpc("fn_day_closing_amend", { p: { id: saved.id, version: now.closing.version, reason: "وُجدت الفكة", lines: [{ key: "cash", entered_halalas: box(g, "cash"), reason: "" }] } });
+    expect(((await client.from("review_items").select("kind, entity_id")).data as any[]).some((x) => x.kind === "day_closing_amended" && x.entity_id === saved.id)).toBe(true);
+    // the window passes
+    const realNow = Date.now; const later = realNow() + 31 * 60000; Date.now = () => later;
+    try {
+      now = await rpc<any>("fn_day_closing_get", { p_branch: BRANCH, p_date: day });
+      expect(now.state).toBe("locked");
+      await expect(rpc("fn_day_closing_amend", { p: { id: saved.id, version: now.closing.version, reason: "x", lines: [] } })).rejects.toThrow(/CLOSING_LOCKED/);
+      const req = await rpc<any>("fn_day_closing_request_edit", { p_id: saved.id, p_reason: "نُسي سند" });
+      await expect(rpc("fn_day_closing_request_edit", { p_id: saved.id, p_reason: "مرة ثانية" })).rejects.toThrow(/REQUEST_PENDING/);
+      await expect(rpc("fn_day_closing_decide", { p_request: req.request_id, p_approve: false, p_note: "" })).rejects.toThrow(/note_required/);
+      const list = await rpc<any>("fn_day_closing_list", { p_branch: BRANCH, p_from: day, p_to: day });
+      expect(list.pending_requests).toHaveLength(1);
+      await rpc("fn_day_closing_decide", { p_request: req.request_id, p_approve: true, p_note: null });
+    } finally { Date.now = realNow; }
+    await login("housekeeping@demo.sa");
+    await expect(rpc("fn_day_closing_get", { p_branch: BRANCH, p_date: day })).rejects.toThrow(/FORBIDDEN/);
+  });
+
   it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
     const r = await createRes({ ci: 64, co: 66 });
     const d = await defaults(BRANCH);
@@ -2187,7 +2228,7 @@ describe("Permissions matrix in the demo (0043)", () => {
   let CATALOG: typeof import("../../src/lib/permissionCatalog");
   beforeAll(async () => { CATALOG = await import("../../src/lib/permissionCatalog"); });
 
-  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 55 rows, five columns, the owner's always allowed, nothing changed yet", async () => {
+  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 57 rows (0063 added the closing's two), five columns, the owner's always allowed, nothing changed yet", async () => {
     const { PERMISSION_CATALOG } = CATALOG;
     for (const role of ROLES) {
       await login(EMAIL[role]); const m = await mine();
@@ -2202,7 +2243,7 @@ describe("Permissions matrix in the demo (0043)", () => {
     await login(EMAIL.owner);
     const mx = await rpc<any>("fn_permissions_matrix", {});
     expect(mx.roles).toEqual([...ROLES]); expect(mx.editable_roles).toEqual(["manager", "supervisor", "finance", "housekeeping"]);
-    expect(mx.rows).toHaveLength(55); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
+    expect(mx.rows).toHaveLength(57); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
     expect(mx.rows.every((r: any) => r.cells.owner.allowed === true && Object.keys(r.cells).length === 5)).toBe(true);
     const row = (code: string) => mx.rows.find((r: any) => r.code === code);
     expect(row("voucher.correct")).toMatchObject({ limit_note: "سنداته خلال 24 ساعة", full_roles: ["owner", "manager"], locked: false });
