@@ -14,7 +14,7 @@ import { invoiceApi, toArabicError, type Invoice, type InvoiceLine, type Invoice
 import { Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, ReasonInput, Submit, useFormBusy } from "./forms";
 import { CHARGE_KIND_LABELS, type ChargeKind } from "../lib/types";
-import { formatCurrency, formatDateTime } from "../lib/utils";
+import { formatCurrency, formatDateTime, radioGroupKeys } from "../lib/utils";
 import { PrintButton, stayPrintContext } from "./PrintButton";
 import { buildInvoicePrint, type PrintContext } from "../lib/printDocs";
 import { useBranches } from "../lib/branch";
@@ -131,13 +131,13 @@ export function InvoiceDialog({ open, d, onClose, onDone }: { open: boolean; d: 
         <div className="space-y-3">
           <dl className="grid grid-cols-2 gap-3 rounded-xl bg-ink-50 p-3 text-sm sm:grid-cols-4">
             <Info label="الحجز" value={r.internal_ref + (r.external_ref ? ` · ${r.external_ref}` : "")} />
-            <Info label="الضيف" value={guest} />
+            <Info label="النزيل" value={guest} />
             <Info label="الوصول" value={r.check_in} ltr />
             <Info label="المغادرة" value={r.check_out} ltr />
           </dl>
-          <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-xs" role="radiogroup" aria-label="ما تحمله الفاتورة">
+          <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-xs" role="radiogroup" onKeyDown={radioGroupKeys} aria-label="ما تحمله الفاتورة">
             {([["period", "فترة"], ["remaining", "كل ما لم يُفوتر"]] as const).map(([m, label]) => (
-              <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
+              <button key={m} type="button" role="radio" aria-checked={mode === m} tabIndex={mode === m ? 0 : -1} onClick={() => setMode(m)}
                 className={`flex-1 rounded-lg px-3 py-1.5 ${mode === m ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{label}</button>
             ))}
           </div>

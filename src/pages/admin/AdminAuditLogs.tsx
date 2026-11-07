@@ -13,7 +13,7 @@ import { SectionTitle, Card, ErrorBanner, Spinner, DataState, Badge } from "../.
 import { ExportMenu } from "../../components/ExportMenu";
 import { fetchAllPages } from "../../lib/api";
 import { ScrollText, Search, AlertTriangle, CheckCircle2, X } from "lucide-react";
-import { formatDateTime, todayISO } from "../../lib/utils";
+import { formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import type { ExportScope, ExportStatement } from "../../lib/exports";
 
 /** Where an operation came from (0026), in the employee's words. */
@@ -22,7 +22,7 @@ const SOURCE_AR: Record<string, string> = {
   screen: "الشاشة", system: "النظام", ops_assistant: "مساعد العمليات", ai_ops: "مساعد العمليات", whatsapp: "واتساب", scheduler: "مهمة مجدولة", migration: "ترحيل", legacy: "قبل التتبع",
 };
 const sourceLabel = (s: string | null) => (s ? SOURCE_AR[s] ?? s : "—");
-const ACTOR_TYPE_AR: Record<string, string> = { staff: "موظف", guest: "ضيف", user: "مستخدم", system: "النظام" };
+const ACTOR_TYPE_AR: Record<string, string> = { staff: "موظف", guest: "نزيل", user: "مستخدم", system: "النظام" };
 const PAGE = 50;
 const EMPTY: AuditList = { total: 0, rows: [], limit: PAGE, offset: 0, tz: "Asia/Riyadh" };
 
@@ -77,7 +77,7 @@ export default function AdminAuditLogs() {
 
   return (
     <div>
-      <SectionTitle title="سجل الإجراءات" subtitle={`${data.total} حدث مطابق — من نفّذ كل عملية ومتى ومن أين ولماذا${isOwner ? "" : " (الأحداث الأمنية للمالك وحده)"}`} action={<ExportMenu source={{ statement, table, pageCount: data.rows.length, total: data.total }} />} />
+      <SectionTitle title="سجل الإجراءات" subtitle={`${data.total ? `الأحداث المطابقة: ${data.total}` : "لا أحداث مطابقة"} — من نفّذ كل عملية ومتى ومن أين ولماذا${isOwner ? "" : " (الأحداث الأمنية للمالك وحده)"}`} action={<ExportMenu source={{ statement, table, pageCount: data.rows.length, total: data.total }} />} />
       {canLookup && <TraceSearch />}
       <Card className="mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-600">
@@ -107,8 +107,8 @@ export default function AdminAuditLogs() {
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-500">{formatDateTime(l.created_at)}</td>
                   <td className="px-3 py-2 font-medium text-ink-700" data-testid="audit-action">{l.action_label}{l.category === "security" && <Badge className="mr-1 bg-warning-500/10 text-warning-700">أمني</Badge>}</td>
                   <td className="px-3 py-2 text-ink-600">{l.entity_label}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-ink-600">{l.entity_ref ?? "—"}{l.entity_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("entity_id", l.entity_id ?? undefined); }} title="كل أحداث هذا الكيان">تتبّع</button>}</td>
-                  <td className="px-3 py-2 text-ink-600">{l.actor_name ?? "—"}{l.actor_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("actor_id", l.actor_id ?? undefined); }} title="كل ما نفّذه">فقط هو</button>}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-ink-600">{l.entity_ref ?? "—"}{l.entity_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("entity_id", l.entity_id ?? undefined); }} title="كل أحداث هذا السجل">كل أحداثه</button>}</td>
+                  <td className="px-3 py-2 text-ink-600">{l.actor_name ?? "—"}{l.actor_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("actor_id", l.actor_id ?? undefined); }} title="كل ما نفّذه">أحداثه فقط</button>}</td>
                   <td className="px-3 py-2 text-xs text-ink-500">{l.branch_name ?? "—"}</td>
                   <td className="max-w-[16rem] truncate px-3 py-2 text-xs text-ink-600" title={l.reason ?? ""}>{l.reason ?? "—"}</td>
                   <td className="px-3 py-2 text-xs text-ink-500">{sourceLabel(l.source)}</td>
@@ -119,14 +119,14 @@ export default function AdminAuditLogs() {
             </tbody>
           </table>
           <div className="flex items-center justify-between border-t border-ink-50 px-3 py-2 text-xs text-ink-500">
-            <span>صفحة {page + 1} من {pages} · {data.total} حدث{loading && <Spinner className="mr-2 inline h-3 w-3" />}</span>
+            <span>صفحة {page + 1} من {pages} · {COUNT.event(data.total)}{loading && <Spinner className="mr-2 inline h-3 w-3" />}</span>
             <div className="flex gap-2"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn-ghost px-2 py-1 text-xs">السابق</button><button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} className="btn-ghost px-2 py-1 text-xs">التالي</button></div>
           </div>
         </Card>
       </DataState>
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(null); }}>
-          <div className="card max-h-[92vh] w-full overflow-y-auto p-5 sm:max-w-2xl" role="dialog" aria-modal="true" data-testid="audit-detail">
+          <div className="card max-h-[92vh] supports-[height:100dvh]:max-h-[92dvh] w-full overflow-y-auto p-5 sm:max-w-2xl" role="dialog" aria-modal="true" data-testid="audit-detail">
             <div className="mb-3 flex items-center justify-between"><h3 className="text-base font-semibold text-ink-800">{open.action_label}</h3><button onClick={() => setOpen(null)} className="rounded-lg p-1 text-ink-400 hover:bg-ink-50" aria-label="إغلاق"><X className="h-4 w-4" /></button></div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
               <dt className="text-ink-400">الوقت</dt><dd>{formatDateTime(open.created_at)}</dd>

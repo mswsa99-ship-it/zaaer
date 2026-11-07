@@ -12,19 +12,19 @@ import { todayISO, addDaysISO, formatDateTime, arabicCount } from "../../lib/uti
  * enforces: the exact preview (a rolled-back dry run), the typed phrase, and the password again.
  */
 const KINDS: Array<{ key: PurgeCategory; title: string; desc: string; icon: typeof Trash2; warn?: string }> = [
-  { key: "conversations", title: "المحادثات والذكاء الاصطناعي", desc: "محادثات النزلاء (واتساب والموقع)، تذاكر التحويل، محادثات مساعد العمليات، الأسئلة بلا إجابة، سجلات المساعد.", icon: MessagesSquare },
+  { key: "conversations", title: "المحادثات والذكاء الاصطناعي", desc: "محادثات النزلاء (واتساب والموقع)، طلبات التحويل، محادثات مساعد العمليات، الأسئلة بلا إجابة، سجلات المساعد.", icon: MessagesSquare },
   { key: "reservations", title: "الحجوزات المنتهية", desc: "الحجوزات التي يقع وصولها في الفترة وانتهت (غادر، ملغى، عدم حضور، مرفوض، أو فات موعدها). المقيمون والقادمون لا يُمسّون.", icon: BookCheck, warn: "الحجز الذي عليه مبالغ لا يُحذف إلا إذا اخترت «المالية» أيضًا." },
   { key: "finance", title: "المالية", desc: "الفواتير والسندات والمدفوعات المؤرخة في الفترة، للحجوزات المنتهية فقط.", icon: Wallet, warn: "تنبيه نظامي: أنظمة الزكاة والضريبة تُلزم عادةً بحفظ الفواتير والسندات سنوات. صدّر تقاريرك قبل الحذف." },
   { key: "guests", title: "ملفات النزلاء", desc: "ملفات النزلاء التي لم يعد أي حجز يشير إليها.", icon: Users },
-  { key: "operations", title: "المهام والصيانة", desc: "مهام التنظيف المنتهية أو الملغاة، تذاكر الصيانة المغلقة، وسجل الكشف التدريجي للفترة الماضية.", icon: Wrench },
+  { key: "operations", title: "المهام والصيانة", desc: "مهام التنظيف المنتهية أو الملغاة، بلاغات الصيانة المغلقة، وسجل الكشف التدريجي للفترة الماضية.", icon: Wrench },
   { key: "logs", title: "الإشعارات وسجلات التكامل", desc: "الإشعارات، أحداث التكامل (واتساب وغيره)، ومحاولات البحث ورموز التحقق.", icon: Bell },
   { key: "audit", title: "سجل الإجراءات", desc: "سجل التدقيق للفترة. يبقى دائمًا سجل عملية التفريغ نفسها.", icon: ScrollText, warn: "بعد حذفه لا يمكن معرفة من فعل ماذا في تلك الفترة." },
 ];
 const COUNT_AR: Record<string, string> = {
-  conversations: "محادثات", conversation_messages: "رسائل", handoff_tickets: "تذاكر تحويل", staff_assistant_chats: "محادثات مساعد العمليات",
+  conversations: "محادثات", conversation_messages: "رسائل", handoff_tickets: "طلبات تحويل", staff_assistant_chats: "محادثات مساعد العمليات",
   unanswered_questions: "أسئلة بلا إجابة", reservations: "حجوزات", reservations_skipped_with_money: "حجوزات عليها مبالغ (ستبقى)",
   reservations_kept_active_or_with_money: "حجوزات في الفترة ستبقى (جارية/قادمة أو عليها مبالغ)", vouchers: "سندات", payments: "مدفوعات",
-  invoices: "فواتير", pos_settlements: "تسويات الشبكة", platform_payouts: "مطابقات المنصات", guest_profiles: "ملفات نزلاء", housekeeping_tasks: "مهام تنظيف", maintenance_tickets: "تذاكر صيانة", released_slots: "سجلات كشف",
+  invoices: "فواتير", pos_settlements: "تسويات الشبكة", platform_payouts: "مطابقات المنصات", guest_profiles: "ملفات نزلاء", housekeeping_tasks: "مهام تنظيف", maintenance_tickets: "بلاغات صيانة", released_slots: "سجلات كشف",
   notifications: "إشعارات", integration_events: "أحداث تكامل", audit_events: "سجلات تدقيق",
 };
 const KEPT = new Set(["reservations_skipped_with_money", "reservations_kept_active_or_with_money"]);
@@ -85,7 +85,7 @@ export default function AdminDataPurge() {
 
   return (
     <div className="space-y-4">
-      <SectionTitle title="تفريغ البيانات" subtitle="حذف نهائي لبيانات فترة محددة، بثلاث مراحل تأكيد. للمالك فقط." />
+      <SectionTitle title="تفريغ البيانات" subtitle="حذف نهائي لبيانات فترة محددة، بثلاث مراحل تأكيد، لمن يملك صلاحية «السجل الأمني ومسح البيانات»." />
       {error && <ErrorBanner message={error} />}
 
       {step === "choose" && (

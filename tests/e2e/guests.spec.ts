@@ -22,7 +22,7 @@ async function openByRoom(page: Page, go: (p: string) => Promise<void>, room: st
 /** Opens a booking by its reference through the list's search. */
 async function openByRef(page: Page, go: (p: string) => Promise<void>, ref: string) {
   await go("/staff/reservations");
-  await page.getByPlaceholder("مرجع / ضيف / جوال").fill(ref);
+  await page.getByPlaceholder("مرجع / نزيل / جوال").fill(ref);
   const row = page.locator("table tbody tr").filter({ hasText: ref }).first();
   await expect(row).toBeVisible();
   await row.getByRole("link", { name: "فتح" }).click();
@@ -109,10 +109,10 @@ test.describe("guests, platforms and the website (phase 5)", () => {
   test("GE02 a banned guest: the red alert on a new booking of the same phone, the arrival refused, the profile page lifts the ban with a reason and bans again", async ({ page, loginAs, go }) => {
     await loginAs("manager");
     await createReservation(page, "رامي ناصر", "0501110017");    // the seeded ban (decision 21)
-    await expect(page.getByTestId("guest-ban-alert")).toContainText("الضيف محظور من الإدارة");
-    await expect(page.getByTestId("guest-ban-alert")).toContainText("ملف الضيف");
+    await expect(page.getByTestId("guest-ban-alert")).toContainText("النزيل محظور من الإدارة");
+    await expect(page.getByTestId("guest-ban-alert")).toContainText("ملف النزيل");
     await expect(page.getByTestId("arrival").getByTestId("reasons")).toContainText("الضيف محظور من الإدارة");   // the arrival's fixed conditions, no button to try
-    await page.getByTestId("guest-ban-alert").getByRole("link", { name: "ملف الضيف" }).click();
+    await page.getByTestId("guest-ban-alert").getByRole("link", { name: "ملف النزيل" }).click();
     await page.waitForURL(/#\/admin\/guests\/[0-9a-f-]+/);
     await expect(page.getByTestId("profile-ban")).toBeVisible();
     await page.getByTestId("unban-guest").click();
@@ -132,16 +132,16 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(page.getByTestId("profile-ban")).toContainText("أضرار متكررة في الوحدة");
     // the list marks the banned guest's bookings
     await go("/staff/reservations");
-    await page.getByPlaceholder("مرجع / ضيف / جوال").fill("0501110017");
+    await page.getByPlaceholder("مرجع / نزيل / جوال").fill("0501110017");
     await expect(page.getByTestId("row-ban").first()).toBeVisible();
   });
 
   test("GE03 the rating 1–5 with an internal note is seen on the guest's booking; a hold on one booking blocks the arrival until a manager lifts it with a reason", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await openByRoom(page, go, "204", "checked_in");                 // سارة: rated 2 in the seed
-    await expect(page.getByTestId("guest-rating")).toContainText("تقييم الضيف");
+    await expect(page.getByTestId("guest-rating")).toContainText("تقييم النزيل");
     await expect(page.getByTestId("guest-rating").getByLabel("2 من 5")).toBeVisible();
-    await page.getByRole("button", { name: "تعديل تقييم الضيف" }).click();
+    await page.getByRole("button", { name: "تعديل تقييم النزيل" }).click();
     const rate = page.getByRole("dialog");
     await rate.getByTestId("rate-stars").getByLabel("4 من 5").click();
     await rate.getByLabel("ملاحظة داخلية").fill("تحسّن الالتزام بالمواعيد");
@@ -237,7 +237,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(page.getByText("رقم الحجز في المنصة مستخدم في حجز آخر أو مجموعة أخرى.")).toBeVisible();
     await expect(page).toHaveURL(/#\/staff\/reservations\/new/);
     await go("/staff/reservations");
-    await page.getByPlaceholder("مرجع / ضيف / جوال").fill("GRP-E2E");
+    await page.getByPlaceholder("مرجع / نزيل / جوال").fill("GRP-E2E");
     await expect(page.locator("table tbody tr")).toHaveCount(2);
   });
 
@@ -282,7 +282,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(text).toContainText("التأمين: 50.00 ر.س");
     await expect(text).toContainText("سياسات الفرع");
     await expect(text).toContainText("المواقف");
-    await expect(dlg).toContainText("لم يُقر الضيف بعد");
+    await expect(dlg).toContainText("لم يُقر النزيل بعد");
     await dlg.getByTestId("record-paper-ack").click();
     await expect(dlg.getByTestId("ack-list")).toContainText("توقيع ورقي");
     await expect(dlg.getByTestId("ack-list")).toContainText("فهد الاستقبال");
@@ -309,7 +309,7 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await openGuestStatus(page, go, "0501110009", "R-26A0009");
     await page.getByRole("link", { name: "استكمال البيانات" }).click();
     await expect(page).toHaveURL(/\/booking\/registration\//);
-    await page.getByRole("button", { name: "أكمل البيانات" }).first().click();
+    await page.getByRole("button", { name: "استكمال البيانات" }).first().click();
     const form = page.getByRole("dialog");
     await form.getByPlaceholder("الاسم الأول الأب الجد").fill("بدر راشد العنزي");
     await form.locator("input[dir=ltr][inputmode=numeric]").first().fill("1077889900");
@@ -408,6 +408,6 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(ids).toContainText("لا هويات معتمدة بهذا المسار في الفترة.");                 // the seed has no office entries yet
     await ids.getByLabel("المسار").selectOption("all");
     await expect(ids).toContainText("من المكتب 0 · مطابقة");
-    await expect(ids).toContainText("أدخلها الضيف");
+    await expect(ids).toContainText("أدخلها النزيل");
   });
 });

@@ -29,7 +29,7 @@ export default function PosSettlement() {
   const q = useBranchQuery<Data>(async (branchId) => {
     const [a, h] = await Promise.all([
       supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, is_default, is_active, archived_at, archive_reason, version")
-        .eq("branch_id", branchId).eq("kind", "bank_account").is("archived_at", null).order("name"),
+        .eq("branch_id", branchId).eq("kind", "bank_account").eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("pos_settlements").select("id, account_id, business_date, terminal_total_halalas, system_total_halalas, difference_halalas, voucher_count, status, note, version, updated_at")
         .eq("branch_id", branchId).gte("business_date", addDaysISO(todayISO(), -14)).order("business_date", { ascending: false }),
     ]);
@@ -59,7 +59,7 @@ export default function PosSettlement() {
             {branchId && accountId && <DayCard branchId={branchId} accountId={accountId} date={date} onSaved={() => setTick((t) => t + 1)} />}
           </div>
           <Card>
-            <h3 className="mb-2 text-sm font-semibold text-ink-700">آخر أسبوعين</h3>
+            <h2 className="mb-2 text-sm font-semibold text-ink-700">آخر أسبوعين</h2>
             {history.length === 0 ? <p className="text-xs text-ink-400">لا تسويات بعد.</p> : (
               <div className="divide-y divide-ink-50 text-sm" data-testid="pos-history">
                 {history.map((s) => (

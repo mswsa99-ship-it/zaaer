@@ -1,6 +1,8 @@
 import { DemoBanner } from "../components/DemoBanner";
-import { useEffect, useState } from "react";
-import { Outlet, NavLink, Link, useNavigate, useLocation } from "react-router-dom";
+import { LoadingScreen } from "../components/ui";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useFocusTrap, useMainFocusOnRoute, useScrollOnRoute, focusMain } from "../lib/useFocusTrap";
+import { Outlet, NavLink, Link, useNavigate, useLocation, useNavigationType } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
 import { adminNav, firstAdminPath } from "../lib/nav";
@@ -28,15 +30,14 @@ export default function AdminLayout() {
   // phones and tablets: the same menu opens as a drawer (it was missing below the desktop width)
   const [menuOpen, setMenuOpen] = useState(false);
   // U3: the owner's bottom bar on a phone; «المزيد» opens the same drawer as «القائمة»
-  const tabs = pickTabs(groups.flatMap((g) => g.items), ["/admin/dashboard", "/admin/reservations", "/admin/finance", "/admin/review"]);
+  // IX-13: a supervisor (no owner pages) gets the pages of the daily work first, not a test page
+  const tabs = pickTabs(groups.flatMap((g) => g.items), ["/admin/dashboard", "/admin/reservations", "/admin/finance", "/admin/review", "/admin/guests", "/admin/policies", "/admin/audit-logs"]);
   const location = useLocation();
+  useMainFocusOnRoute(location.pathname);
+  useScrollOnRoute(location.key, location.pathname, useNavigationType());
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, [menuOpen]);
+  const drawer = useRef<HTMLElement>(null);
+  useFocusTrap(menuOpen, drawer, () => setMenuOpen(false));   // A11Y-03
 
   async function handleSignOut() {
     await signOut();
@@ -57,7 +58,7 @@ export default function AdminLayout() {
         <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4 scrollbar-thin">
           {groups.map((g) => (
             <div key={g.title}>
-              <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{g.title}</p>
+              <p className="px-3 pb-1.5 text-[11px] font-semibold text-ink-400">{g.title}</p>
               <div className="space-y-0.5">
                 {g.items.map((item) => (
                   <NavLink
@@ -81,7 +82,7 @@ export default function AdminLayout() {
         </nav>
         <div className="border-t border-ink-100 p-3">
           <Link to="/staff/dashboard" className="block rounded-xl px-3 py-2 text-xs text-ink-400 hover:bg-ink-50 hover:text-ink-600">
-            ← مركز عمليات المشرف
+            → العودة إلى مركز العمليات
           </Link>
           <div className="mt-1 flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
             <div className="leading-tight">
@@ -98,11 +99,12 @@ export default function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-ink-50">
+      <a href="#main" onClick={focusMain} className="sr-only z-50 rounded-xl bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow focus:not-sr-only focus:fixed focus:right-4 focus:top-4">تخطَّ إلى المحتوى</a>
       <aside className="fixed inset-y-0 right-0 z-20 hidden w-72 flex-col border-l border-ink-100 bg-white lg:flex">{menu}</aside>
       {menuOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="قائمة الإدارة">
-          <button type="button" className="absolute inset-0 bg-ink-900/40" aria-label="إغلاق القائمة" onClick={() => setMenuOpen(false)} />
-          <aside className="absolute inset-y-0 right-0 flex w-[min(20rem,85vw)] flex-col bg-white shadow-xl" data-testid="admin-menu-drawer">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="قائمة الإدارة">
+          <div className="absolute inset-0 bg-ink-900/40" aria-hidden="true" onClick={() => setMenuOpen(false)} />
+          <aside ref={drawer} className="absolute inset-y-0 right-0 flex w-[min(20rem,85vw)] flex-col overflow-y-auto bg-white shadow-xl" data-testid="admin-menu-drawer">
             <button type="button" onClick={() => setMenuOpen(false)} className="absolute left-2 top-3 flex h-11 w-11 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-50" aria-label="إغلاق القائمة"><X className="h-5 w-5" /></button>
             {menu}
           </aside>
@@ -118,10 +120,11 @@ export default function AdminLayout() {
             </button>
             <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة{orgName ? ` — ${orgName}` : ""}</Link>
           </header>
-          <KeyboxAlertBanner alerts={codeAlerts} />
         </div>
-        <main className="flex-1 p-4 pb-36 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
-          <Outlet />
+        {/* IX-03: the code alert scrolls away with the page instead of pinning a tall block on a phone */}
+        <KeyboxAlertBanner alerts={codeAlerts} />
+        <main id="main" tabIndex={-1} className="flex-1 p-4 pb-36 outline-none lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
+          <Suspense fallback={<LoadingScreen />}><Outlet /></Suspense>
         </main>
       </div>
       <OpsCopilot />

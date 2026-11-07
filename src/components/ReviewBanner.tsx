@@ -15,7 +15,7 @@ export function ReviewBanner({ summary }: { summary: ReviewSummary | null }) {
       <span className="min-w-0 flex-1 leading-relaxed">
         <span className="font-semibold">{itemsWaiting(summary.open)}</span> في «بحاجة لمراجعة وتدقيق»
         {summary.monitors > 0 && <> — منها <span className="font-semibold">{summary.monitors}</span> من المراقبة</>}
-        {summary.oldest_at && <span className="text-warning-700/80"> · أقدمها {sinceArabic(summary.oldest_at)}</span>}
+        {summary.oldest_at && <span className="text-warning-700"> · أقدمها {sinceArabic(summary.oldest_at)}</span>}
       </span>
       <span className="shrink-0 rounded-lg bg-white/70 px-2.5 py-1 text-xs font-medium">افتح القائمة</span>
     </Link>

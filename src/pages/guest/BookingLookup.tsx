@@ -87,7 +87,7 @@ export default function BookingLookup() {
     try {
       const r = await guestApi.verifyPhoneCode(toLatin(phone), c);
       if (r.status === "ok" && r.token) { await showList(r.token, true); return; }
-      setError(r.status === "mismatch" ? t(`الرمز غير صحيح${r.attempts_left !== undefined ? ` — بقي ${r.attempts_left} محاولات` : ""}.`, `The code is not correct${r.attempts_left !== undefined ? ` — ${countEn(r.attempts_left, "attempt")} left` : ""}.`) : r.status === "throttled" ? t("تجاوزت عدد المحاولات. اطلب رمزًا جديدًا.", "Too many attempts. Ask for a new code.") : t("انتهت صلاحية الرمز. اطلب رمزًا جديدًا.", "The code has expired. Ask for a new code."));
+      setError(r.status === "mismatch" ? t(`الرمز غير صحيح${r.attempts_left !== undefined ? ` — بقيت ${COUNT.attempt(r.attempts_left)}` : ""}.`, `The code is not correct${r.attempts_left !== undefined ? ` — ${countEn(r.attempts_left, "attempt")} left` : ""}.`) : r.status === "throttled" ? t("تجاوزت عدد المحاولات. اطلب رمزًا جديدًا.", "Too many attempts. Ask for a new code.") : t("انتهت صلاحية الرمز. اطلب رمزًا جديدًا.", "The code has expired. Ask for a new code."));
     } catch (err) { setError(guestError(err, en)); }
     setLoading(false);
   }
@@ -119,7 +119,7 @@ export default function BookingLookup() {
         </div>
         <h1 className="text-2xl font-bold text-ink-800">{t("حجوزاتي", "My bookings")}</h1>
         <p className="mt-2 text-sm text-ink-500">
-          {step === "phone" && t("اكتب رقم جوالك الذي حجزت به.", "Enter the mobile number you booked with.")}
+          {step === "phone" && t("رقم الجوال الذي حُجز به.", "Enter the mobile number you booked with.")}
           {step === "code" && notice}
           {step === "ref" && t("للتأكد أن الجوال لك: اكتب رقم أي حجز لديك (من رسالة التأكيد).", "To confirm the mobile is yours, enter the number of any booking you have (from the confirmation message).")}
           {step === "list" && list && (list.length ? t(`لديك ${list.length === 1 ? "حجز واحد" : list.length === 2 ? "حجزان" : `${list.length} حجوزات`}`, `You have ${countEn(list.length, "booking")}`) : t("لا توجد حجوزات حالية على هذا الرقم.", "There are no current bookings on this number."))}

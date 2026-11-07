@@ -22,7 +22,7 @@ export function priceTaxNote(b: BranchLite | null | undefined): string | null {
   return b.prices_include_tax ? "شامل الضريبة" : "قبل الضريبة";
 }
 
-export const NO_BRANCH_MESSAGE = "لا يوجد فرع مخوّل لحسابك — تواصل مع المدير";
+export const NO_BRANCH_MESSAGE = "لا يوجد فرع مخوّل لحسابك — تواصل مع مالك المنشأة";
 
 const DEFAULT_BRANCH = (import.meta.env.VITE_DEFAULT_BRANCH_ID as string | undefined) ?? null;
 const BRANCH_COLUMNS = "id, name_ar, name_en, check_in_time, check_out_time, tax_rate_bp, prices_include_tax, map_url, booking_platform_url, default_language";

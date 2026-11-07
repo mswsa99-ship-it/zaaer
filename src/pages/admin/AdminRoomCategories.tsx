@@ -75,7 +75,7 @@ export default function AdminRoomCategories() {
             setDraft(null); await load();
           }}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="الاسم العربي (مطلوب)"><input className="input" value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
+              <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} /></Field>
               <Field label="الوصف" className="sm:col-span-2"><textarea className="input" rows={2} value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
               <Field label="السعة الأساسية"><NumberInput value={draft.base_capacity ?? 2} onChange={(v) => setDraft({ ...draft, base_capacity: (v ?? 0) })} /></Field>

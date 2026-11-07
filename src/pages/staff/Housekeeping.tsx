@@ -8,7 +8,7 @@ import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { Modal, Field, ActionForm, Submit, ReasonInput, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
-import { formatDateTime } from "../../lib/utils";
+import { formatDateTime, radioGroupKeys } from "../../lib/utils";
 
 interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; scheduled_end: string | null; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
 interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string }
@@ -82,7 +82,7 @@ export default function Housekeeping() {
           {openTasks.map((t) => (
             <Card key={t.id} className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {t.room_id ? <DoorClosed className="h-5 w-5 text-brand-600" /> : <Landmark className="h-5 w-5 text-accent-600" />}
+                {t.room_id ? <DoorClosed className="h-5 w-5 text-brand-600" /> : <Landmark className="h-5 w-5 text-accent-700" />}
                 <div>
                   <p className="text-sm font-medium text-ink-800">{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name ?? "مرفق"} <span className="font-normal text-ink-500">· {t.task_type_name_snapshot}</span></p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">
@@ -173,8 +173,8 @@ export default function Housekeeping() {
           setInspect(null); setNotice("سُجِّل فحص المغادرة؛ يُرد التأمين بعده."); reload();
         }}>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="نتيجة الفحص">
-              {(["ok", "notes"] as const).map((v) => <button key={v} type="button" role="radio" aria-checked={inspResult === v} onClick={() => setInspResult(v)} className={`rounded-xl border px-3 py-2 text-sm ${inspResult === v ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>{v === "ok" ? "الوحدة سليمة" : "بملاحظات"}</button>)}
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" onKeyDown={radioGroupKeys} aria-label="نتيجة الفحص">
+              {(["ok", "notes"] as const).map((v) => <button key={v} type="button" role="radio" aria-checked={inspResult === v} tabIndex={inspResult === v ? 0 : -1} onClick={() => setInspResult(v)} className={`rounded-xl border px-3 py-2 text-sm ${inspResult === v ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>{v === "ok" ? "الوحدة سليمة" : "بملاحظات"}</button>)}
             </div>
             {inspResult === "notes" && <>
               <Field label="الملاحظات (إلزامية)"><textarea className="input" rows={2} value={inspNotes} onChange={(e) => setInspNotes(e.target.value)} placeholder="ما الذي وُجد في الوحدة؟" /></Field>

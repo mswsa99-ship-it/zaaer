@@ -16,7 +16,7 @@ import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput , NumberInput
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, ACTIVE_PAYMENT_METHODS, METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
 import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
 import type { CashAccount } from "../lib/api";
-import { formatCurrency, formatDateTime, todayISO, COUNT } from "../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, COUNT, radioGroupKeys } from "../lib/utils";
 import { PrintButton, stayPrintContext } from "./PrintButton";
 import { buildVoucherPrint } from "../lib/printDocs";
 import { useBranches } from "../lib/branch";
@@ -184,7 +184,7 @@ function FinanceGrid({ f }: { f: Finance }) {
   const cell = (l: string, v: number, cls = "text-ink-900") => <AmountBox key={l} label={l} value={sar(v)} tone={cls} />;
   return (
     <AmountGrid testId="finance-grid">
-      {cell("الإجمالي", f.total)}{cell("المحصل", f.net_collected, "text-success-600")}{cell("المتبقي", f.balance_due, f.balance_due > 0 ? "text-warning-700" : "text-success-600")}{cell("رصيد للضيف", f.credit, "text-brand-700")}
+      {cell("الإجمالي", f.total)}{cell("المحصل", f.net_collected, "text-success-600")}{cell("المتبقي", f.balance_due, f.balance_due > 0 ? "text-warning-700" : "text-success-600")}{cell("رصيد للنزيل", f.credit, "text-brand-700")}
       {cell("تأمين مقبوض", f.deposit_received)}{cell("تأمين مسترد", f.deposit_refunded)}{cell("رصيد التأمين", f.deposit_balance, "text-brand-700")}{f.tax !== 0 && cell("الضريبة", f.tax, "text-ink-600")}
     </AmountGrid>
   );
@@ -199,7 +199,7 @@ function CancelVoucherButton({ id, onDone }: { id: string; onDone: () => Promise
   const [open, setOpen] = useState(false);
   return (<>
     <button onClick={() => setOpen(true)} className="btn-ghost px-2 py-1 text-[11px] text-danger-600">إلغاء السند</button>
-    <ReasonDialog open={open} title="إلغاء سند" warning="الإلغاء يعكس أثر السند محاسبيًا ويبقي سجله. لا يعني أن مزود الدفع ردّ المبلغ للضيف." onClose={() => setOpen(false)} onSubmit={async (reason) => { await opsApi.cancelVoucher(id, reason); setOpen(false); await onDone(); }} />
+    <ReasonDialog open={open} title="إلغاء سند" warning="الإلغاء يعكس أثر السند محاسبيًا ويبقي سجله. لا يعني أن مزود الدفع ردّ المبلغ للنزيل." onClose={() => setOpen(false)} onSubmit={async (reason) => { await opsApi.cancelVoucher(id, reason); setOpen(false); await onDone(); }} />
   </>);
 }
 
@@ -275,9 +275,9 @@ export function PaymentFields({ method, setMethod, accountId, setAccountId, refe
   return (
     <>
       <Field label={verb === "receive" ? "طريقة الدفع" : "طريقة الرد"}>
-        <div className={`grid grid-cols-2 gap-2 ${methods.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`} role="radiogroup" aria-label={verb === "receive" ? "طريقة الدفع" : "طريقة الرد"}>
+        <div className={`grid grid-cols-2 gap-2 ${methods.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`} role="radiogroup" onKeyDown={radioGroupKeys} aria-label={verb === "receive" ? "طريقة الدفع" : "طريقة الرد"}>
           {methods.map((m) => (
-            <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(m)}
+            <button key={m} type="button" role="radio" aria-checked={method === m} tabIndex={method === m ? 0 : -1} onClick={() => setMethod(m)}
               className={`rounded-xl border px-2 py-2 text-sm ${method === m ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-600 hover:border-ink-200"}`}>{PAYMENT_METHOD_LABELS[m]}</button>
           ))}
         </div>
@@ -524,7 +524,7 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <ReasonInput value={reason} onChange={setReason} />
           {reprices && (
             <div className="space-y-2 rounded-xl border border-warning-500/30 bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="switch-reprice">
-              <p>الوحدة من نوع آخر ({chosen?.category_name}): يُعاد تسعير الليالي من {effective} بأسعار النوع الجديد، ويظهر الفرق في بنود الحجز{r.platform_collects === true ? "؛ قبضت المنصة المبلغ، فيبقى سندها ويظهر الفرق مستحقًا على الضيف أو له" : ""}.</p>
+              <p>الوحدة من نوع آخر ({chosen?.category_name}): يُعاد تسعير الليالي من {effective} بأسعار النوع الجديد، ويظهر الفرق في بنود الحجز{r.platform_collects === true ? "؛ قبضت المنصة المبلغ، فيبقى سندها ويظهر الفرق مستحقًا على النزيل أو له" : ""}.</p>
               {price && (
                 <AmountGrid>
                   <AmountBox label="سعر الليالي الحالي" value={sar(price.old)} />

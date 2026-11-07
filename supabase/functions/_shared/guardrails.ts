@@ -257,6 +257,21 @@ export interface OutputContext {
   maxChars?: number;
 }
 
+/**
+ * SEC-10: a link is allowed when it is on the allowed site itself — the same origin and a path under the allowed one;
+ * «https://site.example.attacker.tld/…» no longer passes for «https://site.example». An internal route («/booking»)
+ * is compared as a path.
+ */
+export function urlAllowed(u: string, allowed: string): boolean {
+  if (allowed.startsWith("/")) return u === allowed || u.startsWith(allowed.endsWith("/") ? allowed : allowed + "/") || u.startsWith(allowed + "?") || u.startsWith(allowed);
+  try {
+    const U = new URL(u), A = new URL(allowed);
+    if (U.origin !== A.origin) return false;
+    const base = A.pathname.replace(/\/+$/, "");
+    return base === "" || U.pathname === base || U.pathname.startsWith(base + "/");
+  } catch { return false; }
+}
+
 export function gateOutput(raw: string, ctx: OutputContext): OutputVerdict {
   const violations: string[] = [];
   let text = normalizeDigits((raw ?? "").toString()).trim();
@@ -270,7 +285,7 @@ export function gateOutput(raw: string, ctx: OutputContext): OutputVerdict {
   // URL allow-list
   const urls = text.match(/https?:\/\/[^\s)]+|\/(booking|checkin|kiosk|privacy|terms)[^\s)]*/g) ?? [];
   for (const u of urls) {
-    const ok = ctx.allowedUrls.some((a) => !!a && u.startsWith(a));   // an empty entry (unset APP_BASE_URL) must not allow everything
+    const ok = ctx.allowedUrls.some((a) => !!a && urlAllowed(u, a));   // an empty entry (unset APP_BASE_URL) must not allow everything
     if (!ok) { violations.push("url_not_allowed"); text = text.replace(u, "[رابط محذوف]"); }
   }
 

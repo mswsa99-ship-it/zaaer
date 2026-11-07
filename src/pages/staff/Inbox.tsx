@@ -4,7 +4,7 @@ import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { toArabicError, whatsappApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Inbox as InboxIcon, MessageCircle, Send, Bot, UserCheck, ShieldCheck, PauseCircle } from "lucide-react";
-import { formatDateTime } from "../../lib/utils";
+import { formatDateTime, COUNT } from "../../lib/utils";
 
 interface ConversationRow {
   id: string;
@@ -136,7 +136,7 @@ export default function Inbox() {
 
   return (
     <div>
-      <SectionTitle title="الوارد الموحّد" subtitle={`${conversations.length} محادثة`} />
+      <SectionTitle title="الوارد الموحّد" subtitle={COUNT.conversation(conversations.length)} />
       {(error || (q.error && conversations.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
       {notice && <p className="mb-4 rounded-xl bg-success-500/10 px-3 py-2 text-sm text-success-600">{notice}</p>}
       {q.error && conversations.length === 0 ? <LoadErrorCard message={q.error} onRetry={loadConversations} /> : conversations.length === 0 ? (
@@ -149,7 +149,7 @@ export default function Inbox() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-ink-600">{channelLabel(c.channel)}</span>
                   <div className="flex items-center gap-1">
-                    {c.guest_verified && <Badge className="bg-accent-500/10 text-accent-600"><ShieldCheck className="h-3 w-3" /> متحقق</Badge>}
+                    {c.guest_verified && <Badge className="bg-accent-500/10 text-accent-700"><ShieldCheck className="h-3 w-3" /> متحقق</Badge>}
                     <Badge className={STATUS_COLORS[c.status] ?? "bg-ink-100 text-ink-400"}>{STATUS_LABELS[c.status] ?? c.status}</Badge>
                   </div>
                 </div>
@@ -166,7 +166,7 @@ export default function Inbox() {
                     <MessageCircle className="h-5 w-5 text-brand-600" />
                     <p className="text-sm font-medium text-ink-700">محادثة {channelLabel(current.channel)}</p>
                     <Badge className={STATUS_COLORS[current.status] ?? ""}>{STATUS_LABELS[current.status] ?? current.status}</Badge>
-                    {current.guest_verified && <Badge className="bg-accent-500/10 text-accent-600">متحقق</Badge>}
+                    {current.guest_verified && <Badge className="bg-accent-500/10 text-accent-700">متحقق</Badge>}
                   </div>
                   <div className="flex gap-2">
                     {current.status !== "handed_off" && current.status !== "closed" && (
@@ -182,7 +182,7 @@ export default function Inbox() {
                   </div>
                 </div>
                 {current.handoff_reason && <p className="mb-3 rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-700">سبب التحويل: {current.handoff_reason}</p>}
-                {pausedUntil && <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-accent-500/10 px-3 py-2 text-xs text-accent-600" data-testid="assistant-paused"><PauseCircle className="h-3.5 w-3.5" /> المساعد صامت في هذه المحادثة حتى {formatDateTime(pausedUntil)} لأن موظفًا يرد. «إعادة للمساعد الذكي» تنهي ذلك الآن.</p>}
+                {pausedUntil && <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-accent-500/10 px-3 py-2 text-xs text-accent-700" data-testid="assistant-paused"><PauseCircle className="h-3.5 w-3.5" /> المساعد صامت في هذه المحادثة حتى {formatDateTime(pausedUntil)} لأن موظفًا يرد. «إعادة للمساعد الذكي» تنهي ذلك الآن.</p>}
                 <div className="space-y-3 max-h-[55vh] overflow-y-auto scrollbar-thin">
                   {messages.map((m, i) => {
                     const isGuest = m.sender === "guest";

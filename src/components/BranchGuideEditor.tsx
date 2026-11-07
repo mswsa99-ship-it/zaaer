@@ -55,23 +55,23 @@ export function BranchGuideEditor({ branchId }: { branchId: string }) {
 
   return (
     <div className="mt-4 space-y-4 rounded-xl border border-ink-100 p-3" data-testid="branch-guide">
-      <p className="text-xs font-semibold text-ink-600">دليل الضيف — يظهر في صفحة حجزه</p>
+      <p className="text-xs font-semibold text-ink-600">دليل النزيل — يظهر في صفحة حجزه</p>
       {error && <ErrorBanner message={error} />}
       {saved && <p className="rounded-lg bg-success-500/10 p-2 text-xs text-success-600" role="status">{saved}</p>}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="تعليمات الوصول" className="sm:col-span-2" hint="كيف يصل الضيف للمبنى ويدخل الوحدة: المدخل، الموقف، المصعد…">
+        <Field label="تعليمات الوصول" className="sm:col-span-2" hint="كيف يصل النزيل للمبنى ويدخل الوحدة: المدخل، الموقف، المصعد…">
           <textarea className="input min-h-[96px]" maxLength={4000} value={g.arrival_instructions} onChange={set("arrival_instructions")} />
         </Field>
         <Field label="اسم البنك"><input className="input" maxLength={80} value={g.bank_name} onChange={set("bank_name")} /></Field>
         <Field label="اسم المستفيد"><input className="input" maxLength={120} value={g.bank_beneficiary} onChange={set("bank_beneficiary")} /></Field>
-        <Field label="رقم الآيبان" className="sm:col-span-2" hint="يظهر للضيف الذي يدفع بالتحويل. اتركه فارغًا لإخفاء بيانات البنك.">
+        <Field label="رقم الآيبان" className="sm:col-span-2" hint="يظهر للنزيل الذي يدفع بالتحويل. اتركه فارغًا لإخفاء بيانات البنك.">
           <input className="input font-mono" dir="ltr" maxLength={34} value={g.bank_iban} onChange={set("bank_iban")} placeholder="SA00 0000 0000 0000 0000 0000" />
         </Field>
       </div>
       <div className="flex justify-end">
         <button type="button" className="btn-primary text-sm" disabled={busy !== null} data-testid="save-branch-guide"
-          onClick={() => run("guide", () => branchGuideApi.setGuide({ branch_id: branchId, ...g }), "حُفظ دليل الضيف.")}>
+          onClick={() => run("guide", () => branchGuideApi.setGuide({ branch_id: branchId, ...g }), "حُفظ دليل النزيل.")}>
           {busy === "guide" ? <Spinner className="h-4 w-4" /> : "حفظ الدليل"}
         </button>
       </div>
@@ -127,7 +127,7 @@ export function BranchGuideEditor({ branchId }: { branchId: string }) {
 
       {archiving && (
         <div className="rounded-lg border border-danger-500/30 p-3" role="group" aria-label="أرشفة">
-          <p className="mb-2 text-xs text-ink-600">{archiving.kind === "photo" ? "تختفي الصورة عن الضيف وتبقى في «المؤرشفة»." : "يختفي الفيديو عن الضيف ويبقى في «المؤرشفة»."}</p>
+          <p className="mb-2 text-xs text-ink-600">{archiving.kind === "photo" ? "تختفي الصورة عن النزيل وتبقى في «المؤرشفة»." : "يختفي الفيديو عن النزيل ويبقى في «المؤرشفة»."}</p>
           <ReasonInput value={reason} onChange={setReason} />
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-outline text-xs" onClick={() => setArchiving(null)}>إلغاء</button>

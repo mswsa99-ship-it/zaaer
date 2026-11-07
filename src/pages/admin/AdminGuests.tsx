@@ -118,7 +118,7 @@ function GuestProfilePage({ id }: { id: string }) {
       <SectionTitle title={p.full_name} subtitle={`${p.identity_type ? `${IDENTITY_TYPE_LABELS[p.identity_type as IdentityType]} ${maskId(p.identity_last4 ?? undefined)}` : "بلا وثيقة معتمدة بعد"} · ${p.nationality ?? "—"} · ${d.stays.length} إقامة`}
         action={<div className="flex flex-wrap gap-2">
           {canRate && <button onClick={() => setDialog("rate")} className="btn-outline text-sm" data-testid="rate-guest"><Star className="h-4 w-4" /> {p.rating != null ? "تعديل التقييم" : "تقييم"}</button>}
-          {d.can_ban && !d.ban && <button onClick={() => setDialog("ban")} className="btn-danger text-sm" data-testid="ban-guest"><ShieldBan className="h-4 w-4" /> حظر الضيف</button>}
+          {d.can_ban && !d.ban && <button onClick={() => setDialog("ban")} className="btn-danger text-sm" data-testid="ban-guest"><ShieldBan className="h-4 w-4" /> حظر النزيل</button>}
           {d.can_ban && d.ban?.own && <button onClick={() => setDialog("unban")} className="btn-outline text-sm" data-testid="unban-guest"><ShieldCheck className="h-4 w-4" /> رفع الحظر</button>}
         </div>} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
@@ -180,9 +180,9 @@ function GuestProfilePage({ id }: { id: string }) {
 function BanDialog({ open, ban, profileId, onClose, onDone }: { open: boolean; ban: boolean; profileId: string; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = useState("");
   return (
-    <Modal open={open} title={ban ? "حظر الضيف" : "رفع الحظر عن الضيف"} onClose={onClose}>
+    <Modal open={open} title={ban ? "حظر النزيل" : "رفع الحظر عن النزيل"} onClose={onClose}>
       <ActionForm onSubmit={async () => { if (!reason.trim()) throw new Error("VALIDATION: reason"); if (ban) await guestProfileApi.ban(profileId, reason.trim()); else await guestProfileApi.unban(profileId, reason.trim()); setReason(""); onDone(); }}>
-        <p className="mb-3 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700">{ban ? "يُطابَق الحظر بملف الضيف وجواله ووثيقته: تنبيه أحمر على حجوزاته القائمة والقادمة، ولا يُسجَّل وصوله ولا يُسلَّم له رمز حتى يُرفع الحظر بسبب. يُدرَج في قائمة المراجعة." : "يعود الضيف إلى الوضع الطبيعي؛ يبقى الحظر في سجله مع سبب رفعه."}</p>
+        <p className="mb-3 rounded-xl bg-warning-500/10 p-3 text-xs text-warning-700">{ban ? "يُطابَق الحظر بملف النزيل وجواله ووثيقته: تنبيه أحمر على حجوزاته القائمة والقادمة، ولا يُسجَّل وصوله ولا يُسلَّم له رمز حتى يُرفع الحظر بسبب. يُدرَج في قائمة المراجعة." : "يعود النزيل إلى الوضع الطبيعي؛ يبقى الحظر في سجله مع سبب رفعه."}</p>
         <ReasonInput value={reason} onChange={setReason} />
         <Submit label={ban ? "حظر" : "رفع الحظر"} onCancel={onClose} danger={ban} />
       </ActionForm>

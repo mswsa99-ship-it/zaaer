@@ -42,7 +42,7 @@ export default function Kiosk() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-ink-900 text-center text-white">
         <Hotel className="mb-6 h-16 w-16 text-accent-500" />
         <h1 className="text-3xl font-bold">{orgName}</h1>
-        <p className="mt-3 text-white/70">انقر للبدء من جديد</p>
+        <p className="mt-3 text-white/70">المس الشاشة للبدء من جديد</p>
         <button onClick={() => { setIdle(false); navigate("/kiosk"); window.location.reload(); }} className="mt-8 flex items-center gap-2 rounded-2xl bg-accent-500 px-8 py-4 text-lg font-medium hover:bg-accent-600">
           <RotateCcw className="h-5 w-5" /> ابدأ
         </button>

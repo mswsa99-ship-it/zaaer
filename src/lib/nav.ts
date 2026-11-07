@@ -20,6 +20,9 @@ import type { Role } from "./types";
 
 export type StaffRole = Exclude<Role, "guest">;
 
+/** PERM-06: the pages that show money follow the matrix (any money operation), not a fixed role list. */
+const MONEY_CAPS = ["voucher.receipt", "voucher.refund", "deposit.refund", "deposit.apply", "pos.settle", "reports.finance"];
+
 export const ALL_STAFF: readonly StaffRole[] = ["owner", "manager", "supervisor", "finance", "housekeeping"];
 /** Roles that may see money (mirrors MONEY_ROLES on the server). */
 export const MONEY_ROLES: readonly StaffRole[] = ["owner", "manager", "supervisor", "finance"];
@@ -63,16 +66,16 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/reservations", label: "الحجوزات", icon: BookCheck, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
   { path: "/staff/reservations/new", label: "حجز جديد", icon: BookCheck, area: "staff", roles: ["owner", "manager", "supervisor"], hidden: true, cap: ["res.create"] },
   { path: "/staff/reservations/:id", label: "تفاصيل الحجز", icon: BookCheck, area: "staff", roles: ALL_STAFF, hidden: true },
-  { path: "/staff/identity-verification", label: "مطابقة الهويات", icon: UserCheck, area: "staff", roles: MONEY_ROLES },
-  { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, area: "staff", roles: MONEY_ROLES },
+  { path: "/staff/identity-verification", label: "مطابقة الهويات", icon: UserCheck, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["identity.approve", "guest.enter"] },
+  { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt", "voucher.refund", "invoice.issue"] },
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, area: "staff", roles: MONEY_ROLES, cap: ["pos.settle"] },
-  { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: MONEY_ROLES },
+  { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["checkin", "code.deliver"] },
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)
-  { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, area: "staff", roles: MONEY_ROLES },
+  { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
   // decision 4: today's and tomorrow's platform arrivals, matched against the platform (the supervisor's daily list)
   { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, area: "staff", roles: ["owner", "manager", "supervisor"] },
-  { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, area: "staff", roles: MONEY_ROLES },
+  { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
   { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
   { path: "/staff/codes", label: "الرموز", icon: KeyRound, area: "staff", roles: CODES_ROLES, cap: ["keybox.code"] },
   { path: "/staff/tickets", label: "البلاغات", icon: Wrench, area: "staff", roles: ALL_STAFF },
@@ -97,11 +100,11 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/reservations", label: "الحجوزات", icon: BookCheck, area: "admin", group: "العمليات", roles: ADMIN_OPS },
   // decisions 2 and 21: guest profiles with search, ratings and bans (owner, manager, supervisor)
   { path: "/admin/guests", label: "النزلاء", icon: Users, area: "admin", group: "العمليات", roles: ["owner", "manager", "supervisor"] },
-  { path: "/admin/guests/:id", label: "ملف الضيف", icon: Users, area: "admin", roles: ["owner", "manager", "supervisor"], hidden: true },
+  { path: "/admin/guests/:id", label: "ملف النزيل", icon: Users, area: "admin", roles: ["owner", "manager", "supervisor"], hidden: true },
 
   { path: "/admin/finance", label: "المالية", icon: Wallet, area: "admin", group: "العمليات", roles: ADMIN_FINANCE },
   // decision 24: platform-collected payments matched to the platform's bank deposit (§16: owner, manager, finance)
-  { path: "/admin/platform-payouts", label: "مطابقة المنصات", icon: HandCoins, area: "admin", group: "العمليات", roles: ADMIN_FINANCE, cap: ["platform.payouts"] },
+  { path: "/admin/platform-payouts", label: "إيداعات المنصات", icon: HandCoins, area: "admin", group: "العمليات", roles: ADMIN_FINANCE, cap: ["platform.payouts"] },
   // decision 25: each branch's cash boxes and bank accounts (§16: owner, manager)
   { path: "/admin/cash-accounts", label: "الصناديق والحسابات", icon: Vault, area: "admin", group: "العمليات", roles: ADMIN_ROLES, cap: ["cash_accounts"] },
   // the key boxes moved to the one screen «الرموز» (/staff/codes); the old address still leads there

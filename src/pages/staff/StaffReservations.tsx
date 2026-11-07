@@ -37,7 +37,7 @@ const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
 const COLUMNS: Col[] = [
   { key: "internal_ref", label: "رقم الحجز", cell: (r) => <><Link to={`/staff/reservations/${r.id}`} className="font-mono text-xs hover:underline">{r.internal_ref}</Link>{r.external_ref && <div className="text-[10px] text-ink-400">{r.source_name} · <span dir="ltr">{r.external_ref}</span></div>}</>, out: (r) => r.internal_ref, width: 14 },
   { key: "external_ref", label: "رقم المنصة", cell: (r) => <span className="font-mono text-xs" dir="ltr">{r.external_ref ?? "—"}</span>, out: (r) => r.external_ref ?? "" },
-  { key: "guest_name", label: "الضيف", cell: (r) => <>{r.guest_name ?? "—"}{r.ban && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600" data-testid="row-ban">محظور</span>}{r.hold && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600">حظر على الحجز</span>}{r.rating != null && r.rating <= 2 && <span className="mr-1 inline-flex items-center rounded-md bg-warning-500/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-700">تقييم {r.rating}/5</span>}</>, out: (r) => r.guest_name ?? "", width: 24 },
+  { key: "guest_name", label: "النزيل", cell: (r) => <>{r.guest_name ?? "—"}{r.ban && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600" data-testid="row-ban">محظور</span>}{r.hold && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600">حظر على الحجز</span>}{r.rating != null && r.rating <= 2 && <span className="mr-1 inline-flex items-center rounded-md bg-warning-500/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-700">تقييم {r.rating}/5</span>}</>, out: (r) => r.guest_name ?? "", width: 24 },
   { key: "booking_type", label: "فرد / شركة", cell: (r) => <>{BOOKING_TYPE_LABELS[r.booking_type ?? ""] ?? r.booking_type ?? "—"}{r.company_name && <div className="text-[10px] text-ink-400">{r.company_name}</div>}</>, out: (r) => `${BOOKING_TYPE_LABELS[r.booking_type ?? ""] ?? r.booking_type ?? ""}${r.company_name ? ` · ${r.company_name}` : ""}` },
   { key: "room_number", label: "الوحدة", cell: (r) => <>{r.room_number ?? <span className="text-ink-400">—</span>}<div className="text-[10px] text-ink-400">{r.category_name}</div></>, out: (r) => r.room_number ?? "" },
   { key: "category_name", label: "نوع الوحدة", cell: (r) => r.category_name ?? "—", out: (r) => r.category_name ?? "" },
@@ -97,7 +97,7 @@ export function filterWords(f: Filters, opts?: ReportFilterOptions | null): stri
 }
 
 export default function StaffReservations() {
-  const { profile, permissions } = useAuth();
+  const { profile, permissions, can } = useAuth();
   const { branch } = useBranch();
   const moneyRole = permissions.seesMoney;
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -191,18 +191,18 @@ export default function StaffReservations() {
 
   return (
     <div>
-      <SectionTitle title="الحجوزات" subtitle={`${data.total} حجز مطابق${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
+      <SectionTitle title="الحجوزات" subtitle={`${data.total ? `الحجوزات المطابقة: ${data.total}` : "لا حجوزات مطابقة"}${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
         <div className="flex flex-wrap items-center gap-2">
           <BranchPicker />
           <Link to="/staff/rooms?view=calendar" className="btn-outline text-sm" data-testid="open-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</Link>
           <ExportMenu source={{ statement, table, pageCount: data.rows.length, total: data.total }} disabled={!branchId} />
-          <Link to="/staff/reservations/new" className="btn-primary text-sm"><Plus className="h-4 w-4" /> حجز جديد</Link>
+          {can("res.create") && <Link to="/staff/reservations/new" className="btn-primary text-sm"><Plus className="h-4 w-4" /> حجز جديد</Link>}
         </div>} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
 
       <div className="card mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 pr-9" placeholder="مرجع / ضيف / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
+          <div className="relative"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 pr-9" placeholder="مرجع / نزيل / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
           <select className="input w-auto" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); set("open_only", !e.target.value); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.open_only)} onChange={(e) => set("open_only", e.target.checked)} /> المفتوحة فقط</label>
           {moneyRole && <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.has_balance)} onChange={(e) => set("has_balance", e.target.checked)} /> عليها متبقٍ</label>}

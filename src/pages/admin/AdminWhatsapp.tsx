@@ -4,7 +4,7 @@ import { MessageCircle, Copy, Check, RefreshCw, PlugZap, Power, ChevronDown, Shi
 import { whatsappApi, toArabicError, bridgeConfig, BRIDGE_DOWNLOAD_PATH, type WaChannelRow, type WaCheck, type WaMode } from "../../lib/api";
 import { isDemo } from "../../lib/supabase";
 import { SectionTitle, LoadingScreen, Card, Badge, Spinner, ErrorBanner } from "../../components/ui";
-import { formatDateTime } from "../../lib/utils";
+import { formatDateTime, COUNT } from "../../lib/utils";
 import { latinDigits } from "../../lib/validation";
 
 /**
@@ -196,7 +196,7 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
           <span className="mt-1 block text-xs text-ink-500">إذا كتب الموظف للنزيل من جوال الفرع أو من الوارد، يصمت المساعد في تلك المحادثة لمدة:</span>
           <select className="input mt-2" value={row.human_pause_minutes} disabled={!!busy} aria-label="مدة توقف الرد الآلي"
             onChange={(e) => run("pause", () => whatsappApi.save(row.branch_id, { human_pause_minutes: Number(e.target.value) }), "تم الحفظ.")}>
-            {[...new Set([...PAUSES, row.human_pause_minutes])].sort((a, b) => a - b).map((m) => <option key={m} value={m}>{m < 60 ? `${m} دقيقة` : m === 60 ? "ساعة" : `${m / 60} ساعات`}</option>)}
+            {[...new Set([...PAUSES, row.human_pause_minutes])].sort((a, b) => a - b).map((m) => <option key={m} value={m}>{m < 60 ? `${m} دقيقة` : m === 60 ? "ساعة" : COUNT.hour(m / 60)}</option>)}
           </select>
         </label>
       </div>
@@ -308,7 +308,7 @@ function BranchChannel({ row, live, onSaved, flash, setFlash }: { row: WaChannel
               </Badge>
             : <Badge className={st.cls}>{st.label}</Badge>}
           <Badge className={row.enabled ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{row.enabled ? "مفعّل للنزلاء" : "غير مفعّل"}</Badge>
-          <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-50" aria-label="الإعدادات"><ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} /></button>
+          <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-2.5 text-ink-400 hover:bg-ink-50" aria-label={`إعدادات واتساب ${row.branch_name ?? ""}`} aria-expanded={open}><ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} /></button>
         </div>
       </div>
 

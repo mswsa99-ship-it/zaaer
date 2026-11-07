@@ -56,7 +56,7 @@ test.describe("owner lists", () => {
   test("QN14 the AI settings mark unsaved changes and refuse a number out of its range", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/admin/ai-settings");
-    const tokens = page.getByLabel("الحد الأقصى لتوكنز الرد (50–2000)");
+    const tokens = page.getByLabel("أقصى طول للرد بالوحدات النصية (50–2000)");
     await tokens.fill("5000");
     await expect(page.getByTestId("ai-unsaved")).toBeVisible();
     await page.getByRole("button", { name: /^حفظ/ }).first().click();

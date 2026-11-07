@@ -38,6 +38,13 @@ export default function AdminRoles() {
     return k in draft ? draft[k] : !!m?.rows.find((r) => r.code === code)?.cells[role]?.allowed;
   };
   const changes: PermissionChange[] = useMemo(() => Object.entries(draft).map(([k, allowed]) => { const [code, role] = k.split("|"); return { code, role, allowed }; }), [draft]);
+  // SETUP-18: closing or reloading the tab with unsaved cells asks first
+  useEffect(() => {
+    if (changes.length === 0) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [changes.length]);
   const toggle = (code: string, role: string) => {
     if (!m) return;
     const saved = !!m.rows.find((r) => r.code === code)?.cells[role]?.allowed;
@@ -90,7 +97,7 @@ export default function AdminRoles() {
       {changes.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-100 bg-white/95 px-4 py-3 shadow-lg backdrop-blur" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))" }}>
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
-            <span className="text-sm font-medium text-ink-700" data-testid="perm-draft-count">{changes.length} تغيير غير محفوظ</span>
+            <span className="text-sm font-medium text-ink-700" data-testid="perm-draft-count">تغييرات غير محفوظة: {changes.length}</span>
             <button type="button" className="btn-primary text-sm" onClick={() => { setReason(""); setSaving("save"); }} data-testid="perm-save"><Save className="h-4 w-4" /> حفظ التغييرات</button>
             <button type="button" className="btn-outline text-sm" onClick={() => setDraft({})} data-testid="perm-discard"><Undo2 className="h-4 w-4" /> تراجع</button>
           </div>
@@ -131,7 +138,7 @@ function AreaRows({ area, m, value, draft, toggle }: { area: string; m: Permissi
         <tr key={r.code} className="border-t border-ink-50" data-testid="perm-row" data-code={r.code}>
           <td className="px-3 py-2 text-ink-800">
             <span className="flex items-center gap-1.5">{r.locked && <Lock className="h-3.5 w-3.5 text-ink-400" />}{r.label}</span>
-            {r.limit_note && <span className="mt-0.5 block text-[11px] text-ink-400">القيد لمن ليس له العملية كاملة: {r.limit_note}</span>}
+            {r.limit_note && <span className="mt-0.5 block text-[11px] text-ink-400">حدود الصلاحية: {r.limit_note}</span>}
             {r.locked && <span className="mt-0.5 block text-[11px] text-ink-400">للمالك وحده، لا تُمنح لدور آخر</span>}
           </td>
           {m.roles.map((role) => {

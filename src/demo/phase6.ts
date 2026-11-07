@@ -245,7 +245,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
 
     // ---- the filter options a report screen offers (decision 36) and the live members of a branch ----
     fn_report_filter_options: ({ p_branch }) => {
-      if (!p_branch || !myBranches().includes(p_branch)) return {};
+      if (!p_branch || !myBranches().includes(p_branch) || !seesMoney()) return {};   // PERM-09 (0061)
       const staff = orgStaff().filter((s) => s.role === "owner" || T("branch_memberships").some((m) => m.staff_id === s.id && m.branch_id === p_branch) || T("financial_vouchers").some((v) => v.branch_id === p_branch && v.created_by === s.id) || T("reservations").some((r) => r.branch_id === p_branch && r.created_by === s.id))
         .sort((x, y) => Number(!!y.is_active) - Number(!!x.is_active) || text(x.full_name, y.full_name)).map((s) => ({ id: s.id, name: s.full_name, role: s.role, is_active: !!s.is_active }));
       const accounts = T("cash_accounts").filter((x) => x.branch_id === p_branch).sort((x, y) => text(x.kind, y.kind) || text(x.name, y.name)).map((x) => ({ id: x.id, name: x.name, kind: x.kind, is_active: !!x.is_active }));

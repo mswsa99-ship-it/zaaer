@@ -24,7 +24,7 @@ export function RequireRole({ children }: { children?: ReactNode }) {
 
   if (!profile || !profile.is_active) {
     return (
-      <GuardCard icon={<UserX className="h-6 w-6" />} title={profile ? "حسابك غير مفعّل" : "لا يوجد ملف موظف مرتبط بحسابك"} description="تواصل مع المدير لتفعيل حسابك قبل استخدام النظام." />
+      <GuardCard icon={<UserX className="h-6 w-6" />} title={profile ? "حسابك غير مفعّل" : "لا يوجد ملف موظف مرتبط بحسابك"} description="تواصل مع مالك المنشأة لتفعيل حسابك قبل استخدام النظام." />
     );
   }
 
@@ -34,7 +34,9 @@ export function RequireRole({ children }: { children?: ReactNode }) {
       <GuardCard
         icon={<ShieldAlert className="h-6 w-6" />}
         title="هذه الصفحة غير متاحة لدورك"
-        description={`صلاحيات دورك الحالي (${ROLE_LABELS[profile.role]}) لا تشمل هذه الصفحة. تواصل مع المدير إذا كنت تحتاج الوصول إليها.`}
+        description={page && page.roles.length === 1 && page.roles[0] === "owner"
+          ? "هذه الصفحة للمالك فقط."   // COPY-17: a manager is not told to ask «the manager»
+          : `لا يشمل دورك (${ROLE_LABELS[profile.role]}) هذه الصفحة. يمنح المالك الصلاحية من «مصفوفة الصلاحيات».`}
         action={<Link to="/staff/dashboard" className="btn-outline text-sm">العودة إلى لوحة العمليات</Link>}
       />
     );

@@ -56,7 +56,7 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
         <Spinner className="mx-auto h-8 w-8" />
       ) : info?.active && info.wa_phone ? (
         <>
-          <h1 className={`${large ? "text-4xl" : "text-3xl"} font-bold text-ink-800`}>امسح الرمز وتحدث معنا عبر واتساب</h1>
+          <h1 className={`${large ? "text-4xl" : "text-3xl"} font-bold text-ink-800`}>امسح الرمز للمحادثة عبر واتساب</h1>
           <p className="mt-3 text-ink-500">الاستقبال كله في محادثة واحدة: حجوزاتك، تسجيل النزلاء، السداد، الوصول ورمز الدخول.</p>
           <div className="mx-auto mt-8 w-fit rounded-3xl border border-ink-100 bg-white p-4 shadow-sm">
             {qr ? <img src={qr} alt="رمز QR لمحادثة واتساب الاستقبال" className={large ? "h-80 w-80" : "h-64 w-64"} data-testid="wa-qr" /> : <Spinner className="m-24 h-6 w-6" />}

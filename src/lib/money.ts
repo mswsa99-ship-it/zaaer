@@ -21,7 +21,8 @@ export function sanitizeMoneyText(raw: string, allowNegative: boolean): string |
     else if (/^-?\d{1,3}(,\d{3})+(\.\d{0,2})?$/.test(t)) t = t.replace(/,/g, "");
     else return null;
   }
-  if (allowNegative && t.startsWith("-")) t = "-" + t.slice(1).replace(/-/g, ""); else t = t.replace(/-/g, "");
+  if (allowNegative && t.startsWith("-")) t = "-" + t.slice(1).replace(/-/g, "");
+  else if (t.includes("-")) return null;   // MONEY-09: a minus is refused here, never silently turned into a plus
   if (!/^-?\d*(\.\d{0,2})?$/.test(t)) return null;
   return t;
 }

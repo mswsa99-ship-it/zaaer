@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    return { error: error ? authErrorAr(error.message) : null };
   }
 
   async function signUp(email: string, password: string, fullName: string) {
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let emailRedirectTo: string | undefined;
     try { emailRedirectTo = new URL("staff/login", new URL(import.meta.env.BASE_URL, window.location.href)).toString(); } catch { /* Site URL */ }
     const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
-    if (error) return { error: error.message };
+    if (error) return { error: authErrorAr(error.message) };
     if (data.session) {
       const { data: claim } = await supabase.rpc("fn_claim_staff_profile", { p_full_name: fullName });
       const c = claim as { ok?: boolean; error?: string } | null;
@@ -189,6 +189,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+/** COPY-15: the sign-in service's messages in Arabic, never its English text. */
+export function authErrorAr(msg: string): string {
+  if (/invalid login credentials/i.test(msg)) return "البريد أو كلمة المرور غير صحيحة.";
+  if (/email not confirmed/i.test(msg)) return "لم يُؤكَّد البريد بعد. افتح رسالة التأكيد المرسلة إلى بريدك ثم أعد تسجيل الدخول.";
+  if (/already registered|already been registered/i.test(msg)) return "هذا البريد مسجّل من قبل. سجّل الدخول به.";
+  if (/password should be at least|weak password/i.test(msg)) return "كلمة المرور قصيرة أو ضعيفة: 8 أحرف على الأقل.";
+  if (/rate limit|too many/i.test(msg)) return "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.";
+  if (/invalid email|unable to validate email/i.test(msg)) return "صيغة البريد غير صحيحة.";
+  if (/fetch|network/i.test(msg)) return "تعذّر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.";
+  return "تعذّر تسجيل الدخول. حاول مرة أخرى.";
 }
 
 function samePermissions(a: Permissions, b: Permissions) {

@@ -18,7 +18,7 @@ import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput, Toggle } from "./forms";
 import { IDENTITY_TYPE_LABELS, type IdentityType } from "../lib/types";
-import { formatCurrency, formatDateTime, todayISO, maskId } from "../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, maskId, COUNT } from "../lib/utils";
 import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../lib/validation";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
@@ -40,9 +40,9 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
         <div key={b.ban_id} data-testid="guest-ban-alert" className="flex items-start gap-3 rounded-xl border border-danger-500/40 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
           <ShieldBan className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="min-w-0">
-            <p className="font-semibold">الضيف محظور من الإدارة — لا يُسجَّل الوصول ولا يُسلَّم الرمز</p>
-            <p className="mt-0.5 text-xs">{b.name} · السبب: {b.reason} · منذ {formatDateTime(b.since)} · المطابقة: {b.matched_by.map((m) => ({ profile: "ملف الضيف", identity: "الهوية", phone: "الجوال" })[m] ?? m).join("، ")}</p>
-            {gp && <Link to={`/admin/guests/${gp.id}`} className="mt-1 inline-block text-xs underline">ملف الضيف</Link>}
+            <p className="font-semibold">النزيل محظور من الإدارة — لا يُسجَّل الوصول ولا يُسلَّم الرمز</p>
+            <p className="mt-0.5 text-xs">{b.name} · السبب: {b.reason} · منذ {formatDateTime(b.since)} · المطابقة: {b.matched_by.map((m) => ({ profile: "ملف النزيل", identity: "الهوية", phone: "الجوال" })[m] ?? m).join("، ")}</p>
+            {gp && <Link to={`/admin/guests/${gp.id}`} className="mt-1 inline-block text-xs underline">ملف النزيل</Link>}
           </div>
         </div>
       ))}
@@ -61,7 +61,7 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
         <div data-testid="guest-rating" className="flex items-start gap-3 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-2.5 text-sm text-ink-700">
           <Star className="mt-0.5 h-4 w-4 shrink-0 text-warning-700" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold">تقييم الضيف: {gp.rating != null ? <Stars n={gp.rating} /> : "—"}{gp.stays > 1 ? ` · ${gp.stays} إقامات` : ""}</p>
+            <p className="text-xs font-semibold">تقييم النزيل: {gp.rating != null ? <Stars n={gp.rating} /> : "—"}{gp.stays > 1 ? ` · ${COUNT.stay(gp.stays)}` : ""}</p>
             {gp.rating_note && <p className="mt-0.5 text-xs text-ink-600">ملاحظة داخلية: {gp.rating_note}{gp.rated_by ? ` — ${gp.rated_by}` : ""}</p>}
           </div>
         </div>
@@ -69,7 +69,7 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
       {(canHold || (gp && canRate)) && open && (
         <div className="flex flex-wrap gap-2">
           {canHold && !d.hold && <button onClick={() => setDialog("hold")} className="btn-ghost text-xs text-danger-600"><ShieldAlert className="h-3.5 w-3.5" /> وضع حظر على الحجز</button>}
-          {gp && canRate && <button onClick={() => setDialog("rate")} className="btn-ghost text-xs"><Star className="h-3.5 w-3.5" /> {gp.rating != null ? "تعديل تقييم الضيف" : "تقييم الضيف"}</button>}
+          {gp && canRate && <button onClick={() => setDialog("rate")} className="btn-ghost text-xs"><Star className="h-3.5 w-3.5" /> {gp.rating != null ? "تعديل تقييم النزيل" : "تقييم النزيل"}</button>}
         </div>
       )}
       <HoldDialog open={dialog === "hold" || dialog === "lift"} hold={dialog === "hold"} reservationId={d.reservation.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onChanged(); }} />
@@ -102,9 +102,9 @@ export function RateDialog({ open, profileId, rating, note, onClose, onDone }: {
   const [n, setN] = useState(note ?? "");
   useEffect(() => { if (open) { setR(rating); setN(note ?? ""); } }, [open, rating, note]);
   return (
-    <Modal open={open} title="تقييم الضيف" onClose={onClose}>
+    <Modal open={open} title="تقييم النزيل" onClose={onClose}>
       <ActionForm onSubmit={async () => { await guestProfileApi.rate(profileId, r, n.trim() || null); onDone(); }}>
-        <p className="mb-3 text-xs text-ink-500">تقييم داخلي من 1 إلى 5 مع ملاحظة يراها الموظفون في حجوزات الضيف القادمة. لا يراه الضيف.</p>
+        <p className="mb-3 text-xs text-ink-500">تقييم داخلي من 1 إلى 5 مع ملاحظة يراها الموظفون في حجوزات النزيل القادمة. لا يراه النزيل.</p>
         <div className="mb-3 flex items-center gap-1" dir="ltr" data-testid="rate-stars">
           {[1, 2, 3, 4, 5].map((i) => <button key={i} type="button" onClick={() => setR(i)} aria-label={`${i} من 5`} className="p-1"><Star className={`h-6 w-6 ${r != null && i <= r ? "fill-warning-500 text-warning-500" : "text-ink-200"}`} /></button>)}
           {r != null && <button type="button" onClick={() => setR(null)} className="ml-2 text-xs text-ink-400">بلا تقييم</button>}
@@ -224,7 +224,7 @@ export function PlatformPanel({ d, canCheck, onChanged }: { d: ReservationDetail
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-50 pt-3">
         {p.verified_at ? <Badge className="bg-success-500/10 text-success-600"><CheckCircle2 className="h-3 w-3" /> طُوبق مع المنصة{p.verified_by ? ` — ${p.verified_by}` : ""} · {formatDateTime(p.verified_at)}</Badge> : <Badge className="bg-ink-100 text-ink-500">لم يُطابَق مع المنصة بعد</Badge>}
         {canEdit && <button onClick={() => setEditing(true)} className="btn-outline text-xs" data-testid="platform-edit"><PencilLine className="h-3 w-3" /> تصحيح بيانات المنصة</button>}
-        {canCheck && !["cancelled", "rejected", "no_show", "closed"].includes(d.reservation.status) && <button onClick={toggle} disabled={busy} className="btn-outline text-xs" data-testid="platform-check">{busy ? <Spinner className="h-3 w-3" /> : null} {p.verified_at ? "إلغاء المطابقة" : "طابقتُ مع المنصة"}</button>}
+        {canCheck && !["cancelled", "rejected", "no_show", "closed"].includes(d.reservation.status) && <button onClick={toggle} disabled={busy} className="btn-outline text-xs" data-testid="platform-check">{busy ? <Spinner className="h-3 w-3" /> : null} {p.verified_at ? "إلغاء المطابقة" : "تأكيد المطابقة مع المنصة"}</button>}
       </div>
       {err && <div className="mt-2"><ErrorBanner message={err} /></div>}
       {editing && <PlatformEditDialog d={d} onClose={() => setEditing(false)} onDone={() => { setEditing(false); onChanged(); }} />}
@@ -266,7 +266,7 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
               </select>
             </Field>
           )}
-          {changedSource && <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="platform-source-note">يُعاد تسعير الإقامة كلها بأسعار المنصة الجديدة، ويظهر الفرق في بنود الحجز مستحقًا على الضيف أو له.</p>}
+          {changedSource && <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="platform-source-note">يُعاد تسعير الإقامة كلها بأسعار المنصة الجديدة، ويظهر الفرق في بنود الحجز مستحقًا على النزيل أو له.</p>}
           <Field label="رقم الحجز في المنصة"><input className="input" dir="ltr" value={ext} onChange={(e) => setExt(e.target.value)} aria-label="رقم الحجز في المنصة" /></Field>
           <Field label="تاريخ الحجز في المنصة"><input type="date" className="input" dir="ltr" max={todayISO()} value={booked} onChange={(e) => setBooked(e.target.value)} aria-label="تاريخ الحجز في المنصة" /></Field>
           {knowsCollects && <Field label="من يقبض">
@@ -277,7 +277,7 @@ function PlatformEditDialog({ d, onClose, onDone }: { d: ReservationDetail; onCl
           </Field>}
           {changedCollects && (
             <p className="rounded-xl bg-warning-500/10 p-3 text-sm text-warning-700" data-testid="platform-collects-note">
-              {collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من الضيف عند الوصول."}
+              {collects ? "يصدر سند «آجل عبر المنصات» بالمتبقي على الحجز، ويُطابق لاحقًا مع إيداع المنصة." : "يُلغى سند «آجل عبر المنصات» ويُسجَّل في المراجعة، ويُحصَّل المبلغ من النزيل عند الوصول."}
             </p>
           )}
           {d.reservation.group_ref ? <p className="text-xs text-ink-500">يسري التصحيح على كل وحدات المجموعة.</p> : null}
@@ -312,7 +312,7 @@ export function GroupPanel({ current, group }: { current: string; group: GroupSu
               </tr>
             ))}
           </tbody>
-          {t.total_halalas != null && <tfoot><tr className="text-sm font-semibold text-ink-800"><td className="pt-2" colSpan={4}>الإجمالي ({t.units} وحدات{t.active_units != null && t.active_units !== t.units ? `، ${t.active_units} قائمة` : ""})</td><td className="pt-2" dir="ltr" data-testid="group-total">{sar(t.total_halalas)}</td><td className="pt-2 text-success-600" dir="ltr">{sar(t.paid_halalas)}</td><td className="pt-2 text-warning-700" dir="ltr">{sar(t.balance_due_halalas)}</td><td className="pt-2" dir="ltr">{sar(t.deposit_balance_halalas)}</td></tr></tfoot>}
+          {t.total_halalas != null && <tfoot><tr className="text-sm font-semibold text-ink-800"><td className="pt-2" colSpan={4}>الإجمالي ({COUNT.unit(t.units)}{t.active_units != null && t.active_units !== t.units ? `، ${t.active_units} قائمة` : ""})</td><td className="pt-2" dir="ltr" data-testid="group-total">{sar(t.total_halalas)}</td><td className="pt-2 text-success-600" dir="ltr">{sar(t.paid_halalas)}</td><td className="pt-2 text-warning-700" dir="ltr">{sar(t.balance_due_halalas)}</td><td className="pt-2" dir="ltr">{sar(t.deposit_balance_halalas)}</td></tr></tfoot>}
         </table>
       </div>
       <p className="mt-2 text-xs text-ink-400">كل وحدة بماليتها ووصولها كما في الحجز المنفرد؛ التأمين لكل وحدة.</p>
@@ -338,7 +338,7 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
       <style>body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;margin:32px;color:#111;font-size:14px;line-height:1.7}header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px}img{max-height:64px}pre{white-space:pre-wrap;font:inherit;margin:0}.sig{margin-top:40px;display:flex;justify-content:space-between;gap:24px}.sig div{flex:1;border-top:1px solid #111;padding-top:6px;font-size:12px}.hash{margin-top:24px;font-family:monospace;font-size:10px;color:#666;direction:ltr;text-align:left}@media print{body{margin:16mm}}</style></head><body>
       <header><div><strong>${esc(s.branch.name)}</strong>${s.branch.city ? `<br><small>${esc(s.branch.city)}${s.branch.address ? " — " + esc(s.branch.address) : ""}</small>` : ""}${s.branch.phone ? `<br><small dir="ltr">${esc(s.branch.phone)}</small>` : ""}</div>${logo ? `<img src="${logo}" alt="">` : ""}</header>
       <pre>${esc(s.text)}</pre>
-      <div class="sig"><div>${en ? "Guest signature" : "توقيع الضيف"}</div><div>${en ? "Date" : "التاريخ"}</div><div>${en ? "Reception" : "الاستقبال"}</div></div>
+      <div class="sig"><div>${en ? "Guest signature" : "توقيع النزيل"}</div><div>${en ? "Date" : "التاريخ"}</div><div>${en ? "Reception" : "الاستقبال"}</div></div>
       <p class="hash">${esc(s.hash)}</p></body></html>`);
     w.document.close(); w.focus(); w.print();
   };
@@ -352,7 +352,7 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
           <p className="text-[11px] text-ink-400" dir="ltr">بصمة النص: {s.hash.slice(0, 16)}…</p>
           <div>
             <h4 className="mb-1 text-xs font-semibold text-ink-600">الإقرارات المسجلة</h4>
-            {s.acknowledgements.length === 0 ? <p className="text-xs text-ink-400">لم يُقر الضيف بعد (إلكترونيًا عند التسجيل، أو ورقيًا من هنا).</p> : (
+            {s.acknowledgements.length === 0 ? <p className="text-xs text-ink-400">لم يُقر النزيل بعد (إلكترونيًا عند التسجيل، أو ورقيًا من هنا).</p> : (
               <ul className="space-y-1 text-xs text-ink-600" data-testid="ack-list">
                 {s.acknowledgements.map((a) => <li key={a.id} className="flex items-center gap-2"><CheckCircle2 className={`h-3.5 w-3.5 ${a.text_hash === s.hash ? "text-success-600" : "text-ink-400"}`} />{a.method === "paper" ? "توقيع ورقي" : "إقرار إلكتروني"} · {formatDateTime(a.accepted_at)}{a.recorded_by ? ` · ${a.recorded_by}` : ""}{a.text_hash !== s.hash ? " · على نص سابق" : ""}</li>)}
               </ul>
@@ -362,7 +362,7 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
             <button onClick={print} className="btn-primary text-sm"><Printer className="h-4 w-4" /> طباعة / PDF</button>
             {canRecord && !s.acknowledgements.some((a) => a.text_hash === s.hash && a.method === "paper") && (
               <button onClick={async () => { setBusy(true); setErr(null); try { await opsApi.recordPaperAck(reservationId, s.hash); await load(); onChanged(); } catch (e) { setErr(toArabicError(e)); } finally { setBusy(false); } }} disabled={busy} className="btn-outline text-sm" data-testid="record-paper-ack">
-                {busy ? <Spinner className="h-4 w-4" /> : <FileSignature className="h-4 w-4" />} وقّع الضيف النسخة الورقية
+                {busy ? <Spinner className="h-4 w-4" /> : <FileSignature className="h-4 w-4" />} وقّع النزيل النسخة الورقية
               </button>
             )}
           </div>
@@ -375,7 +375,7 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
 /** One guest's identity line with the office path's actions (decision 2). */
 export function GuestEntryBadge({ g }: { g: Guest }) {
   if (g.entry_path === "office") return <Badge className="bg-brand-50 text-brand-700"><IdCard className="h-3 w-3" /> من الوثيقة{g.verified_by ? ` — ${g.verified_by}` : ""}</Badge>;
-  if (g.entry_path === "guest") return <Badge className="bg-ink-100 text-ink-500">أدخلها الضيف</Badge>;
+  if (g.entry_path === "guest") return <Badge className="bg-ink-100 text-ink-500">أدخلها النزيل</Badge>;
   return null;
 }
 

@@ -77,7 +77,7 @@ test.describe("«الرموز» — key-box codes", () => {
     // a stay with nothing owed, in a unit with a key box (0033, decision 8: no departure with money owed, for anyone)
     const room = "104";
     const row = page.locator("table tbody tr").filter({ has: page.locator("td:nth-child(3)", { hasText: room }) }).first();
-    await expect(row).toContainText("تم الدخول");
+    await expect(row).toContainText("مقيم");
     await row.getByRole("link", { name: "فتح" }).click();
 
     await checkOut(page);
@@ -86,7 +86,7 @@ test.describe("«الرموز» — key-box codes", () => {
 
     await go("/staff/codes");
     await expect(unit(page, room)).toHaveAttribute("data-state", "change");
-    await expect(unit(page, room)).toContainText("يجب تغيير الرمز بعد خروج النزيل");
+    await expect(unit(page, room)).toContainText("يجب تغيير الرمز بعد مغادرة النزيل");
     await go("/staff/dashboard");
     await expect(page.getByTestId("keybox-alert")).toContainText(room);
   });

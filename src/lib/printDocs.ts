@@ -56,7 +56,7 @@ function header(ctx: PrintContext): string {
 function stayMeta(ctx: PrintContext): string {
   const rows: Array<[string, string, boolean?]> = [["الحجز", ctx.reservationRef, true]];
   if (ctx.externalRef) rows.push(["رقم المنصة", ctx.externalRef, true]);
-  if (ctx.guest) rows.push(["الضيف", ctx.guest]);
+  if (ctx.guest) rows.push(["النزيل", ctx.guest]);
   if (ctx.room) rows.push(["الوحدة", ctx.room]);
   if (ctx.checkIn && ctx.checkOut) rows.push(["الإقامة", `${ctx.checkIn} → ${ctx.checkOut}`, true]);
   return rows.map(([k, v, ltr]) => `<div><span>${esc(k)}</span><span${ltr ? ' class="ltr"' : ""}>${esc(v)}</span></div>`).join("");
@@ -78,8 +78,8 @@ ${v.status === "cancelled" ? `<div class="void">سند ملغى${v.cancel_reason
 <div class="amount"><div class="fig">${esc(sar(v.amount_halalas))}</div><div class="words">${esc(amountInWords(v.amount_halalas))}</div></div>
 ${v.note ? `<p>البيان: ${esc(v.note)}</p>` : ""}
 <div class="sig">${v.kind === "refund" || v.kind === "deposit_refund"
-  ? `<div>المُسلِّم${v.created_by_name ? `: ${esc(v.created_by_name)}` : ""}</div><div>توقيع الضيف المستلم</div>`
-  : `<div>المستلم${v.created_by_name ? `: ${esc(v.created_by_name)}` : ""}</div><div>توقيع الضيف</div>`}</div>
+  ? `<div>المُسلِّم${v.created_by_name ? `: ${esc(v.created_by_name)}` : ""}</div><div>توقيع النزيل المستلم</div>`
+  : `<div>المستلم${v.created_by_name ? `: ${esc(v.created_by_name)}` : ""}</div><div>توقيع النزيل</div>`}</div>
 <footer>طُبع ${esc(formatDateTime(new Date().toISOString()))}${ctx.printedBy ? ` · ${esc(ctx.printedBy)}` : ""}</footer>`;
   return page(`${v.kindLabel} ${v.number}`, format, body);
 }
@@ -115,7 +115,7 @@ ${inv.status === "cancelled" ? `<div class="void">فاتورة ملغاة</div>`
 </div>
 <div class="amount"><div class="words">${esc(amountInWords(inv.total_halalas))}</div></div>
 ${inv.bill_to?.note ? `<p>${esc(inv.bill_to.note)}</p>` : ""}
-<div class="sig"><div>أصدرها${inv.issued_by ? `: ${esc(inv.issued_by)}` : ""}</div><div>توقيع الضيف</div></div>
+<div class="sig"><div>أصدرها${inv.issued_by ? `: ${esc(inv.issued_by)}` : ""}</div><div>توقيع النزيل</div></div>
 <footer>طُبع ${esc(formatDateTime(new Date().toISOString()))}${ctx.printedBy ? ` · ${esc(ctx.printedBy)}` : ""}</footer>`;
   return page(`${inv.kindLabel} ${inv.number}`, format, body);
 }

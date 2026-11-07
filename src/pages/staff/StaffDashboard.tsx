@@ -1,4 +1,5 @@
-import { COUNT } from "../../lib/utils";
+import { COUNT, arabicCount } from "../../lib/utils";
+import { canOpen } from "../../lib/nav";
 import { useReservations } from "../../lib/hooks";
 import { ReservationCardRow } from "../../components/ReservationCard";
 import { SectionTitle, LoadingScreen, EmptyState, LoadErrorCard, ErrorBanner } from "../../components/ui";
@@ -20,7 +21,7 @@ export default function StaffDashboard() {
   const sumQ = useBranchQuery<DailySummary | null>((branchId) => opsApi.dailySummary(branchId), [all.length], null);
   const sum = sumQ.data;
   // 0033: what waits for a decision today (the money roles; the server refuses the others)
-  const { permissions } = useAuth();
+  const { permissions, profile, can, canFull } = useAuth();
   const followRole = permissions.seesMoney;
   const fuQ = useBranchQuery<StayFollowups | null>((branchId) => (followRole ? stayApi.followups(branchId) : Promise.resolve(null)), [all.length, followRole], null);
   const fu = fuQ.data;
@@ -31,7 +32,7 @@ export default function StaffDashboard() {
   if (listError && all.length === 0 && arrivals.length === 0) {
     return (
       <div>
-        <SectionTitle title="مركز عمليات الاستقبال" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+        <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
         <LoadErrorCard message={listError} onRetry={() => { r1(); r2(); sumQ.reload(); }} />
       </div>
     );
@@ -48,22 +49,22 @@ export default function StaffDashboard() {
     { label: "وصول اليوم", value: arrivals.length, icon: CalendarClock, to: "/staff/arrivals", color: "bg-brand-50 text-brand-600" },
     { label: "بانتظار المطابقة", value: pendingIdentity.length, icon: UserCheck, to: "/staff/identity-verification", color: "bg-warning-500/10 text-warning-700" },
     ...(permissions.seesMoney ? [{ label: "بانتظار الدفع", value: pendingPayment.length, icon: CreditCard, to: "/staff/payments", color: "bg-danger-500/10 text-danger-600" }] : []),
-    { label: "جاهز لتسجيل الوصول", value: readyForApproval.length, icon: LogIn, to: "/staff/access-approvals", color: "bg-accent-500/10 text-accent-600" },
+    { label: "جاهز لتسجيل الوصول", value: readyForApproval.length, icon: LogIn, to: "/staff/access-approvals", color: "bg-accent-500/10 text-accent-700" },
     { label: "استلموا الرمز أو المفتاح", value: delivered.length, icon: KeyRound, to: "/staff/access-approvals", color: "bg-success-500/10 text-success-600" },
     { label: "إجمالي الحجوزات", value: all.length, icon: BookCheck, to: "/staff/reservations", color: "bg-ink-100 text-ink-600" },
   ];
 
   return (
     <div>
-      <SectionTitle title="مركز عمليات الاستقبال" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+      <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
       <ReviewBanner summary={review} />
       {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
       {fu && fu.overdue.length + fu.departed_open.length + fu.late_departures.length > 0 && (
         <Link to="/staff/followups" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-700 hover:shadow-sm" data-testid="followups-banner">
           <span className="flex items-center gap-2 font-medium"><BellRing className="h-4 w-4" /> متابعة الإقامات</span>
-          {fu.overdue.length > 0 && <span>{fu.overdue.length} بليلة غير مدفوعة بعد موعدها</span>}
-          {fu.departed_open.length > 0 && <span>{fu.departed_open.length} غادر ولم يُغلق</span>}
-          {fu.late_departures.length > 0 && <span>{fu.late_departures.length} تجاوز موعد المغادرة</span>}
+          {fu.overdue.length > 0 && <span>{COUNT.stay(fu.overdue.length)} بليلة غير مدفوعة بعد موعدها</span>}
+          {fu.departed_open.length > 0 && <span>{arabicCount(fu.departed_open.length, ["مغادرة واحدة لم تُغلق", "مغادرتان لم تُغلقا", "مغادرات لم تُغلق", "مغادرة لم تُغلق"])}</span>}
+          {fu.late_departures.length > 0 && <span>{arabicCount(fu.late_departures.length, ["إقامة واحدة تجاوزت", "إقامتان تجاوزتا", "إقامات تجاوزت", "إقامة تجاوزت"])} موعد المغادرة</span>}
         </Link>
       )}
 
@@ -76,7 +77,7 @@ export default function StaffDashboard() {
             { l: "جاهزة للدخول", v: sum.units.ready, to: "/staff/rooms" },
             { l: "تحتاج تنظيفًا", v: sum.units.dirty, to: "/staff/housekeeping" },
             // FRONT-05: «تمت من المجموع» — a guest still in the unit keeps the tile from reading as finished
-            { l: sum.departures.expected > 0 ? `مغادرة اليوم — ${sum.departures.expected} لم يغادر بعد` : "مغادرة اليوم", v: `${sum.departures.done}/${sum.departures.done + sum.departures.expected}`, to: "/staff/reservations" },
+            { l: sum.departures.expected > 0 ? `مغادرة اليوم — لم يغادر بعد: ${sum.departures.expected}` : "مغادرة اليوم", v: `${sum.departures.done}/${sum.departures.done + sum.departures.expected}`, to: "/staff/reservations" },
             // 0052 (PERM-01): the money tiles only for a role that sees money (the server leaves finance out otherwise)
             ...(sum.finance ? [
               { l: "متبقٍ على المقيمين", v: formatCurrency(sum.finance.outstanding_in_house / 100), to: "/staff/reservations" },
@@ -87,12 +88,12 @@ export default function StaffDashboard() {
       </div>
 
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-6">
-        {stats.map((s) => (
+        {stats.filter((s) => canOpen(profile?.role, s.to, { can, canFull })).map((s) => (   /* PERM-05: no tile that opens a refusal */
           <Link key={s.label} to={s.to} className="card flex flex-col gap-2 p-4 transition-all hover:shadow-md">
             <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${s.color}`}>
               <s.icon className="h-5 w-5" />
             </div>
-            <p className="text-2xl font-bold text-ink-800">{s.value}</p>
+            <p className="min-w-0 break-words text-xl font-bold tabular-nums text-ink-800 sm:text-2xl">{s.value}</p>
             <p className="text-xs text-ink-400">{s.label}</p>
           </Link>
         ))}

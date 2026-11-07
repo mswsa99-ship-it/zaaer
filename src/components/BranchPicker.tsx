@@ -19,7 +19,7 @@ export function BranchPicker({ className }: { className?: string }) {
   return (
     <label className={"inline-flex items-center gap-2 text-sm " + (className ?? "")}>
       <Building2 className="h-4 w-4 text-ink-400" />
-      <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} className="input w-auto py-1.5" aria-label="الفرع النشط">
+      <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} className="input w-auto max-w-full py-2.5" aria-label="الفرع النشط">
         {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
       </select>
     </label>

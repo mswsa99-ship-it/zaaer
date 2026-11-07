@@ -33,13 +33,13 @@ test.describe("rates (phase 2)", () => {
     await expect(page.getByTestId("rates-grid")).toBeVisible();
     await page.getByRole("button", { name: `شقة بغرفتين السعر ${nights[0]}` }).click();
     await page.getByRole("button", { name: `شقة بغرفتين السعر ${nights[2]}` }).click({ modifiers: ["Shift"] });
-    await expect(page.getByText("3 خانة محددة")).toBeVisible();
+    await expect(page.getByText("المحددة: 3")).toBeVisible();
     await page.getByRole("button", { name: "تعديل المحدد" }).click();
     const dlg = page.getByRole("dialog");
     await dlg.locator("input[data-money]").first().fill("650");
     await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg).toBeHidden();
-    await expect(page.getByText("حُدِّثت 3 خانة.")).toBeVisible();
+    await expect(page.getByText("حُدِّثت الخانات: 3.")).toBeVisible();
     await expect(page.getByRole("button", { name: `شقة بغرفتين السعر ${nights[1]}` })).toHaveText("650");
 
     // a price under the type's minimum (480.00) is refused, with the reason

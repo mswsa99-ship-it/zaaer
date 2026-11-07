@@ -36,40 +36,41 @@ import Codes from "./pages/staff/Codes";
 import Tickets from "./pages/staff/Tickets";
 import Inbox from "./pages/staff/Inbox";
 
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminBranches from "./pages/admin/AdminBranches";
-import AdminRoomCategories from "./pages/admin/AdminRoomCategories";
-import AdminRooms from "./pages/admin/AdminRooms";
-import AdminAvailability from "./pages/admin/AdminAvailability";
-import AdminAvailabilityRules from "./pages/admin/AdminAvailabilityRules";
-import AdminReservations from "./pages/admin/AdminReservations";
-import AdminGuests from "./pages/admin/AdminGuests";
-import AdminFinance from "./pages/admin/AdminFinance";
-import AdminStaff from "./pages/admin/AdminStaff";
-import AdminRoles from "./pages/admin/AdminRoles";
-import AdminBookingSources from "./pages/admin/AdminBookingSources";
-import AdminAiSettings from "./pages/admin/AdminAiSettings";
-import AdminOrganization from "./pages/admin/AdminOrganization";
-import AdminWhatsapp from "./pages/admin/AdminWhatsapp";
-import AdminPaymentProviders from "./pages/admin/AdminPaymentProviders";
-import AdminPolicies from "./pages/admin/AdminPolicies";
-import AdminKnowledge from "./pages/admin/AdminKnowledge";
-import AdminReports from "./pages/admin/AdminReports";
-import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
-import AdminUsage from "./pages/admin/AdminUsage";
-import AdminIntegrations from "./pages/admin/AdminIntegrations";
-import AdminStructure from "./pages/admin/AdminStructure";
-import AdminFacilities from "./pages/admin/AdminFacilities";
-import AdminTaskTypes from "./pages/admin/AdminTaskTypes";
-import AdminServices from "./pages/admin/AdminServices";
-import AdminAssistant from "./pages/admin/AdminAssistant";
-import AdminDataPurge from "./pages/admin/AdminDataPurge";
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminBranches = lazy(() => import("./pages/admin/AdminBranches"));
+const AdminRoomCategories = lazy(() => import("./pages/admin/AdminRoomCategories"));
+const AdminRooms = lazy(() => import("./pages/admin/AdminRooms"));
+const AdminAvailability = lazy(() => import("./pages/admin/AdminAvailability"));
+const AdminAvailabilityRules = lazy(() => import("./pages/admin/AdminAvailabilityRules"));
+const AdminReservations = lazy(() => import("./pages/admin/AdminReservations"));
+const AdminGuests = lazy(() => import("./pages/admin/AdminGuests"));
+const AdminFinance = lazy(() => import("./pages/admin/AdminFinance"));
+const AdminStaff = lazy(() => import("./pages/admin/AdminStaff"));
+const AdminRoles = lazy(() => import("./pages/admin/AdminRoles"));
+const AdminBookingSources = lazy(() => import("./pages/admin/AdminBookingSources"));
+const AdminAiSettings = lazy(() => import("./pages/admin/AdminAiSettings"));
+const AdminOrganization = lazy(() => import("./pages/admin/AdminOrganization"));
+const AdminWhatsapp = lazy(() => import("./pages/admin/AdminWhatsapp"));
+const AdminPaymentProviders = lazy(() => import("./pages/admin/AdminPaymentProviders"));
+const AdminPolicies = lazy(() => import("./pages/admin/AdminPolicies"));
+const AdminKnowledge = lazy(() => import("./pages/admin/AdminKnowledge"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
+const AdminAuditLogs = lazy(() => import("./pages/admin/AdminAuditLogs"));
+const AdminUsage = lazy(() => import("./pages/admin/AdminUsage"));
+const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
+const AdminStructure = lazy(() => import("./pages/admin/AdminStructure"));
+const AdminFacilities = lazy(() => import("./pages/admin/AdminFacilities"));
+const AdminTaskTypes = lazy(() => import("./pages/admin/AdminTaskTypes"));
+const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
+const AdminAssistant = lazy(() => import("./pages/admin/AdminAssistant"));
+const AdminDataPurge = lazy(() => import("./pages/admin/AdminDataPurge"));
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
 import PosSettlement from "./pages/staff/PosSettlement";
-import AdminCashAccounts from "./pages/admin/AdminCashAccounts";
-import AdminPlatformPayouts from "./pages/admin/AdminPlatformPayouts";
-import AdminRates from "./pages/admin/AdminRates";
-import AdminReview from "./pages/admin/AdminReview";
+const AdminCashAccounts = lazy(() => import("./pages/admin/AdminCashAccounts"));
+const AdminPlatformPayouts = lazy(() => import("./pages/admin/AdminPlatformPayouts"));
+const AdminRates = lazy(() => import("./pages/admin/AdminRates"));
+const AdminReview = lazy(() => import("./pages/admin/AdminReview"));
+/** IX-08: the owner's screens load on first use, so the staff and guest pages start faster on a weak network */
 /** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
 const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
 
@@ -82,6 +83,7 @@ function ProtectedStaff({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <Suspense fallback={<LoadingScreen />}>
     <Routes>
       {/* Guest */}
       <Route element={<GuestLayout />}>
@@ -169,5 +171,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

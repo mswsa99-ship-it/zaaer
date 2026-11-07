@@ -57,13 +57,13 @@ export default function BookingStatus() {
   const hasKeybox = r.has_keybox !== false;
   const firstNightPaid = r.first_night_paid ?? r.payment_status === "paid";
 
-  const hijri = (d: string) => (en ? formatHijri(d).replace("هـ", " AH") : formatHijri(d));
+  const hijri = (d: string) => formatHijri(d, en);
   const money = (h: number) => (en ? moneyEn(h / 100) : formatCurrency(h / 100));
   const steps = [
     { label: t("تسجيل بيانات النزلاء", "Guests' details"), icon: UserCheck, done: submitted >= required && required > 0, statusText: t(`${submitted} من ${required}`, `${submitted} of ${required}`), action: submitted < required && !departed && !["checked_in"].includes(r.status) ? { label: t("استكمال البيانات", "Complete details"), to: `/booking/registration/${token}` } : null },
     { label: t("مطابقة الهوية (الاستقبال)", "ID check (at the reception)"), icon: FileCheck, done: r.identity_status === "verified", statusText: en ? VERIFICATION_EN[r.identity_status] ?? r.identity_status : GUEST_VERIFICATION_LABELS[r.identity_status as GuestVerificationStatus] },
     { label: t("سداد الليلة الأولى", "First night's payment"), icon: CreditCard, done: firstNightPaid, statusText: `${en ? PAYMENT_EN[r.payment_status] ?? r.payment_status : PAYMENT_STATUS_LABELS[r.payment_status as PaymentStatus]}${dueHalalas > 0 ? t(` · المتبقي على الإقامة ${money(dueHalalas)}`, ` · ${money(dueHalalas)} left on the stay`) : ""}` },
-    { label: t("تسجيل الوصول في الاستقبال", "Check-in at the reception"), icon: LogIn, done: arrived, statusText: arrived ? t("تم", "Done") : t("عند وصولك: التسجيل في شموس والتأمين في الاستقبال", "On arrival: guest registration with the authorities and the security deposit, at the reception") },
+    { label: t("تسجيل الوصول في الاستقبال", "Check-in at the reception"), icon: LogIn, done: arrived, statusText: arrived ? t("تم", "Done") : t("عند وصولك يسجّلك الاستقبال في نظام شموس (إلزامي للإيواء) ويستلم مبلغ التأمين", "On arrival: guest registration with the authorities and the security deposit, at the reception") },
     hasKeybox
       ? { label: t("رمز صندوق المفتاح", "Key-box code"), icon: KeyRound, done: delivered, statusText: delivered ? t("جاهز للعرض", "Ready to view") : t("بعد تسجيل الوصول", "After check-in") }
       : { label: t("مفتاح الوحدة", "Unit key"), icon: KeyRound, done: arrived, statusText: arrived ? t("يُسلَّم في الاستقبال", "Handed over at the reception") : t("يُسلَّم في الاستقبال بعد تسجيل الوصول", "Handed over at the reception after check-in") },
@@ -106,8 +106,8 @@ export default function BookingStatus() {
   const today = todayISO();
   const greeting = ["checked_out", "closed"].includes(r.status) ? t("شكرًا لإقامتك معنا", "Thank you for staying with us")
     : arrived ? t("نتمنى لك إقامة طيبة", "We wish you a pleasant stay")
-    : r.check_in === today ? t("أهلًا بك، إقامتك تبدأ اليوم", "Welcome — your stay starts today")
-    : r.check_in > today ? t(`أهلًا بك، موعد وصولك ${r.check_in}`, `Welcome — you arrive on ${r.check_in}`)
+    : r.check_in === today ? t("أهلًا وسهلًا، إقامتك تبدأ اليوم", "Welcome — your stay starts today")
+    : r.check_in > today ? t(`أهلًا وسهلًا، موعد وصولك ${r.check_in}`, `Welcome — you arrive on ${r.check_in}`)
     : t(`موعد وصولك كان ${r.check_in} — إن كنت ما زلت قادمًا فتواصل مع الاستقبال`, `Your arrival date was ${r.check_in} — if you are still coming, please contact the reception`);   // GUEST-18: an arrival date that has passed
   const checkInTime = formatClock(branch?.check_in_time, en);   // GUEST-17: the same time format as the terms page
 
@@ -166,13 +166,13 @@ export default function BookingStatus() {
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         {["locked"].includes(r.access_status) && !arrived && submitted >= required && (
           <button onClick={confirmArrival} disabled={acting} className="btn-primary">
-            {acting ? <Spinner /> : <><MapPin className="h-4 w-4" /> {t("وصلت — أبلغ الاستقبال", "I have arrived — tell the reception")}</>}
+            {acting ? <Spinner /> : <><MapPin className="h-4 w-4" /> {t("وصلتُ — إبلاغ الاستقبال", "I have arrived — tell the reception")}</>}
           </button>
         )}
         {r.access_status === "eligibility_review" && !arrived && (
           <div className="rounded-xl bg-brand-50 p-3 text-center text-sm text-brand-700">{t("أُبلغ الاستقبال بوصولك؛ يُسجَّل وصولك هناك.", "The reception knows you have arrived; check-in is done there.")}</div>
         )}
-        <button onClick={() => navigate(`/reception?token=${token}`)} className="btn-outline"><MessageCircle className="h-4 w-4" /> {t("محادثة المساعد (متحقق)", "Chat with the assistant (verified)")}</button>
+        <button onClick={() => navigate(`/reception?token=${token}`)} className="btn-outline"><MessageCircle className="h-4 w-4" /> {t("محادثة المساعد عن حجزك", "Chat with the assistant (verified)")}</button>
         <Link to={`/booking/summary/${token}`} className="btn-outline" data-testid="summary-link"><FileText className="h-4 w-4" /> {t("ملخص الإقامة", "Stay summary")}{r.summary_accepted ? t(" (مُقرّ)", " (accepted)") : ""}</Link>
         {branch?.phone && <a href={`tel:${branch.phone.replace(/[^0-9+]/g, "")}`} className="btn-outline" data-testid="call-reception"><Phone className="h-4 w-4" /> {t("اتصل بالاستقبال", "Call the reception")} <span className="font-mono text-xs" dir="ltr">{branch.phone}</span></a>}
         {branch?.map_url && <a href={branch.map_url} target="_blank" rel="noopener noreferrer" className="btn-outline" data-testid="map-link"><MapPin className="h-4 w-4" /> {t("الموقع على الخريطة", "Location on the map")}</a>}
@@ -191,9 +191,9 @@ export default function BookingStatus() {
 
       {delivered && (
         <div className="mt-6 rounded-2xl bg-accent-500/10 p-5 text-center">
-          <KeyRound className="mx-auto mb-2 h-8 w-8 text-accent-600" />
-          <p className="text-sm font-medium text-accent-600">{t("رمز صندوق المفتاح جاهز", "Your key-box code is ready")}</p>
-          <Link to={`/checkin/${token}`} className="btn-accent mt-3">{t("عرض رمز الدخول", "Show the entry code")}</Link>
+          <KeyRound className="mx-auto mb-2 h-8 w-8 text-accent-700" />
+          <p className="text-sm font-medium text-accent-700">{t("رمز صندوق المفتاح جاهز", "Your key-box code is ready")}</p>
+          <Link to={`/checkin/${token}`} className="btn-accent mt-3">{t("عرض رمز الصندوق", "Show the key-box code")}</Link>
         </div>
       )}
     </div>

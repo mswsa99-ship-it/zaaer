@@ -12,7 +12,7 @@ import { useAuth } from "../lib/auth";
 import { staffApi, stayApi, toArabicError, newIdempotencyKey, type StayStatus, type PaymentEntry, type CheckInResult } from "../lib/api";
 import { useCashAccounts } from "../lib/useCashAccounts";
 import { METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, RESERVATION_STATUS_LABELS, type PaymentMethod, type ReservationStatus } from "../lib/types";
-import { formatCurrency, formatDateTime, UI_LOCALE, COUNT } from "../lib/utils";
+import { formatCurrency, formatDateTime, UI_LOCALE, COUNT, radioGroupKeys } from "../lib/utils";
 import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "./forms";
 import { PaymentFields } from "./ReservationOperations";
@@ -175,7 +175,7 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
                 <MoneyInput valueHalalas={deposit} onChange={setDeposit} />
               </Field>
               {(deposit ?? 0) > 0 && <PaymentFields method={depMethod} setMethod={setDepMethod} accountId={depAccount} setAccountId={setDepAccount} reference={depRef} setReference={setDepRef} accounts={accounts.active} verb="receive" deposit />}
-              {depositShort > 0 && <ReasonInput value={reason} onChange={setReason} label="سبب عدم استلام التأمين كاملًا (إلزامي)" placeholder="مثال: ضيف شركة بعقد سارٍ" />}
+              {depositShort > 0 && <ReasonInput value={reason} onChange={setReason} label="سبب عدم استلام التأمين كاملًا (إلزامي)" placeholder="مثال: نزيل شركة بعقد سارٍ" />}
             </fieldset>
           </div>
           <Submit label="تسجيل الوصول" />
@@ -219,9 +219,9 @@ function InHouseCard({ s, id, done, fail, refused, canAct, canInspect, money, is
           </div>
         ) : canAct ? (
           <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="قناة التسليم">
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" onKeyDown={radioGroupKeys} aria-label="قناة التسليم">
               {(["screen", "supervisor"] as const).map((c) => (
-                <button key={c} type="button" role="radio" aria-checked={channel === c} onClick={() => setChannel(c)}
+                <button key={c} type="button" role="radio" aria-checked={channel === c} tabIndex={channel === c ? 0 : -1} onClick={() => setChannel(c)}
                   className={`rounded-xl border px-3 py-2 text-sm ${channel === c ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100 text-ink-600"}`}>{c === "screen" ? "صفحة النزيل" : "شفهيًا عبر المشرف"}</button>
               ))}
             </div>
@@ -330,9 +330,9 @@ function InspectionForm({ id, done, deposit }: { id: string; done: Done; deposit
         await stayApi.inspect({ reservation_id: id, result, notes: notes.trim() || undefined, suggested_deduction_halalas: result === "notes" && suggested && suggested > 0 ? suggested : undefined });
         await done("سُجِّل فحص المغادرة.");
       }}>
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="نتيجة الفحص">
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" onKeyDown={radioGroupKeys} aria-label="نتيجة الفحص">
           {(["ok", "notes"] as const).map((v) => (
-            <button key={v} type="button" role="radio" aria-checked={result === v} onClick={() => setResult(v)}
+            <button key={v} type="button" role="radio" aria-checked={result === v} tabIndex={result === v ? 0 : -1} onClick={() => setResult(v)}
               className={`rounded-xl border px-3 py-2 text-sm ${result === v ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100 text-ink-600"}`}>{v === "ok" ? "الوحدة سليمة" : "بملاحظات"}</button>
           ))}
         </div>
@@ -399,7 +399,7 @@ function CheckoutModal({ open, s, id, money, onClose, onDone, onRefused }: { ope
   const finish = (r: Awaited<ReturnType<typeof stayApi.checkOut>>) => {
     // decision 27: the departure invoices what is not yet invoiced, in the same operation
     const invoiced = r.invoice ? ` وصدرت فاتورة الإقامة ${r.invoice}` : "";
-    const credit = (r.credit_halalas ?? 0) > 0 ? ` للضيف رصيد ${sar(r.credit_halalas)} يُرد أو يُبقى حسب سياسة الفرع.` : "";
+    const credit = (r.credit_halalas ?? 0) > 0 ? ` للنزيل رصيد ${sar(r.credit_halalas)} يُرد أو يُبقى حسب سياسة الفرع.` : "";
     if (r.status === "closed") return `سُجِّلت المغادرة${invoiced} وأُغلقت الإقامة: لا مستحق، ولا رصيد للضيف، والتأمين مُسوّى، وقيمة الإقامة مفوترة.`;
     return `سُجِّلت المغادرة${invoiced}.${credit}${(r.deposit_to_settle_halalas ?? 0) > 0 ? ` يبقى تأمين ${sar(r.deposit_to_settle_halalas)} يُرد بعد فحص المغادرة.` : ""}`;
   };

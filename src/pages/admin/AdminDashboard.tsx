@@ -105,7 +105,7 @@ export default function AdminDashboard() {
   const kpis: Array<{ label: string; value: string | number; icon: typeof DoorClosed; color: string; note?: string; to?: string; testId?: string }> = [
     { label: "الوحدات", value: stats.totalRooms, icon: DoorClosed, color: "bg-brand-50 text-brand-600", note: s ? `${s.units.active} عاملة · ${s.units.occupied} مشغولة · ${s.units.ready} جاهزة` : undefined },
     // OWNER-03: both figures, each with its definition
-    { label: "الإشغال (الوحدات العاملة)", value: pct1(s?.occupancy_pct), icon: TrendingUp, color: "bg-accent-500/10 text-accent-600", note: "المشغولة ÷ الوحدات العاملة (بلا الموقوفة)", testId: "kpi-occupancy" },
+    { label: "الإشغال (الوحدات العاملة)", value: pct1(s?.occupancy_pct), icon: TrendingUp, color: "bg-accent-500/10 text-accent-700", note: "المشغولة ÷ الوحدات العاملة (بلا الموقوفة)", testId: "kpi-occupancy" },
     { label: "الإشغال (كل الوحدات)", value: pct1(s?.occupancy_all_pct), icon: BedDouble, color: "bg-ink-100 text-ink-600", note: "المشغولة ÷ كل الوحدات غير المؤرشفة", testId: "kpi-occupancy-all" },
     // OWNER-15: the same definition as the owner's table — still to arrive today
     { label: "متبقٍ وصولًا اليوم", value: s ? s.arrivals.expected : "—", icon: BookCheck, color: "bg-brand-50 text-brand-600", note: s ? `وصل ${s.arrivals.arrived} · متأخر ${s.arrivals.overdue}` : undefined, to: "/staff/arrivals" },
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
     // OWNER-06: live bookings only; the cancelled and no-show ones said apart
     { label: "طلبات دفع معلّقة", value: stats.pendingPayments, icon: Wallet, color: "bg-warning-500/10 text-warning-700", note: stats.pendingPaymentsDead ? `على حجوزات قائمة؛ و${COUNT.booking(stats.pendingPaymentsDead)} ملغاة أو لم تحضر خارجها` : "على حجوزات قائمة", to: "/admin/reservations", testId: "kpi-pending-payments" },
     { label: "إقامات آخر 7 أيام", value: stats.finance ? stats.finance.reservations.count : "—", icon: Users, color: "bg-ink-100 text-ink-600", note: stats.finance ? COUNT.night(stats.finance.reservations.nights) : undefined },
-    { label: "تذاكر تحويل لمشرف (مفتوحة)", value: stats.openHandoffs, icon: LifeBuoy, color: stats.openHandoffs > 0 ? "bg-danger-500/10 text-danger-600" : "bg-ink-100 text-ink-600", to: "/staff/tickets" },
+    { label: "طلبات التحويل لموظف (مفتوحة)", value: stats.openHandoffs, icon: LifeBuoy, color: stats.openHandoffs > 0 ? "bg-danger-500/10 text-danger-600" : "bg-ink-100 text-ink-600", to: "/staff/tickets" },
     { label: "حجوزات غير مطابقة", value: stats.unmatched, icon: SearchX, color: stats.unmatched > 0 ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-600" },
     { label: "تسليم رمز بلا تأكيد (> ساعة)", value: stats.deliveryFailures, icon: KeyRound, color: stats.deliveryFailures > 0 ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-600" },
   ];

@@ -1,6 +1,7 @@
 import { DemoBanner } from "../components/DemoBanner";
-import { useEffect, useState } from "react";
-import { Outlet, NavLink, useNavigate, Link, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useFocusTrap, useMainFocusOnRoute, useScrollOnRoute, focusMain } from "../lib/useFocusTrap";
+import { Outlet, NavLink, useNavigate, Link, useLocation, useNavigationType } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { ROLE_LABELS } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -26,13 +27,11 @@ export default function StaffLayout() {
   const tabs = pickTabs(nav, ["/staff/rooms", "/staff/access-approvals", "/staff/reservations", "/staff/payments"]);
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
+  useMainFocusOnRoute(location.pathname);
+  useScrollOnRoute(location.key, location.pathname, useNavigationType());
   useEffect(() => { setMoreOpen(false); }, [location.pathname]);
-  useEffect(() => {
-    if (!moreOpen) return;
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setMoreOpen(false); };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, [moreOpen]);
+  const drawer = useRef<HTMLElement>(null);
+  useFocusTrap(moreOpen, drawer, () => setMoreOpen(false));   // A11Y-03: focus in, Tab kept inside, back to «المزيد»
 
   async function handleSignOut() {
     await signOut();
@@ -41,6 +40,7 @@ export default function StaffLayout() {
 
   return (
     <div className="flex min-h-screen bg-ink-50">
+      <a href="#main" onClick={focusMain} className="sr-only z-50 rounded-xl bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow focus:not-sr-only focus:fixed focus:right-4 focus:top-4">تخطَّ إلى المحتوى</a>
       <aside className="fixed inset-y-0 right-0 z-20 hidden w-64 flex-col border-l border-ink-100 bg-white lg:flex">
         <div className="flex items-center gap-2.5 border-b border-ink-100 px-5 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white">
@@ -100,18 +100,19 @@ export default function StaffLayout() {
               <LogOut className="h-4 w-4" />
             </button>
           </header>
-          <KeyboxAlertBanner alerts={codeAlerts} />
         </div>
-        <main className="flex-1 p-4 pb-36 lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
+        {/* IX-03: the code alert scrolls away with the page instead of pinning a tall block on a phone */}
+        <KeyboxAlertBanner alerts={codeAlerts} />
+        <main id="main" tabIndex={-1} className="flex-1 p-4 pb-36 outline-none lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
           <Outlet />
         </main>
       </div>
       <OpsCopilot />
       <BottomTabs items={tabs} onMore={() => setMoreOpen(true)} moreOpen={moreOpen} />
       {moreOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="كل الصفحات">
-          <button type="button" className="absolute inset-0 bg-ink-900/40" aria-label="إغلاق القائمة" onClick={() => setMoreOpen(false)} />
-          <aside className="absolute inset-y-0 right-0 flex w-[min(20rem,85vw)] flex-col overflow-y-auto bg-white shadow-xl" data-testid="staff-menu-drawer">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="كل الصفحات">
+          <div className="absolute inset-0 bg-ink-900/40" aria-hidden="true" onClick={() => setMoreOpen(false)} />
+          <aside ref={drawer} className="absolute inset-y-0 right-0 flex w-[min(20rem,85vw)] flex-col overflow-y-auto bg-white shadow-xl" data-testid="staff-menu-drawer">
             <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
               <p className="text-sm font-semibold text-ink-800">كل الصفحات</p>
               <button type="button" onClick={() => setMoreOpen(false)} className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-50" aria-label="إغلاق القائمة"><X className="h-5 w-5" /></button>

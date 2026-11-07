@@ -60,12 +60,12 @@ export function OpsCopilot() {
         <Bot className="h-5 w-5" /> <span className="hidden sm:inline">مساعد العمليات</span>
       </button>
       {open && (
-        <div className="fixed bottom-[136px] left-5 z-40 flex h-[min(640px,70vh)] lg:bottom-20 w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xl">
+        <div role="dialog" aria-label="مساعد العمليات" className="fixed bottom-[136px] left-5 z-40 flex h-[min(640px,70vh)] lg:bottom-20 w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-ink-100 bg-ink-800 px-4 py-3 text-white">
-            <div className="flex items-center gap-2"><Bot className="h-5 w-5" /><div className="leading-tight"><p className="text-sm font-semibold">مساعد العمليات</p><p className="text-[11px] text-ink-400">{branch?.name_ar} · يقرأ البيانات ويقترح؛ أنت من ينفذ</p></div></div>
-            <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-white"><X className="h-4 w-4" /></button>
+            <div className="flex items-center gap-2"><Bot className="h-5 w-5" /><div className="leading-tight"><p className="text-sm font-semibold">مساعد العمليات</p><p className="text-[11px] text-ink-200">{branch?.name_ar}</p><p className="text-[11px] text-ink-200">يقرأ البيانات ويقترح؛ أنت من ينفذ</p></div></div>
+            <button onClick={() => setOpen(false)} className="rounded-lg p-2.5 text-ink-200 hover:bg-white/10 hover:text-white" aria-label="إغلاق المساعد"><X className="h-4 w-4" /></button>
           </div>
-          <div className="flex-1 space-y-3 overflow-y-auto p-3 scrollbar-thin">
+          <div className="flex-1 space-y-3 overflow-y-auto p-3 scrollbar-thin" role="log" aria-live="polite" aria-label="المحادثة">
             {msgs.length === 0 && (
               <div className="space-y-2">
                 <p className="text-xs text-ink-500">اسأل عن حالة اليوم أو اطلب إجراءً (مثل: «أنشئ مهمة تنظيف للوحدة 101» أو «مدّد الحجز R-… ليلة»). كل إجراء يحتاج تأكيدك.</p>
@@ -100,7 +100,7 @@ export function OpsCopilot() {
           </div>
           <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2 border-t border-ink-100 p-2">
             <input value={input} onChange={(e) => setInput(e.target.value)} className="input" aria-label="سؤالك أو طلبك" placeholder="اكتب سؤالك أو طلبك…" disabled={busy} />
-            <button type="submit" disabled={busy || !input.trim()} className="btn-primary px-3"><Send className="h-4 w-4" /></button>
+            <button type="submit" disabled={busy || !input.trim()} className="btn-primary px-3" aria-label="إرسال"><Send className="h-4 w-4" /></button>
           </form>
         </div>
       )}

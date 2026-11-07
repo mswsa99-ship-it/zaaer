@@ -13,7 +13,7 @@ import { knowledgeApi, suggestKeywords, KNOWLEDGE_CATEGORY_LABELS, type Knowledg
 import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge , NumberInput} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
-import { formatDateTime } from "../../lib/utils";
+import { formatDateTime, COUNT } from "../../lib/utils";
 import { BookOpen, Plus, Pencil, Search, MessageCircleQuestion, Archive, RotateCcw, FileText, Building2, Globe, Lock, Sparkles } from "lucide-react";
 
 type Tab = "entries" | "unanswered";
@@ -75,7 +75,7 @@ export default function AdminKnowledge() {
 
       {/* the three sources, in one line */}
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
-        <div className="card flex items-center gap-3 p-3"><BookOpen className="h-5 w-5 text-brand-600" /><div><p className="text-sm font-semibold text-ink-800">الأسئلة والأجوبة</p><p className="text-[11px] text-ink-400">{rows.filter((r) => !r.archived_at).length} إجابة فعّالة · {open.length} سؤال بلا إجابة</p></div></div>
+        <div className="card flex items-center gap-3 p-3"><BookOpen className="h-5 w-5 text-brand-600" /><div><p className="text-sm font-semibold text-ink-800">الأسئلة والأجوبة</p><p className="text-[11px] text-ink-400">{COUNT.answer(rows.filter((r) => !r.archived_at).length)} فعّالة · {COUNT.question(open.length)} بلا إجابة</p></div></div>
         <Link to="/admin/policies" className="card flex items-center gap-3 p-3 hover:bg-ink-50"><FileText className="h-5 w-5 text-brand-600" /><div><p className="text-sm font-semibold text-ink-800">السياسات الأساسية</p><p className="text-[11px] text-ink-400">الإلغاء، الإنترنت، المواقف، الأطفال، شروط الإقامة ↗</p></div></Link>
         <Link to="/admin/branches" className="card flex items-center gap-3 p-3 hover:bg-ink-50"><Building2 className="h-5 w-5 text-brand-600" /><div><p className="text-sm font-semibold text-ink-800">بيانات الفرع</p><p className="text-[11px] text-ink-400">مواعيد الوصول والمغادرة، العنوان، الهاتف ↗</p></div></Link>
       </div>
@@ -111,12 +111,12 @@ export default function AdminKnowledge() {
                     <Badge className="bg-ink-50 text-ink-500">{r.branch_id ? "هذا الفرع" : "كل الفروع"}</Badge>
                     {r.keywords.map((k) => <span key={k} className="rounded-md border border-ink-100 px-1.5 py-0.5 text-[11px] text-ink-500">{k}</span>)}
                   </div>
-                  <p className="mt-2 text-[11px] text-ink-400">استُخدمت {r.used_count} مرة{r.last_used_at ? ` · آخر مرة ${formatDateTime(r.last_used_at)}` : ""}{r.archive_reason ? ` · سبب الأرشفة: ${r.archive_reason}` : ""}</p>
+                  <p className="mt-2 text-[11px] text-ink-400">{r.used_count ? `استُخدمت ${COUNT.times(r.used_count)}` : "لم تُستخدم بعد"}{r.last_used_at ? ` · آخر مرة ${formatDateTime(r.last_used_at)}` : ""}{r.archive_reason ? ` · سبب الأرشفة: ${r.archive_reason}` : ""}</p>
                 </div>
                 {canEdit && (
                   <div className="flex shrink-0 flex-col gap-1">
-                    {!r.archived_at && <button onClick={() => startEdit(r)} className="btn-ghost p-1.5" title="تعديل"><Pencil className="h-4 w-4" /></button>}
-                    {!r.archived_at && <button onClick={() => setLifecycle({ row: r, reason: "" })} className="btn-ghost p-1.5 text-ink-400" title="أرشفة"><Archive className="h-4 w-4" /></button>}
+                    {!r.archived_at && <button onClick={() => startEdit(r)} className="btn-ghost p-2.5" title="تعديل" aria-label={`تعديل: ${r.question}`}><Pencil className="h-4 w-4" /></button>}
+                    {!r.archived_at && <button onClick={() => setLifecycle({ row: r, reason: "" })} className="btn-ghost p-2.5 text-ink-400" title="أرشفة" aria-label={`أرشفة: ${r.question}`}><Archive className="h-4 w-4" /></button>}
                     {r.archived_at && <button disabled={busyId === r.id} onClick={() => act(r.id, () => knowledgeApi.archive(r.id, "استعادة", false))} className="btn-ghost p-1.5" title="استعادة">{busyId === r.id ? <Spinner className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}</button>}
                   </div>
                 )}
@@ -134,7 +134,7 @@ export default function AdminKnowledge() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-ink-800">{u.question}</p>
-                  <p className="text-[11px] text-ink-400">سُئل {u.asked_count} مرة · آخر مرة {formatDateTime(u.last_asked_at)}</p>
+                  <p className="text-[11px] text-ink-400">سُئل {COUNT.times(u.asked_count)} · آخر مرة {formatDateTime(u.last_asked_at)}</p>
                 </div>
                 {canEdit && (
                   <div className="flex gap-2">

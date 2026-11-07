@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./lib/auth";
 import { BranchProvider } from "./lib/branch";
 import App from "./App";
+import { AppErrorBoundary, OfflineBanner } from "./components/AppErrorBoundary";
 import "./index.css";
 import { startLabelLinker } from "./lib/a11y";
 
@@ -28,7 +29,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <AuthProvider>
           {/* One branch scope for the whole app: BranchPicker, data hooks and the route guard share it (GAP01/GAP02). */}
           <BranchProvider>
-            <App />
+            <AppErrorBoundary>
+              <OfflineBanner />
+              <App />
+            </AppErrorBoundary>
           </BranchProvider>
         </AuthProvider>
       </Router>

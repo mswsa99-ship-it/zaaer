@@ -22,6 +22,7 @@ const SHORT: Record<string, string> = {
   "/staff/rooms": "الوحدات", "/staff/access-approvals": "الوصول", "/staff/reservations": "الحجوزات", "/staff/payments": "المدفوعات",
   "/staff/housekeeping": "الغرف", "/staff/tickets": "البلاغات", "/staff/dashboard": "العمليات",
   "/admin/dashboard": "الإدارة", "/admin/reservations": "الحجوزات", "/admin/finance": "المالية", "/admin/review": "المراجعة",
+  "/admin/guests": "النزلاء", "/admin/policies": "السياسات", "/admin/audit-logs": "السجل", "/admin/assistant": "المساعد", "/admin/knowledge": "المعرفة",
 };
 
 export function BottomTabs({ items, onMore, moreOpen }: { items: TabItem[]; onMore: () => void; moreOpen: boolean }) {

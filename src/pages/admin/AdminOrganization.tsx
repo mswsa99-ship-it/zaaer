@@ -89,7 +89,7 @@ export default function AdminOrganization() {
         )}
         <div className="flex flex-wrap items-center gap-3 rounded-xl bg-ink-50 p-3">
           {org.logo ? <img src={org.logo} alt="شعار المنشأة" className="h-12 max-w-[140px] rounded-md object-contain" /> : <div className="flex h-12 w-16 items-center justify-center rounded-md bg-white text-ink-400"><ImageIcon className="h-5 w-5" /></div>}
-          <p className="flex-1 text-xs text-ink-500">الشعار — PNG أو JPG أو WebP حتى 200 كيلوبايت. يظهر في رأس الشاشات وصفحات الضيوف.</p>
+          <p className="flex-1 text-xs text-ink-500">الشعار — PNG أو JPG أو WebP حتى 200 كيلوبايت. يظهر في رأس الشاشات وصفحات النزلاء.</p>
           {owner && <label className="btn-outline min-h-[44px] cursor-pointer text-xs">{org.logo ? "استبدال" : "رفع"}<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={pickLogo} disabled={busy !== null} aria-label="رفع شعار المنشأة" /></label>}
           {owner && org.logo && <button className="btn-ghost min-h-[44px] text-xs text-danger-600" disabled={busy !== null} onClick={() => save("names", { logo_base64: "" })}>إزالة</button>}
         </div>

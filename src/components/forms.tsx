@@ -14,8 +14,10 @@ export function Modal({ open, title, onClose, children, wide, closeLabel = "إغ
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const close = useRef(onClose); close.current = onClose;
+  const dirty = useRef(false);   // IX-06: once something is typed, a stray tap on the backdrop no longer throws it away
   useEffect(() => {
     if (!open) return;
+    dirty.current = false;
     const opener = document.activeElement as HTMLElement | null;
     const focusables = () => Array.from(box.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []).filter((el) => el.offsetParent !== null || el === document.activeElement);
     const first = focusables().find((el) => !el.hasAttribute("data-modal-close")) ?? focusables()[0];
@@ -33,8 +35,8 @@ export function Modal({ open, title, onClose, children, wide, closeLabel = "إغ
   }, [open]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={box} tabIndex={-1} className={cn("card max-h-[92vh] w-full overflow-y-auto p-5 outline-none sm:p-6", wide ? "sm:max-w-3xl" : "sm:max-w-lg")} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !dirty.current) onClose(); }}>
+      <div ref={box} tabIndex={-1} className={cn("card max-h-[92vh] supports-[height:100dvh]:max-h-[92dvh] w-full overflow-y-auto p-5 outline-none sm:p-6", wide ? "sm:max-w-3xl" : "sm:max-w-lg")} role="dialog" aria-modal="true" aria-labelledby={titleId} onInput={() => { dirty.current = true; }} onChange={() => { dirty.current = true; }}>
         <div className="mb-4 flex items-center justify-between">
           <h3 id={titleId} className="text-base font-semibold text-ink-800">{title}</h3>
           <button onClick={onClose} className="rounded-lg p-2 text-ink-400 hover:bg-ink-50 hover:text-ink-700" aria-label={closeLabel} data-modal-close=""><X className="h-4 w-4" /></button>
@@ -118,7 +120,7 @@ export function ActionForm({ onSubmit, children, error }: { onSubmit: () => Prom
     try { await onSubmit(); } catch (ex) { setErr(toArabicError(ex)); } finally { setBusy(false); }
   };
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} noValidate>{/* SETUP-15: our Arabic messages, not the browser's English ones */}
       {(err || error) && <div className="mb-3"><ErrorBanner message={err ?? error ?? ""} /></div>}
       <FormBusy.Provider value={busy}>{children}</FormBusy.Provider>
     </form>
@@ -150,7 +152,7 @@ export function DefinitionLifecycle({ entity, id, archived, onDone, compact }: {
   const [deps, setDeps] = useState<Record<string, number> | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const DEP_LABELS: Record<string, string> = { rooms: "وحدات", reservations: "حجوزات", staff: "موظفون", blocks: "بلوكات", floors: "طوابق", facilities: "مرافق", allocations: "تخصيصات", tasks: "مهام", keyboxes: "صناديق", services: "خدمات", charges: "بنود حجز" };
+  const DEP_LABELS: Record<string, string> = { room_categories: "أنواع وحدات", vouchers: "سندات", pos_settlements: "تسويات شبكة", platform_payouts: "إيداعات منصات", rate_calendar: "أسعار في التقويم", rooms: "وحدات", reservations: "حجوزات", staff: "موظفون", blocks: "بلوكات", floors: "طوابق", facilities: "مرافق", allocations: "تخصيصات", tasks: "مهام", keyboxes: "صناديق", services: "خدمات", charges: "بنود حجز" };
 
   const openDelete = async () => {
     setErr(null); setMode("delete"); setDeps(null);

@@ -63,7 +63,7 @@ export function periodProblem(from: string, to: string, today = todayISO()): str
 }
 
 // Categorical order shared with the other admin charts (brand, accent, …).
-const C1 = "#1f5f74", C2 = "#2bb3a3";
+const C1 = "#1f5f74", C2 = "#167366";   // A11Y-16: the legend text in accent-700 (5.71:1), not accent-500 (2.6:1)
 const AXIS = { fontSize: 11, fill: "#6f83a3" };
 const TOOLTIP = { borderRadius: 12, border: "1px solid #e9edf3", fontSize: 12 };
 
@@ -154,7 +154,7 @@ export default function AdminReports() {
   const moneyTiles = report && L && Ch ? [
     { label: "المحصّل في المنشأة", value: sar(L.net_collected), tone: "text-success-600", note: defs.revenue },
     // OWNER-02: what the platforms hold, apart, with the way to match it
-    { label: "آجل عند المنصات", value: sar(L.platform_net ?? 0), tone: "text-warning-700", note: defs.platform, link: { to: "/admin/platform-payouts", label: "مطابقة المنصات" } },
+    { label: "آجل عند المنصات", value: sar(L.platform_net ?? 0), tone: "text-warning-700", note: defs.platform, link: { to: "/admin/platform-payouts", label: "إيداعات المنصات" } },
     { label: "قبض الإقامة في المنشأة", value: sar(L.receipts), tone: "text-ink-800", note: "سندات قبض الإقامة المعتمدة نقدًا أو شبكة أو تحويلًا، بتاريخ السند ضمن الفترة." },
     { label: "الاستردادات", value: sar(L.refunds), tone: "text-ink-800", note: "سندات الاسترداد المعتمدة ضمن الفترة؛ تُخصم من المحصّل." },
     { label: "إجمالي الرسوم", value: sar(Ch.total_charged), tone: "text-ink-800", note: `إيجار ${sar(Ch.rent)} · إضافات ${sar(Ch.addons)} · خصومات ${sar(Ch.discounts)}${Ch.tax ? ` · ضريبة ${sar(Ch.tax)}` : ""} للإقامات المتقاطعة مع الفترة${filters.source_id || filters.category_id ? " بالمصدر أو النوع المختار" : ""}.` },
@@ -180,7 +180,7 @@ export default function AdminReports() {
     if (!report) return { columns: [], rows: [] };
     const r = report;
     const kpi: ExportTable["rows"] = [
-      ["المحصّل في المنشأة", money(r.ledger.net_collected), ""], ["آجل عند المنصات", money(r.ledger.platform_net ?? 0), "يُطابق في «مطابقة المنصات»"], ["قبض الإقامة في المنشأة", money(r.ledger.receipts), ""], ["الاستردادات", money(r.ledger.refunds), ""],
+      ["المحصّل في المنشأة", money(r.ledger.net_collected), ""], ["آجل عند المنصات", money(r.ledger.platform_net ?? 0), "يُطابق في «إيداعات المنصات»"], ["قبض الإقامة في المنشأة", money(r.ledger.receipts), ""], ["الاستردادات", money(r.ledger.refunds), ""],
       ["إجمالي الرسوم", money(r.charges.total_charged), `إيجار ${sar(r.charges.rent)} · إضافات ${sar(r.charges.addons)} · خصومات ${sar(r.charges.discounts)} · ضريبة ${sar(r.charges.tax)}`],
       ["نسبة التحصيل %", r.collection_rate_pct == null ? "—" : r.collection_rate_pct, rateHidden ? "لا تُحسب مع مرشح الموظف أو الطريقة أو الحساب" : r.collection ? `دُفع ${sar(r.collection.paid)} من ${sar(r.collection.due)}${r.collection.raw_pct > 100 ? ` · الفعلي ${r.collection.raw_pct}%` : ""}` : ""],
       ["رصيد التأمين المفتوح (ليس إيرادًا)", money(r.ledger.deposit_balance_open), "رصيد حالي لا يتبع الفترة"],
@@ -219,7 +219,7 @@ export default function AdminReports() {
 
       {report && (
         <>
-          <h3 className="mb-2 text-sm font-semibold text-ink-700">المؤشرات المالية — من دفتر السندات ({report.period.from} → {report.period.to}){report.filtered && <Badge className="mr-2 bg-brand-50 text-brand-700">مرشّح</Badge>}</h3>
+          <h2 className="mb-2 text-sm font-semibold text-ink-700">المؤشرات المالية — من دفتر السندات (من {report.period.from} إلى {report.period.to}){report.filtered && <Badge className="mr-2 bg-brand-50 text-brand-700">مرشّح</Badge>}</h2>
           <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
             {moneyTiles.map((t) => (
               <Card key={t.label} className="flex flex-col gap-1">
@@ -239,7 +239,7 @@ export default function AdminReports() {
       {/* 0054 (MONEY-05): the platforms — what came into the accounts, the commission, the difference, what is still owed */}
       {platQ.data && (
         <Card className="mb-6" data-testid="report-platforms">
-          <h3 className="mb-2 text-sm font-semibold text-ink-700">المنصات في الفترة</h3>
+          <h2 className="mb-2 text-sm font-semibold text-ink-700">المنصات في الفترة</h2>
           <div className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
             <div><p className="text-xs text-ink-400">وصل إلى الحسابات</p><p className="font-bold tabular-nums">{formatCurrency(platQ.data.received_halalas / 100)}</p></div>
             <div><p className="text-xs text-ink-400">عمولات المنصات</p><p className="font-bold tabular-nums">{formatCurrency(platQ.data.commission_halalas / 100)}</p></div>
@@ -257,11 +257,11 @@ export default function AdminReports() {
         </Card>
       )}
 
-      <h3 className="mb-2 text-sm font-semibold text-ink-700">إحصاءات تشغيلية</h3>
+      <h2 className="mb-2 text-sm font-semibold text-ink-700">إحصاءات تشغيلية</h2>
       {!ops ? <div className="mb-6"><LoadErrorCard message={opsQ.error ?? "تعذّر تحميل الإحصاءات التشغيلية."} onRetry={opsQ.reload} /></div> : <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {report && <Card><p className="text-xs text-ink-400">حجوزات الفترة</p><p className="mt-1 text-xl font-bold text-ink-800">{report.reservations.count}</p><p className="text-[11px] text-ink-400">ليالي الإقامة: {report.reservations.nights}</p></Card>}
         {report && <Card><p className="text-xs text-ink-400">ملغاة / عدم حضور (الفترة)</p><p className="mt-1 text-xl font-bold text-ink-800">{report.reservations.cancelled} / {report.reservations.no_show}</p></Card>}
-        <Card><p className="text-xs text-ink-400">تذاكر تحويل مفتوحة (الآن)</p><p className="mt-1 text-xl font-bold text-danger-600">{ops.handoffs}</p></Card>
+        <Card><p className="text-xs text-ink-400">طلبات تحويل لموظف مفتوحة (الآن)</p><p className="mt-1 text-xl font-bold text-danger-600">{ops.handoffs}</p></Card>
         <Card><p className="text-xs text-ink-400">حجوزات غير مطابقة (الآن)</p><p className="mt-1 text-xl font-bold text-warning-700">{ops.unmatched}</p></Card>
         <Card><p className="text-xs text-ink-400">طلبات المساعد (كل الفروع، آخر 14 يومًا)</p><p className="mt-1 text-xl font-bold text-brand-700">{ops.aiRequests14}</p><p className="text-[11px] text-ink-400">منها بالمسار الثابت: {ops.aiFallbacks14}</p></Card>
       </div>}
@@ -269,7 +269,7 @@ export default function AdminReports() {
       <div className="grid gap-4 lg:grid-cols-2">
         {report && (
           <Card>
-            <h3 className="mb-1 text-sm font-semibold text-ink-700">التحصيل اليومي (ر.س)</h3>
+            <h2 className="mb-1 text-sm font-semibold text-ink-700">التحصيل اليومي (ر.س)</h2>
             <p className="mb-3 text-[11px] text-ink-400">كل أيام الفترة، ويوم بلا حركة صفر. «في المنشأة»: قبض الإقامة نقدًا أو شبكة أو تحويلًا والتأمين المستخدم لتغطية رسوم{hasPlatform ? "؛ «عند المنصات»: ما سُجّل آجلًا عبر المنصة" : ""}{hasRefunds ? "؛ «استرداد»: سندات الاسترداد" : ""}، بتاريخ السند.</p>
             {byDay.length === 0 || dayRows.every((d) => !d.receipts && !d.refunds && !d.platform) ? <p className="py-10 text-center text-sm text-ink-400">لا سندات في هذه الفترة.</p> : (
               <ResponsiveContainer width="100%" height={240}>
@@ -289,15 +289,15 @@ export default function AdminReports() {
         )}
         {report && (
           <Card>
-            <h3 className="mb-1 text-sm font-semibold text-ink-700">قبض الإقامة حسب طريقة الدفع (ر.س)</h3>
+            <h2 className="mb-1 text-sm font-semibold text-ink-700">قبض الإقامة حسب طريقة الدفع (ر.س)</h2>
             <p className="mb-3 text-[11px] text-ink-400">سندات القبض المعتمدة ضمن الفترة؛ «آجل عبر المنصة» عند المنصة حتى تحوّله.</p>
             <HBars rows={byMethod} empty="لا سندات قبض في هذه الفترة." testId="report-by-method" />
           </Card>
         )}
         {report && (
           <Card data-testid="finance-by-staff">
-            <h3 className="mb-1 text-sm font-semibold text-ink-700">التحصيل حسب الموظف</h3>
-            <p className="mb-3 text-[11px] text-ink-400">من سجّل سندات القبض والاسترداد في المنشأة خلال الفترة؛ ما سُجّل «آجل عبر المنصة» لا يُحسب لأحد (القرار 36).</p>
+            <h2 className="mb-1 text-sm font-semibold text-ink-700">التحصيل حسب الموظف</h2>
+            <p className="mb-3 text-[11px] text-ink-400">من سجّل سندات القبض والاسترداد في المنشأة خلال الفترة؛ ما سُجّل «آجل عبر المنصة» لا يُحسب لأحد.</p>
             {byStaff.length === 0 ? <p className="py-6 text-center text-sm text-ink-400">لا سندات في هذه الفترة.</p> : (
               <table className="w-full text-sm"><thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الموظف</th><th className="text-right font-medium">قبض</th><th className="text-right font-medium">استرداد</th><th className="text-right font-medium">السندات</th></tr></thead>
                 <tbody>{byStaff.map((s) => <tr key={s.staff_id ?? s.staff} className="border-b border-ink-50"><td className="py-1.5">{s.staff}</td><td dir="ltr">{sar(s.receipts)}</td><td dir="ltr">{sar(s.refunds)}</td><td className="text-xs text-ink-500">{s.count}</td></tr>)}</tbody></table>
@@ -306,7 +306,7 @@ export default function AdminReports() {
         )}
         {report && (
           <Card data-testid="finance-by-account">
-            <h3 className="mb-1 text-sm font-semibold text-ink-700">حركة الصناديق والحسابات</h3>
+            <h2 className="mb-1 text-sm font-semibold text-ink-700">حركة الصناديق والحسابات</h2>
             <p className="mb-3 text-[11px] text-ink-400">قبض الإقامة والتأمين إلى كل صندوق أو حساب، والصرف منه، ضمن الفترة (حركة لا رصيدًا).</p>
             {byAccount.length === 0 ? <p className="py-6 text-center text-sm text-ink-400">لا حركة في هذه الفترة.</p> : (
               <table className="w-full text-sm"><thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الصندوق أو الحساب</th><th className="text-right font-medium">قبض</th><th className="text-right font-medium">صرف</th></tr></thead>
@@ -316,14 +316,14 @@ export default function AdminReports() {
         )}
         {ops && (
           <Card>
-            <h3 className="mb-1 text-sm font-semibold text-ink-700">الحجوزات حسب الحالة — كل الفترات</h3>
+            <h2 className="mb-1 text-sm font-semibold text-ink-700">الحجوزات حسب الحالة — كل الفترات</h2>
             <p className="mb-3 text-[11px] text-ink-400">كل حجوزات الفرع الآن، لا تتبع فترة التقرير ({COUNT.booking(total)}).</p>
             <HBars rows={byStatus} empty="لا حجوزات." testId="report-by-status" />
           </Card>
         )}
         {report && (
           <Card>
-            <h3 className="mb-1 text-sm font-semibold text-ink-700">حجوزات الفترة حسب المصدر</h3>
+            <h2 className="mb-1 text-sm font-semibold text-ink-700">حجوزات الفترة حسب المصدر</h2>
             <p className="mb-3 text-[11px] text-ink-400">الحجوزات المتقاطعة مع الفترة، بأي حالة.</p>
             <HBars rows={bySource} empty="لا حجوزات في هذه الفترة." testId="report-by-source" />
           </Card>
@@ -352,7 +352,7 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
   return (
     <Card className="mt-4" data-testid="late-entries-report">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ink-700">حجوزات المنصات المتأخرة الإدخال ({from} → {to})</h3>
+        <h2 className="text-sm font-semibold text-ink-700">حجوزات المنصات المتأخرة الإدخال (من {from} إلى {to})</h2>
         <div className="flex flex-wrap items-center gap-2">{d && <p className="text-sm text-ink-600">{d.late} من {arabicCount(d.platform_bookings, ["حجز منصة واحد", "حجزي منصة", "حجوزات منصات", "حجز منصة"])} أُدخل بعد يوم أو أكثر{d.after_arrival ? ` · ${d.after_arrival} بعد موعد الوصول` : ""}</p>}<ExportMenu allOnly source={{ statement: statementFor("حجوزات المنصات المتأخرة الإدخال"), table, pageCount: d?.late ?? 0, total: d?.late ?? 0 }} /></div>
       </div>
       {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.late === 0 ? <p className="text-sm text-ink-400">لا حجوزات متأخرة الإدخال في هذه الفترة.</p> : (
@@ -388,14 +388,14 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
   const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.identities>> | null>((branchId) => (allowed ? guestReportsApi.identities(branchId, from, to, path, f) : Promise.resolve(null)), [from, to, path, allowed, f], null);
   const d = q.error ? null : q.data;   // OWNER-08: an error blanks the figures
   if (!allowed) return null;
-  const pathWord = path === "office" ? "من المكتب (من الوثيقة)" : path === "guest" ? "أدخلها الضيف وطابقها المشرف" : "كل المسارات";
-  const table = async (): Promise<ExportTable> => ({ columns: ["الحجز", "النزيل", "مرافق", "نوع الوثيقة", "آخر أربعة", "المسار", "أدخلها", "وقت الإدخال", "اعتمدها", "وقت الاعتماد"], rows: (d?.rows ?? []).map((r) => [r.internal_ref, r.full_name, r.is_primary ? "" : "نعم", r.identity_type ?? "", r.identity_last4 ? `••••${r.identity_last4}` : "", r.entry_path === "office" ? "من الوثيقة" : "أدخلها الضيف", r.entered_by ?? "", r.entered_at ? formatDateTime(r.entered_at) : "", r.verified_by ?? "", formatDateTime(r.verified_at)]) });
+  const pathWord = path === "office" ? "من المكتب (من الوثيقة)" : path === "guest" ? "أدخلها النزيل وطابقها المشرف" : "كل المسارات";
+  const table = async (): Promise<ExportTable> => ({ columns: ["الحجز", "النزيل", "مرافق", "نوع الوثيقة", "آخر أربعة", "المسار", "أدخلها", "وقت الإدخال", "اعتمدها", "وقت الاعتماد"], rows: (d?.rows ?? []).map((r) => [r.internal_ref, r.full_name, r.is_primary ? "" : "نعم", r.identity_type ?? "", r.identity_last4 ? `••••${r.identity_last4}` : "", r.entry_path === "office" ? "من الوثيقة" : "أدخلها النزيل", r.entered_by ?? "", r.entered_at ? formatDateTime(r.entered_at) : "", r.verified_by ?? "", formatDateTime(r.verified_at)]) });
   return (
     <Card className="mt-4" data-testid="identities-report">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ink-700">الهويات المعتمدة ({from} → {to})</h3>
+        <h2 className="text-sm font-semibold text-ink-700">الهويات المعتمدة (من {from} إلى {to})</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <select className="input py-1 text-xs" value={path} onChange={(e) => setPath(e.target.value as typeof path)} aria-label="المسار"><option value="office">من المكتب (من الوثيقة)</option><option value="guest">أدخلها الضيف وطابقها المشرف</option><option value="all">الكل</option></select>
+          <select className="input py-1 text-xs" value={path} onChange={(e) => setPath(e.target.value as typeof path)} aria-label="المسار"><option value="office">من المكتب (من الوثيقة)</option><option value="guest">أدخلها النزيل وطابقها المشرف</option><option value="all">الكل</option></select>
           {d && <p className="text-sm text-ink-600">{d.count}</p>}
           <ExportMenu allOnly source={{ statement: statementFor("الهويات المعتمدة", [`المسار: ${pathWord}`]), table, pageCount: d?.count ?? 0, total: d?.count ?? 0 }} />
         </div>
@@ -414,7 +414,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
                   <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
                   <td className="text-xs">{r.full_name}{!r.is_primary && <span className="mr-1 text-[10px] text-ink-400">(مرافق)</span>}</td>
                   <td className="text-xs">{r.identity_type ?? "—"} ••••{r.identity_last4 ?? ""}</td>
-                  <td className="text-xs">{r.entry_path === "office" ? "من الوثيقة" : "أدخلها الضيف"}</td>
+                  <td className="text-xs">{r.entry_path === "office" ? "من الوثيقة" : "أدخلها النزيل"}</td>
                   <td className="text-xs text-ink-500">{r.verified_by ?? "—"}</td>
                   <td className="text-xs text-ink-500" dir="ltr">{r.verified_at.slice(0, 16).replace("T", " ")}</td>
                 </tr>))}</tbody>
@@ -436,10 +436,10 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
   return (
     <Card className="mt-4" data-testid="discounts-report">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ink-700">تقرير الخصومات ({from} → {to})</h3>
+        <h2 className="text-sm font-semibold text-ink-700">تقرير الخصومات (من {from} إلى {to})</h2>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs text-ink-600"><input type="checkbox" checked={afterArrival} onChange={(e) => setAfterArrival(e.target.checked)} /> بعد الوصول فقط</label>
-          {d && <p className="text-sm text-ink-600">{d.count} خصم · <span className="font-semibold" dir="ltr">{sar(d.total_halalas)}</span></p>}
+          {d && <p className="text-sm text-ink-600">{COUNT.discount(d.count)} · <span className="font-semibold" dir="ltr">{sar(d.total_halalas)}</span></p>}
           <ExportMenu allOnly source={{ statement: statementFor("تقرير الخصومات", afterArrival ? ["بعد الوصول فقط"] : []), table, pageCount: d?.rows?.length ?? 0, total: d?.rows?.length ?? 0 }} />
         </div>
       </div>

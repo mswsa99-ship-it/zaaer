@@ -33,7 +33,7 @@ export default function StaffLogin() {
     setLoading(true);
     if (mode === "login") {
       const { error } = await signIn(email, password);
-      if (error) setError(/email not confirmed/i.test(error) ? "لم يُؤكَّد البريد بعد. افتح رسالة التأكيد المرسلة إلى بريدك ثم أعد تسجيل الدخول." : error);
+      if (error) setError(error);
     } else {
       if (fullName.trim().length < 3) {
         setError("الرجاء إدخال الاسم الكامل.");
@@ -52,14 +52,14 @@ export default function StaffLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-800 to-brand-800 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-800 to-brand-800 px-4">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center text-white">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
             <Hotel className="h-7 w-7" />
           </div>
           <h1 className="text-xl font-bold">{orgName ? `${orgName} — ` : ""}بوابة الموظفين</h1>
-          <p className="mt-1 text-sm text-white/60">مركز عمليات الاستقبال</p>
+          <p className="mt-1 text-sm text-white/60">مركز العمليات</p>
         </div>
 
         {isDemo && (
@@ -113,8 +113,8 @@ export default function StaffLogin() {
           )}
         </div>
 
-        <Link to="/" className="mt-4 block text-center text-xs text-white/50 hover:text-white">← العودة لصفحة النزيل</Link>
+        <Link to="/" className="mt-4 block text-center text-xs text-white/80 hover:text-white">→ العودة إلى صفحة النزيل</Link>
       </div>
-    </div>
+    </main>
   );
 }

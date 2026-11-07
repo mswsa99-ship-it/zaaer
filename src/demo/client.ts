@@ -14,6 +14,7 @@ import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, valid
 import { phase6Rpcs } from "./phase6";
 import { phase2Rpcs } from "./phase2";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
+import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v8";
@@ -654,7 +655,7 @@ const rpcs: Record<string, (a: any) => any> = {
     if (changed) { emit("rate_calendar"); audit(p.branch_id, "rates.updated", "rate_calendar", p.branch_id, { before: { cells: before, more: Math.max(changed - 400, 0) }, after: { changed, price_halalas: clear === "both" || clear === "price" ? null : setP ? Number(p.price_halalas) : null, platform_price_halalas: clear === "both" || clear === "platform" ? null : setPP ? Number(p.platform_price_halalas) : null, clear, from: p.from ?? null, to: p.to ?? null, cells: Array.isArray(p.cells) }, reason: p.reason ?? null }); }
     return { ok: true, changed, matched: cells.length }; },
   fn_category_capacity_impact: ({ p_category, p_max_capacity }) => { requireCap("definitions"); const c = byId("room_categories", p_category); if (!c) throw new Error("NOT_FOUND"); requireBranch(c.branch_id); return capacityImpact(c.id, Number(p_max_capacity)); },
-  fn_staff_quote: ({ p_branch, p_category, p_check_in, p_check_out, p_nightly_override, p_discount_halalas }) => quote(p_branch, p_category, p_check_in, p_check_out, p_nightly_override, p_discount_halalas ?? 0),
+  fn_staff_quote: ({ p_branch, p_category, p_check_in, p_check_out, p_nightly_override, p_discount_halalas }) => !(can("res.create") || can("rates") || can("stay.extend") || can("room.assign")) ? null : quote(p_branch, p_category, p_check_in, p_check_out, p_nightly_override, p_discount_halalas ?? 0),
   fn_available_rooms: ({ p_branch, p_from, p_to, p_category, p_exclude_reservation }) => T("rooms").filter((r) => r.branch_id === p_branch && myBranches().includes(p_branch) && r.is_active && !r.archived_at && !["blocked", "out_of_service", "maintenance"].includes(r.status) && (!p_category || r.category_id === p_category) && roomAvailable(r.id, p_from, p_to, p_exclude_reservation)).map((r) => ({ room_id: r.id, room_number: r.room_number, category_id: r.category_id, category_name: byId("room_categories", r.category_id)?.name_ar, status: r.status, cleanliness: r.cleanliness, block_name: byId("blocks", r.block_id)?.name ?? null, floor_name: byId("floors", r.floor_id)?.name ?? null })).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })),
   fn_room_available: ({ p_room, p_from, p_to, p_exclude_reservation }) => roomAvailable(p_room, p_from, p_to, p_exclude_reservation),
   // multi-unit booking (0011): one reservation per unit sharing group_ref, all-or-nothing
@@ -742,7 +743,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
       refund = gone.reduce((s, x) => s + x.price_halalas, 0);
       for (const x of gone) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: p_reason });
       emit("reservation_nights");
-      addCharge(r.id, "adjustment", `تقصير الإقامة ${-delta} ليلة`, 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
+      addCharge(r.id, "adjustment", `تقصير الإقامة ${nightsAr(-delta)}`, 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
     }
     const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
     r.check_out = p_new_check_out; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f }; },
@@ -813,7 +814,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (p_kind === "adjustment") { ensureNights(r.id); const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
       if (act.length) { const adj = T("reservation_charges").filter((c) => c.reservation_id === r.id && c.kind === "adjustment").reduce((s, c) => s + roundHalfUp(Number(c.quantity) * c.unit_price_halalas), 0);
         checkPriceBand(r.room_category_id, (act.reduce((s, x) => s + x.price_halalas, 0) - discountsOf(r.id) + adj + Number(p_amount_halalas)) / act.length, Number(p_amount_halalas) > 0 ? "max" : "min"); } }
-    const before = { total_halalas: r.total_halalas }; addCharge(r.id, p_kind, p_description || p_kind, 1, p_amount_halalas, true, p_reason); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.total_changed", "reservation", r.id, { before, after: { total_halalas: r.total_halalas, kind: p_kind, amount_halalas: p_amount_halalas }, reason: p_reason }); return { ok: true, finance: f }; },
+    const before = { total_halalas: r.total_halalas }; addCharge(r.id, p_kind, (p_description ?? "").trim() || ({ discount: "خصم", adjustment: "تسوية", penalty: "غرامة", addon: "إضافة" } as Record<string, string>)[p_kind] || p_kind, 1, p_amount_halalas, true, p_reason); /* MONEY-08 */ r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.total_changed", "reservation", r.id, { before, after: { total_halalas: r.total_halalas, kind: p_kind, amount_halalas: p_amount_halalas }, reason: p_reason }); return { ok: true, finance: f }; },
   fn_staff_add_service: ({ p_reservation, p_service, p_quantity, p_note }) => { requireCap("charges.add"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (["cancelled", "rejected", "closed", "no_show"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); const s = byId("service_definitions", p_service); if (!s || s.branch_id !== r.branch_id || s.archived_at || !s.is_active) throw new Error("SERVICE_NOT_AVAILABLE");
     // 0053 (FRONT-04): a once-only service already on the stay is added again only with a written reason
     if (s.billing_unit === "once" && !String(p_note ?? "").trim() && T("reservation_charges").some((c) => c.reservation_id === r.id && c.kind === "addon" && c.service_definition_id === s.id)) throw new Error("SERVICE_ALREADY_ADDED");
@@ -1249,7 +1250,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_guest_submit: ({ p_token, p_guest_id, p_payload }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; const p = p_payload ?? {}; checkNameParts(p.full_name, p.identity_type); if (!["national_id", "iqama", "passport", "gcc_id"].includes(p.identity_type)) throw new Error("VALIDATION: identity_type"); checkPersonName(p.full_name); const number = latinDigits(String(p.identity_number ?? "")).replace(/\s/g, ""); checkIdentity(p.identity_type, number); const phone = checkPhone(p.phone, false); checkMinAge(p.birth_date, todayISO()); if (String(p.consent) !== "true") throw new Error("VALIDATION: consent_required"); if (["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(r.status)) throw new Error("RESERVATION_NOT_EDITABLE"); const fp = fingerprint(p.identity_type, number); let g = p_guest_id ? byId("reservation_guests", p_guest_id) : null;
     if (g?.is_primary && !p.ack_hash && !T("stay_acknowledgements").some((a) => a.reservation_id === r.id)) throw new Error("VALIDATION: acknowledgement_required");
     if (T("reservation_guests").some((x) => x.reservation_id === r.id && x.identity_fingerprint === fp && x.id !== g?.id)) throw new Error("DUPLICATE_GUEST"); if (!g) { const n = T("reservation_guests").filter((x) => x.reservation_id === r.id).length; if (n >= registrationTarget(r)) throw new Error("GUEST_LIMIT_REACHED"); g = { id: uid(), reservation_id: r.id, guest_profile_id: null, is_primary: n === 0, full_name: "", identity_type: null, identity_number_last4: null, nationality: null, birth_date: null, phone: null, relationship: null, verification_status: "not_started", data_submitted: false, created_at: nowISO() }; T("reservation_guests").push(g); } if (g.verification_status === "verified") throw new Error("GUEST_ALREADY_VERIFIED"); if (g.is_primary && p.ack_hash) rpcs.fn_guest_acknowledge({ p_token, p_hash: p.ack_hash });   // the summary as the guest read it, before their name changes it
-    Object.assign(g, { full_name: p.full_name, identity_type: p.identity_type, identity_number_last4: number.slice(-4), identity_fingerprint: fp, nationality: p.nationality, birth_date: p.birth_date, relationship: g.is_primary ? "self" : p.relationship ?? null, phone: phone ?? g.phone, verification_status: "data_submitted", data_submitted: true, entry_path: "guest", entered_by: null, entered_at: nowISO(), verified_by: null, verified_at: null });
+    Object.assign(g, { full_name: p.full_name, identity_type: p.identity_type, identity_number_last4: number.slice(-4), identity_fingerprint: fp, nationality: p.nationality, birth_date: p.birth_date, relationship: g.is_primary ? "self" : p.relationship ?? null, phone: g.is_primary && g.phone ? g.phone : (phone ?? g.phone),   /* SEC-07 (0061): the main guest's phone set once is changed by the reception only */ verification_status: "data_submitted", data_submitted: true, entry_path: "guest", entered_by: null, entered_at: nowISO(), verified_by: null, verified_at: null });
     const all = T("reservation_guests").filter((x) => x.reservation_id === r.id); r.identity_status = all.length >= registrationTarget(r) && all.every((x) => x.data_submitted) ? "pending_supervisor" : "data_submitted"; emit("reservation_guests"); emit("reservations"); return { ok: true, guest_id: g.id }; },
   fn_guest_submit_checkin: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; if (r.access_status === "locked") r.access_status = "eligibility_review"; emit("reservations"); return { ok: true, access_status: r.access_status }; },
   fn_guest_access_code: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!;
@@ -1312,7 +1313,8 @@ const rpcsMore: Record<string, (a: any) => any> = {
 // the stay cycle (0032–0033): the arrival and its two entries, Shomoos, the code after the arrival, night-by-night
 // payment, check-out with nothing owed, the inspection and the deposit, damages, corrections, «مغلق» by itself
 // ---------------------------------------------------------------------------
-const sarText = (h: number) => `${(h / 100).toFixed(2)} ر.س`;
+const sarText = (h: number) => `${(h / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س`;   // COPY-12: grouped, like fn_sar_text
+const nightsAr = (n: number) => COUNT.night(n);
 /** A branch-local wall-clock moment as an instant (the demo's branches are all in Asia/Riyadh: UTC+3, no daylight saving). */
 const localMs = (day: string, hhmm: string) => Date.parse(`${day}T${String(hhmm).slice(0, 5)}:00+03:00`);
 const checkOutTime = (branchId: string) => String(byId("branches", branchId)?.check_out_time ?? "12:00").slice(0, 5);
@@ -1828,7 +1830,7 @@ const rpcsStay: Record<string, (a: any) => any> = {
       if (end < r.check_out) {
         ensureNights(r.id); const left = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active" && x.night >= end && x.night < r.check_out);
         const amount = left.reduce((a2, x) => a2 + x.price_halalas, 0);
-        if (!mode) return { ok: false, early_departure: true, unused_nights: left.length, unused_halalas: amount, new_check_out: end, reasons: [`مغادرة قبل موعدها: ${left.length} ليلة مدفوعة أو محجوزة لم تُستخدم. اختر تقصير الإقامة أو إبقاء الليالي مدفوعة، مع السبب.`] };
+        if (!mode) return { ok: false, early_departure: true, unused_nights: left.length, unused_halalas: amount, new_check_out: end, reasons: [`مغادرة قبل موعدها: ليالٍ مدفوعة أو محجوزة لم تُستخدم (${left.length}). اختر تقصير الإقامة أو إبقاء الليالي مدفوعة، مع السبب.`] };
         if (!["shorten", "keep"].includes(mode)) throw new Error("VALIDATION: early_departure"); if (!reason) throw new Error("VALIDATION: reason");
         if (mode === "shorten") {
           if (["weekly", "monthly"].includes(r.price_basis) && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: shortening a weekly or monthly stay requires manager");
@@ -1836,7 +1838,7 @@ const rpcsStay: Record<string, (a: any) => any> = {
           for (const a3 of T("reservation_allocations")) if (a3.reservation_id === r.id && a3.status === "active" && a3.to_date === r.check_out && a3.from_date < end) a3.to_date = end;
           for (const x of left) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: reason });
           emit("reservation_nights"); emit("reservation_allocations");
-          addCharge(r.id, "adjustment", `مغادرة مبكرة: ${-delta} ليلة لم تُستخدم`, 1, -amount, true, reason, null, end, r.check_out);
+          addCharge(r.id, "adjustment", `مغادرة مبكرة: ${nightsAr(-delta)} لم تُستخدم`, 1, -amount, true, reason, null, end, r.check_out);
           const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active"); r.check_out = end; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((a2, x) => a2 + x.price_halalas, 0) / act.length);
           recompute(r.id); audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: end, total_halalas: r.total_halalas, delta_nights: delta, early_departure: "shorten", nights: { refunded_halalas: amount } }, reason });
         } else audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before: { check_out: r.check_out }, after: { check_out: r.check_out, early_departure: "keep", unused_nights: left.length, unused_halalas: amount }, reason });
@@ -2169,7 +2171,7 @@ function bookNights(resId: string, runs: Run[], label: string, reason: string | 
   const r = byId("reservations", resId)!; let total = 0;
   for (const x of runs) {
     for (const night of nightsBetween(x.from, x.to)) T("reservation_nights").push(nightRow(r, night, x.price, x.basis));
-    addCharge(r.id, "rent", `${label} ${x.nights} ليلة × ${(x.price / 100).toFixed(2)} ر.س${x.basis === "weekly" ? " (السعر الأسبوعي)" : x.basis === "monthly" ? " (السعر الشهري)" : x.basis === "platform" ? " (سعر المنصات)" : ""}`, x.nights, x.price, true, reason, null, x.from, x.to);
+    addCharge(r.id, "rent", `${label} ${nightsAr(x.nights)} × ${sarText(x.price)}${x.basis === "weekly" ? " (السعر الأسبوعي)" : x.basis === "monthly" ? " (السعر الشهري)" : x.basis === "platform" ? " (سعر المنصات)" : ""}`, x.nights, x.price, true, reason, null, x.from, x.to);
     total += x.nights * x.price;
   }
   emit("reservation_nights"); return total;

@@ -33,7 +33,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
   test("LE01 the reservations list: every filter of the reference, the column picker, a saved view that opens by default", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/staff/reservations");
-    const total = await matching(page, /(\d+) حجز مطابق/);
+    const total = await matching(page, /الحجوزات المطابقة: (\d+)/);
     expect(total).toBeGreaterThan(0);
     await page.getByTestId("toggle-advanced").click();
     await expect(page.getByTestId("advanced-filters")).toBeVisible();
@@ -41,7 +41,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     // a status filter narrows the set and is said in words
     await page.getByLabel("الحالة").selectOption("confirmed");
     await expect(page.getByText(/الحالة: مؤكد/).first()).toBeVisible();
-    const confirmed = await matching(page, /(\d+) حجز مطابق/);
+    const confirmed = await matching(page, /الحجوزات المطابقة: (\d+)/);
     expect(confirmed).toBeLessThanOrEqual(total);
     await expect(page.locator("[data-testid=reservation-row]")).toHaveCount(Math.min(confirmed, 25));
     for (const row of await page.locator("[data-testid=reservation-row]").all()) await expect(row).toContainText("مؤكد");
@@ -61,7 +61,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await go("/staff/reservations");
     await expect(page.getByLabel("العروض المحفوظة")).toHaveValue(/.+/);
     await expect(page.getByText(/الحالة: مؤكد/).first()).toBeVisible();
-    expect(await matching(page, /(\d+) حجز مطابق/)).toBe(confirmed);
+    expect(await matching(page, /الحجوزات المطابقة: (\d+)/)).toBe(confirmed);
     // another person has no such view
     await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
     await loginAs("supervisor");
@@ -83,7 +83,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await createReservation(page, "ضيف تصدير ثانٍ", "0500110002", { pickRoom: false });
     await go("/staff/reservations");
     await page.getByLabel("المفتوحة فقط").uncheck();
-    const total = await matching(page, /(\d+) حجز مطابق/);
+    const total = await matching(page, /الحجوزات المطابقة: (\d+)/);
     expect(total).toBeGreaterThan(25);
     const all = await exportAll(page, "all");
     expect(all.statement[0]).toBe("الحجوزات");
@@ -95,7 +95,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     expect(new Set(all.data.map((r) => r[0])).size).toBe(total);   // every row once
     // a filter, then the page scope
     await page.getByLabel("الحالة").selectOption("cancelled");
-    const cancelled = await matching(page, /(\d+) حجز مطابق/);
+    const cancelled = await matching(page, /الحجوزات المطابقة: (\d+)/);
     const pageScope = await exportAll(page, "page");
     expect(pageScope.statement[3]).toContain("الحالة: ملغى");
     expect(pageScope.statement[4]).toBe(`النطاق: هذه الصفحة فقط (${Math.min(cancelled, 25)} من ${cancelled})`);
@@ -170,7 +170,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await expect(page.getByTestId("audit-table")).toBeVisible();
     await expect(page.getByLabel("الفئة")).toHaveCount(0);
     await page.getByLabel("الإجراء").selectOption("staff.signed_out");
-    await expect(page.getByText("لا أحداث مطابقة")).toBeVisible();
+    await expect(page.getByText("لا أحداث مطابقة").first()).toBeVisible();
   });
 
   test("LE05 / X09a the ledger: filters, totals over the whole set, and an export that holds exactly the matching vouchers", async ({ page, loginAs, go }) => {
@@ -253,7 +253,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await branchBoxes.nth(1).check();
     await dialog.getByRole("button", { name: "حفظ التعديل" }).click();
     await expect(dialog).toContainText("يجب كتابة سبب");
-    await dialog.getByPlaceholder(/انتقل إلى فرع/).fill("انتقل إلى فرع آخر");
+    await dialog.getByPlaceholder(/نُقل إلى فرع/).fill("انتقل إلى فرع آخر");
     await dialog.getByRole("button", { name: "حفظ التعديل" }).click();
     await expect(page.getByTestId("staff-notice")).toContainText("الاسم، الهاتف، الفروع");
     await expect(card).toContainText("فهد الاستقبال (معدّل)");
@@ -291,7 +291,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     // tab A: the supervisor at work
     await loginAs("supervisor");
     await go("/staff/reservations");
-    await expect(page.getByText(/حجز مطابق/)).toBeVisible();
+    await expect(page.getByText(/الحجوزات المطابقة|لا حجوزات مطابقة/)).toBeVisible();
     // tab B: the owner ends the supervisor's sessions with a reason
     const owner = await context.newPage();
     await owner.goto("/#/staff/login", { waitUntil: "networkidle" });
@@ -315,7 +315,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await page.getByRole("button", { name: "مشرف الاستقبال" }).click();
     await page.waitForURL(/#\/staff\//);
     await go("/staff/reservations");
-    await expect(page.getByText(/حجز مطابق/)).toBeVisible();
+    await expect(page.getByText(/الحجوزات المطابقة|لا حجوزات مطابقة/)).toBeVisible();
     await owner.close();
   });
 

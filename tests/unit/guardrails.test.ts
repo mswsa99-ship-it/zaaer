@@ -237,3 +237,15 @@ describe("Review Phase 3b — the chat's urgent messages (GUEST-09, 20, 21)", ()
     expect(r.intent).toBe("privacy"); expect(r.handoff).toBeUndefined();
   });
 });
+
+describe("SEC-10 links in the assistant's replies", () => {
+  it("allows the site itself and its pages, not a look-alike host that starts with the same text", async () => {
+    const { urlAllowed } = await import("../../supabase/functions/_shared/guardrails");
+    expect(urlAllowed("https://five.example/booking/lookup", "https://five.example")).toBe(true);
+    expect(urlAllowed("https://five.example", "https://five.example")).toBe(true);
+    expect(urlAllowed("https://five.example.attacker.tld/x", "https://five.example")).toBe(false);
+    expect(urlAllowed("https://five.exampleevil.com/", "https://five.example")).toBe(false);
+    expect(urlAllowed("https://www.booking.com/hotel/sa/x.html", "https://www.booking.com/hotel/sa/x.html")).toBe(true);
+    expect(urlAllowed("/booking/lookup", "/booking")).toBe(true);
+  });
+});

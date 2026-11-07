@@ -47,7 +47,7 @@ export default function AdminBookingSources() {
   if (loading) return <LoadingScreen />;
   return (
     <div>
-      <SectionTitle title="مصادر الحجز" subtitle={`${sources.length} مصدرًا — الإضافة والتعديل والتفعيل والإيقاف ونسبة العمولة`}
+      <SectionTitle title="مصادر الحجز" subtitle={`مصادر الحجز: ${sources.length} — الإضافة والتعديل والتفعيل والإيقاف ونسبة العمولة`}
         action={canToggle ? <button className="btn-primary text-sm" data-testid="new-source" onClick={() => setDraft({ name: "", kind: "external", ref: true, pct: "0" })}><Plus className="h-4 w-4" /> مصدر جديد</button> : undefined} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {sources.length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا توجد مصادر" /> : (
@@ -121,7 +121,7 @@ export default function AdminBookingSources() {
           </ActionForm>
         )}
       </Modal>
-      <p className="mt-3 text-xs text-ink-400">رابط الحجز الذي يُرسل للضيف هو «رابط منصة الحجز» في إعدادات الفرع، لا هنا. «Booking Engine» حجز مباشر معطّل لأن المنشأة ليست نقطة تأجير مباشرة (القرار 23). إن كان «جذر إن» و«Gathern» منصة واحدة عندكم فعطّلوا أحدهما حتى لا يُدخل الحجز مرتين.</p>
+      <p className="mt-3 text-xs text-ink-400">رابط الحجز الذي يُرسل للنزيل هو «رابط منصة الحجز» في إعدادات الفرع، لا هنا. «Booking Engine» حجز مباشر معطّل لأن المنشأة ليست نقطة تأجير مباشرة. إن كان «جذر إن» و«Gathern» منصة واحدة عندكم فعطّلوا أحدهما حتى لا يُدخل الحجز مرتين.</p>
     </div>
   );
 }

@@ -38,14 +38,14 @@ const ERROR_AR: Record<string, string> = {
   GUEST_DATA_NOT_SUBMITTED: "لم يُكمل النزيل بياناته بعد.",
   REASON_REQUIRED: "يجب كتابة سبب.",
   IDENTITY_NOT_VERIFIED: "يجب اعتماد مطابقة الهوية أولًا.",
-  ROOM_NOT_FOUND: "الغرفة غير موجودة.",
-  ROOM_CATEGORY_MISMATCH: "تصنيف الغرفة لا يطابق تصنيف الحجز.",
-  ROOM_NOT_AVAILABLE: "الغرفة غير متاحة للتخصيص.",
+  ROOM_NOT_FOUND: "الوحدة غير موجودة.",
+  ROOM_CATEGORY_MISMATCH: "نوع الوحدة لا يطابق نوع الحجز.",
+  ROOM_NOT_AVAILABLE: "الوحدة غير متاحة للتخصيص.",
   ROOM_OCCUPIED_OVERSTAY: "في الوحدة نزيل تجاوز موعد مغادرته ولم تُسجَّل مغادرته؛ تبقى مشغولة حتى تُسجَّل.",
   VOUCHER_ALREADY_REVERSED: "هذا السند عُكس من قبل ولا يُصحح مرة أخرى؛ صحّح السند البديل.",
   SERVICE_ALREADY_ADDED: "هذه الخدمة مضافة لهذا الحجز من قبل. لإضافتها مرة أخرى اكتب السبب في الملاحظة.",
   RESERVATION_STATUS_INVALID: "حالة الحجز لا تسمح بهذا الإجراء.",
-  NOT_CHECKED_IN: "الحجز ليس في حالة دخول.",
+  NOT_CHECKED_IN: "لم يُسجَّل وصول هذا الحجز بعد.",
   NOT_IN_DELIVERED_STATE: "لم يتم تسليم الرمز لهذا الحجز.",
   CODE_MUST_DIFFER_FROM_PREVIOUS: "هذا هو الرمز الحالي نفسه — لا يُقبل. اضبط رمزًا جديدًا على الصندوق ثم احفظه.",
   PLATFORM_VERIFIED: "طُوبق الحجز مع المنصة؛ تُلغى المطابقة أولًا ثم تُصحَّح بيانات المنصة.",
@@ -58,9 +58,9 @@ const ERROR_AR: Record<string, string> = {
   DUPLICATE_GUEST: "هذه الوثيقة مسجلة مسبقًا في نفس الحجز.",
   GUEST_ALREADY_VERIFIED: "تم اعتماد هذا النزيل ولا يمكن تعديل بياناته.",
   RESERVATION_NOT_EDITABLE: "لا يمكن تعديل هذا الحجز.",
-  SECRET_NOT_CONFIGURED: "إعداد التشفير غير مكتمل على الخادم (app.keybox_key / app.identity_key).",
+  SECRET_NOT_CONFIGURED: "تعذّر حفظ البيانات المشفّرة: إعداد الخادم غير مكتمل. أبلغ الدعم الفني.",
   NO_INVITATION: "لا توجد دعوة لهذا البريد. اطلب من المالك إضافتك.",
-  reservations_no_overlap: "تعارض: الغرفة محجوزة لفترة متداخلة.",
+  reservations_no_overlap: "تعارض: الوحدة محجوزة في فترة متداخلة.",
   ALLOCATION_CONFLICT: "الوحدة مرتبطة بحجز آخر خلال جزء من الفترة المختارة.",
   ALREADY_ALLOCATED: "الحجز مرتبط بوحدة بالفعل؛ استخدم «تبديل الوحدة».",
   VERSION_CONFLICT: "تغيّر هذا السجل بواسطة مستخدم آخر؛ حدّث البيانات قبل الحفظ.",
@@ -69,8 +69,8 @@ const ERROR_AR: Record<string, string> = {
   DUPLICATE_NAME: "الاسم مستخدم مسبقًا ضمن هذا النطاق.",
   DUPLICATE_ROOM_NUMBER: "رقم الوحدة مستخدم مسبقًا في هذا الفرع.",
   DUPLICATE_EXTERNAL_REF: "رقم الحجز في المنصة مستخدم في حجز آخر أو مجموعة أخرى.",
-  GROUP_NUMBER_PENDING_MIGRATION: "مشاركة رقم المنصة بين وحدات المجموعة تنتظر لصقة المالك (الترحيل 0039)؛ حتى ذلك الحين أدخل كل وحدة حجزًا مستقلًا برقمها.",
-  SUMMARY_CHANGED: "تغيّر ملخص الإقامة منذ طباعته؛ اطبعه من جديد ووقّعه الضيف.",
+  GROUP_NUMBER_PENDING_MIGRATION: "مشاركة رقم المنصة بين وحدات المجموعة غير متاحة بعد؛ أدخل كل وحدة حجزًا مستقلًا برقمها.",
+  SUMMARY_CHANGED: "تغيّر ملخص الإقامة منذ طباعته؛ اطبعه من جديد ليوقّعه النزيل.",
   HAS_DEPENDENCIES: "لا يمكن الحذف لوجود سجلات مرتبطة؛ يمكن أرشفته.",
   HAS_OPEN_COMMITMENTS: "لا يمكن الأرشفة لوجود التزامات مفتوحة (حجوزات أو مهام).",
   HAS_FUTURE_COMMITMENTS: "لا يمكن تعطيل الوحدة لوجود حجوزات مستقبلية عليها؛ انقلها أولًا.",
@@ -112,6 +112,7 @@ const ERROR_AR: Record<string, string> = {
 };
 
 export const VALIDATION_AR: Record<string, string> = {
+  trace: "رمز التتبع غير صحيح: 8 أحرف وأرقام، مثل K7Q2M9XA.",
   // 0052: the AI guard and the WhatsApp contact alert
   early_departure: "اختر: تقصير الإقامة أو إبقاء الليالي مدفوعة.",
   ai_guard: "حدود إيقاف المساعد خارج نطاقها: التكرار 2–20، الرسائل 3–200 خلال 1–120 دقيقة، التوكنز 1000–1000000.",
@@ -121,7 +122,7 @@ export const VALIDATION_AR: Record<string, string> = {
   acknowledgement_required: "يجب الإقرار بملخص الإقامة أولًا.",
   platform_collects: "حدّد من يقبض المبلغ: المنصة أم المنشأة.", platform_booked_on: "تاريخ الحجز في المنصة مطلوب ولا يكون بعد اليوم.",
   cancel_number: "رقم الإلغاء من المنصة مطلوب (حتى 60 حرفًا).", not_platform: "هذا الحجز ليس من منصة.", rating: "التقييم من 1 إلى 5.", note: "الملاحظة حتى 500 حرف.",
-  ban: "حدّد الحظر أو رفعه.", hold: "حدّد وضع الحظر أو رفعه.", guest_profile: "ملف الضيف غير موجود.",
+  ban: "حدّد الحظر أو رفعه.", hold: "حدّد وضع الحظر أو رفعه.", guest_profile: "ملف النزيل غير موجود.",
   name_en: "الاسم الإنجليزي للفرع مطلوب.", country: "رمز الدولة حرفان كبيران (مثل SA).", language: "اللغة الافتراضية: عربي أو إنجليزي.",
   map_url: "رابط الموقع يجب أن يكون رابط خرائط Google يبدأ بـ https.", booking_url: "رابط منصة الحجز يجب أن يبدأ بـ https.",
   image: "الملف ليس صورة صالحة.", image_type: "الشعار والصورة بصيغة PNG أو JPG أو WebP فقط (لا SVG).", image_too_large: "حجم الملف أكبر من المسموح (الشعار 200 كيلوبايت، الصورة 1 ميجابايت).",
@@ -196,7 +197,7 @@ export const VALIDATION_AR: Record<string, string> = {
   phone_required_primary: "رقم الجوال مطلوب للنزيل الرئيسي.",
   // data validity (0047)
   name_letters_only: "الاسم حروف فقط (عربية أو إنجليزية)، بلا أرقام أو رموز.",
-  phone_required: "رقم جوال الضيف الرئيسي مطلوب.",
+  phone_required: "رقم جوال النزيل الرئيسي مطلوب.",
   phone_format: "رقم الجوال: سعودي يبدأ بـ 05 ويتكون من 10 أرقام، أو دولي يبدأ بـ + ثم رمز الدولة.",
   minimum_age_15: "لا يُسجَّل من عمره أقل من 15 سنة.",
   amount: "المبلغ غير صحيح.",
@@ -225,7 +226,7 @@ export const VALIDATION_AR: Record<string, string> = {
   title: "العنوان مطلوب.",
   channel: "قناة التسليم غير صحيحة.",
   name: "الاسم مطلوب.", name_ar: "الاسم العربي مطلوب.", room_number: "رقم الوحدة مطلوب.", reason: "يجب كتابة سبب.",
-  dates: "يجب أن يكون وقت المغادرة بعد وقت الوصول.", guest_name: "اسم الضيف مطلوب.", guests: "عدد النزلاء غير صحيح.",
+  dates: "يجب أن يكون وقت المغادرة بعد وقت الوصول.", guest_name: "اسم النزيل مطلوب.", guests: "عدد النزلاء غير صحيح.",
   source: "مصدر الحجز غير صالح.", external_ref_required: "المرجع الخارجي مطلوب لهذا المصدر.", one_target: "اختر وحدة أو مرفقًا (واحدًا فقط).",
   pricing_mode: "اختر طريقة التسعير.", effective_date: "تاريخ التبديل خارج فترة الإقامة.", checkout_in_past: "تاريخ المغادرة الجديد في الماضي.",
   arrival_not_due: "لا يمكن إعلان عدم الحضور قبل موعد الوصول.", kind: "نوع العملية غير صحيح.", method: "طريقة الدفع مطلوبة.",
@@ -233,7 +234,7 @@ export const VALIDATION_AR: Record<string, string> = {
   action: "إجراء غير مسموح.", summary: "وصف الاقتراح مطلوب.", timezone: "المنطقة الزمنية غير صالحة (مثال: Asia/Riyadh).",
   display_phone: "رقم واتساب غير صحيح (مثال: 05xxxxxxxx أو 9665xxxxxxxx).", phone_number_id: "Phone Number ID أرقام فقط (من Meta)، ولا يُستخدم لفرعين.",
   waba_id: "WhatsApp Business Account ID أرقام فقط.", access_token: "رمز الوصول غير صالح (انسخه كاملًا من Meta).", app_secret: "App Secret غير صالح.",
-  channel_incomplete: "أكمل الإعداد قبل التفعيل: رقم واتساب الفرع ومفتاح ربط كمبيوتر الاستقبال (أو بيانات Meta في وضع Cloud API).", period: "الفترة غير صحيحة (من قبل إلى).",
+  channel_incomplete: "أكمل الإعداد قبل التفعيل: رقم واتساب الفرع ومفتاح ربط كمبيوتر الاستقبال (أو بيانات Meta في وضع Cloud API).", period: "تاريخ «من» يجب أن يسبق تاريخ «إلى».",
   mode: "طريقة الربط غير صحيحة.", auto_reply: "قيمة الرد الآلي غير صحيحة.", human_pause_minutes: "مدة توقف الرد الآلي بين 5 و720 دقيقة.",
   period_after_today: "لا يمكن أن تنتهي الفترة بعد اليوم.", choose_category: "اختر نوعًا واحدًا من البيانات على الأقل.", unknown_category: "نوع بيانات غير معروف.",
   confirmation_phrase: "عبارة التأكيد غير مطابقة.", preview_expired: "انتهت صلاحية المعاينة (15 دقيقة). اعرض المعاينة من جديد.",
@@ -245,13 +246,13 @@ export const VALIDATION_AR: Record<string, string> = {
 
 /** Refusals that say which rule refused, more useful than the generic «no permission». */
 const FORBIDDEN_AR: Array<[RegExp, string]> = [
-  [/post-arrival discount/, "الخصم بعد وصول الضيف للمالك أو المدير."],
+  [/post-arrival discount/, "الخصم بعد وصول النزيل للمالك أو المدير."],
   [/rate below the quoted price/, "سعر ليلة أقل من السعر المحسوب خصمٌ يعتمده المالك أو المدير؛ استخدم خانة الخصم ضمن حدك."],
   [/shortening a weekly or monthly stay/, "تقصير إقامة بالسعر الأسبوعي أو الشهري يقرر تسويته المالك أو المدير."],
   [/tax settings are the owner/, "إعدادات الضريبة للمالك وحده."],
   [/supervisor corrects only the vouchers they issued/, "يصحح المشرف السندات التي أصدرها هو فقط؛ غيرها يصححه المالك أو المدير."],
   [/after 24 hours a voucher is corrected by a manager/, "مضت 24 ساعة على السند؛ يصححه الآن المالك أو المدير."],
-  [/a manager signs out neither an owner nor a manager/, "لا يُخرج المالكَ أو مديرًا إلا المالك."],
+  [/a manager signs out neither an owner nor a manager/, "تسجيل خروج المالك أو المدير إجباريًا للمالك وحده."],
   [/only the owner changes an owner/, "حساب المالك ودور المالك لا يغيّرهما إلا المالك."],
   [/PERMISSION_LOCKED/, "تعديل مصفوفة الصلاحيات للمالك وحده، ولا يُمنح لدور آخر."],
   [/UNKNOWN_PERMISSION/, "عملية غير معروفة في مصفوفة الصلاحيات."],
@@ -267,7 +268,7 @@ function matrixRefusal(msg: string): string | null {
 }
 function arabicMessage(msg: string): string {
   const v = msg.match(/VALIDATION:\s*([a-z_0-9]+)/i);
-  if (v) return VALIDATION_AR[v[1]] ?? "بيانات غير صالحة: " + v[1];
+  if (v) return VALIDATION_AR[v[1]] ?? "بعض البيانات غير صالحة. راجع الحقول وحاول مرة أخرى.";   // COPY-15: never a field code
   for (const [re, ar] of FORBIDDEN_AR) if (re.test(msg)) return ar;
   const matrix = matrixRefusal(msg);
   if (matrix) return matrix;
@@ -283,7 +284,10 @@ function arabicMessage(msg: string): string {
   if (/REFUND_METHOD_DIFFERS/.test(msg)) return "الاسترداد يكون بطريقة الدفع نفسها. لطريقة أخرى اكتب سبب الاختلاف.";
   for (const k of Object.keys(ERROR_AR)) if (msg.includes(k)) return ERROR_AR[k];
   if (/permission denied|row-level security/i.test(msg)) return ERROR_AR.FORBIDDEN;
-  return "تعذّر تنفيذ العملية: " + msg.slice(0, 120);
+  if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return "تعذّر الاتصال بالخادم؛ تحقق من الإنترنت ثم أعد المحاولة.";   // IX-09
+  if (/invalid login credentials/i.test(msg)) return "البريد أو كلمة المرور غير صحيحة.";
+  if (/email not confirmed/i.test(msg)) return "لم يُؤكَّد البريد بعد. افتح رسالة التأكيد في بريدك.";
+  return "تعذّر تنفيذ العملية. حاول مرة أخرى، وإن تكرر أبلغ المشرف برمز التتبع.";   // COPY-15: no raw server text
 }
 
 /** The Arabic message for an error; a failed server operation also shows its trace code (decision 60). */

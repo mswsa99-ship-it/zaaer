@@ -41,6 +41,21 @@ export default function StaffReservationNew() {
   const [f, setF] = useState({ check_in: todayISO(), check_out: addDays(todayISO(), 1), category_id: "", room_id: "", source_id: "", external_ref: "", guest_name: "", guest_phone: "", nationality: "", adults: 1, companions: 0, booking_type: "individual", company_name: "", visit_purpose: "", notes: "", confirm: true, override: false, nightly_rate: null as number | null, discount: 0, discount_reason: "",
     // decision 4: a platform's booking says who collects and the day it was booked there
     platform_collects: null as boolean | null, platform_booked_on: todayISO() });
+  // IX-05: what is typed survives a reload (a draft in this tab only, per branch), and leaving the page asks first
+  const draftKey = `zaaer:new-reservation:${branchId ?? ""}`;
+  const [draft, setDraft] = useState<typeof f | null>(null);
+  const typed = !!(f.guest_name.trim() || f.guest_phone.trim() || f.notes.trim() || f.external_ref.trim());
+  useEffect(() => {
+    try { const raw = sessionStorage.getItem(draftKey); setDraft(raw ? JSON.parse(raw) : null); } catch { setDraft(null); }
+  }, [draftKey]);
+  useEffect(() => {
+    if (!typed) return;
+    const t = window.setTimeout(() => { try { sessionStorage.setItem(draftKey, JSON.stringify(f)); } catch { /* storage off */ } }, 400);
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => { window.clearTimeout(t); window.removeEventListener("beforeunload", warn); };
+  }, [f, typed, draftKey]);
+  const clearDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* storage off */ } setDraft(null); };
   // decision 2: the guest profile — chosen from the search, matched by phone on the server, or a new one
   const [guest, setGuest] = useState<GuestProfileRow | null>(null);
   const [newProfile, setNewProfile] = useState(false);
@@ -106,6 +121,7 @@ export default function StaffReservationNew() {
         guest_name: f.guest_name, guest_phone: f.guest_phone || null, nationality: f.nationality || null, booking_type: f.booking_type, company_name: f.company_name || null, visit_purpose: f.visit_purpose || null,
         notes: f.notes || null, confirm: f.confirm, discount_halalas: canDiscount ? f.discount : 0, discount_reason: f.discount_reason || null,
         ...(extraUnits.length > 0 ? { units: [main, ...extraUnits.map((u) => ({ category_id: u.category_id, room_id: null, adults: u.adults, companions: u.companions, companions_details: [], nightly_rate_halalas: null, discount_halalas: 0 }))] } : {}) });
+      clearDraft();
       navigate(`/staff/reservations/${r.id}`);
     } catch (e) { setError(toArabicError(e)); } finally { setBusy(false); }
   }
@@ -124,10 +140,17 @@ export default function StaffReservationNew() {
       <SectionTitle title="حجز جديد" subtitle="يتحقق الخادم من التوفر والسعة والسعر لحظة التأكيد" action={<BranchPicker />} />
       {opts.error && <div className="mb-4"><LoadErrorCard message={opts.error} onRetry={opts.reload} /></div>}
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {draft && !typed && (draft.guest_name || draft.guest_phone) && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-700" data-testid="reservation-draft">
+          مسودة لم تُحفظ{draft.guest_name ? ` باسم ${draft.guest_name}` : ""}.
+          <button type="button" className="btn-primary px-3 py-1 text-xs" onClick={() => { setF(draft); setDraft(null); }}>استعادة المسودة</button>
+          <button type="button" className="btn-ghost px-3 py-1 text-xs" onClick={clearDraft}>تجاهلها</button>
+        </div>
+      )}
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
-            <h3 className="mb-3 font-semibold text-ink-800">المدة والوحدة</h3>
+            <h2 className="mb-3 font-semibold text-ink-800">المدة والوحدة</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="الوصول"><input type="date" className="input" dir="ltr" value={f.check_in} onChange={(e) => setF({ ...f, check_in: e.target.value, check_out: f.check_out <= e.target.value ? addDays(e.target.value, 1) : f.check_out })} /></Field>
               <Field label="المغادرة"><input type="date" className="input" dir="ltr" min={addDays(f.check_in, 1)} value={f.check_out} onChange={(e) => setF({ ...f, check_out: e.target.value })} /></Field>
@@ -162,11 +185,11 @@ export default function StaffReservationNew() {
             ))}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => setExtraUnits([...extraUnits, { category_id: f.category_id, adults: 1, companions: 0 }])} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> وحدة أخرى في نفس الحجز</button>
-              {extraUnits.length > 0 && <p className="text-[11px] text-ink-400">يُنشأ حجز لكل وحدة بنفس الضيف والتواريخ، دفعة واحدة: إن تعذّر أحدها لا يُنشأ أي منها. تُخصَّص وحدات الحجوزات الإضافية من صفحة كل حجز.</p>}
+              {extraUnits.length > 0 && <p className="text-[11px] text-ink-400">يُنشأ حجز لكل وحدة بنفس النزيل والتواريخ، دفعة واحدة: إن تعذّر أحدها لا يُنشأ أي منها. تُخصَّص وحدات الحجوزات الإضافية من صفحة كل حجز.</p>}
             </div>
           </Card>
           <Card>
-            <h3 className="mb-3 font-semibold text-ink-800">الضيف الرئيسي</h3>
+            <h2 className="mb-3 font-semibold text-ink-800">النزيل الرئيسي</h2>
             {/* decision 2: a returning guest is picked from the profiles (by name, phone or document); a new one gets a new profile */}
             <div className="mb-3 rounded-xl border border-ink-100 p-3" data-testid="profile-picker">
               {guest ? (
@@ -176,19 +199,19 @@ export default function StaffReservationNew() {
                 </div>
               ) : (
                 <div>
-                  <div className="relative"><Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" /><input className="input pr-9" value={profileQ} onChange={(e) => setProfileQ(e.target.value)} placeholder="ضيف سابق؟ ابحث بالاسم أو الجوال أو رقم الوثيقة" aria-label="بحث عن ضيف سابق" /></div>
+                  <div className="relative"><Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" /><input className="input pr-9" value={profileQ} onChange={(e) => setProfileQ(e.target.value)} placeholder="نزيل سابق؟ ابحث بالاسم أو الجوال أو رقم الوثيقة" aria-label="بحث عن نزيل سابق" /></div>
                   {profileHits.length > 0 && (
                     <ul className="mt-2 divide-y divide-ink-50 rounded-lg border border-ink-100 bg-white text-sm">
                       {profileHits.map((g) => <li key={g.id}><button type="button" onClick={() => { setGuest(g); setNewProfile(false); setProfileQ(""); setProfileHits([]); setF({ ...f, guest_name: g.full_name, nationality: g.nationality ?? f.nationality }); }} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-right hover:bg-ink-50" data-testid="profile-hit"><span>{g.full_name}{g.banned && <span className="mr-2 text-xs text-danger-600">محظور</span>}</span><span className="text-xs text-ink-400" dir="ltr">{g.phone_masked ?? ""} · {g.stays}</span></button></li>)}
                     </ul>
                   )}
-                  <label className="mt-2 flex items-center gap-2 text-xs text-ink-500"><input type="checkbox" checked={newProfile} onChange={(e) => setNewProfile(e.target.checked)} /> ضيف جديد (لا تربطه بملف على الجوال نفسه)</label>
+                  <label className="mt-2 flex items-center gap-2 text-xs text-ink-500"><input type="checkbox" checked={newProfile} onChange={(e) => setNewProfile(e.target.checked)} /> نزيل جديد (لا تربطه بملف على الجوال نفسه)</label>
                 </div>
               )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم (مطلوب)" error={nameErr}><input className="input" value={f.guest_name} aria-invalid={!!nameErr} onChange={(e) => setF({ ...f, guest_name: e.target.value })} /></Field>
-              <Field label={guest ? "الجوال" : "الجوال (مطلوب)"} error={phoneErr} hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف الضيف بالجوال نفسه ما لم تُعلّم «ضيف جديد»"}><input className="input" dir="ltr" inputMode="tel" autoComplete="tel" value={f.guest_phone} aria-invalid={!!phoneErr} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
+              <Field label={guest ? "الجوال" : "الجوال (مطلوب)"} error={phoneErr} hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف النزيل بالجوال نفسه ما لم تُعلّم «نزيل جديد»"}><input className="input" dir="ltr" inputMode="tel" autoComplete="tel" value={f.guest_phone} aria-invalid={!!phoneErr} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
               <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="بالغون"><NumberInput value={f.adults} onChange={(v) => setF({ ...f, adults: (v ?? 0) })} /></Field>
@@ -210,7 +233,7 @@ export default function StaffReservationNew() {
             </div>
           </Card>
           <Card>
-            <h3 className="mb-3 font-semibold text-ink-800">المصدر والتفاصيل</h3>
+            <h2 className="mb-3 font-semibold text-ink-800">المصدر والتفاصيل</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="مصدر الحجز"><select className="input" value={f.source_id} onChange={(e) => setF({ ...f, source_id: e.target.value })}>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
               <Field label={`رقم الحجز في المنصة${source?.external_reference_required ? " (مطلوب)" : ""}`} hint={extraUnits.length > 0 && f.external_ref ? "رقم واحد للمجموعة كلها؛ لا يُقبل في حجز أو مجموعة أخرى" : undefined}><input className="input" dir="ltr" value={f.external_ref} onChange={(e) => setF({ ...f, external_ref: e.target.value })} aria-label="رقم الحجز في المنصة" /></Field>
@@ -231,7 +254,7 @@ export default function StaffReservationNew() {
         </div>
         <div className="space-y-4">
           <Card>
-            <h3 className="mb-3 flex items-center gap-2 font-semibold text-ink-800"><Calculator className="h-4 w-4 text-brand-600" /> التسعير</h3>
+            <h2 className="mb-3 flex items-center gap-2 font-semibold text-ink-800"><Calculator className="h-4 w-4 text-brand-600" /> التسعير</h2>
             <div className="space-y-3">
               <Toggle checked={f.override} onChange={(v) => setF({ ...f, override: v, nightly_rate: v ? (quote?.nightly_rate ?? cat?.base_price_halalas ?? 0) : null })} label="سعر ليلة يدوي لكل الليالي" />
               {f.override && <><MoneyInput valueHalalas={f.nightly_rate} onChange={(h) => setF({ ...f, nightly_rate: h })} />{!isMgr && <p className="text-[11px] text-ink-400">لا يقل عن السعر المحسوب؛ الأقل خصمٌ ضمن حدك.</p>}</>}

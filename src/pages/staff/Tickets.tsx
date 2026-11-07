@@ -36,7 +36,7 @@ const KIND_LABELS: Record<string, string> = {
   escalation: "تصعيد",
   ai_guardrail: "حماية الذكاء الاصطناعي",
   ai_fallback: "تعطل المساعد",
-  guest_request: "طلب النزيل",
+  guest_request: "طلب النزيل موظفًا",
 };
 
 const KIND_COLORS: Record<string, string> = {
@@ -47,6 +47,16 @@ const KIND_COLORS: Record<string, string> = {
   ai_fallback: "bg-ink-100 text-ink-600",
 };
 
+const DETAIL_LABELS: Record<string, (v: unknown) => string | null> = {
+  phone_last4_given: (v) => (v ? "أدخل النزيل آخر 4 أرقام من جواله" : null),
+  reason: (v) => `السبب: ${String(v)}`,
+  note: (v) => String(v),
+  message: (v) => `رسالة النزيل: ${String(v)}`,
+  channel: (v) => `القناة: ${v === "whatsapp" ? "واتساب" : v === "web" ? "الموقع" : String(v)}`,
+  rule: () => null,
+  stage: () => null,
+};
+
 const HANDOFF_STATUS: Record<string, string> = { open: "مفتوح", in_progress: "قيد المعالجة", resolved: "تم الحل" };
 
 function detailsText(d: Record<string, unknown> | string | null): string {
@@ -55,7 +65,10 @@ function detailsText(d: Record<string, unknown> | string | null): string {
   const parts: string[] = [];
   for (const [k, v] of Object.entries(d)) {
     if (v === null || v === undefined || v === "") continue;
-    parts.push(`${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+    // COPY-01: a sentence per known key, never a raw key
+    const known = DETAIL_LABELS[k];
+    if (known) { const line = known(v); if (line) parts.push(line); continue; }
+    if (typeof v === "string") parts.push(v);
   }
   return parts.join(" · ").slice(0, 300);
 }
@@ -63,7 +76,7 @@ function detailsText(d: Record<string, unknown> | string | null): string {
 const NO_TICKETS: { tickets: Ticket[]; rooms: { id: string; room_number: string }[]; handoffs: HandoffTicket[] } = { tickets: [], rooms: [], handoffs: [] };
 
 export default function Tickets() {
-  const { profile } = useAuth();
+  const { profile, can } = useAuth();
   const canSeeHandoff = profile?.role === "owner" || profile?.role === "manager" || profile?.role === "supervisor";
 
   const [acting, setActing] = useState<string | null>(null);
@@ -117,7 +130,7 @@ export default function Tickets() {
   async function createTicket(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!newTitle.trim() || !newRoom) { setFormError("العنوان والغرفة مطلوبة."); return; }
+    if (!newTitle.trim() || !newRoom) { setFormError("العنوان والوحدة مطلوبان."); return; }
     setActing("create");
     try {
       await staffApi.createMaintenance(newRoom, newTitle.trim(), newDesc.trim() || null);
@@ -143,7 +156,7 @@ export default function Tickets() {
 
       {canSeeHandoff && (
         <section>
-          <SectionTitle title="طلبات التدخل البشري" subtitle={`طلبات مفتوحة: ${openHandoff}`} />
+          <SectionTitle title="طلبات التحويل لموظف" subtitle={`طلبات مفتوحة: ${openHandoff}`} />
           {handoffs.length === 0 ? (
             <EmptyState icon={<LifeBuoy className="h-10 w-10" />} title="لا توجد طلبات تدخل" description="تظهر هنا الحالات التي أحالها المساعد الذكي إلى موظف." />
           ) : (
@@ -154,7 +167,7 @@ export default function Tickets() {
                     <LifeBuoy className={`mt-0.5 h-5 w-5 ${h.status === "resolved" ? "text-success-600" : "text-brand-600"}`} />
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge className={KIND_COLORS[h.kind] ?? "bg-ink-100 text-ink-600"}>{KIND_LABELS[h.kind] ?? h.kind}</Badge>
+                        <Badge className={KIND_COLORS[h.kind] ?? "bg-ink-100 text-ink-600"}>{KIND_LABELS[h.kind] ?? "طلب آخر"}</Badge>
                         <Badge className={h.status === "resolved" ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{HANDOFF_STATUS[h.status] ?? h.status}</Badge>
                       </div>
                       <p className="mt-1 text-xs text-ink-500">
@@ -172,7 +185,7 @@ export default function Tickets() {
                   </div>
                   {h.status !== "resolved" && (
                     <button onClick={() => resolveHandoff(h.id)} disabled={acting === h.id} className="btn-outline text-xs">
-                      {acting === h.id ? <Spinner className="h-3.5 w-3.5" /> : <><CheckCircle2 className="h-3.5 w-3.5" /> تحديد كمحلول</>}
+                      {acting === h.id ? <Spinner className="h-3.5 w-3.5" /> : <><CheckCircle2 className="h-3.5 w-3.5" /> تم الحل</>}
                     </button>
                   )}
                 </Card>
@@ -183,16 +196,16 @@ export default function Tickets() {
       )}
 
       <section>
-        <SectionTitle title="البلاغات والصيانة" subtitle={`بلاغات مفتوحة: ${openMaint}`} action={
+        <SectionTitle level={2} title="البلاغات والصيانة" subtitle={`بلاغات مفتوحة: ${openMaint}`} action={
           <button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلاغ جديد</button>
         } />
 
         {showForm && (
           <Card className="mb-4">
             <form onSubmit={createTicket} className="space-y-3">
-              <div><label className="label">الغرفة</label>
+              <div><label className="label">الوحدة</label>
                 <select value={newRoom} onChange={(e) => setNewRoom(e.target.value)} className="input">
-                  <option value="">اختر غرفة</option>
+                  <option value="">اختيار وحدة</option>
                   {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}</option>)}
                 </select>
               </div>
@@ -216,13 +229,13 @@ export default function Tickets() {
                   <Wrench className={`h-5 w-5 ${t.status === "resolved" ? "text-success-600" : "text-danger-500"}`} />
                   <div>
                     <p className="text-sm font-medium text-ink-800">{t.title}</p>
-                    <p className="text-xs text-ink-400">غرفة {t.room?.room_number ?? "—"} · {t.status === "resolved" ? "تم الحل" : t.status === "in_progress" ? "قيد المعالجة" : "مفتوح"} · {formatDateTime(t.created_at)}</p>
+                    <p className="text-xs text-ink-400">وحدة {t.room?.room_number ?? "—"} · {t.status === "resolved" ? "تم الحل" : t.status === "in_progress" ? "قيد المعالجة" : "مفتوح"} · {formatDateTime(t.created_at)}</p>
                     {t.description && <p className="mt-1 text-xs text-ink-500">{t.description}</p>}
                   </div>
                 </div>
-                {t.status !== "resolved" && (
+                {t.status !== "resolved" && can("maintenance.resolve") && (   /* PERM-05 */
                   <button onClick={() => resolveMaintenance(t.id)} disabled={acting === t.id} className="btn-outline text-xs">
-                    {acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : "تحديد كمحلول"}
+                    {acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : "تم الحل"}
                   </button>
                 )}
               </Card>

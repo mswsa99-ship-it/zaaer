@@ -1,5 +1,6 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import { useEffect, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "../lib/utils";
+import { useOrganizationName } from "../lib/organization";
 
 /** A white card; other attributes (data-testid, role…) reach the element. */
 export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, "className" | "children">) {
@@ -9,6 +10,9 @@ export function Card({ className, children, ...rest }: { className?: string; chi
 /** A page title (H1) or, with `level={2}`, a section inside the page. */
 export function SectionTitle({ title, subtitle, action, level = 1 }: { title: string; subtitle?: string; action?: ReactNode; level?: 1 | 2 }) {
   const H = level === 1 ? "h1" : "h2";
+  // A11Y-10 (SC 2.4.2): each page names the browser tab after its own title
+  const org = useOrganizationName();
+  useEffect(() => { if (level === 1 && title) document.title = org ? `${title} — ${org}` : title; }, [level, title, org]);
   return (
     // on a phone the action (branch picker, buttons) moves under the title instead of squeezing it into a narrow column
     <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
@@ -83,7 +87,7 @@ export function DataState({ loading, error, empty, onRetry, emptyIcon, emptyTitl
 
 export function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
+    <div role="alert" className="rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">{/* A11Y-09 */}
       {message}
     </div>
   );

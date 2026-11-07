@@ -5,7 +5,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   manager: "مدير فرع",
   supervisor: "مشرف استقبال",
   finance: "مالية",
-  housekeeping: "النظافة",
+  housekeeping: "خدمة الغرف",
   guest: "نزيل",
 };
 
@@ -24,8 +24,8 @@ export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
   draft: "مسودة",
   pending_verification: "بانتظار التحقق",
   confirmed: "مؤكد",
-  checked_in: "تم الدخول",
-  checked_out: "تمت المغادرة",
+  checked_in: "مقيم",
+  checked_out: "غادر",
   closed: "مغلق",
   cancelled: "ملغى",
   rejected: "مرفوض",
@@ -58,9 +58,9 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   pending: "بانتظار الدفع",
   processing: "قيد المعالجة",
   paid: "مدفوع",
-  failed: "فشل",
+  failed: "تعذّر الدفع",
   partially_paid: "دفع جزئي",
-  refunded: "مسترد",
+  refunded: "مُسترَد",
   overpaid: "دفع زائد",
 };
 
@@ -90,7 +90,7 @@ export const ROOM_STATUS_LABELS: Record<RoomStatus, string> = {
   available: "متاحة",
   reserved: "محجوزة",
   occupied: "مشغولة",
-  cleaning: "تحت التنظيف",
+  cleaning: "قيد التنظيف",
   maintenance: "صيانة",
   blocked: "محجوبة",
   out_of_service: "خارج الخدمة",
@@ -111,7 +111,7 @@ export const ROOM_STATUS_COLORS: Record<RoomStatus, string> = {
   maintenance: "bg-danger-500/10 text-danger-600",
   blocked: "bg-ink-300/30 text-ink-600",
   out_of_service: "bg-danger-500/15 text-danger-600",
-  ready: "bg-accent-500/10 text-accent-600",
+  ready: "bg-accent-500/10 text-accent-700",
 };
 
 export type IdentityType = "national_id" | "iqama" | "passport" | "gcc_id";
@@ -157,7 +157,7 @@ export const CHARGE_KIND_LABELS: Record<ChargeKind, string> = {
 
 export const CLEANLINESS_LABELS: Record<string, string> = { clean: "نظيفة", dirty: "متسخة", in_progress: "قيد التنظيف" };
 export const CLEANLINESS_COLORS: Record<string, string> = { clean: "bg-success-500/10 text-success-600", dirty: "bg-danger-500/10 text-danger-600", in_progress: "bg-warning-500/10 text-warning-700" };
-export const TASK_STATUS_LABELS: Record<string, string> = { pending: "معلقة", in_progress: "قيد التنفيذ", completed: "مكتملة", cancelled: "ملغاة" };
+export const TASK_STATUS_LABELS: Record<string, string> = { pending: "لم تبدأ", in_progress: "قيد التنفيذ", completed: "مكتملة", cancelled: "ملغاة" };
 export const TASK_PRIORITY_LABELS: Record<string, string> = { low: "منخفضة", medium: "متوسطة", high: "مرتفعة" };
 export const BILLING_UNIT_LABELS: Record<string, string> = { once: "مرة واحدة", night: "لكل ليلة", person: "لكل شخص", quantity: "بالكمية" };
 

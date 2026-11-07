@@ -153,31 +153,43 @@ export function buildOpsSystemPrompt(o: { propertyName: string; branchName: stri
 // ---------------------------------------------------------------------------
 const sar = (h: unknown) => (Number(h ?? 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ر.س";
 const n = (v: unknown) => Number(v ?? 0);
+/** COPY-11: an Arabic count by the CLDR rules (1, 2, 3–10, 11–99, 100…), as arabicCount does in the app. */
+function ar(k: number, [one, two, few, many]: [string, string, string, string]): string {
+  if (k === 1) return one;
+  if (k === 2) return two;
+  const m = Math.abs(k) % 100;
+  if (m >= 3 && m <= 10) return `${k} ${few}`;
+  if (m >= 11 && m <= 99) return `${k} ${many}`;
+  return `${k} ${many.replace(/ً?ا$|ً$/, "")}`;
+}
+const DAYS: [string, string, string, string] = ["يوم واحد", "يومان", "أيام", "يومًا"];
+const UNITS: [string, string, string, string] = ["وحدة واحدة", "وحدتان", "وحدات", "وحدة"];
 
 export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string }
 
 export function buildBriefing(ctx: Record<string, any>): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
-  const s = ctx?.summary ?? {}; const u = s.units ?? {}; const ar = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
+  const s = ctx?.summary ?? {}; const u = s.units ?? {}; const av = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
   const money = !!s.finance;   // PERM-08: a role without money gets no money sentence (not a false zero)
   const items: BriefingItem[] = [];
   const overstays = (ctx.overstays ?? []) as any[]; // deno-lint-ignore no-explicit-any
   const overdue = (ctx.overdue_arrivals ?? []) as any[]; // deno-lint-ignore no-explicit-any
-  if (overstays.length) items.push({ level: "critical", text: `${overstays.length} إقامة تجاوزت موعد المغادرة: ${overstays.slice(0, 5).map((o) => `${o.ref} (وحدة ${o.room ?? "—"}، ${o.days_over} يوم)`).join("، ")}`, link: "/staff/reservations" });
-  if (overdue.length) items.push({ level: "warning", text: `${overdue.length} وصول متأخر لم يُسجَّل ولم يُعلَن عدم حضور: ${overdue.slice(0, 5).map((o) => o.ref).join("، ")}`, link: "/staff/arrivals" });
-  if (n(ar.expected)) items.push({ level: "info", text: `الوصول اليوم: ${ar.expected} متوقع، ${ar.arrived} وصل، ${ar.pending_identity} بانتظار مطابقة الهوية${money ? `، ${ar.unpaid} عليه متبقٍ` : ""}`, link: "/staff/arrivals" });
-  if (n(dp.expected)) items.push({ level: money && n(dp.with_balance) ? "warning" : "info", text: `المغادرة اليوم: ${dp.expected} متوقعة، ${dp.done} تمت${money ? `، ${dp.with_balance} عليها رصيد متبقٍ` : ""}`, link: "/staff/reservations" });
+  if (overstays.length) items.push({ level: "critical", text: `${ar(overstays.length, ["إقامة واحدة تجاوزت", "إقامتان تجاوزتا", "إقامات تجاوزت", "إقامة تجاوزت"])} موعد المغادرة: ${overstays.slice(0, 5).map((o) => `${o.ref} (وحدة ${o.room ?? "—"}، ${ar(n(o.days_over), DAYS)})`).join("، ")}`, link: "/staff/reservations" });
+  if (overdue.length) items.push({ level: "warning", text: `وصول متأخر لم يُسجَّل ولم يُعلَن عدم حضوره (${overdue.length}): ${overdue.slice(0, 5).map((o) => o.ref).join("، ")}`, link: "/staff/arrivals" });
+  if (n(av.expected)) items.push({ level: "info", text: `الوصول اليوم: المتوقع ${av.expected}، وصل ${av.arrived}، بانتظار مطابقة الهوية ${av.pending_identity}${money ? `، عليهم متبقٍ ${av.unpaid}` : ""}`, link: "/staff/arrivals" });
+  if (n(dp.expected)) items.push({ level: money && n(dp.with_balance) ? "warning" : "info", text: `المغادرة اليوم: المتوقع ${dp.expected}، تمت ${dp.done}${money ? `، عليها رصيد متبقٍ ${dp.with_balance}` : ""}`, link: "/staff/reservations" });
   const unitsAttn = (ctx.units_needing_attention ?? []) as any[]; // deno-lint-ignore no-explicit-any
   const arrivingDirty = unitsAttn.filter((x) => x.next_arrival && x.next_arrival <= s.date);
-  if (arrivingDirty.length) items.push({ level: "critical", text: `${arrivingDirty.length} وحدة عليها وصول اليوم وليست جاهزة: ${arrivingDirty.map((x) => x.room).join("، ")}`, link: "/staff/housekeeping" });
-  if (n(u.dirty)) items.push({ level: "warning", text: `${u.dirty} وحدة تحتاج تنظيفًا، ${hk.unassigned} مهمة غير مسندة، ${hk.in_progress} قيد التنفيذ، ${hk.completed_today} أُنجزت اليوم`, link: "/staff/housekeeping" });
-  if (n(u.maintenance)) items.push({ level: "warning", text: `${u.maintenance} وحدة في الصيانة`, link: "/staff/tickets" });
+  if (arrivingDirty.length) items.push({ level: "critical", text: `${ar(arrivingDirty.length, ["وحدة واحدة عليها", "وحدتان عليهما", "وحدات عليها", "وحدة عليها"])} وصول اليوم وليست جاهزة: ${arrivingDirty.map((x) => x.room).join("، ")}`, link: "/staff/housekeeping" });
+  if (n(u.dirty)) items.push({ level: "warning", text: `تحتاج تنظيفًا: ${ar(n(u.dirty), UNITS)} — مهام غير مسندة ${n(hk.unassigned)}، قيد التنفيذ ${n(hk.in_progress)}، أُنجزت اليوم ${n(hk.completed_today)}`, link: "/staff/housekeeping" });
+  if (n(u.maintenance)) items.push({ level: "warning", text: `في الصيانة: ${ar(n(u.maintenance), UNITS)}`, link: "/staff/tickets" });
   if (n(f.outstanding_in_house)) items.push({ level: "warning", text: `متبقٍ على النزلاء المقيمين: ${sar(f.outstanding_in_house)}`, link: "/staff/payments" });
   // 0033: a stay's deposit goes back after the departure's inspection; «متابعة الإقامات» lists the departures not closed
   if (n(f.deposit_to_settle_after_checkout)) items.push({ level: "warning", text: `تأمينات لم تُسوَّ بعد المغادرة: ${sar(f.deposit_to_settle_after_checkout)} — تحتاج فحص المغادرة ثم ردًا أو رسم ضرر بسبب`, link: "/staff/followups" });
-  if (n(s.tickets_open)) items.push({ level: "warning", text: `${s.tickets_open} تذكرة مفتوحة من المساعد الذكي تحتاج مشرفًا`, link: "/staff/tickets" });
-  items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — ${u.occupied} مؤجرة من ${u.active} فعالة، ${u.ready} جاهزة للدخول، ${u.reserved} محجوزة، ${u.out_of_service} خارج الخدمة.${money ? ` تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` : ""}` });
+  if (n(s.tickets_open)) items.push({ level: "warning", text: `طلبات تحويل لموظف مفتوحة من المساعد الذكي تحتاج مشرفًا: ${s.tickets_open}`, link: "/staff/tickets" });
+  items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — مؤجرة ${n(u.occupied)} من ${n(u.active)} عاملة، جاهزة للتسليم ${n(u.ready)}، محجوزة ${n(u.reserved)}، خارج الخدمة ${n(u.out_of_service)}.${money ? ` تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` : ""}` });
   const crit = items.filter((i) => i.level === "critical").length; const warn = items.filter((i) => i.level === "warning").length;
-  const headline = crit ? `${crit} أمر عاجل و${warn} تنبيه يحتاج انتباهك اليوم` : warn ? `لا أمور عاجلة — ${warn} تنبيه للمتابعة` : "اليوم هادئ — لا تنبيهات تشغيلية";
+  const ALERTS: [string, string, string, string] = ["تنبيه واحد", "تنبيهان", "تنبيهات", "تنبيهًا"];
+  const headline = crit ? `${ar(crit, ["أمر عاجل واحد", "أمران عاجلان", "أمور عاجلة", "أمرًا عاجلًا"])}${warn ? ` و${ar(warn, ALERTS)}` : ""} — تحتاج انتباهك اليوم` : warn ? `لا أمور عاجلة — ${ar(warn, ALERTS)} للمتابعة` : "اليوم هادئ — لا تنبيهات تشغيلية";
   const text = [headline, ...items.map((i) => (i.level === "critical" ? "🔴 " : i.level === "warning" ? "🟠 " : "🔵 ") + i.text)].join("\n");
   return { headline, items, text };
 }
@@ -191,7 +203,7 @@ export function fallbackOpsReply(message: string, ctx: Record<string, any>): str
   const m = message.toLowerCase();
   const list = (rows: any[], f: (r: any) => string, empty: string) => rows.length ? rows.slice(0, 12).map((r, i) => `${i + 1}. ${f(r)}`).join("\n") : empty; // deno-lint-ignore no-explicit-any
   if (/(وصول|قادم|يوصل|arrival)/.test(m)) return "وصول اليوم:\n" + list(ctx.arrivals ?? [], (r) => `${r.ref} — ${r.guest ?? "—"} — ${r.room ? "وحدة " + r.room : r.category ?? ""} — ${r.status === "checked_in" ? "وصل" : "لم يصل"} — هوية: ${r.identity_status} — متبقٍ ${sar(r.balance_due)}`, "لا يوجد وصول متوقع اليوم.");
-  if (/(مغادر|يغادر|departure|checkout)/.test(m)) return "مغادرة اليوم:\n" + list(ctx.departures ?? [], (r) => `${r.ref} — ${r.guest ?? "—"} — وحدة ${r.room ?? "—"} — متبقٍ ${sar(r.balance_due)} — تأمين ${sar(r.deposit_balance)}`, "لا توجد مغادرات متوقعة اليوم.") + ((ctx.overstays ?? []).length ? "\n\nتجاوزوا موعد المغادرة:\n" + list(ctx.overstays, (r) => `${r.ref} — وحدة ${r.room ?? "—"} — ${r.days_over} يوم`, "") : "");
+  if (/(مغادر|يغادر|departure|checkout)/.test(m)) return "مغادرة اليوم:\n" + list(ctx.departures ?? [], (r) => `${r.ref} — ${r.guest ?? "—"} — وحدة ${r.room ?? "—"} — متبقٍ ${sar(r.balance_due)} — تأمين ${sar(r.deposit_balance)}`, "لا توجد مغادرات متوقعة اليوم.") + ((ctx.overstays ?? []).length ? "\n\nتجاوزوا موعد المغادرة:\n" + list(ctx.overstays, (r) => `${r.ref} — وحدة ${r.room ?? "—"} — ${ar(n(r.days_over), DAYS)}`, "") : "");
   if (/(نظاف|متسخ|تنظيف|dirty|clean|مهم|task)/.test(m)) return "الوحدات التي تحتاج انتباهًا:\n" + list(ctx.units_needing_attention ?? [], (r) => `وحدة ${r.room} — ${r.cleanliness === "clean" ? "نظيفة" : r.cleanliness === "dirty" ? "متسخة" : "قيد التنظيف"} — حالة ${r.status} — مهام مفتوحة ${r.open_tasks}${r.next_arrival ? " — وصول قادم " + r.next_arrival : ""}`, "كل الوحدات نظيفة.") + "\n\nالمهام المفتوحة:\n" + list(ctx.open_tasks ?? [], (t) => `${t.target} — ${t.type} — ${t.priority} — ${t.assignee ?? "غير مسندة"}`, "لا مهام مفتوحة.");
   if (/(متبقي|رصيد|مديون|دفع|تأمين|balance|deposit|مال)/.test(m)) return "المقيمون وعليهم متبقٍ:\n" + list(ctx.in_house_with_balance ?? [], (r) => `${r.ref} — وحدة ${r.room ?? "—"} — ${sar(r.balance_due)}`, "لا مديونيات على المقيمين.") + "\n\nتأمينات بعد المغادرة لم تُسوَّ:\n" + list(ctx.checked_out_with_deposit ?? [], (r) => `${r.ref} — ${sar(r.deposit_balance)}`, "لا تأمينات معلقة.");
   if (/(متاح|فاضي|خالي|available|توفر)/.test(m)) { const u = ctx.summary?.units ?? {}; return `الوحدات: ${u.ready} جاهزة للدخول، ${u.reserved} محجوزة، ${u.occupied} مؤجرة، ${u.dirty} تحتاج تنظيفًا، ${u.maintenance} صيانة. للتحقق من توفر فترة محددة استخدم شاشة «حجز جديد» أو اسأل بصيغة: المتاح من YYYY-MM-DD إلى YYYY-MM-DD.`; }

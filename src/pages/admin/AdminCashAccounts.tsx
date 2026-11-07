@@ -37,13 +37,13 @@ export default function AdminCashAccounts() {
 
   if (q.loading) return <LoadingScreen />;
   const visible = rows.filter((r) => showArchived || !r.archived_at);
-  const missingDefault = (["cash_box", "bank_account"] as const).filter((k) => !rows.some((r) => r.kind === k && r.is_default && !r.archived_at));
+  const missingDefault = (["cash_box", "bank_account"] as const).filter((k) => !rows.some((r) => r.kind === k && r.is_default && r.is_active && !r.archived_at));
 
   const group = (kind: CashAccount["kind"]) => {
     const list = visible.filter((r) => r.kind === kind);
     return (
       <div>
-        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-700">{kind === "cash_box" ? <Wallet className="h-4 w-4 text-brand-600" /> : <Landmark className="h-4 w-4 text-brand-600" />}{kind === "cash_box" ? "صناديق النقد" : "الحسابات البنكية"}</h3>
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-700">{kind === "cash_box" ? <Wallet className="h-4 w-4 text-brand-600" /> : <Landmark className="h-4 w-4 text-brand-600" />}{kind === "cash_box" ? "صناديق النقد" : "الحسابات البنكية"}</h2>
         <p className="mb-3 text-xs text-ink-400">{kind === "cash_box" ? "يُقيَّد فيها القبض والرد النقدي." : "يُقيَّد فيها ما يُدفع بالشبكة أو بالتحويل البنكي، مع رقم العملية."}</p>
         {list.length === 0 ? <p className="text-sm text-ink-400">لا يوجد.</p> : (
           <div className="space-y-2">
@@ -53,7 +53,7 @@ export default function AdminCashAccounts() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-ink-800">{a.name}</span>
-                      {a.is_default && !a.archived_at && <Badge className="bg-brand-50 text-brand-700"><Star className="ml-1 inline h-3 w-3" />الافتراضي</Badge>}
+                      {a.is_default && a.is_active && !a.archived_at && <Badge className="bg-brand-50 text-brand-700"><Star className="ml-1 inline h-3 w-3" />الافتراضي</Badge>}
                       <ArchivedBadge archivedAt={a.archived_at} />
                       {!a.is_active && !a.archived_at && <Badge className="bg-warning-500/10 text-warning-700">موقوف</Badge>}
                     </div>
@@ -78,7 +78,7 @@ export default function AdminCashAccounts() {
   return (
     <div>
       <SectionTitle title="الصناديق والحسابات" subtitle="أين يُقيَّد كل قبض ورد في هذا الفرع — قيود فقط، يكمّلها النظام المحاسبي لاحقًا" action={
-        <div className="flex items-center gap-3"><BranchPicker />{canEdit && <button onClick={() => setDraft({ kind: "cash_box", name: "", is_default: false })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> صندوق أو حساب</button>}</div>} />
+        <div className="flex min-w-0 flex-wrap items-center gap-3"><BranchPicker />{canEdit && <button onClick={() => setDraft({ kind: "cash_box", name: "", is_default: false })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> صندوق أو حساب</button>}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       {notice && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{notice}</p>}
       {missingDefault.length > 0 && rows.length > 0 && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">لا يوجد {missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} افتراضي: كل سند بهذه الطريقة يحتاج اختيار الحساب يدويًا.</p>}

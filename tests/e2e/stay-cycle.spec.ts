@@ -174,7 +174,7 @@ test.describe("the stay cycle (phase 3)", () => {
     await expect(page.getByText("تظهر هنا سنداتك أنت")).toBeVisible();
     await expect(page.getByTestId("day-summary")).toContainText("فهد الاستقبال");
     await go("/staff/dashboard");
-    await expect(page.getByTestId("followups-banner")).toContainText("غادر ولم يُغلق");
+    await expect(page.getByTestId("followups-banner")).toContainText("مغادرات لم تُغلق");
   });
 
   test("SU07 the guest's page: the arrival at reception first, then the code — or, in the annex, the key", async ({ page, go }) => {
@@ -190,7 +190,7 @@ test.describe("the stay cycle (phase 3)", () => {
     };
     await open("0501110008", "R-26A0008");   // arriving today, the first night paid
     await expect(page.getByText("تسجيل الوصول في الاستقبال")).toBeVisible();
-    await expect(page.getByText("عند وصولك: التسجيل في شموس والتأمين في الاستقبال")).toBeVisible();
+    await expect(page.getByText(/عند وصولك يسجّلك الاستقبال في نظام شموس/)).toBeVisible();
     await expect(page.getByTestId("guest-reasons")).toContainText("يُنجزها الاستقبال عند وصولك");   // GUEST-08: the desk's steps in the guest's words
     await expect(page.getByText("رمز صندوق المفتاح")).toBeVisible();
     await open("0501110005", "R-26A0005");   // in house in the annex: no key box

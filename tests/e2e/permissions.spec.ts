@@ -50,7 +50,7 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     await loginAs("owner");
     await go("/admin/roles");
     await cell(page, "res.create", "supervisor").uncheck();
-    await expect(page.getByTestId("perm-draft-count")).toHaveText("1 تغيير غير محفوظ");
+    await expect(page.getByTestId("perm-draft-count")).toHaveText("تغييرات غير محفوظة: 1");
     await save(page, "المشرف لا ينشئ الحجوزات مؤقتًا");
     await expect(page.getByTestId("perm-changed-count")).toHaveText("1 خانة تختلف عن المصفوفة المعتمدة");
     await expect(page.getByTestId("perm-last-change")).toContainText("المشرف لا ينشئ الحجوزات مؤقتًا");
@@ -97,7 +97,7 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     await go("/admin/roles");
     await cell(page, "maintenance.create", "finance").check();
     await cell(page, "guest.rate", "supervisor").uncheck();
-    await expect(page.getByTestId("perm-draft-count")).toHaveText("2 تغيير غير محفوظ");
+    await expect(page.getByTestId("perm-draft-count")).toHaveText("تغييرات غير محفوظة: 2");
     await page.getByTestId("perm-save").click();
     await expect(page.getByTestId("perm-review")).toContainText("يُسمح لـمالية");
     await expect(page.getByTestId("perm-review")).toContainText("يُمنع لـمشرف استقبال");

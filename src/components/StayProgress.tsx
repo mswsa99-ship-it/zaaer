@@ -35,18 +35,18 @@ export function stagesDone(r: StayProgressInput): number {
 export function nextStep(r: StayProgressInput): { title: string; why?: string; label: string; section: StaySection } | null {
   if (ENDED.includes(r.status) || r.status === "closed" || r.status === "draft") return null;
   const remaining = Math.max(0, (r.total_halalas ?? 0) - (r.paid_halalas ?? 0));
-  if (r.status === "checked_out") return { title: "فحص الوحدة ورد التأمين", why: "تُغلق الإقامة بعد الفحص ورد التأمين أو خصمه بسبب.", label: "فتح دورة الإقامة", section: "stay" };
+  if (r.status === "checked_out") return { title: "فحص الوحدة ورد التأمين", why: "تُغلق الإقامة بعد الفحص ورد التأمين أو خصمه بسبب.", label: "عرض خطوات الإقامة", section: "stay" };
   if (r.status === "checked_in") {
-    if (r.access_status === "approved" || r.access_status === "delivery_pending") return { title: "تسليم الرمز", why: "سُجّل الوصول؛ يُسلَّم رمز الصندوق أو المفتاح الآن.", label: "فتح دورة الإقامة", section: "stay" };
+    if (r.access_status === "approved" || r.access_status === "delivery_pending") return { title: "تسليم الرمز", why: "سُجّل الوصول؛ يُسلَّم رمز الصندوق أو المفتاح الآن.", label: "عرض خطوات الإقامة", section: "stay" };
     if (r.total_halalas != null && remaining > 0) return { title: "تحصيل المتبقي", why: `على النزيل ${formatCurrency(remaining / 100)}.`, label: "فتح الملخص المالي", section: "ops" };
-    if (r.check_out <= r.today) return { title: "تسجيل المغادرة", why: r.check_out < r.today ? "تجاوز النزيل موعد المغادرة؛ الوحدة مشغولة حتى تُسجَّل مغادرته." : "موعد المغادرة اليوم.", label: "فتح دورة الإقامة", section: "stay" };
+    if (r.check_out <= r.today) return { title: "تسجيل المغادرة", why: r.check_out < r.today ? "تجاوز النزيل موعد المغادرة؛ الوحدة مشغولة حتى تُسجَّل مغادرته." : "موعد المغادرة اليوم.", label: "عرض خطوات الإقامة", section: "stay" };
     return null;
   }
   if (!r.has_room) return { title: "تخصيص وحدة", why: "لا وحدة لهذا الحجز بعد.", label: "اختيار وحدة", section: "room" };
   if (r.identity_status !== "verified") return { title: "مطابقة الهوية", why: r.status === "pending_verification" ? "يتأكد الحجز تلقائيًا عند اعتماد مطابقة الهوية مع الوثيقة الأصلية." : "يُسلَّم الرمز بعد مطابقة الهوية مع الوثيقة الأصلية وتسجيل الوصول.", label: "مطابقة الهوية", section: "guests" };
-  if (r.government_registration === false) return { title: "التسجيل في شموس", label: "فتح دورة الإقامة", section: "stay" };
-  if (r.government_registration && !r.shomoos_accepted_at) return { title: "تأكيد قبول شموس", label: "فتح دورة الإقامة", section: "stay" };
-  return { title: "تسجيل الوصول", why: "التأمين أو سببه، ثم الرمز في خطوته.", label: "فتح دورة الإقامة", section: "stay" };
+  if (r.government_registration === false) return { title: "التسجيل في شموس", label: "عرض خطوات الإقامة", section: "stay" };
+  if (r.government_registration && !r.shomoos_accepted_at) return { title: "تأكيد قبول شموس", label: "عرض خطوات الإقامة", section: "stay" };
+  return { title: "تسجيل الوصول", why: "اقبض التأمين أو اكتب سبب عدم قبضه، ثم سلّم الرمز في خطوته.", label: "عرض خطوات الإقامة", section: "stay" };
 }
 
 export function StayProgress({ r, canMoney, onJump }: { r: StayProgressInput; canMoney: boolean; onJump: (s: StaySection) => void }) {

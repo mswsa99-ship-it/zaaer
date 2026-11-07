@@ -16,7 +16,7 @@ import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO, addDaysISO } from "../../lib/utils";
 
 const WINDOW = 28;
-const DAY_NAMES = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const DAY_NAMES = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const dow = (night: string) => new Date(`${night}T00:00:00Z`).getUTCDay();
 const sar = (h: number | null | undefined) => (h == null ? "—" : formatCurrency(h / 100));
 /** A cell's price without the currency: 250 or 250.50 */
@@ -71,7 +71,7 @@ export default function AdminRates() {
         <input type="date" className="input w-auto py-1.5 text-sm" dir="ltr" value={start} onChange={(e) => e.target.value && setStart(e.target.value)} aria-label="بداية العرض" />
         <div className="flex-1" />
         {selection.length > 0 && <>
-          <span className="text-sm text-ink-600">{selection.length} خانة محددة</span>
+          <span className="text-sm text-ink-600">المحددة: {selection.length}</span>
           <button type="button" className="btn-ghost text-sm" onClick={() => setPicked(new Map())}><X className="h-4 w-4" /> إلغاء التحديد</button>
           <button type="button" className="btn-primary text-sm" onClick={() => setEditing(true)}>تعديل المحدد</button>
         </>}
@@ -99,11 +99,11 @@ export default function AdminRates() {
       )}
       <p className="mt-3 text-[11px] text-ink-400">اضغط خانة لتحديدها، وShift مع الضغط لتحديد مدى في الصف نفسه. «المتوفر» للعرض: الوحدات الفعّالة ناقص الحجوزات المؤكدة والمقيمة تلك الليلة. الأسبوعي والشهري والحد الأدنى في «أنواع الوحدات»؛ التأمين في إعدادات الفرع.</p>
 
-      <Modal open={editing} title={`تعديل ${selection.length} خانة`} onClose={() => setEditing(false)}>
-        {editing && branchId && <EditSelection branchId={branchId} cells={selection} categories={cal.categories} onDone={(n) => { setEditing(false); setNotice(`حُدِّثت ${n} خانة.`); reload(); }} />}
+      <Modal open={editing} title={`تعديل المحدد (${selection.length})`} onClose={() => setEditing(false)}>
+        {editing && branchId && <EditSelection branchId={branchId} cells={selection} categories={cal.categories} onDone={(n) => { setEditing(false); setNotice(`حُدِّثت الخانات: ${n}.`); reload(); }} />}
       </Modal>
       <Modal open={grouping} title="تعديل مجموعة" onClose={() => setGrouping(false)} wide>
-        {grouping && branchId && <GroupEdit branchId={branchId} today={cal.today} categories={cal.categories} onDone={(n) => { setGrouping(false); setNotice(`حُدِّثت ${n} خانة.`); reload(); }} />}
+        {grouping && branchId && <GroupEdit branchId={branchId} today={cal.today} categories={cal.categories} onDone={(n) => { setGrouping(false); setNotice(`حُدِّثت الخانات: ${n}.`); reload(); }} />}
       </Modal>
     </div>
   );

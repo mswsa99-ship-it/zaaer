@@ -187,7 +187,7 @@ export default function StaffReservationDetail() {
             {detail.branch?.name_ar} · {detail.room?.room_number ?? "—"} · {detail.room_category?.name_ar}
           </p>
           <p className="mt-1 text-xs text-ink-400">
-            {detail.check_in}{detail.expected_arrival_time ? ` ${detail.expected_arrival_time.slice(0, 5)}` : ""} → {detail.check_out}{detail.expected_departure_time ? ` ${detail.expected_departure_time.slice(0, 5)}` : ""} · {detail.source?.name}
+            من <bdi>{detail.check_in}{detail.expected_arrival_time ? ` ${detail.expected_arrival_time.slice(0, 5)}` : ""}</bdi> إلى <bdi>{detail.check_out}{detail.expected_departure_time ? ` ${detail.expected_departure_time.slice(0, 5)}` : ""}</bdi> · {detail.source?.name}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -292,7 +292,7 @@ export default function StaffReservationDetail() {
             {guests.length === 0 && <p className="text-sm text-ink-400">لم تُسجّل بيانات النزلاء بعد.</p>}
           </div>
           <p className="mt-3 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-500">
-            مساران (القرار 2): يدخل الضيف بياناته بنفسه ثم يطابقها المشرف مع الوثيقة الأصلية، أو يدخلها المكتب من الوثيقة الأصلية فتُعتمد فورًا باسمه. التصحيح بسبب ويُراجَع.
+            مساران: يدخل النزيل بياناته بنفسه ثم يطابقها المشرف مع الوثيقة الأصلية، أو يدخلها المكتب من الوثيقة الأصلية فتُعتمد فورًا باسمه. التصحيح بسبب ويُراجَع.
           </p>
         </Card>
 
@@ -318,24 +318,26 @@ export default function StaffReservationDetail() {
           <Card id="res-room" className="scroll-mt-20">
             <div className="mb-3 flex items-center gap-2">
               <DoorClosed className="h-5 w-5 text-brand-600" />
-              <h2 className="text-base font-semibold text-ink-800">الغرفة</h2>
+              <h2 className="text-base font-semibold text-ink-800">الوحدة</h2>
             </div>
             {detail.room ? (
               <p className="text-sm text-ink-700">
-                غرفة {detail.room.room_number} · <span className="text-ink-400">{ROOM_STATUS_LABELS[detail.room.status] ?? detail.room.status}</span>
+                وحدة {detail.room.room_number} · <span className="text-ink-400">{ROOM_STATUS_LABELS[detail.room.status] ?? detail.room.status}</span>
               </p>
+            ) : !can("room.assign") ? (
+              <p className="text-sm text-ink-500">لم تُخصَّص وحدة بعد.</p>   /* PERM-05: no assignment control for a role the server refuses */
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="label">تخصيص غرفة ({detail.room_category?.name_ar ?? "التصنيف"})</label>
+                  <label className="label">تخصيص وحدة ({detail.room_category?.name_ar ?? "النوع"})</label>
                   <select value={selectedRoom} onChange={(e) => setSelectedRoom(e.target.value)} className="input">
-                    <option value="">اختر غرفة متاحة</option>
+                    <option value="">اختيار وحدة متاحة</option>
                     {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number} · {ROOM_STATUS_LABELS[r.status] ?? r.status}</option>)}
                   </select>
                   {rooms.length === 0 && <p className="mt-1 text-xs text-ink-400">لا توجد وحدة من هذا النوع متاحة لكامل فترة الإقامة.</p>}
                 </div>
                 <button onClick={assignRoom} disabled={action === "assign" || !selectedRoom} className="btn-primary w-full text-sm">
-                  {action === "assign" ? <Spinner className="h-4 w-4" /> : <DoorClosed className="h-4 w-4" />} تخصيص الغرفة
+                  {action === "assign" ? <Spinner className="h-4 w-4" /> : <DoorClosed className="h-4 w-4" />} تخصيص الوحدة
                 </button>
               </div>
             )}
@@ -386,11 +388,11 @@ const AUDIT_LABELS: Record<string, string> = {
   reject_identity: "رفض مطابقة الهوية",
   // phase 5 (0038)
   "guest.entered_from_document": "إدخال بيانات نزيل من الوثيقة", "guest.corrected": "تصحيح بيانات نزيل", "reservation.hold_set": "وضع حظر على الحجز", "reservation.hold_lifted": "رفع الحظر عن الحجز",
-  "reservation.platform_checked": "مطابقة مع المنصة", "reservation.platform_unchecked": "إلغاء المطابقة مع المنصة", "reservation.summary_signed": "توقيع ملخص الإقامة", guest_summary_accepted: "إقرار الضيف بملخص الإقامة",
-  guest_data_submitted: "إدخال الضيف لبياناته",
+  "reservation.platform_checked": "مطابقة مع المنصة", "reservation.platform_unchecked": "إلغاء المطابقة مع المنصة", "reservation.summary_signed": "توقيع ملخص الإقامة", guest_summary_accepted: "إقرار النزيل بملخص الإقامة",
+  guest_data_submitted: "إدخال النزيل لبياناته",
   confirm_payment: "تأكيد السداد",
   confirm_gov_registration: "تأكيد التسجيل النظامي",
-  assign_room: "تخصيص غرفة",
+  assign_room: "تخصيص وحدة",
   approve_checkin: "اعتماد الدخول",
   deliver_access_code: "تسليم رمز الصندوق",
   deliver_keybox: "تسليم رمز الصندوق",

@@ -58,9 +58,9 @@ test.describe("staff reservation lifecycle", () => {
   test("SR02 the same room cannot be booked twice for overlapping nights", async ({ page, loginAs }) => {
     await loginAs("owner");
     await createReservation(page, "ضيف الأول", "0501110001");
-    const roomLine = page.getByText(/غرفة \d+/).first();
+    const roomLine = page.getByText(/وحدة \d+/).first();
     await expect(roomLine).toBeVisible();
-    const roomNumber = (await roomLine.innerText()).match(/غرفة (\S+)/)![1];
+    const roomNumber = (await roomLine.innerText()).match(/وحدة (\S+)/)![1];
 
     // second reservation for the same dates: that room must no longer be offered
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
@@ -142,7 +142,7 @@ test.describe("staff reservation lifecycle", () => {
     await page.getByRole("button", { name: "إنشاء 2 حجوزات" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
     await expect(page.getByText(/حجز جماعي G-[0-9A-F]+ — 2 وحدات/)).toBeVisible();
-    await expect(page.getByText(/ 18:30 →/)).toBeVisible();
+    await expect(page.getByText(/ 18:30$/)).toBeVisible();
     await expect(page.getByText("سارة").first()).toBeVisible();
   });
 });

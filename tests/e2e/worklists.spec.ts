@@ -42,7 +42,7 @@ test.describe("work lists and the units board (correction batch 4)", () => {
   test("PV03 a voucher and an invoice print on A4 or an 80 mm receipt, with the amount in words", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await go("/staff/reservations");
-    await page.getByPlaceholder("مرجع / ضيف / جوال").fill("R-26A0008");
+    await page.getByPlaceholder("مرجع / نزيل / جوال").fill("R-26A0008");
     const row = page.locator("table tbody tr").filter({ hasText: "R-26A0008" }).first();
     await row.getByRole("link", { name: "فتح" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/);

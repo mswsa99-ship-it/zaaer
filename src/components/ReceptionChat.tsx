@@ -19,7 +19,7 @@ interface Message { id: string; sender: "assistant" | "guest"; content: string; 
 
 const WELCOME = (name: string): Message => ({
   id: "init", sender: "assistant",
-  content: `أهلًا بك في ${name}. كيف أخدمك؟`,
+  content: `أهلًا وسهلًا في ${name}. كيف أخدمك؟`,
   actions: [{ label: "احجز الآن", value: "أرغب بحجز جديد" }, { label: "حجوزاتي", route: "/booking/lookup" }, { label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" }],
 });
 const CONV_KEY = "reception_conversation_id";
@@ -124,7 +124,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
             <p className="text-sm font-semibold text-ink-800">مساعد الاستقبال الذكي</p>
             <p className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
               {status.handedOff ? <span className="inline-flex items-center gap-1 text-warning-700"><UserRound className="h-3 w-3" /> تم التحويل إلى موظف الاستقبال — سيرد هنا</span>
-                : status.mode === "ai" ? <span className="inline-flex items-center gap-1 text-accent-600"><Bot className="h-3 w-3" /> مساعد رقمي</span>
+                : status.mode === "ai" ? <span className="inline-flex items-center gap-1 text-accent-700"><Bot className="h-3 w-3" /> مساعد رقمي</span>
                 : <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" /> مسار إرشادي</span>}
               {status.verified && <span className="inline-flex items-center gap-1 text-success-600"><ShieldCheck className="h-3 w-3" /> حجز متحقق</span>}
             </p>

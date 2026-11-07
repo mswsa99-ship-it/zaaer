@@ -39,7 +39,7 @@ export default function AdminBranches() {
   const visible = rows.filter((b) => showArchived || !b.archived_at);
   return (
     <div>
-      <SectionTitle title="الفروع" subtitle={`${visible.length} فرع — الضريبة والمنطقة الزمنية إعدادات معتمدة لكل فرع`} action={isOwner ? <button onClick={() => setDraft({ ...EMPTY })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> فرع جديد</button> : undefined} />
+      <SectionTitle title="الفروع" subtitle={`${COUNT.branch(visible.length)} — الضريبة والمنطقة الزمنية إعدادات معتمدة لكل فرع`} action={isOwner ? <button onClick={() => setDraft({ ...EMPTY })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> فرع جديد</button> : undefined} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {visible.length === 0 ? <EmptyState icon={<Building2 className="h-10 w-10" />} title="لا توجد فروع" /> : (
@@ -51,8 +51,8 @@ export default function AdminBranches() {
                   <div className="flex items-center gap-2"><h3 className="text-base font-semibold text-ink-800">{b.name_ar}</h3><ArchivedBadge archivedAt={b.archived_at} />{!b.is_active && !b.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطل</Badge>}</div>
                   {b.name_en && <p className="text-xs text-ink-400" dir="ltr">{b.name_en}</p>}
                   <p className="mt-1 text-sm text-ink-500">{[b.city, b.address].filter(Boolean).join(" · ") || "—"}</p>
-                  <p className="mt-1 text-xs text-ink-400">{COUNT.unit(b.rooms ?? 0)} · وصول {b.check_in_time?.slice(0, 5)} / مغادرة {b.check_out_time?.slice(0, 5)} · {taxText(b)} · التأمين {formatCurrency(b.default_deposit_halalas / 100)} لكل وحدة · {b.timezone} · {b.default_language === "en" ? "English" : "عربي"}</p>
-                  <p className="mt-1 text-xs text-ink-400">{b.booking_platform_url ? <a href={b.booking_platform_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline" dir="ltr">رابط منصة الحجز</a> : <span className="text-warning-700">لا رابط منصة حجز — يُحال الضيف إلى الاستقبال</span>}{b.map_url ? <> · <a href={b.map_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">الخريطة</a></> : null}</p>
+                  <p className="mt-1 text-xs text-ink-400">{COUNT.unit(b.rooms ?? 0)} · وصول {b.check_in_time?.slice(0, 5)} / مغادرة {b.check_out_time?.slice(0, 5)} · {taxText(b)} · التأمين {formatCurrency(b.default_deposit_halalas / 100)} لكل وحدة · {b.timezone === "Asia/Riyadh" ? "توقيت الرياض" : b.timezone} · {b.default_language === "en" ? "English" : "عربي"}</p>
+                  <p className="mt-1 text-xs text-ink-400">{b.booking_platform_url ? <a href={b.booking_platform_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline" dir="ltr">رابط منصة الحجز</a> : <span className="text-warning-700">لا رابط منصة حجز — يُحال النزيل إلى الاستقبال</span>}{b.map_url ? <> · <a href={b.map_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">الخريطة</a></> : null}</p>
                 </div>
                 <button onClick={() => setDraft(b)} className="btn-ghost p-1.5" title="تعديل" aria-label={`تعديل ${b.name_ar}`}><Pencil className="h-4 w-4" /></button>
               </div>
@@ -64,8 +64,8 @@ export default function AdminBranches() {
         {draft && (
           <ActionForm onSubmit={async () => { await opsApi.upsertBranch({ ...draft, rooms: undefined }); setDraft(null); await load(); }}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="الاسم العربي (مطلوب)"><input className="input" value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
-              <Field label="الاسم الإنجليزي (مطلوب)" hint="يظهر في مطبوعات الضيف بالإنجليزية"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} aria-label="الاسم الإنجليزي" /></Field>
+              <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
+              <Field label="الاسم الإنجليزي (مطلوب)" hint="يظهر في مطبوعات النزيل بالإنجليزية"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} aria-label="الاسم الإنجليزي" /></Field>
               <Field label="المدينة"><input className="input" value={draft.city ?? ""} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></Field>
               <Field label="العنوان"><input className="input" value={draft.address ?? ""} onChange={(e) => setDraft({ ...draft, address: e.target.value })} /></Field>
               <Field label="الهاتف"><input className="input" dir="ltr" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></Field>
@@ -76,9 +76,9 @@ export default function AdminBranches() {
               <Field label="التأمين لكل وحدة" hint="المبلغ المقترح عند قبض التأمين، وهو منفصل عن الإيراد ويُرد بعد فحص المغادرة."><MoneyInput valueHalalas={draft.default_deposit_halalas ?? 0} onChange={(h) => setDraft({ ...draft, default_deposit_halalas: h ?? 0 })} /></Field>
               <Field label="السجل التجاري"><input className="input" dir="ltr" value={draft.commercial_register ?? ""} onChange={(e) => setDraft({ ...draft, commercial_register: e.target.value })} /></Field>
               <Field label="البلد" hint="رمز من حرفين"><input className="input" dir="ltr" maxLength={2} value={draft.country_code ?? "SA"} onChange={(e) => setDraft({ ...draft, country_code: e.target.value.toUpperCase() })} aria-label="البلد" /></Field>
-              <Field label="اللغة الافتراضية" hint="للرسائل التلقائية للضيف ومطبوعاته (ملخص الإقامة)"><select className="input" value={draft.default_language ?? "ar"} onChange={(e) => setDraft({ ...draft, default_language: e.target.value as "ar" | "en" })} aria-label="اللغة الافتراضية"><option value="ar">العربية</option><option value="en">English</option></select></Field>
-              <Field label="رابط الموقع (خرائط Google)" hint="https فقط؛ يرسله المساعد للضيف ويظهر في صفحاته" className="sm:col-span-2"><input className="input" dir="ltr" value={draft.map_url ?? ""} onChange={(e) => setDraft({ ...draft, map_url: e.target.value })} placeholder="https://maps.app.goo.gl/…" aria-label="رابط الموقع" /></Field>
-              <Field label="رابط منصة الحجز" hint="الطريقة الوحيدة لحجز جديد (القرار 23): يُحال إليه من لا حجز له، في الموقع وواتساب" className="sm:col-span-2"><input className="input" dir="ltr" value={draft.booking_platform_url ?? ""} onChange={(e) => setDraft({ ...draft, booking_platform_url: e.target.value })} placeholder="https://www.booking.com/hotel/sa/…" aria-label="رابط منصة الحجز" /></Field>
+              <Field label="اللغة الافتراضية" hint="للرسائل التلقائية للنزيل ومطبوعاته (ملخص الإقامة)"><select className="input" value={draft.default_language ?? "ar"} onChange={(e) => setDraft({ ...draft, default_language: e.target.value as "ar" | "en" })} aria-label="اللغة الافتراضية"><option value="ar">العربية</option><option value="en">English</option></select></Field>
+              <Field label="رابط الموقع (خرائط Google)" hint="https فقط؛ يرسله المساعد للنزيل ويظهر في صفحاته" className="sm:col-span-2"><input className="input" dir="ltr" value={draft.map_url ?? ""} onChange={(e) => setDraft({ ...draft, map_url: e.target.value })} placeholder="https://maps.app.goo.gl/…" aria-label="رابط الموقع" /></Field>
+              <Field label="رابط منصة الحجز" hint="الطريقة الوحيدة لحجز جديد: يُحال إليه من لا حجز له، في الموقع وواتساب" className="sm:col-span-2"><input className="input" dir="ltr" value={draft.booking_platform_url ?? ""} onChange={(e) => setDraft({ ...draft, booking_platform_url: e.target.value })} placeholder="https://www.booking.com/hotel/sa/…" aria-label="رابط منصة الحجز" /></Field>
               <Field label="أقصى خصم للمشرف %" hint="من إيجار الإقامة، قبل الوصول، ولا ينزل تحت أدنى سعر للنوع. صفر = لا يخصم المشرف؛ ما فوقه للمالك أو المدير.">
                 <NumberInput decimals value={((draft.supervisor_max_discount_bp ?? 0) / 100)} onChange={(v) => setDraft({ ...draft, supervisor_max_discount_bp: Math.round((v ?? 0) * 100) })} label="أقصى خصم للمشرف" />
               </Field>
@@ -134,7 +134,7 @@ function BranchMedia({ branchId }: { branchId: string }) {
       <p className="mb-2 text-xs font-semibold text-ink-600">الشعار والصورة</p>
       {error && <div className="mb-2"><ErrorBanner message={error} /></div>}
       <div className="grid gap-3 sm:grid-cols-2">
-        {([["logo", "الشعار (يظهر في المطبوعات) — PNG/JPG/WebP حتى 200 كيلوبايت"], ["image", "صورة الفرع (تظهر في صفحات الضيف) — حتى 1 ميجابايت"]] as const).map(([kind, label]) => (
+        {([["logo", "الشعار (يظهر في المطبوعات) — PNG/JPG/WebP حتى 200 كيلوبايت"], ["image", "صورة الفرع (تظهر في صفحات النزيل) — حتى 1 ميجابايت"]] as const).map(([kind, label]) => (
           <div key={kind} className="rounded-lg bg-ink-50 p-3">
             <p className="text-[11px] text-ink-500">{label}</p>
             <div className="mt-2 flex items-center gap-3">

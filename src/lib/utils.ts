@@ -49,13 +49,32 @@ function jdToHijri(jd: number): { year: number; month: number; day: number } {
   return { year: years + 1, month, day };
 }
 
+/** COPY-02: the Umm al-Qura calendar (the one Saudi Arabia uses) through Intl; the arithmetic estimate only where Intl lacks it. */
+const UMALQURA = (() => {
+  try { return new Intl.DateTimeFormat("en-u-ca-islamic-umalqura-nu-latn", { timeZone: "UTC", year: "numeric", month: "numeric", day: "numeric" }); } catch { return null; }
+})();
+
 export function gregorianToHijri(year: number, month: number, day: number) {
+  if (UMALQURA) {
+    const parts = UMALQURA.formatToParts(new Date(Date.UTC(year, month - 1, day)));
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? NaN);
+    const h = { year: get("year"), month: get("month"), day: get("day") };
+    if (Number.isFinite(h.year) && Number.isFinite(h.month) && Number.isFinite(h.day)) return h;
+  }
   return jdToHijri(gregorianToJD(year, month, day));
 }
 
 export function hijriToGregorian(year: number, month: number, day: number) {
   const jd = HIJRI_EPOCH_JD + (year - 1) * 354.367 + (month - 1) * 29.5 + day;
-  return jdToGregorian(jd);
+  const est = jdToGregorian(jd);
+  // the estimate is within a few days: the Umm al-Qura day that matches exactly, when there is one
+  const base = Date.UTC(est.year, est.month - 1, est.day);
+  for (const off of [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5]) {
+    const d = new Date(base + off * 86_400_000);
+    const h = gregorianToHijri(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    if (h.year === year && h.month === month && h.day === day) return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+  }
+  return est;
 }
 
 export function formatGregorian(iso: string): string {
@@ -64,11 +83,14 @@ export function formatGregorian(iso: string): string {
   return d.toLocaleDateString("en-GB", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
-export function formatHijri(iso: string): string {
+export const HIJRI_MONTH_NAMES = ["محرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"];
+export const HIJRI_MONTH_NAMES_EN = ["Muharram", "Safar", "Rabi al-Awwal", "Rabi al-Thani", "Jumada al-Ula", "Jumada al-Akhirah", "Rajab", "Shaban", "Ramadan", "Shawwal", "Dhu al-Qadah", "Dhu al-Hijjah"];
+
+export function formatHijri(iso: string, en = false): string {
   if (!iso) return "";
   const d = new Date(iso);
   const h = gregorianToHijri(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
-  return `${h.day}/${String(h.month).padStart(2, "0")}/${h.year}هـ`;
+  return en ? `${h.day} ${HIJRI_MONTH_NAMES_EN[h.month - 1] ?? h.month} ${h.year} AH` : `${h.day} ${HIJRI_MONTH_NAMES[h.month - 1] ?? h.month} ${h.year}هـ`;
 }
 
 /**
@@ -88,29 +110,56 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-/** Arabic count with the right word form: 1 → واحد, 2 → المثنى, 3–10 → الجمع, 11+ → المفرد المنصوب/المجرور. */
-export function arabicCount(n: number, [one, two, few, many]: readonly [string, string, string, string]): string {
+/**
+ * Arabic count with the right word form, by the CLDR plural rules for Arabic (COPY-11): 1 → واحد, 2 → المثنى,
+ * 3–10 (and 103–110 …) → الجمع, 11–99 (and 111–199 …) → المفرد المنصوب, 100, 101, 102, 200 … → المفرد المجرور.
+ * 0 takes its own phrase when one is given («لا حجوزات»), else the genitive singular («0 حجز»).
+ */
+export function arabicCount(n: number, [one, two, few, many]: readonly [string, string, string, string], zero?: string): string {
+  if (n === 0 && zero) return zero;
   if (n === 1) return one;
   if (n === 2) return two;
-  if (n >= 3 && n <= 10) return `${n} ${few}`;
-  return `${n} ${many}`;
+  const m = Math.abs(n) % 100;
+  if (m >= 3 && m <= 10) return `${n} ${few}`;
+  if (m >= 11 && m <= 99) return `${n} ${many}`;
+  return `${n} ${many.replace(/ً?ا$|ً$/, "")}`;   // 0, 100–102, 200 …: «100 حجز»
 }
 
 /** U1 note 11: the counted nouns the screens show, so «1 مهمة» reads «مهمة واحدة» and «2 ليلة» reads «ليلتان». */
-const W = (one: string, two: string, few: string, many: string) => (n: number) => arabicCount(n, [one, two, few, many]);
+const W = (one: string, two: string, few: string, many: string, zero?: string) => (n: number) => arabicCount(n, [one, two, few, many], zero);
 export const COUNT = {
-  unit: W("وحدة واحدة", "وحدتان", "وحدات", "وحدة"),
-  task: W("مهمة واحدة", "مهمتان", "مهام", "مهمة"),
+  unit: W("وحدة واحدة", "وحدتان", "وحدات", "وحدة", "لا وحدات"),
+  task: W("مهمة واحدة", "مهمتان", "مهام", "مهمة", "لا مهام"),
   night: W("ليلة واحدة", "ليلتان", "ليالٍ", "ليلة"),
-  voucher: W("سند واحد", "سندان", "سندات", "سندًا"),
-  booking: W("حجز واحد", "حجزان", "حجوزات", "حجزًا"),
-  request: W("طلب واحد", "طلبان", "طلبات", "طلبًا"),
-  guest: W("نزيل واحد", "نزيلان", "نزلاء", "نزيلًا"),
-  companion: W("مرافق واحد", "مرافقان", "مرافقين", "مرافقًا"),
-  floor: W("طابق واحد", "طابقان", "طوابق", "طابقًا"),
-  facility: W("مرفق واحد", "مرفقان", "مرافق", "مرفقًا"),
-  file: W("ملف واحد", "ملفان", "ملفات", "ملفًا"),
-  child: W("طفل واحد", "طفلان", "أطفال", "طفلًا"),
+  voucher: W("سند واحد", "سندان", "سندات", "سندًا", "لا سندات"),
+  booking: W("حجز واحد", "حجزان", "حجوزات", "حجزًا", "لا حجوزات"),
+  request: W("طلب واحد", "طلبان", "طلبات", "طلبًا", "لا طلبات"),
+  guest: W("نزيل واحد", "نزيلان", "نزلاء", "نزيلًا", "لا نزلاء"),
+  companion: W("مرافق واحد", "مرافقان", "مرافقين", "مرافقًا", "لا مرافقين"),
+  floor: W("طابق واحد", "طابقان", "طوابق", "طابقًا", "لا طوابق"),
+  facility: W("مرفق واحد", "مرفقان", "مرافق", "مرفقًا", "لا مرافق"),
+  file: W("ملف واحد", "ملفان", "ملفات", "ملفًا", "لا ملفات"),
+  child: W("طفل واحد", "طفلان", "أطفال", "طفلًا", "لا أطفال"),
+  branch: W("فرع واحد", "فرعان", "فروع", "فرعًا", "لا فروع"),
+  staff: W("موظف واحد", "موظفان", "موظفين", "موظفًا", "لا موظفين"),
+  answer: W("إجابة واحدة", "إجابتان", "إجابات", "إجابة", "لا إجابات"),
+  question: W("سؤال واحد", "سؤالان", "أسئلة", "سؤالًا", "لا أسئلة"),
+  event: W("حدث واحد", "حدثان", "أحداث", "حدثًا", "لا أحداث"),
+  day: W("يوم واحد", "يومان", "أيام", "يومًا"),
+  week: W("أسبوع واحد", "أسبوعان", "أسابيع", "أسبوعًا"),
+  hour: W("ساعة واحدة", "ساعتان", "ساعات", "ساعة"),
+  discount: W("خصم واحد", "خصمان", "خصومات", "خصمًا", "لا خصومات"),
+  payment: W("دفعة واحدة", "دفعتان", "دفعات", "دفعة", "لا دفعات"),
+  conversation: W("محادثة واحدة", "محادثتان", "محادثات", "محادثة", "لا محادثات"),
+  attempt: W("محاولة واحدة", "محاولتان", "محاولات", "محاولة"),
+  person: W("شخص واحد", "شخصان", "أشخاص", "شخصًا"),
+  alert: W("تنبيه واحد", "تنبيهان", "تنبيهات", "تنبيهًا", "لا تنبيهات"),
+  record: W("سجل واحد", "سجلان", "سجلات", "سجلًا", "لا سجلات"),
+  item: W("بند واحد", "بندان", "بنود", "بندًا", "لا بنود"),
+  times: W("مرة واحدة", "مرتين", "مرات", "مرة", "لم تُستخدم بعد"),
+  stay: W("إقامة واحدة", "إقامتان", "إقامات", "إقامة", "لا إقامات"),
+  ticket: W("طلب تحويل واحد", "طلبا تحويل", "طلبات تحويل", "طلب تحويل", "لا طلبات تحويل"),
+  message: W("رسالة واحدة", "رسالتان", "رسائل", "رسالة", "لا رسائل"),
 } as const;
 
 /** How long ago, in Arabic: «الآن», «منذ دقيقتين», «منذ 3 ساعات», «منذ 11 يومًا». */
@@ -160,7 +209,7 @@ export function maskId(last4: string | undefined): string {
 }
 
 export function maskName(name: string | undefined): string {
-  if (!name) return "—";
+  if (!name || !name.trim() || name.trim() === "—") return "—";   // COPY-29: no «—•••»
   const parts = name.trim().split(/\s+/);
   if (parts.length < 2) return parts[0]?.[0] + "•••";
   return `${parts[0]} ${parts[1][0]}••`;
@@ -179,6 +228,25 @@ export function formatClock(t: string | null | undefined, en = false): string {
   return `${hh}:${mm} ${h >= 12 ? (h >= 18 ? "مساءً" : h === 12 ? "ظهرًا" : "عصرًا") : "صباحًا"}`;
 }
 
+/** COPY-12: one money form on every screen and in the server's texts — «1,600.00 ر.س», grouped, no trailing period. */
+const MONEY_NUMBER = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat(UI_LOCALE, { style: "currency", currency: "SAR", maximumFractionDigits: 2 }).format(amount);
+  return `${MONEY_NUMBER.format(Number.isFinite(amount) ? amount : 0)} ر.س`;
+}
+
+/**
+ * A11Y-13 (APG radio group): the arrow keys move between the options of a `role="radiogroup"` and choose the one
+ * they land on; Tab reaches the group once (the chosen option holds tabIndex 0, the others -1).
+ */
+export function radioGroupKeys(e: { key: string; currentTarget: HTMLElement; preventDefault: () => void }) {
+  const keys: Record<string, number> = { ArrowLeft: 1, ArrowDown: 1, ArrowRight: -1, ArrowUp: -1 };   // right-to-left: ← is next
+  const step = keys[e.key];
+  if (!step) return;
+  const radios = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]:not([disabled])'));
+  if (radios.length === 0) return;
+  e.preventDefault();
+  const at = radios.findIndex((r) => r === document.activeElement || r.getAttribute("aria-checked") === "true");
+  const next = radios[(Math.max(at, 0) + step + radios.length) % radios.length];
+  next.focus();
+  next.click();
 }

@@ -84,7 +84,7 @@ test("UB06 the guest's page welcomes them with the branch, lists the steps befor
   await page.getByRole("button", { name: "عرض حجوزاتي" }).click();
   await expect(page).toHaveURL(/\/booking\/status\//);
   await expect(page.getByTestId("guest-hero")).toBeVisible();
-  await expect(page.getByTestId("guest-greeting")).toHaveText("أهلًا بك، إقامتك تبدأ اليوم");
+  await expect(page.getByTestId("guest-greeting")).toHaveText("أهلًا وسهلًا، إقامتك تبدأ اليوم");
   await expect(page.getByRole("heading", { name: "قبل وصولك" })).toBeVisible();
   await expect(page.getByRole("list", { name: "خطوات الإقامة" }).getByRole("listitem")).toHaveCount(5);
   await expect(page.getByTestId("guest-rules")).toBeVisible();

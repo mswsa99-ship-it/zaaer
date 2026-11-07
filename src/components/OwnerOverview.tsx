@@ -176,7 +176,7 @@ export function OwnerOverview() {
               ))}
             </ul>
           )}
-          <Link to="/admin/platform-payouts" className="btn-outline mt-3 inline-flex text-sm">مطابقة المنصات</Link>
+          <Link to="/admin/platform-payouts" className="btn-outline mt-3 inline-flex text-sm">إيداعات المنصات</Link>
         </Card>
         <Card>
           <h2 className="mb-2 text-base font-semibold text-ink-800">تنبيهات التشغيل</h2>

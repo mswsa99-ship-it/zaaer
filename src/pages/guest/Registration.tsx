@@ -7,7 +7,7 @@ import { useGuestLang, guestError, validationMessages, IDENTITY_TYPE_EN, VERIFIC
 import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { Modal, Field } from "../../components/forms";
 import { IDENTITY_TYPE_LABELS, GUEST_VERIFICATION_LABELS, type IdentityType, type GuestVerificationStatus } from "../../lib/types";
-import { gregorianToHijri, hijriToGregorian, maskId, todayISO, COUNT } from "../../lib/utils";
+import { gregorianToHijri, hijriToGregorian, maskId, todayISO, COUNT, HIJRI_MONTH_NAMES, HIJRI_MONTH_NAMES_EN, radioGroupKeys } from "../../lib/utils";
 import { checkIdentityNumber, checkMinAge, checkNameParts, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../../lib/validation";
 
 type GuestRow = GuestSession["guests"][number];
@@ -92,7 +92,7 @@ export default function Registration() {
             ) : g.data_submitted ? (
               <button onClick={() => setEditing({ guest: g, open: true })} className="btn-ghost min-h-[44px] text-xs text-brand-600">{t("تعديل", "Edit")}</button>
             ) : (
-              <button onClick={() => setEditing({ guest: g, open: true })} className="btn-outline text-xs"><UserPlus className="h-3.5 w-3.5" /> {t("أكمل البيانات", "Add details")}</button>
+              <button onClick={() => setEditing({ guest: g, open: true })} className="btn-outline text-xs"><UserPlus className="h-3.5 w-3.5" /> {t("استكمال البيانات", "Add details")}</button>
             )}
           </Card>
         ))}
@@ -177,8 +177,8 @@ function ChildrenCard({ token, ages, editable, onSaved }: { token: string; ages:
   );
 }
 
-const HIJRI_MONTHS = ["محرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"];
-const HIJRI_MONTHS_EN = ["Muharram", "Safar", "Rabi al-Awwal", "Rabi al-Thani", "Jumada al-Ula", "Jumada al-Akhirah", "Rajab", "Shaban", "Ramadan", "Shawwal", "Dhu al-Qadah", "Dhu al-Hijjah"];
+const HIJRI_MONTHS = HIJRI_MONTH_NAMES;
+const HIJRI_MONTHS_EN = HIJRI_MONTH_NAMES_EN;
 const pad = (n: number) => String(n).padStart(2, "0");
 const isoOf = (y: number, m: number, d: number) => `${String(y).padStart(4, "0")}-${pad(m)}-${pad(d)}`;
 
@@ -302,9 +302,9 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
         <fieldset>
           <div className="mb-1.5 flex items-center gap-3">
             <legend className="label mb-0">{t("تاريخ الميلاد", "Date of birth")}</legend>
-            <div className="flex gap-1 text-xs" role="radiogroup" aria-label={t("التقويم", "Calendar")}>
+            <div className="flex gap-1 text-xs" role="radiogroup" onKeyDown={radioGroupKeys} aria-label={t("التقويم", "Calendar")}>
               {(["gregorian", "hijri"] as const).map((c) => (
-                <button key={c} type="button" role="radio" aria-checked={birthCalendar === c} onClick={() => switchCalendar(c)}
+                <button key={c} type="button" role="radio" aria-checked={birthCalendar === c} tabIndex={birthCalendar === c ? 0 : -1} onClick={() => switchCalendar(c)}
                   className={`min-h-[36px] rounded-lg px-3 ${birthCalendar === c ? "bg-brand-100 text-brand-700" : "text-ink-500"}`}>{c === "gregorian" ? t("ميلادي", "Gregorian") : t("هجري", "Hijri")}</button>
               ))}
             </div>
@@ -320,7 +320,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
           )}
           {hijriErr ? <p className="mt-1 text-xs text-danger-600" role="alert">{hijriErr}</p> : otherCalendar && <p className="mt-1 text-xs text-ink-500">{otherCalendar}</p>}
         </fieldset>
-        <Field label={t("رقم الجوال (اختياري)", "Mobile number (optional)")} hint={isPrimary ? t("اتركه فارغًا ليبقى الرقم الذي حجزت به.", "Leave it empty to keep the number you booked with.") : undefined} error={phoneErr}>
+        <Field label={t("رقم الجوال (اختياري)", "Mobile number (optional)")} hint={isPrimary ? t("الرقم الذي حُجز به يبقى كما هو؛ لتغييره تواصل مع الاستقبال.", "The number the booking was made with stays as it is; to change it, contact the reception.") : undefined} error={phoneErr}>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder="05XXXXXXXX" />
         </Field>
 

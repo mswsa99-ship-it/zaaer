@@ -59,7 +59,7 @@ export default function AdminAvailabilityRules() {
 
   return (
     <div>
-      <SectionTitle title="قواعد الكشف التدريجي" subtitle="Sequential Room Release — تحكم في عدد الغرف المعروضة تدريجيًا" action={
+      <SectionTitle title="قواعد الكشف التدريجي" subtitle="تحكم في عدد الوحدات المعروضة تدريجيًا" action={
         <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
           {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
         </select>
@@ -99,7 +99,7 @@ export default function AdminAvailabilityRules() {
                 <button onClick={() => toggle(r)} disabled={acting === r.id} className="btn-outline text-sm">
                   {acting === r.id ? <Spinner /> : r.enabled ? "إيقاف" : "تفعيل"}
                 </button>
-                <button onClick={() => setReleaseFor(r)} className="btn-accent text-sm"><Unlock className="h-4 w-4" /> إفراج يدوي عن غرفة إضافية</button>
+                <button onClick={() => setReleaseFor(r)} className="btn-accent text-sm"><Unlock className="h-4 w-4" /> إفراج يدوي عن وحدة إضافية</button>
               </div>
             </Card>
           ))}
@@ -121,7 +121,7 @@ export default function AdminAvailabilityRules() {
           )}
         </div>
         <Card>
-          <h3 className="mb-3 text-sm font-semibold text-ink-700">الغرف المُفرج عنها — 14 يومًا القادمة</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ink-700">الوحدات المُفرج عنها — 14 يومًا القادمة</h3>
           {slots.length === 0 ? <p className="text-xs text-ink-400">لا توجد إفراجات مسجّلة.</p> : (
             <table className="w-full text-xs">
               <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">التاريخ</th><th className="py-1.5 text-right font-medium">التصنيف</th><th className="py-1.5 text-center font-medium">مُفرج</th></tr></thead>
@@ -159,10 +159,10 @@ function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; bran
   return (
     <Modal open title={`إفراج يدوي — ${catName(rule)}`} onClose={onClose}>
       <div>
-        <p className="mb-4 text-xs text-ink-400">يُفتح عدد "الزيادة" ({rule.release_increment}) من الرصيد المتبقي لهذا التاريخ، ويُسجَّل السبب في سجل التدقيق.</p>
+        <p className="mb-4 text-xs text-ink-400">يُفتح عدد «الزيادة» ({rule.release_increment}) من الرصيد المتبقي لهذا التاريخ، ويُسجَّل السبب في سجل التدقيق.</p>
         {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
         {result !== null ? (
-          <div className="rounded-xl bg-success-500/10 p-4 text-sm text-success-600">إجمالي الغرف المُفرج عنها لتاريخ {date}: <strong>{result}</strong></div>
+          <div className="rounded-xl bg-success-500/10 p-4 text-sm text-success-600">إجمالي الوحدات المُفرج عنها لتاريخ {date}: <strong>{result}</strong></div>
         ) : (
           <div className="space-y-3">
             <div><label className="label">التاريخ</label><input type="date" className="input" value={date} min={todayISO()} onChange={(e) => setDate(e.target.value)} /></div>

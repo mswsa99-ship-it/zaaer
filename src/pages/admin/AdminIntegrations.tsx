@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { aiHealth, whatsappApi } from "../../lib/api";
 import { isFreeTierError, providerErrorHint } from "../../lib/providerErrors";
+import { COUNT } from "../../lib/utils";
 import { SectionTitle, Card, Badge, Spinner } from "../../components/ui";
 import { Plug, Check, Clock, AlertCircle, XCircle } from "lucide-react";
 
@@ -19,7 +20,7 @@ const STATIC: Integration[] = [
 
 export default function AdminIntegrations() {
   const [ai, setAi] = useState<Integration>({ name: "مزود الذكاء الاصطناعي (Gemini)", status: "checking", description: "جارٍ الفحص…", link: "/admin/ai-settings" });
-  const [db, setDb] = useState<Integration>({ name: "Supabase (قاعدة البيانات)", status: "checking", description: "قاعدة البيانات والمصادقة وRealtime" });
+  const [db, setDb] = useState<Integration>({ name: "قاعدة البيانات (Supabase)", status: "checking", description: "قاعدة البيانات والمصادقة وRealtime" });
   const [wa, setWa] = useState<Integration>({ name: "واتساب الفروع (WhatsApp Business)", status: "checking", description: "جارٍ الفحص…", link: "/admin/whatsapp" });
 
   // per-branch numbers (owner only — other roles see the generic state)
@@ -35,7 +36,7 @@ export default function AdminIntegrations() {
       const allLive = rows.length > 0 && live === rows.filter((r) => r.enabled).length && live > 0;
       setWa({ name: "واتساب الفروع (WhatsApp Business)", link: "/admin/whatsapp",
         status: broken ? "error" : allLive && !waiting ? "connected" : "awaiting",
-        description: `${live} من ${rows.length} فرع يعمل الآن للنزلاء${waiting ? ` — ${waiting} بانتظار الربط (كمبيوتر الاستقبال غير متصل أو واتساب غير مربوط)` : ""}${broken ? ` — ${broken} بخطأ اتصال` : ""}` });
+        description: `${live} من ${COUNT.branch(rows.length)} يعمل الآن للنزلاء${waiting ? ` — ${waiting} بانتظار الربط (كمبيوتر الاستقبال غير متصل أو واتساب غير مربوط)` : ""}${broken ? ` — ${broken} بخطأ اتصال` : ""}` });
     }).catch(() => setWa({ name: "واتساب الفروع (WhatsApp Business)", link: "/admin/whatsapp", status: "awaiting", description: "يضبطه المالك لكل فرع" }));
   }, []);
 
@@ -45,7 +46,7 @@ export default function AdminIntegrations() {
         supabase.from("ai_settings").select("enabled, provider, model").maybeSingle(),
         aiHealth(),
       ]);
-      setDb({ name: "Supabase (قاعدة البيانات)", status: settings.error && /fetch|network/i.test(settings.error.message) ? "error" : "connected", description: "قاعدة البيانات والمصادقة وRealtime" });
+      setDb({ name: "قاعدة البيانات (Supabase)", status: settings.error && /fetch|network/i.test(settings.error.message) ? "error" : "connected", description: "قاعدة البيانات والمصادقة وRealtime" });
       const s = settings.data as { enabled: boolean; provider: string; model: string } | null;
       const base = { name: "مزود الذكاء الاصطناعي (Gemini)", link: "/admin/ai-settings" };
       if (!s || !s.enabled || s.provider === "none") setAi({ ...base, status: "disabled", description: "معطّل من الإعدادات — يعمل المسار الحواري التقليدي" });

@@ -29,10 +29,10 @@ export function KeyboxAlertBanner({ alerts }: { alerts: KeyboxAlerts | null }) {
       className="flex items-center gap-3 bg-danger-500 px-4 py-2.5 text-sm text-white hover:bg-danger-600 lg:px-8">
       <CodeLight tone="white" />
       <span className="min-w-0 flex-1 leading-relaxed">
-        <span className="font-semibold">{unitsNeedingChange(alerts.count)} تغيير رمز الصندوق</span> بعد خروج النزيل: {names}
-        {alerts.oldest_since && <span className="text-white/80"> · أقدمها {sinceArabic(alerts.oldest_since)}</span>}
+        <span className="font-semibold">{unitsNeedingChange(alerts.count)} تغيير رمز الصندوق</span> بعد مغادرة النزيل: {names}
+        {alerts.oldest_since && <span className="text-white"> · أقدمها {sinceArabic(alerts.oldest_since)}</span>}
       </span>
-      <span className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1 text-xs font-medium">افتح «الرموز»</span>
+      <span className="shrink-0 rounded-lg bg-danger-600 px-2.5 py-1 text-xs font-medium">افتح «الرموز»</span>
     </Link>
   );
 }

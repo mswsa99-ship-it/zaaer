@@ -60,6 +60,7 @@ function counted(n: number, one: string, two: string, few: string, many: string,
   const fem = few === "هللات";
   if (r >= 3 && r <= 10) return `${numberWords(n, fem)} ${few}`;
   if (r >= 11) return `${numberWords(n, fem)} ${many}`;
+  if (r === 1 || r === 2) return `${numberWords(n, fem)} ${many}`;   // MONEY-14: «مئة وواحد ريالًا», not «… ريال»
   return `${numberWords(n, fem, true)} ${one}`;   // a round number: the noun follows the number directly
 }
 

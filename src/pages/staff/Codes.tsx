@@ -103,7 +103,7 @@ export default function Codes() {
   if (board.loading) return <LoadingScreen />;
   return (
     <div>
-      <SectionTitle title="الرموز" subtitle="رموز صناديق المفاتيح — يتغيّر رمز الوحدة بعد خروج كل نزيل" action={<BranchPicker />} />
+      <SectionTitle title="الرموز" subtitle="رموز صناديق المفاتيح — يتغيّر رمز الوحدة بعد مغادرة كل نزيل" action={<BranchPicker />} />
       {(error || (board.error && units.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? board.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" role="status">{notice}</div>}
 
@@ -143,7 +143,7 @@ function roomStatusText(st: string): string {
 }
 
 function stateLine(u: KeyboxUnit): string {
-  if (u.state === "change") return u.has_code ? "يجب تغيير الرمز بعد خروج النزيل" : "لا يوجد رمز — عيّن رمزًا للصندوق";
+  if (u.state === "change") return u.has_code ? "يجب تغيير الرمز بعد مغادرة النزيل" : "لا يوجد رمز — عيّن رمزًا للصندوق";
   if (u.state === "untested") return "رمز جديد لم يُجرَّب على الصندوق بعد";
   if (u.state === "ok") return "الرمز محدّث";
   return "لا يوجد صندوق مفاتيح مسجّل لهذه الوحدة";

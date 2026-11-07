@@ -62,5 +62,7 @@ echo "== running review phase 4a tests (0059: the platforms apart, both occupanc
 psql -d "$DB" -f tests/sql/audit_phase4_tests.sql
 echo "== running review phase 4b tests (0060: near names in the guest search, the objection and the undo on the review list)"
 psql -d "$DB" -f tests/sql/audit_phase4b_tests.sql
+echo "== running review phase 5 tests (0061: Arabic counts and money in server texts, prices and filters by role, the guest phone, the lookup lock, visitor columns)"
+psql -d "$DB" -f tests/sql/audit_phase5_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

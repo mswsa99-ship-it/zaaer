@@ -15,7 +15,7 @@ import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, Spinner, ErrorBan
 import { Modal, Field, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { UserCog, UserPlus, Pencil, LogOut, Power } from "lucide-react";
 import { ROLE_LABELS } from "../../lib/types";
-import { formatDateTime } from "../../lib/utils";
+import { formatDateTime, COUNT } from "../../lib/utils";
 
 const INVITE_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"] as const;
 
@@ -77,13 +77,13 @@ export default function AdminStaff() {
 
   return (
     <div>
-      <SectionTitle title="الموظفون" subtitle={`${staff.length} موظف · ${staff.filter((s) => s.is_active).length} فعّال`} />
+      <SectionTitle title="الموظفون" subtitle={`${COUNT.staff(staff.length)} · النشطون ${staff.filter((s) => s.is_active).length}`} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" data-testid="staff-notice">{notice}</div>}
 
       {canManage && (
         <Card className="mb-5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-700"><UserPlus className="h-4 w-4 text-brand-600" /> دعوة موظف</h3>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-700"><UserPlus className="h-4 w-4 text-brand-600" /> دعوة موظف</h2>
           <p className="mb-3 text-xs text-ink-400">يُنشأ ملف الموظف الآن ويرتبط تلقائيًا بحسابه عند أول تسجيل دخول بنفس البريد. لا يمكن للموظف اختيار دوره بنفسه.</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div><label className="label">البريد الإلكتروني</label><input className="input" dir="ltr" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
@@ -179,7 +179,7 @@ export default function AdminStaff() {
                   </div>
                 </Field>
               )}
-              <ReasonInput value={edit.reason} onChange={(v) => setEdit({ ...edit, reason: v })} placeholder="مثال: انتقل إلى فرع الرياض" />
+              <ReasonInput value={edit.reason} onChange={(v) => setEdit({ ...edit, reason: v })} placeholder="مثال: نُقل إلى فرع آخر" />
               <p className="text-[11px] text-ink-400">يُسجَّل التعديل بما قبله وما بعده واسم من عدّل ووقته والسبب في سجل الإجراءات (الهاتف مقنّع فيه).</p>
             </div>
             <Submit label="حفظ التعديل" onCancel={() => setEdit(null)} />

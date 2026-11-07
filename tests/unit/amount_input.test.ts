@@ -29,7 +29,7 @@ describe("AM01 the money field starts empty and takes riyals, halalas only after
     expect(sanitizeMoneyText("2.505", false)).toBeNull();
     expect(sanitizeMoneyText("2a", false)).toBeNull();
     expect(sanitizeMoneyText("2.5.1", false)).toBeNull();
-    expect(sanitizeMoneyText("-50", false)).toBe("50");
+    expect(sanitizeMoneyText("-50", false)).toBeNull();   // MONEY-09: refused, not flipped
     expect(sanitizeMoneyText("-50", true)).toBe("-50");
     expect(moneyTextToHalalas("")).toBeNull();
     expect(moneyTextToHalalas(".")).toBeNull();

@@ -64,7 +64,7 @@ export default function AdminFacilities() {
               <Field label="الاسم (مطلوب)"><input className="input" value={draft.name ?? ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="البلوك"><select className="input" value={draft.block_id ?? ""} onChange={(e) => setDraft({ ...draft, block_id: e.target.value || null, floor_id: null })}><option value="">—</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-                <Field label="الطابق"><select className="input" value={draft.floor_id ?? ""} onChange={(e) => setDraft({ ...draft, floor_id: e.target.value || null })}><option value="">—</option>{draftFloors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+                <Field label="الطابق" hint={draft.block_id ? undefined : "اختر البلوك أولًا"}><select className="input" disabled={!draft.block_id} value={draft.floor_id ?? ""} onChange={(e) => setDraft({ ...draft, floor_id: e.target.value || null })}><option value="">—</option>{draftFloors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
               </div>
               <Field label="الوصف"><textarea className="input" rows={2} value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
               {draft.id && <Toggle checked={draft.is_active ?? true} onChange={(v) => setDraft({ ...draft, is_active: v })} label="فعال" />}

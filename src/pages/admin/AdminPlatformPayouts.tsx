@@ -14,7 +14,7 @@ import { accountLabel } from "../../lib/useCashAccounts";
 import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, EmptyState } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
-import { formatCurrency, todayISO, isoDateIn, UI_LOCALE } from "../../lib/utils";
+import { formatCurrency, todayISO, isoDateIn, UI_LOCALE, COUNT } from "../../lib/utils";
 import { bpToPercent } from "../../lib/money";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
@@ -73,7 +73,7 @@ export default function AdminPlatformPayouts() {
 
   return (
     <div>
-      <SectionTitle title="مطابقة المنصات" subtitle="الدفعات الآجلة عبر المنصات مقابل ما أودعته المنصة في الحساب — شهريًا" action={<BranchPicker />} />
+      <SectionTitle title="إيداعات المنصات" subtitle="الدفعات الآجلة عبر المنصات مقابل ما أودعته المنصة في الحساب — شهريًا" action={<BranchPicker />} />
       {q.error && <div className="mb-4">{unsettled.length + payouts.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
 
       <h3 className="mb-2 text-sm font-semibold text-ink-700">دفعات لم تُطابق بعد</h3>
@@ -86,7 +86,7 @@ export default function AdminPlatformPayouts() {
               <Card key={g.source_id + g.month}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-ink-800">{g.source} · {monthName(g.month)}</p>
-                  <div className="flex items-center gap-3 text-sm"><span className="text-ink-500">{g.items.length} دفعة · <span dir="ltr">{sar(total)}</span></span>
+                  <div className="flex items-center gap-3 text-sm"><span className="text-ink-500">{COUNT.payment(g.items.length)} · <span dir="ltr">{sar(total)}</span></span>
                     <button type="button" className="btn-ghost text-xs" onClick={() => setPicked((s) => { const n = new Set(s); for (const x of g.items) { if (allIn) n.delete(x.id); else n.add(x.id); } return n; })}>{allIn ? "إلغاء التحديد" : "تحديد الكل"}</button></div>
                 </div>
                 <div className="divide-y divide-ink-50 text-sm">
@@ -106,7 +106,7 @@ export default function AdminPlatformPayouts() {
       )}
       {chosen.length > 0 && (
         <div className="sticky bottom-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white p-3 shadow-lg">
-          <span className="text-sm text-ink-700">{chosen.length} دفعة · المتوقع <span dir="ltr" className="font-semibold">{sar(net)}</span>{bp > 0 && <span className="text-ink-500"> (بعد عمولة <span dir="ltr">{bpToPercent(bp)}%</span>)</span>}{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
+          <span className="text-sm text-ink-700">{COUNT.payment(chosen.length)} · المتوقع <span dir="ltr" className="font-semibold">{sar(net)}</span>{bp > 0 && <span className="text-ink-500"> (بعد عمولة <span dir="ltr">{bpToPercent(bp)}%</span>)</span>}{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
           <button type="button" className="btn-primary text-sm" disabled={chosenSources.length !== 1} onClick={() => { setForm({ received: net, on: todayISO(), account: activeAccounts.find((a) => a.is_default)?.id ?? activeAccounts[0]?.id ?? "", reference: "", note: "" }); setConfirming(true); }}>تأكيد إيداع المنصة</button>
         </div>
       )}
@@ -119,7 +119,7 @@ export default function AdminPlatformPayouts() {
             <tbody>
               {payouts.map((p) => (
                 <tr key={p.id} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
-                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {p.voucher_count} دفعة</span></td>
+                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
                   <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] text-ink-400">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</td><td dir="ltr">{sar(p.received_halalas)}</td>
                   <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
                   <td className="font-mono text-xs">{p.reference}</td>
@@ -141,7 +141,7 @@ export default function AdminPlatformPayouts() {
             setConfirming(false); setPicked(new Set()); q.reload();
           }}>
             <div className="mb-3 space-y-0.5 text-sm text-ink-600" data-testid="payout-expected">
-              <p>{sourceName(chosenSources[0])}: {chosen.length} دفعة بإجمالي <span dir="ltr">{sar(expected)}</span></p>
+              <p>{sourceName(chosenSources[0])}: {COUNT.payment(chosen.length)} بإجمالي <span dir="ltr">{sar(expected)}</span></p>
               {bp > 0 && <p>عمولة المنصة <span dir="ltr">{bpToPercent(bp)}%</span>: <span dir="ltr">{sar(commission)}</span></p>}
               <p className="font-semibold text-ink-800">الصافي المتوقع: <span dir="ltr">{sar(net)}</span></p>
             </div>

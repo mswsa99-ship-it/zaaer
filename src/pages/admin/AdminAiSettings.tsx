@@ -156,7 +156,7 @@ export default function AdminAiSettings() {
     <div>
       <SectionTitle title="إعدادات الذكاء الاصطناعي" subtitle="محرك مساعد الاستقبال (Gemini عبر Edge Function). عند التعطيل أو الفشل يعمل المسار الحواري التقليدي تلقائيًا." />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      {!isOwner && <div className="mb-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-500">العرض فقط — حفظ الإعدادات متاح للمالك.</div>}
+      {!isOwner && <div className="mb-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-500">العرض فقط — يحفظ الإعدادات من يملك صلاحية «السجل الأمني ومسح البيانات وإعدادات المساعد».</div>}
 
       <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         {/* Settings form */}
@@ -164,8 +164,8 @@ export default function AdminAiSettings() {
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink-700"><Bot className="h-4 w-4 text-brand-600" /> إعدادات المحرك</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <Toggle label="تفعيل المساعد الذكي" checked={form.enabled} onChange={(v) => set("enabled", v)} disabled={!isOwner} hint="عند الإيقاف يُستخدم المسار الحواري التقليدي فقط." />
-            <Toggle label="النطاق الصارم (strict_scope)" checked={form.strict_scope} onChange={(v) => set("strict_scope", v)} disabled={!isOwner} hint="يُبقي المساعد داخل نطاق الاستقبال فقط (حجوزات، تسجيل، دفع، دخول، سياسات) ويرفض أي موضوع خارجه." />
-            <Toggle label="مساعد العمليات للموظفين (ops_enabled)" checked={form.ops_enabled} onChange={(v) => set("ops_enabled", v)} disabled={!isOwner} hint="يقرأ بيانات الفرع بصلاحية الموظف نفسه ويقترح إجراءات تتطلب تأكيدًا بشريًا. عند الإيقاف تبقى الإحاطة والإجابات المباشرة من بيانات النظام." />
+            <Toggle label="النطاق الصارم" checked={form.strict_scope} onChange={(v) => set("strict_scope", v)} disabled={!isOwner} hint="يُبقي المساعد داخل نطاق الاستقبال فقط (حجوزات، تسجيل، دفع، دخول، سياسات) ويرفض أي موضوع خارجه." />
+            <Toggle label="مساعد العمليات للموظفين" checked={form.ops_enabled} onChange={(v) => set("ops_enabled", v)} disabled={!isOwner} hint="يقرأ بيانات الفرع بصلاحية الموظف نفسه ويقترح إجراءات تتطلب تأكيدًا بشريًا. عند الإيقاف تبقى الإحاطة والإجابات المباشرة من بيانات النظام." />
             <Toggle label="توصيات ذكية في إحاطة اليوم" checked={form.briefing_with_insights} onChange={(v) => set("briefing_with_insights", v)} disabled={!isOwner} hint="3 توصيات مرتبة بالأولوية تُولَّد من السياق التشغيلي؛ للمراجعة البشرية فقط." />
             <div>
               <label className="label">المزود</label>
@@ -187,22 +187,22 @@ export default function AdminAiSettings() {
                 ? <p className="mt-1 text-xs text-danger-600">{fallbackError}</p>
                 : <p className="mt-1 text-xs text-ink-400">إن تعذّر النموذج الأساسي (ضغط على المزود، تجاوز حصته، أو إيقافه) يُجرَّب التالي ضمن نفس المهلة، ويُسجَّل حدث provider_fallback. اتركه فارغًا لإيقاف ذلك.</p>}
             </div>
-            <NumberField label={`درجة الحرارة (${form.temperature.toFixed(2)})`} value={form.temperature} min={0} max={1} step={0.05} onChange={(v) => set("temperature", v)} disabled={!isOwner} range />
-            <NumberField label="الحد الأقصى لتوكنز الرد (50–2000)" value={form.max_output_tokens} min={50} max={2000} step={10} onChange={(v) => set("max_output_tokens", v)} disabled={!isOwner} />
-            <NumberField label="المهلة (ms) 2000–60000" value={form.timeout_ms} min={2000} max={60000} step={500} onChange={(v) => set("timeout_ms", v)} disabled={!isOwner} />
+            <NumberField label={`تنوّع الردود (${form.temperature.toFixed(2)}) — 0 ثابت، 1 متنوّع`} value={form.temperature} min={0} max={1} step={0.05} onChange={(v) => set("temperature", v)} disabled={!isOwner} range />
+            <NumberField label="أقصى طول للرد بالوحدات النصية (50–2000)" value={form.max_output_tokens} min={50} max={2000} step={10} onChange={(v) => set("max_output_tokens", v)} disabled={!isOwner} />
+            <NumberField label="مهلة الرد بالمللي ثانية (2000–60000)" value={form.timeout_ms} min={2000} max={60000} step={500} onChange={(v) => set("timeout_ms", v)} disabled={!isOwner} />
             <NumberField label="حد الطلبات اليومي" value={form.daily_request_limit} min={0} step={50} onChange={(v) => set("daily_request_limit", v)} disabled={!isOwner} />
             <NumberField label="حد طلبات مساعد العمليات اليومي" value={form.ops_daily_request_limit} min={0} step={50} onChange={(v) => set("ops_daily_request_limit", v)} disabled={!isOwner} />
-            <NumberField label="ميزانية التوكنز اليومية" value={form.daily_token_budget} min={0} step={1000} onChange={(v) => set("daily_token_budget", v)} disabled={!isOwner} />
+            <NumberField label="الحد اليومي للوحدات النصية" value={form.daily_token_budget} min={0} step={1000} onChange={(v) => set("daily_token_budget", v)} disabled={!isOwner} />
             <NumberField label="حد الرسائل لكل جلسة" value={form.per_session_message_limit} min={1} max={500} step={1} onChange={(v) => set("per_session_message_limit", v)} disabled={!isOwner} />
             {/* 0052 (SEC-02): the conversation's rhythm — past any of these the AI stops on that conversation and the supervisor gets it */}
             <div className="sm:col-span-2 rounded-xl border border-ink-100 bg-ink-50/50 p-3" data-testid="ai-guard">
               <p className="text-sm font-semibold text-ink-800">إيقاف المساعد عند نمط غير طبيعي</p>
-              <p className="mb-3 mt-0.5 text-xs text-ink-500">إذا تجاوزت المحادثة أيًّا من هذه الحدود يتوقف الذكاء الاصطناعي عليها، وتُحوَّل إلى المشرف بتذكرة واحدة، ويُسجَّل السبب.</p>
+              <p className="mb-3 mt-0.5 text-xs text-ink-500">إذا تجاوزت المحادثة أيًّا من هذه الحدود يتوقف الذكاء الاصطناعي عليها، وتُحوَّل إلى المشرف بطلب تحويل واحدة، ويُسجَّل السبب.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <NumberField label="الرسالة نفسها متتالية (2–20 مرة)" value={form.guard_repeat_limit} min={2} max={20} step={1} onChange={(v) => set("guard_repeat_limit", v)} disabled={!isOwner} />
                 <NumberField label="أكثر من هذا العدد من الرسائل (3–200)" value={form.guard_burst_messages} min={3} max={200} step={1} onChange={(v) => set("guard_burst_messages", v)} disabled={!isOwner} />
                 <NumberField label="خلال هذه الدقائق (1–120)" value={form.guard_burst_minutes} min={1} max={120} step={1} onChange={(v) => set("guard_burst_minutes", v)} disabled={!isOwner} />
-                <NumberField label="توكنز المحادثة الواحدة (1000–1000000)" value={form.guard_conversation_tokens} min={1000} max={1000000} step={1000} onChange={(v) => set("guard_conversation_tokens", v)} disabled={!isOwner} />
+                <NumberField label="الوحدات النصية للمحادثة الواحدة (1000–1000000)" value={form.guard_conversation_tokens} min={1000} max={1000000} step={1000} onChange={(v) => set("guard_conversation_tokens", v)} disabled={!isOwner} />
               </div>
             </div>
             <div className="sm:col-span-2">
@@ -274,7 +274,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
             </ResponsiveContainer>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">اليوم</th><th className="py-1.5 text-center font-medium">طلبات</th><th className="py-1.5 text-center font-medium">توكنز</th><th className="py-1.5 text-center font-medium">تقليدي</th><th className="py-1.5 text-center font-medium">حجب</th></tr></thead>
+                <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">اليوم</th><th className="py-1.5 text-center font-medium">طلبات</th><th className="py-1.5 text-center font-medium">وحدات نصية</th><th className="py-1.5 text-center font-medium">تقليدي</th><th className="py-1.5 text-center font-medium">حجب</th></tr></thead>
                 <tbody>{usage.map((u) => (
                   <tr key={u.day} className="border-b border-ink-50"><td className="py-1.5 text-ink-700" dir="ltr">{u.day}</td><td className="py-1.5 text-center">{u.requests}</td><td className="py-1.5 text-center">{(Number(u.tokens_in) + Number(u.tokens_out)).toLocaleString("en")}</td><td className="py-1.5 text-center">{u.fallbacks}</td><td className="py-1.5 text-center">{u.guardrail_blocks}</td></tr>
                 ))}</tbody>
@@ -291,7 +291,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>بوابة الإدخال:</strong> كشف محاولات الحقن (prompt injection)، رفض المواضيع خارج النطاق، وحجب/إخفاء البيانات الشخصية (PII) قبل وصولها للنموذج.</li>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>قائمة الأدوات المسموحة:</strong> {TOOLS.length} أداة فقط، لا وصول مباشر لقاعدة البيانات ولا تعديل للهوية أو الدفع أو رموز الصناديق.</li>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>بوابة الإخراج:</strong> منع تسريب الرموز، أرقام الوثائق، أرقام الجوال، الروابط غير المصرح بها، إعادة طباعة التعليمات (prompt echo)، وفرض اللغة.</li>
-          <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>الميزانيات:</strong> حد الطلبات اليومي، ميزانية التوكنز، وحد الرسائل لكل جلسة.</li>
+          <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>الميزانيات:</strong> حد الطلبات اليومي، الحد اليومي للوحدات النصية، وحد الرسائل لكل جلسة.</li>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>النماذج الاحتياطية:</strong> إن تعذّر النموذج الأساسي يُجرَّب التالي في القائمة ضمن نفس المهلة، ويُؤجَّل النموذج المتعثر لدقائق حتى لا ينتظره كل نزيل.</li>
           <li className="rounded-lg bg-ink-50 px-3 py-2"><strong>المسار الاحتياطي:</strong> عند أي فشل أو تجاوز للحدود يرد النظام بمسار حواري مكتوب مسبقًا (scripted fallback) ويُسجَّل الحدث.</li>
         </ul>
@@ -306,7 +306,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <div>
-            <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-600"><ShieldCheck className="h-3.5 w-3.5" /> آخر 30 حدث حماية</h4>
+            <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-600"><ShieldCheck className="h-3.5 w-3.5" /> آخر 30 حدثًا أمنيًا</h4>
             {guards.length === 0 ? <p className="text-xs text-ink-400">لا توجد أحداث.</p> : (
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
@@ -352,11 +352,11 @@ function Toggle({ label, checked, onChange, disabled, hint }: { label: string; c
 
 /** OWNER-19: the ranges the server keeps (0005), checked before saving; the field names them */
 const NUMBER_RANGES: Partial<Record<keyof AiSettings, [number, number, string]>> = {
-  temperature: [0, 1, "درجة الحرارة"], max_output_tokens: [50, 2000, "الحد الأقصى لتوكنز الرد"], timeout_ms: [2000, 60000, "المهلة"],
+  temperature: [0, 1, "تنوّع الردود"], max_output_tokens: [50, 2000, "أقصى طول للرد"], timeout_ms: [2000, 60000, "مهلة الرد"],
   daily_request_limit: [0, 1000000, "حد الطلبات اليومي"], ops_daily_request_limit: [0, 1000000, "حد طلبات مساعد العمليات اليومي"],
-  daily_token_budget: [0, 1000000000, "ميزانية التوكنز اليومية"], per_session_message_limit: [1, 500, "حد الرسائل لكل جلسة"],
+  daily_token_budget: [0, 1000000000, "الحد اليومي للوحدات النصية"], per_session_message_limit: [1, 500, "حد الرسائل لكل جلسة"],
   guard_repeat_limit: [2, 20, "الرسالة نفسها متتالية"], guard_burst_messages: [3, 200, "عدد الرسائل"], guard_burst_minutes: [1, 120, "الدقائق"],
-  guard_conversation_tokens: [1000, 1000000, "توكنز المحادثة الواحدة"],
+  guard_conversation_tokens: [1000, 1000000, "الوحدات النصية للمحادثة الواحدة"],
 };
 
 function NumberField({ label, value, onChange, min, max, step, disabled, range }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; range?: boolean }) {

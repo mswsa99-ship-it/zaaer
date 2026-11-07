@@ -122,7 +122,7 @@ export default function StaffRooms() {
             ["occupied", "مؤجرة", String(u.occupied), "وحدة مشغولة الآن", "text-brand-700"],
             ["ready", "جاهزة", String(u.ready), "للتسليم الآن", "text-success-600"],
             ["dirty", "تحتاج تنظيفًا", String(u.dirty), "متسخة أو قيد التنظيف", "text-warning-700"],
-            ["maintenance", "صيانة", String(u.maintenance), "خارج التشغيل مؤقتًا", "text-danger-600"],
+            ["maintenance", "صيانة", String(u.maintenance), "خارج الخدمة مؤقتًا", "text-danger-600"],
           ] as const).map(([k, label, value, hint, tone], i) => (
             <button key={label} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k}
               className={`flex min-h-[44px] flex-col items-start gap-1 rounded-2xl border bg-white p-3 text-right shadow-sm transition hover:border-brand-500 ${filter === k ? "border-brand-500 ring-2 ring-brand-100" : "border-ink-100"}`}
@@ -155,7 +155,7 @@ export default function StaffRooms() {
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Badge className={CLEANLINESS_COLORS[x.cleanliness]}><Sparkles className="h-3 w-3" /> {CLEANLINESS_LABELS[x.cleanliness]}</Badge>
-                  <Badge className={x.keybox_ready ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}><KeyRound className="h-3 w-3" /> {x.keybox_ready ? "الرمز جاهز" : "الرمز يحتاج تدويرًا"}</Badge>
+                  <Badge className={x.keybox_ready ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}><KeyRound className="h-3 w-3" /> {x.keybox_ready ? "الرمز جاهز" : "يجب تغيير الرمز"}</Badge>
                   {x.open_maintenance > 0 && <Badge className="bg-danger-500/10 text-danger-600"><Wrench className="h-3 w-3" /> صيانة</Badge>}
                   {x.open_tasks > 0 && <Badge className="bg-warning-500/10 text-warning-700">{COUNT.task(x.open_tasks)}</Badge>}
                 </div>

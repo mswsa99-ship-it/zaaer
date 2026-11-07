@@ -34,7 +34,7 @@ export default function PlatformCheck() {
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-ink-100 text-xs text-ink-400">
-              <th className="py-2 text-right font-medium">المنصة</th><th className="py-2 text-right font-medium">رقم الحجز في المنصة</th><th className="py-2 text-right font-medium">الضيف</th><th className="py-2 text-right font-medium">الوصول</th><th className="py-2 text-right font-medium">الليالي / الأشخاص</th><th className="py-2 text-right font-medium">من يقبض</th><th className="py-2 text-right font-medium">الإجمالي</th><th className="py-2 text-right font-medium">الحالة</th><th className="py-2 text-right font-medium">المطابقة</th>
+              <th className="py-2 text-right font-medium">المنصة</th><th className="py-2 text-right font-medium">رقم الحجز في المنصة</th><th className="py-2 text-right font-medium">النزيل</th><th className="py-2 text-right font-medium">الوصول</th><th className="py-2 text-right font-medium">الليالي / الأشخاص</th><th className="py-2 text-right font-medium">من يقبض</th><th className="py-2 text-right font-medium">الإجمالي</th><th className="py-2 text-right font-medium">الحالة</th><th className="py-2 text-right font-medium">المطابقة</th>
             </tr></thead>
             <tbody>
               {(rows ?? []).map((r) => (
@@ -49,7 +49,7 @@ export default function PlatformCheck() {
                   <td className="py-2 text-xs">{RESERVATION_STATUS_LABELS[r.status as ReservationStatus] ?? r.status}{r.cancel_reference ? <span className="block font-mono text-[10px] text-ink-400" dir="ltr">إلغاء {r.cancel_reference}</span> : null}</td>
                   <td className="py-2">
                     {r.verified_at ? <Badge className="bg-success-500/10 text-success-600"><CheckCircle2 className="h-3 w-3" /> {r.verified_by ?? "—"} · {formatDateTime(r.verified_at)}</Badge> : null}
-                    {!["cancelled", "no_show"].includes(r.status) && <button onClick={() => toggle(r)} disabled={busy === r.id} className="btn-ghost mr-1 px-2 py-1 text-xs" data-testid="platform-toggle">{busy === r.id ? <Spinner className="h-3 w-3" /> : r.verified_at ? <Circle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {r.verified_at ? "إلغاء" : "طابقتُ"}</button>}
+                    {!["cancelled", "no_show"].includes(r.status) && <button onClick={() => toggle(r)} disabled={busy === r.id} className="btn-ghost mr-1 px-2 py-1 text-xs" data-testid="platform-toggle">{busy === r.id ? <Spinner className="h-3 w-3" /> : r.verified_at ? <Circle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {r.verified_at ? "إلغاء" : "تأكيد المطابقة"}</button>}
                   </td>
                 </tr>
               ))}

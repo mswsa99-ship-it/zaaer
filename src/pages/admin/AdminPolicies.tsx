@@ -65,7 +65,7 @@ export default function AdminPolicies() {
 
   return (
     <div>
-      <SectionTitle title="السياسات" subtitle="ما يقرؤه الضيف ويُسمح للمساعد الذكي بذكره، لكل فرع" action={
+      <SectionTitle title="السياسات" subtitle="ما يقرؤه النزيل ويُسمح للمساعد الذكي بذكره، لكل فرع" action={
         <div className="flex flex-wrap items-center gap-2">
           <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
@@ -76,7 +76,7 @@ export default function AdminPolicies() {
       {(error || (q.error && all.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
       <div className="mb-4 flex items-start gap-2 rounded-xl bg-brand-50 p-4 text-sm text-brand-700">
         <Bot className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>السياسات المعلّمة «عامة» هي <strong>المصدر الوحيد</strong> لما يذكره المساعد الذكي عن المنشأة، وتظهر للضيف في الشروط. أي سؤال لا تغطيه يُحوَّل إلى مشرف.</p>
+        <p>السياسات المعلّمة «عامة» هي <strong>المصدر الوحيد</strong> لما يذكره المساعد الذكي عن المنشأة، وتظهر للنزيل في الشروط. أي سؤال لا تغطيه يُحوَّل إلى مشرف.</p>
       </div>
       <div className="mb-3 flex gap-2" role="tablist" aria-label="عرض السياسات">
         <button role="tab" aria-selected={!showArchived} className={!showArchived ? "btn-primary text-xs" : "btn-outline text-xs"} onClick={() => setShowArchived(false)}>النشطة ({live.length})</button>
@@ -85,7 +85,7 @@ export default function AdminPolicies() {
 
       {q.error && all.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : rows.length === 0 ? (
         showArchived ? <EmptyState icon={<Archive className="h-10 w-10" />} title="لا توجد سياسات مؤرشفة" />
-          : <EmptyState icon={<FileText className="h-10 w-10" />} title="لا توجد سياسات لهذا الفرع" description="أضف سياسات الوصول والإلغاء والإنترنت وغيرها ليقرأها الضيف ويجيب عنها المساعد." action={canEdit ? <button className="btn-primary text-sm" onClick={() => setDraft({ ...EMPTY, sort_order: 1 })}><Plus className="h-4 w-4" /> سياسة جديدة</button> : undefined} />
+          : <EmptyState icon={<FileText className="h-10 w-10" />} title="لا توجد سياسات لهذا الفرع" description="أضف سياسات الوصول والإلغاء والإنترنت وغيرها ليقرأها النزيل ويجيب عنها المساعد." action={canEdit ? <button className="btn-primary text-sm" onClick={() => setDraft({ ...EMPTY, sort_order: 1 })}><Plus className="h-4 w-4" /> سياسة جديدة</button> : undefined} />
       ) : (
         <div className="space-y-3">
           {rows.map((p) => (
@@ -95,7 +95,7 @@ export default function AdminPolicies() {
                 <h3 className="text-sm font-semibold text-ink-800">{p.title}</h3>
                 <Badge className="bg-ink-100 text-ink-500">{policyTopic(p)}</Badge>
                 {p.archived_at ? <Badge className="bg-ink-100 text-ink-500">مؤرشفة</Badge>
-                  : <Badge className={p.is_public ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{p.is_public ? "عامة — يراها الضيف والمساعد" : "داخلية"}</Badge>}
+                  : <Badge className={p.is_public ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{p.is_public ? "عامة — يراها النزيل والمساعد" : "داخلية"}</Badge>}
                 <span className="mr-auto text-xs text-ink-400">#{p.sort_order ?? 0}</span>
                 {canEdit && !p.archived_at && (
                   <>
@@ -127,7 +127,7 @@ export default function AdminPolicies() {
               <Field label="النص" className="sm:col-span-2" hint={`${draft.content_ar.length} / 4000`}><textarea className="input min-h-[120px]" maxLength={4000} value={draft.content_ar} onChange={(e) => setDraft({ ...draft, content_ar: e.target.value })} /></Field>
               <label className="flex min-h-[44px] items-center gap-2 text-sm text-ink-700 sm:col-span-2">
                 <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={draft.is_public} onChange={(e) => setDraft({ ...draft, is_public: e.target.checked })} />
-                عامة — تظهر للضيف ويُسمح للمساعد الذكي بذكرها
+                عامة — تظهر للنزيل ويُسمح للمساعد الذكي بذكرها
               </label>
             </div>
             <Submit label="حفظ" onCancel={() => setDraft(null)} />
@@ -138,7 +138,7 @@ export default function AdminPolicies() {
       <Modal open={!!archiving} title={archiving ? `أرشفة «${archiving.title}»` : ""} onClose={() => setArchiving(null)}>
         {archiving && (
           <ActionForm onSubmit={archive}>
-            <p className="mb-3 text-sm text-ink-600">تختفي السياسة عن الضيف والمساعد الذكي فورًا، وتبقى في «المؤرشفة» ويمكن استعادتها.</p>
+            <p className="mb-3 text-sm text-ink-600">تختفي السياسة عن النزيل والمساعد الذكي فورًا، وتبقى في «المؤرشفة» ويمكن استعادتها.</p>
             <ReasonInput value={reason} onChange={setReason} />
             <Submit label="أرشفة" onCancel={() => setArchiving(null)} danger />
           </ActionForm>
