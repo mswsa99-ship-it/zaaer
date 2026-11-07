@@ -11,7 +11,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { moneyApi, type CashAccount } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { accountLabel, last4Text, numberRuleText } from "../../lib/useCashAccounts";
+import { accountLabel } from "../../lib/useCashAccounts";
 import { latinDigits } from "../../lib/validation";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, ArchivedBadge, Toggle, ReasonInput } from "../../components/forms";
@@ -70,7 +70,7 @@ export default function AdminCashAccounts() {
                       <ArchivedBadge archivedAt={a.archived_at} />
                       {!a.is_active && !a.archived_at && <Badge className="bg-warning-500/10 text-warning-700">موقوف</Badge>}
                     </div>
-                    {(a.bank_name || a.account_last4 || a.account_prefix) && <p className="mt-0.5 text-xs text-ink-500">{[a.bank_name, numberRuleText(a.account_prefix, a.account_suffix) ?? last4Text(a.account_last4)].filter(Boolean).join(" · ")}</p>}
+                    {(a.bank_name || (a.account_last4 && !a.account_suffix)) && <p className="mt-0.5 text-xs text-ink-500">{a.bank_name}{a.bank_name && a.account_last4 && !a.account_suffix && " · "}{a.account_last4 && !a.account_suffix && <span dir="ltr">••{a.account_last4}</span>}</p>}
                     {a.kind === "bank_account" && !a.archived_at && <>
                       {a.account_prefix && a.account_suffix
                         ? <p className="mt-0.5 text-xs text-ink-500" data-testid="account-rule">رقم الحساب يبدأ بـ <span dir="ltr">{a.account_prefix}</span> وينتهي بـ <span dir="ltr">{a.account_suffix}</span></p>
