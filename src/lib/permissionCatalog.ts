@@ -74,6 +74,8 @@ export const PERMISSION_CATALOG: readonly PermissionRow[] = [
   { code: "reports.finance", label: "التقارير المالية وتقرير الخصومات", area: "التقارير والسجل", sort: 520, defaultRoles: ["owner", "manager", "supervisor", "finance"], fullRoles: ["owner", "manager", "finance"], limitNote: "ملخص الخصومات فقط", locked: false },
   { code: "accounts.view", label: "دليل الحسابات والقيود وميزان المراجعة وقائمة الدخل والميزانية", area: "التقارير والسجل", sort: 524, defaultRoles: ["owner", "manager", "finance"], fullRoles: null, limitNote: null, locked: false },
   { code: "accounts.close_month", label: "قفل الشهر المحاسبي وفتحه", area: "التقارير والسجل", sort: 526, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
+  { code: "bank.view", label: "الرسائل البنكية والحركات المستخرجة منها", area: "التقارير والسجل", sort: 527, defaultRoles: ["owner", "manager", "finance"], fullRoles: null, limitNote: null, locked: false },
+  { code: "bank.manage", label: "بريد البنك وقواعد قراءة الرسائل وإعادة قراءتها", area: "التقارير والسجل", sort: 528, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "reports.identities_usage", label: "تقرير الهويات المعتمدة من المكتب وتقرير الاستعمال", area: "التقارير والسجل", sort: 530, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "audit.log", label: "سجل الإجراءات", area: "التقارير والسجل", sort: 540, defaultRoles: ["owner", "manager", "supervisor"], fullRoles: ["owner", "manager"], limitNote: "بلا تفاصيل التغييرات", locked: false },
 ];

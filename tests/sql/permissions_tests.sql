@@ -78,9 +78,9 @@ select t_set('res_pm', t_book(310));
 do $$ declare n int; codes int; o int; lk text[]; begin
   select count(*), count(distinct c.code), count(*) filter (where 'owner' = any(c.default_roles)), array_agg(c.code) filter (where c.locked)
     into n, codes, o, lk from fn_permission_catalog() c;
-  perform t_record('PM01 the catalogue is the approved matrix: 62 operations (55 approved on 26 October, the closing''s two of 0063, the expenses and ledger''s three of 0064, the accounts'' two of 0065), unique codes, the owner allowed in every row, only «تعديل مصفوفة الصلاحيات» locked',
-    n = 62 and codes = 62 and o = 62 and lk = array['admin.permissions'], n || ' rows, ' || codes || ' codes, locked ' || lk::text);
-exception when others then perform t_record('PM01 the catalogue is the approved matrix: 62 operations (55 approved on 26 October, the closing''s two of 0063, the expenses and ledger''s three of 0064, the accounts'' two of 0065), unique codes, the owner allowed in every row, only «تعديل مصفوفة الصلاحيات» locked', false, sqlerrm); end $$;
+  perform t_record('PM01 the catalogue is the approved matrix: 64 operations (55 approved on 26 October, the closing''s two of 0063, the expenses and ledger''s three of 0064, the accounts'' two of 0065, the bank''s two of 0066), unique codes, the owner allowed in every row, only «تعديل مصفوفة الصلاحيات» locked',
+    n = 64 and codes = 64 and o = 64 and lk = array['admin.permissions'], n || ' rows, ' || codes || ' codes, locked ' || lk::text);
+exception when others then perform t_record('PM01 the catalogue is the approved matrix: 64 operations (55 approved on 26 October, the closing''s two of 0063, the expenses and ledger''s three of 0064, the accounts'' two of 0065, the bank''s two of 0066), unique codes, the owner allowed in every row, only «تعديل مصفوفة الصلاحيات» locked', false, sqlerrm); end $$;
 
 do $$ declare bad text := ''; r record; mine jsonb; begin
   for r in select * from (values ('a0000000-0000-0000-0000-000000000008'::uuid, 'manager'::role_code), ('a0000000-0000-0000-0000-000000000002', 'supervisor'),
@@ -101,7 +101,7 @@ do $$ declare m jsonb; begin
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   m := fn_permissions_matrix();
   perform t_record('PM03 the owner reads the matrix: every row with five columns, the owner''s always allowed, the defaults marked, the conditions where the approved matrix had them, nothing changed yet',
-    jsonb_array_length(m->'rows') = 62 and (m->>'changed')::int = 0
+    jsonb_array_length(m->'rows') = 64 and (m->>'changed')::int = 0
     and not exists (select 1 from jsonb_array_elements(m->'rows') x where (x->'cells'->'owner'->>'allowed')::boolean is not true)
     and (select (x->'cells'->'supervisor'->>'limited')::boolean from jsonb_array_elements(m->'rows') x where x->>'code' = 'voucher.correct')
     and (select x->>'limit_note' from jsonb_array_elements(m->'rows') x where x->>'code' = 'voucher.correct') = 'سنداته خلال 24 ساعة'

@@ -199,6 +199,17 @@ export const VALIDATION_AR: Record<string, string> = {
   edit_minutes: "مهلة التعديل بين 5 و240 دقيقة.",
   // the expenses and the ledger (0064)
   attachment_required: "أرفق صورة الفاتورة أو الإيصال (صورة أو PDF).",
+  mailbox_address: "عنوان بريد غير صحيح.",
+  imap_host: "اسم خادم البريد غير صحيح (مثل imap.gmail.com).",
+  imap_port: "رقم المنفذ بين 1 و65535 (عادة 993).",
+  imap_user: "اسم الدخول للبريد غير صحيح.",
+  allowed_senders: "اكتب مرسلًا واحدًا على الأقل (حتى 20، كل اسم حتى 40 حرفًا).",
+  bank_mail_incomplete: "أكمل البريد واسم الدخول وكلمة المرور ومفتاح التطبيق قبل التشغيل.",
+  keyword: "الكلمة من 2 إلى 60 حرفًا.",
+  priority: "الأولوية رقم من 0 إلى 9999.",
+  message_status: "تُعاد قراءة الرسالة غير المفهومة أو المرفوضة فقط.",
+  movement_assigned: "نُسبت هذه الحركة لحساب من قبل.",
+  enabled: "قيمة التشغيل غير صحيحة.",
   attachments_count: "خمسة مرفقات على الأكثر للسند.",
   attachment: "تعذّرت قراءة المرفق؛ اختره من جديد.",
   attachment_too_large: "حجم المرفق أكبر من 2 ميجابايت.",
@@ -717,6 +728,31 @@ export const glApi = {
   chart: (asOf: string, branchId: string | null) => rpc<GlChartRow[]>("fn_gl_chart", { p_as_of: asOf, p_branch: branchId }),
   months: () => rpc<{ locked_months: string[]; today: string }>("fn_accounting_months", {}),
   lockMonth: (month: string, lock: boolean, reason: string) => rpc<{ ok: boolean; month: string; locked: boolean; unchanged?: boolean }>("fn_accounting_lock_month", { p_month: month, p_lock: lock, p_reason: reason }),
+};
+
+export type BankKind = "deposit" | "transfer_in" | "pos_settlement" | "other_in" | "transfer_out" | "withdrawal" | "fee" | "pos_fee" | "purchase" | "other_out";
+export interface BankMailSettings { mailbox_address: string | null; imap_host: string; imap_port: number; imap_user: string | null; has_password: boolean; has_relay_key: boolean;
+  relay_key_last4: string | null; allowed_senders: string[]; enabled: boolean; last_polled_at: string | null; last_error: string | null; version: number;
+  state: "not_configured" | "off" | "error" | "on"; accounts: Array<{ id: string; branch: string; name: string; prefix: string | null; suffix: string | null }> }
+export interface BankRule { id: string; keyword: string; kind: BankKind; direction: "in" | "out"; priority: number; is_active: boolean; version: number }
+export interface BankMessage { id: string; received_at: string; mail_from: string | null; sms_sender: string | null; channel: string | null; sms_received_at: string | null;
+  text: string; status: "received" | "rejected" | "unparsed" | "parsed" | "duplicate_movement"; reason: string | null; movement_id: string | null }
+export interface BankMovement { id: string; branch_id: string | null; branch: string | null; account: string | null; kind: BankKind; direction: "in" | "out"; amount_halalas: number;
+  occurred_at: string; reference: string | null; balance_halalas: number | null; account_hint: string | null; status: "pending" | "matched" | "converted"; text: string | null; channel: string | null }
+
+export const bankApi = {
+  settings: () => rpc<BankMailSettings>("fn_admin_bank_mail_get", {}),
+  save: (p: Record<string, unknown> & { version: number }) => rpc<{ ok: boolean; version: number; relay_key?: string | null; unchanged?: boolean }>("fn_admin_bank_mail_set", { p }),
+  upsertRule: (p: { id?: string; keyword: string; kind: BankKind; priority: number; is_active?: boolean; version?: number }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_bank_rule", { p }),
+  messages: (status: string | null) => rpc<BankMessage[]>("fn_bank_messages", { p_status: status, p_limit: 200 }),
+  movements: (branchId: string | null, from: string, to: string) => rpc<BankMovement[]>("fn_bank_movements", { p_branch: branchId, p_from: from, p_to: to }),
+  reparse: (id: string) => rpc<{ ok: boolean; status: string; reason?: string }>("fn_bank_reparse", { p_message: id }),
+  assign: (movementId: string, accountId: string, reason: string) => rpc<{ ok: boolean; branch_id: string }>("fn_bank_assign_account", { p_movement: movementId, p_account: accountId, p_reason: reason }),
+  pollNow: async () => {
+    const { data, error } = await supabase.functions.invoke<{ configured: boolean; fetched: number; results: unknown[]; error?: string }>("bank-mail", { body: { action: "poll" } });
+    if (error) throw error;
+    return data!;
+  },
 };
 
 export const moneyApi = {

@@ -16,13 +16,14 @@ import { phase2Rpcs } from "./phase2";
 import { accountingRpcs } from "./accounting";
 import { expensesRpcs } from "./expenses";
 import { glRpcs, lockedEntryAdded } from "./gl";
+import { bankRpcs, seedBank } from "./bank";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
 
-const KEY = "zaaer_demo_store_v8";
+const KEY = "zaaer_demo_store_v9";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
-function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); return s; }
+function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); return s; }
 const SESSION_KEY = "zaaer_demo_session";
 
 // ---------------------------------------------------------------------------
@@ -262,6 +263,7 @@ type Filter = (r: Row) => boolean;
 const WRITE_RULES: Record<string, () => boolean> = {
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
+  bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false,
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
@@ -284,6 +286,11 @@ function visible(table: string, r: Row): boolean {
   if (["day_closings", "day_closing_requests"].includes(table)) return (can("day.close") || can("day.close.approve")) && branches.includes(r.branch_id);
   if (table === "expense_vouchers") return (can("expense.create") || can("expense.cancel") || can("ledger.view")) && branches.includes(r.branch_id);
   if (table === "expense_attachments") return false;
+  // 0065/0066: the books and the bank's messages are read through their functions; these mirror the tables' policies
+  if (["gl_accounts", "journal_entries", "journal_lines", "accounting_periods", "bank_mail_settings"].includes(table)) return false;
+  if (table === "bank_parse_rules") return can("bank.view") || can("bank.manage");
+  if (table === "bank_messages") return can("bank.manage");
+  if (table === "bank_movements") return can("bank.manage") || (can("bank.view") && branches.includes(r.branch_id));
   if (table === "expense_categories") return r.organization_id === ORG;
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
@@ -2076,6 +2083,8 @@ Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staf
 // the double entry (0065: A5): the chart, the journal derived from the money, the statements and the month lock
 const gl = glRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, dayOf: (iso) => dayOf(iso) /* every demo branch keeps Riyadh time */, today: (b) => branchToday(b ?? undefined) });
 Object.assign(rpcs, gl.rpcs);
+// the bank's messages (0066: A6 and A7)
+Object.assign(rpcs, bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso) }));
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));
@@ -2435,6 +2444,7 @@ function invoke(name: string, opts: any) {
     msg.meta = { channel: "whatsapp", delivery: "failed", error: "demo" };
     return { data: { ok: true, delivered: false, error: "channel_unavailable" }, error: null };
   }
+  if (name === "bank-mail") { if (!can("bank.manage")) return { data: null, error: { message: "forbidden" } }; return { data: { configured: false, fetched: 0, results: [], demo: true }, error: null }; }
   if (name === "ai-health") return { data: { configured: false, ok: false, model: null, error: "وضع العرض التجريبي — لا مزود متصل" }, error: null };
   if (name === "ai-ops") { if (body.mode === "briefing") { const ctx = rpcs.fn_ai_ops_context({ p_branch: body.branch_id, p_date: body.date ?? null }); if (!ctx) return { data: null, error: { message: "forbidden" } }; const b = buildBriefing(ctx); return { data: { ...b, insights: null, mode: "deterministic", ai_status: "demo", generated_at: ctx.generated_at, date: ctx.summary?.date }, error: null }; } const r = opsChat(body); return r.error ? { data: null, error: r.error } : { data: r.data, error: null }; }
   if (name === "ai-reception") { const branch = body.branch_id ?? T("branches")[0]?.id; let conv = body.conversation_id ? byId("conversations", body.conversation_id) : null; if (!conv) { conv = { id: uid(), reservation_id: null, channel: "screen", status: "active", branch_id: branch, guest_token: body.guest_token ?? null, client_fingerprint: body.client_fingerprint ?? null, created_at: nowISO(), last_message_at: nowISO(), handed_off_at: null, handoff_reason: null }; T("conversations").unshift(conv); } const msg = String(body.message ?? ""); T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "guest", content: msg, meta: { mode: "scripted" }, created_at: nowISO() }); const bb = byId("branches", branch); const knowledge = { branchName: bb?.name_ar, checkInTime: bb?.check_in_time, checkOutTime: bb?.check_out_time, address: bb?.address, phone: bb?.phone, mapUrl: bb?.map_url ?? null, bookingUrl: bb?.booking_platform_url ?? null, policies: T("property_policies").filter((x) => x.branch_id === branch && x.is_public).map((x) => ({ topic: x.topic, title: x.title, content: x.content_ar })), entries: rpcs.fn_public_knowledge({ p_branch: branch }) };

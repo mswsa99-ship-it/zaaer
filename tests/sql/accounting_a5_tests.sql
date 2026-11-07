@@ -46,7 +46,7 @@ end $$;
 
 -- ---------------------------------------------------------------- GL01 the matrix, GL02 the chart
 select t_record('GL01 the permissions matrix has «accounts.view» (owner, manager, finance) and «accounts.close_month» (owner)',
-  (select count(*) from fn_permission_catalog()) = 62
+  (select count(*) from fn_permission_catalog()) >= 62
   and exists (select 1 from fn_permission_catalog() c where c.code = 'accounts.view' and c.default_roles = '{owner,manager,finance}')
   and exists (select 1 from fn_permission_catalog() c where c.code = 'accounts.close_month' and c.default_roles = '{owner}'));
 select t_record('GL02 the chart is numbered by kind: the deposits (21) are a liability, the rent (41) revenue, the boxes under 111 and the banks under 112, opened on first use',

@@ -409,6 +409,34 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).rejects.toThrow(/FORBIDDEN/);
   });
 
+  it("BK01–BK05 the bank's messages in the demo: settings never show a secret, a relay key once, an unread message read again after a word is added, the SMS and the notification one movement", async () => {
+    await login("owner@demo.sa");
+    const s0 = await rpc<any>("fn_admin_bank_mail_get", {});
+    expect(s0.state).toBe("not_configured");
+    await expect(rpc("fn_admin_bank_mail_set", { p: { version: s0.version, enabled: true } })).rejects.toThrow(/bank_mail_incomplete/);
+    const r = await rpc<any>("fn_admin_bank_mail_set", { p: { version: s0.version, mailbox_address: "Relay@Example.com", imap_user: "relay@example.com", password: "demo-pass", new_relay_key: true } });
+    expect(r.relay_key).toMatch(/^[0-9a-f]{48}$/);
+    const s1 = await rpc<any>("fn_admin_bank_mail_get", {});
+    expect(JSON.stringify(s1)).not.toContain("demo-pass");
+    expect(JSON.stringify(s1)).not.toContain(r.relay_key);
+    expect(s1.mailbox_address).toBe("relay@example.com");
+    // the samples: the SMS and the notification of DEMO1001 are one movement; «استرداد» is not understood yet
+    const msgs = await rpc<any[]>("fn_bank_messages", { p_status: null, p_limit: 50 });
+    const dup = msgs.find((m) => m.status === "duplicate_movement");
+    expect(dup).toBeTruthy();
+    const unread = msgs.find((m) => m.status === "unparsed");
+    expect((await rpc<any>("fn_bank_reparse", { p_message: unread.id })).status).toBe("unparsed");
+    await rpc("fn_admin_upsert_bank_rule", { p: { keyword: "قيد عكسي", kind: "other_in", priority: 5 } });
+    expect((await rpc<any>("fn_bank_reparse", { p_message: unread.id })).status).toBe("parsed");
+    await expect(rpc("fn_bank_reparse", { p_message: unread.id })).rejects.toThrow(/message_status/);
+    const mv = await rpc<any[]>("fn_bank_movements", { p_branch: null, p_from: today().slice(0, 8) + "01", p_to: today() });
+    expect(mv.filter((x) => x.reference === "DEMO1001")).toHaveLength(1);
+    expect(mv.find((x) => x.kind === "pos_settlement").amount_halalas).toBe(128000);
+    await login("manager@demo.sa");
+    await expect(rpc("fn_bank_messages", { p_status: null })).rejects.toThrow(/FORBIDDEN/);
+    await expect(rpc("fn_bank_movements", { p_branch: null, p_from: today(), p_to: today() })).rejects.toThrow(/FORBIDDEN/);
+  });
+
   it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
     const r = await createRes({ ci: 64, co: 66 });
     const d = await defaults(BRANCH);
@@ -2298,7 +2326,7 @@ describe("Permissions matrix in the demo (0043)", () => {
   let CATALOG: typeof import("../../src/lib/permissionCatalog");
   beforeAll(async () => { CATALOG = await import("../../src/lib/permissionCatalog"); });
 
-  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 62 rows (0063 added the closing's two, 0064 the expenses and ledger's three, 0065 the accounts' two), five columns, the owner's always allowed, nothing changed yet", async () => {
+  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 64 rows (0063 added the closing's two, 0064 the expenses and ledger's three, 0065 the accounts' two, 0066 the bank's two), five columns, the owner's always allowed, nothing changed yet", async () => {
     const { PERMISSION_CATALOG } = CATALOG;
     for (const role of ROLES) {
       await login(EMAIL[role]); const m = await mine();
@@ -2313,7 +2341,7 @@ describe("Permissions matrix in the demo (0043)", () => {
     await login(EMAIL.owner);
     const mx = await rpc<any>("fn_permissions_matrix", {});
     expect(mx.roles).toEqual([...ROLES]); expect(mx.editable_roles).toEqual(["manager", "supervisor", "finance", "housekeeping"]);
-    expect(mx.rows).toHaveLength(62); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
+    expect(mx.rows).toHaveLength(64); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
     expect(mx.rows.every((r: any) => r.cells.owner.allowed === true && Object.keys(r.cells).length === 5)).toBe(true);
     const row = (code: string) => mx.rows.find((r: any) => r.code === code);
     expect(row("voucher.correct")).toMatchObject({ limit_note: "سنداته خلال 24 ساعة", full_roles: ["owner", "manager"], locked: false });
@@ -2666,7 +2694,7 @@ describe("Review Phase 3a — the front desk in the demo (0057)", () => {
     const r = await rpc<any>("fn_staff_create_reservation", { p: { ...base, late_entry_reason: "حجز منصة أُدخل بعد المغادرة" } });
     const a = (await client.from("audit_events").select("action, entity_id").eq("action", "reservation.late_entry")).data as any[];
     expect(a.some((x) => x.entity_id === r.id)).toBe(true);
-    expect(await fails(rpc("fn_staff_create_reservation", { p: { ...base, guest_phone: "0551000382", check_in: back(1), check_out: fut(1) } }))).not.toBe("PAST_STAY");
+    expect(await fails(rpc("fn_staff_create_reservation", { p: { ...base, guest_phone: "0551000382", check_in: back(1), check_out: back(-1) } }))).not.toBe("PAST_STAY");
   });
 
   it("QR09 «1111», «1234» and «9876» are refused as key-box codes; «7319» is accepted", async () => {

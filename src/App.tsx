@@ -70,7 +70,9 @@ import DayClosing from "./pages/staff/DayClosing";
 import Expenses from "./pages/staff/Expenses";
 import Ledger from "./pages/staff/Ledger";
 import Accounts from "./pages/staff/Accounts";
+import BankMovements from "./pages/staff/BankMovements";
 const AdminCashAccounts = lazy(() => import("./pages/admin/AdminCashAccounts"));
+const AdminBankMail = lazy(() => import("./pages/admin/AdminBankMail"));
 const AdminPlatformPayouts = lazy(() => import("./pages/admin/AdminPlatformPayouts"));
 const AdminRates = lazy(() => import("./pages/admin/AdminRates"));
 const AdminReview = lazy(() => import("./pages/admin/AdminReview"));
@@ -124,6 +126,7 @@ export default function App() {
           <Route path="/staff/expenses" element={<Expenses />} />
           <Route path="/staff/ledger" element={<Ledger />} />
           <Route path="/staff/accounts" element={<Accounts />} />
+          <Route path="/staff/bank" element={<BankMovements />} />
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
           <Route path="/staff/followups" element={<StayFollowups />} />
           <Route path="/staff/platforms" element={<PlatformCheck />} />
@@ -157,6 +160,7 @@ export default function App() {
           <Route path="/admin/finance" element={<AdminFinance />} />
           <Route path="/admin/platform-payouts" element={<AdminPlatformPayouts />} />
           <Route path="/admin/cash-accounts" element={<AdminCashAccounts />} />
+          <Route path="/admin/bank-mail" element={<AdminBankMail />} />
           {/* the key boxes moved to the one screen «الرموز» */}
           <Route path="/admin/keyboxes" element={<Navigate to="/staff/codes" replace />} />
           <Route path="/admin/staff" element={<AdminStaff />} />

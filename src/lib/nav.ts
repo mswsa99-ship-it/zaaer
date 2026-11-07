@@ -15,7 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins, ClipboardList, Scale, BellRing, ClipboardCheck, Activity, Building } from "lucide-react";
+  Calculator, Vault, HandCoins, ClipboardList, Scale, Mail, BellRing, ClipboardCheck, Activity, Building } from "lucide-react";
 import type { Role } from "./types";
 
 export type StaffRole = Exclude<Role, "guest">;
@@ -76,6 +76,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/ledger", label: "دفتر الحركة", icon: ClipboardList, area: "staff", roles: MONEY_ROLES, cap: ["ledger.view"] },
   // A5 (0065): the double entry — trial balance, income statement, balance sheet, chart and statements, the month lock
   { path: "/staff/accounts", label: "الحسابات", icon: Scale, area: "staff", roles: ["owner", "manager", "finance"], cap: ["accounts.view", "accounts.close_month"] },
+  // A6/A7 (0066): the movements the bank's messages told, and (the owner) the messages as they arrived
+  { path: "/staff/bank", label: "الحركات البنكية", icon: Landmark, area: "staff", roles: ["owner", "manager", "finance"], cap: ["bank.view", "bank.manage"] },
   { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, area: "staff", roles: MONEY_ROLES, cap: ["pos.settle"] },
   { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["checkin", "code.deliver"] },
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)
@@ -114,6 +116,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/platform-payouts", label: "إيداعات المنصات", icon: HandCoins, area: "admin", group: "العمليات", roles: ADMIN_FINANCE, cap: ["platform.payouts"] },
   // decision 25: each branch's cash boxes and bank accounts (§16: owner, manager)
   { path: "/admin/cash-accounts", label: "الصناديق والحسابات", icon: Vault, area: "admin", group: "العمليات", roles: ADMIN_ROLES, cap: ["cash_accounts"] },
+  { path: "/admin/bank-mail", label: "بريد البنك", icon: Mail, area: "admin", group: "العمليات", roles: ["owner"], scope: "org", cap: ["bank.manage"] },
   // the key boxes moved to the one screen «الرموز» (/staff/codes); the old address still leads there
   { path: "/admin/keyboxes", label: "الرموز", icon: KeyRound, area: "admin", roles: CODES_ROLES, hidden: true },
 

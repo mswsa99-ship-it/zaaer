@@ -31,7 +31,7 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     await go("/admin/dashboard");
     await page.getByRole("link", { name: "مصفوفة الصلاحيات" }).first().click();
     await expect(page.getByTestId("perm-matrix")).toBeVisible();
-    await expect(page.locator("[data-testid=perm-row]")).toHaveCount(62);
+    await expect(page.locator("[data-testid=perm-row]")).toHaveCount(64);
     await expect(page.getByTestId("perm-changed-count")).toHaveText("مطابقة للمصفوفة المعتمدة");
     await expect(cell(page, "res.create", "owner")).toBeChecked();
     await expect(cell(page, "res.create", "owner")).toBeDisabled();
@@ -43,7 +43,7 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     const rows = firstSheetRows(new Uint8Array(readFileSync((await download.path())!)));
     expect(rows[0][0]).toBe("مصفوفة الصلاحيات");
     const blank = rows.findIndex((r) => r.length === 0 || r.every((c) => c === ""));
-    expect(rows.slice(blank + 2).filter((r) => r.some((c) => c !== "")).length).toBe(62);
+    expect(rows.slice(blank + 2).filter((r) => r.some((c) => c !== "")).length).toBe(64);
   });
 
   test("PE02 unticking «إنشاء حجز» for the supervisor takes effect at their next operation; «استعادة المصفوفة المعتمدة» gives it back", async ({ page, loginAs, go }) => {
