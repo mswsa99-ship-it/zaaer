@@ -14,6 +14,7 @@
 import { uid, nowISO, ORG, type Row } from "./data";
 import type { Permissions } from "./permissions";
 import { checkIdentityNumber, checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, registrationTarget } from "../lib/validation";
+import { nameCloseness, nameNorm, NEAR_NAME } from "../lib/names";
 
 export interface GuestCtx extends Permissions {
   T: (t: string) => Row[];
@@ -240,14 +241,18 @@ export function guestRpcs(c: GuestCtx): Record<string, (a: any) => any> {
       requireRole("owner", "manager", "supervisor"); const q = String(p?.q ?? "").trim(); const filter = p?.filter || "all"; if (!["all", "banned", "duplicates", "rated", "low", "incomplete"].includes(filter)) throw new Error("VALIDATION: filter"); const limit = Math.min(Math.max(Number(p?.limit ?? 50), 1), 200); const offset = Math.max(Number(p?.offset ?? 0), 0);
       const digits = q.replace(/[٠-٩]/g, (x) => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/\D/g, "");
       const fps = /^[A-Za-z0-9]{5,15}$/.test(q) ? ["national_id", "passport", "gcc_id"].map((t) => fingerprint(t, q)) : [];
-      const rows = T("guest_profiles").filter((gp) => gp.organization_id === ORG && profileVisible(gp)).filter((gp) => !q
-        || String(gp.full_name).includes(q) || (digits.length >= 4 && String(gp.phone ?? "").replace(/\D/g, "").includes(digits)) || (digits.length === 4 && gp.identity_last4 === digits) || fps.includes(gp.identity_fingerprint)
+      // 0060 (OWNER-12): three letters of a name also find the near names, after the exact ones
+      const isName = q.replace(/[\d\s\W]/g, "").length >= 3 || /[\u0600-\u06FF]{3,}/.test(q);
+      const exact = (gp: Row) => !q
+        || String(gp.full_name).includes(q) || (isName && nameNorm(gp.full_name).replace(/ /g, "").includes(nameNorm(q).replace(/ /g, ""))) || (digits.length >= 4 && String(gp.phone ?? "").replace(/\D/g, "").includes(digits)) || (digits.length === 4 && gp.identity_last4 === digits) || fps.includes(gp.identity_fingerprint)
         || T("reservation_guests").some((g) => g.guest_profile_id === gp.id && (fps.includes(g.identity_fingerprint) || (digits.length === 4 && g.identity_number_last4 === digits)))
-        || T("reservation_guests").some((g) => g.guest_profile_id === gp.id && [byId("reservations", g.reservation_id)?.internal_ref, byId("reservations", g.reservation_id)?.external_ref].some((x) => String(x ?? "").toLowerCase() === q.toLowerCase())))
-        .map((gp) => { const ban = profileBan(gp); return { id: gp.id, full_name: gp.full_name, phone_masked: maskPhone(gp.phone), nationality: gp.nationality, identity_type: gp.identity_type ?? null, identity_last4: gp.identity_last4 ?? null, rating: gp.rating ?? null, rating_note: gp.rating_note ?? null, stays: staysOf(gp.id), last_check_in: lastCheckIn(gp.id), banned: !!ban, ban_reason: ban?.reason ?? null, duplicates: duplicatesOf(gp).length, incomplete: !gp.phone || !gp.identity_fingerprint, created_at: gp.created_at }; })
+        || T("reservation_guests").some((g) => g.guest_profile_id === gp.id && [byId("reservations", g.reservation_id)?.internal_ref, byId("reservations", g.reservation_id)?.external_ref].some((x) => String(x ?? "").toLowerCase() === q.toLowerCase()));
+      const nearOf = (gp: Row) => (q && isName && filter === "all" && !exact(gp) ? nameCloseness(gp.full_name, q) : 0);
+      const rows = T("guest_profiles").filter((gp) => gp.organization_id === ORG && profileVisible(gp)).filter((gp) => exact(gp) || nearOf(gp) >= NEAR_NAME)
+        .map((gp) => { const ban = profileBan(gp); const near = nearOf(gp); return { near: near >= NEAR_NAME, closeness: near, id: gp.id, full_name: gp.full_name, phone_masked: maskPhone(gp.phone), nationality: gp.nationality, identity_type: gp.identity_type ?? null, identity_last4: gp.identity_last4 ?? null, rating: gp.rating ?? null, rating_note: gp.rating_note ?? null, stays: staysOf(gp.id), last_check_in: lastCheckIn(gp.id), banned: !!ban, ban_reason: ban?.reason ?? null, duplicates: duplicatesOf(gp).length, incomplete: !gp.phone || !gp.identity_fingerprint, created_at: gp.created_at }; })
         .filter((x) => filter === "all" || (filter === "incomplete" && x.incomplete) || (filter === "banned" && x.banned) || (filter === "duplicates" && x.duplicates > 0) || (filter === "rated" && x.rating != null) || (filter === "low" && x.rating != null && x.rating <= 2))
-        .sort((a, b) => (a.last_check_in === b.last_check_in ? (a.created_at < b.created_at ? 1 : -1) : (a.last_check_in ?? "") < (b.last_check_in ?? "") ? 1 : -1));
-      return { total: rows.length, rows: rows.slice(offset, offset + limit) };
+        .sort((a, b) => (a.near !== b.near ? (a.near ? 1 : -1) : a.near && a.closeness !== b.closeness ? b.closeness - a.closeness : a.last_check_in === b.last_check_in ? (a.created_at < b.created_at ? 1 : -1) : (a.last_check_in ?? "") < (b.last_check_in ?? "") ? 1 : -1));
+      return { total: rows.length, near: rows.filter((x) => x.near).length, rows: rows.slice(offset, offset + limit).map(({ closeness: _c, ...x }) => x) };
     },
     fn_guest_profile: ({ p_id }) => {
       requireRole("owner", "manager", "supervisor"); const gp = byId("guest_profiles", p_id); if (!gp || !profileVisible(gp)) throw new Error("NOT_FOUND"); const ban = profileBan(gp);

@@ -1726,15 +1726,35 @@ const rpcsInvoices: Record<string, (a: any) => any> = {
       .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0)).slice(0, lim)
       .map((ri) => ({ id: ri.id, kind: ri.kind, entity_type: ri.entity_type, entity_id: ri.entity_id, reservation_id: ri.reservation_id, internal_ref: byId("reservations", ri.reservation_id)?.internal_ref ?? null,
         branch_id: ri.branch_id, branch_name: byId("branches", ri.branch_id)?.name_ar ?? null, summary: ri.summary, reason: ri.reason, details: ri.details,
-        created_at: ri.created_at, created_by: staffName(ri.created_by), reviewed_at: ri.reviewed_at, reviewed_by: staffName(ri.reviewed_by), review_note: ri.review_note }));
+        created_at: ri.created_at, created_by: staffName(ri.created_by), reviewed_at: ri.reviewed_at, reviewed_by: staffName(ri.reviewed_by), review_note: ri.review_note,
+        reviewed_by_me: ri.reviewed_by === staffId(), objection_note: ri.objection_note ?? null, objection_at: ri.objection_at ?? null, objection_by: staffName(ri.objection_by ?? null) }));
     return { items, open_count: scoped.filter((ri) => ri.reviewed_at == null).length };
   },
   fn_review_mark: ({ p }) => {
     requireCap("review.list"); const ids: string[] = Array.isArray(p?.ids) ? p.ids.map(String) : []; if (!ids.length) throw new Error("VALIDATION: ids");
     const note = trimOrNull(p?.note); const m = me()!; const mine = myBranches(); let n = 0;
+    // 0060 (OWNER-13): an objection keeps the item open, needs a note, and tells the branch's supervisors
+    const outcome = trimOrNull(p?.outcome) ?? "ok"; if (!["ok", "objection"].includes(outcome)) throw new Error("VALIDATION: outcome");
+    if (outcome === "objection") {
+      if (!note || note.length < 3) throw new Error("VALIDATION: objection_note");
+      for (const ri of T("review_items")) if (ids.includes(ri.id) && ri.reviewed_at == null && ri.organization_id === m.organization_id && (ri.branch_id == null || mine.includes(ri.branch_id))) {
+        Object.assign(ri, { objection_note: note, objection_at: nowISO(), objection_by: staffId() }); n++;
+        T("notifications").push({ id: uid(), branch_id: ri.branch_id, audience: "supervisor", title: "اعتراض المالك: " + String(ri.summary).slice(0, 120), body: `${staffName(ri.created_by) ? staffName(ri.created_by) + " — " : ""}${note}`, link: ri.reservation_id ? `/staff/reservations/${ri.reservation_id}` : null, read_at: null, created_at: nowISO() });
+      }
+      emit("review_items"); emit("notifications"); audit(null, "review.objection", "review_items", null as unknown as string, { after: { count: n, ids }, reason: note });
+      return { ok: true, objected: n };
+    }
     for (const ri of T("review_items")) if (ids.includes(ri.id) && ri.reviewed_at == null && ri.organization_id === m.organization_id && (ri.branch_id == null || mine.includes(ri.branch_id))) { Object.assign(ri, { reviewed_at: nowISO(), reviewed_by: staffId(), review_note: note }); n++; }
     emit("review_items"); audit(null, "review.marked", "review_items", null as unknown as string, { after: { count: n, ids }, reason: note });
     return { ok: true, marked: n };
+  },
+  // 0060 (OWNER-13): a «تمت المراجعة» taken back within 10 minutes, by whoever marked it
+  fn_review_undo: ({ p }) => {
+    requireCap("review.list"); const ids: string[] = Array.isArray(p?.ids) ? p.ids.map(String) : []; if (!ids.length) throw new Error("VALIDATION: ids");
+    const items = T("review_items").filter((ri) => ids.includes(ri.id) && ri.reviewed_at != null);
+    if (items.some((ri) => ri.reviewed_by !== staffId() || Date.parse(ri.reviewed_at) < Date.now() - 600_000)) throw new Error("CORRECTION_WINDOW_PASSED");
+    for (const ri of items) Object.assign(ri, { reviewed_at: null, reviewed_by: null, review_note: null });
+    emit("review_items"); audit(null, "review.undone", "review_items", null as unknown as string, { after: { count: items.length, ids } }); return { ok: true, undone: items.length };
   },
   // the owner's banner: how many wait, by kind (anyone else: nothing)
   fn_review_summary: () => reviewSummary(),

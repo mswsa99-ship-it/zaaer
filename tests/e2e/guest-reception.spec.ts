@@ -234,6 +234,9 @@ test.describe("data purge", () => {
     await loginAs("owner");
     await go("/admin/data-purge");
     await page.getByLabel("من تاريخ").fill("2020-01-01");
+    // OWNER-22: no default scope — preview stays off until the branch is chosen
+    await expect(page.getByRole("button", { name: "معاينة ما سيُحذف" })).toBeDisabled();
+    await page.getByTestId("purge-branch").selectOption({ label: "كل الفروع" });
     await page.getByLabel("المحادثات والذكاء الاصطناعي").check();
     await page.getByLabel("الإشعارات وسجلات التكامل").check();
     await page.getByRole("button", { name: "معاينة ما سيُحذف" }).click();

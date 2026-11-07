@@ -161,9 +161,11 @@ test.describe("invoices, voucher correction and the review list (phase 4)", () =
     await expect(items.filter({ hasText: "تعديل فاتورة" })).toContainText("طلب الضيف إصدارها باسم جهة عمله");
     // mark the correction, with a note
     await corrected.getByRole("checkbox").check();
-    await page.getByLabel("ملاحظة المراجعة").fill("راجعتها مع المشرف");
+    await page.getByLabel("ملاحظة المراجعة", { exact: true }).fill("راجعتها مع المشرف");
     await page.getByRole("button", { name: /تأشير المحدد كمراجَع/ }).click();
+    await page.getByRole("button", { name: "نعم، تمت المراجعة" }).click();   // 0060 (OWNER-13): closed on purpose
     await expect(items).toHaveCount(1);
+    await expect(page.getByTestId("review-undo-toast")).toBeVisible();
     await page.getByRole("tab", { name: "تمت مراجعتها" }).click();
     await expect(items.first()).toContainText("راجعتها مع المشرف");
     await go("/staff/dashboard");

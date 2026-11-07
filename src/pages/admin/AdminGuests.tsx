@@ -29,19 +29,25 @@ function GuestList() {
   const [filter, setFilter] = useState<typeof FILTERS[number]["key"]>("all");
   const [rows, setRows] = useState<GuestProfileRow[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [near, setNear] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // OWNER-12 (owner decision): the list opens with a few; the rest is reached by search (from three letters a name
+  // also finds the near names) or by «عرض المزيد»
+  const searching = q.trim().length > 0;
+  const [shown, setShown] = useState(5);
+  useEffect(() => { setShown(searching ? 15 : 5); }, [q, filter, searching]);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
-      try { const r = await guestProfileApi.list({ q: q.trim() || undefined, filter, limit: 100 }); if (alive) { setRows(r.rows); setTotal(r.total); setError(null); } }
+      try { const r = await guestProfileApi.list({ q: q.trim() || undefined, filter, limit: shown }); if (alive) { setRows(r.rows); setTotal(r.total); setNear(r.near ?? 0); setError(null); } }
       catch (e) { if (alive) { setError(toArabicError(e)); setRows([]); } }
     }, 200);
     return () => { alive = false; clearTimeout(t); };
-  }, [q, filter]);
+  }, [q, filter, shown]);
   if (rows === null && !error) return <LoadingScreen />;
   return (
     <div>
-      <SectionTitle title="النزلاء" subtitle={`${COUNT.file(total)} — يبحث بالاسم أو الجوال أو رقم الوثيقة (كاملًا أو آخر 4) أو رقم الحجز`} />
+      <SectionTitle title="النزلاء" subtitle={`${COUNT.file(total).replace(/^\d+/, (n) => Number(n).toLocaleString("en-US"))} — يبحث بالاسم (ومن ثلاثة أحرف يجد الأسماء القريبة) أو الجوال أو رقم الوثيقة (كاملًا أو آخر 4) أو رقم الحجز`} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[16rem] flex-1">
@@ -64,6 +70,7 @@ function GuestList() {
                 <tr key={g.id} className="border-b border-ink-50" data-testid="guest-row">
                   <td className="py-2.5"><Link to={`/admin/guests/${g.id}`} className="font-medium text-ink-800 hover:text-brand-700">{g.full_name}</Link>
                     <div className="mt-0.5 flex flex-wrap gap-1">
+                      {g.near && <Badge className="bg-brand-50 text-brand-700" testId="guest-near">اسم قريب</Badge>}
                       {g.banned && <Badge className="bg-danger-500/10 text-danger-600"><ShieldBan className="h-3 w-3" /> محظور</Badge>}
                       {g.duplicates > 0 && <Badge className="bg-warning-500/10 text-warning-700"><Copy className="h-3 w-3" /> تكرار محتمل ({g.duplicates})</Badge>}
                       {g.incomplete && <Badge className="bg-ink-100 text-ink-600" testId="guest-incomplete" title={!g.phone_masked ? "لا جوال صالح — يُؤخذ في أول زيارة" : "لا وثيقة — تُطلب في أول زيارة"}><CircleAlert className="h-3 w-3" /> يحتاج استكمال</Badge>}
@@ -80,6 +87,13 @@ function GuestList() {
             </tbody>
           </table>
         </Card>
+      )}
+      {(rows ?? []).length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-500" data-testid="guest-paging">
+          <span>يُعرض {(rows ?? []).length.toLocaleString("en-US")} من {total.toLocaleString("en-US")}{near ? ` (منها ${near.toLocaleString("en-US")} بأسماء قريبة)` : ""}</span>
+          {(rows ?? []).length < total && <button type="button" className="btn-outline text-xs" onClick={() => setShown((n) => n + 25)} data-testid="guest-more">عرض المزيد</button>}
+          {!searching && total > (rows ?? []).length && <span>أو ابحث بالاسم أو الجوال لتصل إلى نزيل بعينه.</span>}
+        </div>
       )}
       <p className="mt-3 text-xs text-ink-400">رقم الوثيقة مشفَّر ولا يُعرض كاملًا لأحد؛ البحث به يتم بالمطابقة على الخادم دون فك التشفير. الملفات التي تشترك في جوال أو وثيقة تُعلَّم تكرارًا محتملًا ولا تُدمج.</p>
     </div>

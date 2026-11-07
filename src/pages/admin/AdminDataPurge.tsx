@@ -5,7 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
 import { SectionTitle, Card, ErrorBanner, Spinner, Badge } from "../../components/ui";
-import { todayISO, addDaysISO, formatDateTime } from "../../lib/utils";
+import { todayISO, addDaysISO, formatDateTime, arabicCount } from "../../lib/utils";
 
 /**
  * Data purge by period (owner only). Seven kinds of data to choose from; three confirmations that the server
@@ -35,7 +35,8 @@ type Step = "choose" | "preview" | "phrase" | "password" | "done";
 export default function AdminDataPurge() {
   const { session } = useAuth();
   const { branches } = useBranch();
-  const [branch, setBranch] = useState<string>("");
+  // OWNER-22: no default scope — the owner picks a branch or «كل الفروع» on purpose
+  const [branch, setBranch] = useState<string | null>(null);
   const [from, setFrom] = useState(addDaysISO(todayISO(), -90));
   const [to, setTo] = useState(addDaysISO(todayISO(), -1));
   const [cats, setCats] = useState<PurgeCategory[]>([]);
@@ -91,7 +92,8 @@ export default function AdminDataPurge() {
         <Card className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block"><span className="label">الفرع</span>
-              <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
+              <select className="input" value={branch ?? "choose"} onChange={(e) => setBranch(e.target.value === "choose" ? null : e.target.value)} aria-label="الفرع" data-testid="purge-branch">
+                <option value="choose" disabled>اختر الفرع…</option>
                 <option value="">كل الفروع</option>
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
               </select>
@@ -118,7 +120,8 @@ export default function AdminDataPurge() {
             </div>
           </div>
           <p className="text-xs text-ink-400">لا تُحذف أبدًا: الفروع والوحدات والتصنيفات والأسعار والخدمات وأنواع المهام والموظفون والإعدادات (تُؤرشف ولا تُحذف).</p>
-          <button type="button" className="btn-primary" onClick={doPreview} disabled={busy || cats.length === 0}>{busy ? <Spinner /> : "معاينة ما سيُحذف"}</button>
+          <button type="button" className="btn-primary" onClick={doPreview} disabled={busy || cats.length === 0 || branch === null}>{busy ? <Spinner /> : "معاينة ما سيُحذف"}</button>
+          {branch === null && <p className="text-xs text-ink-500">اختر الفرع أو «كل الفروع» أولًا.</p>}
         </Card>
       )}
 
@@ -143,7 +146,7 @@ export default function AdminDataPurge() {
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-outline" onClick={reset}><ArrowRight className="h-4 w-4" /> رجوع</button>
               <button type="button" className="btn-danger" onClick={() => setStep("phrase")} disabled={total === 0}>
-                {total === 0 ? "لا يوجد ما يُحذف" : `التأكيد 1 من 3: متابعة حذف ${total.toLocaleString("en-US")} سجل`}
+                {total === 0 ? "لا يوجد ما يُحذف" : `التأكيد 1 من 3: متابعة حذف ${arabicCount(total, ["سجل واحد", "سجلين", "سجلات", "سجلًا"])}`}
               </button>
             </div>
           )}

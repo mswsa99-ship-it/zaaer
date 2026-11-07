@@ -180,7 +180,7 @@ export const VALIDATION_AR: Record<string, string> = {
   payout_status: "هذه المطابقة ملغاة مسبقًا.",
   tax_rate: "نسبة الضريبة بين 0 و100%.",
   // 0059 (OWNER-08): one limit for the reports' period
-  period_too_long: "الفترة أطول من 366 يومًا؛ اختر فترة أقصر.", period_future: "الفترة كلها بعد اليوم؛ لا حركة فيها بعد.",
+  period_too_long: "الفترة أطول من 366 يومًا؛ اختر فترة أقصر.", objection_note: "اكتب ما تعترض عليه أو ما تطلب توضيحه (3 أحرف على الأقل).", outcome: "نتيجة المراجعة غير صحيحة.", period_future: "الفترة كلها بعد اليوم؛ لا حركة فيها بعد.",
   full_name_three_parts: "الاسم الثلاثي مطلوب كما في الوثيقة.",
   full_name_two_parts: "اكتب الاسم كما في الجواز أو الهوية الخليجية (الاسم الأول واسم العائلة على الأقل).",
   identity_number_format_passport: "رقم الجواز من 5 إلى 12 حرفًا ورقمًا إنجليزيًا.",
@@ -218,7 +218,7 @@ export const VALIDATION_AR: Record<string, string> = {
   provider: "اختر مزوّد الدفع من القائمة.", provider_label: "اسم المزوّد حتى 60 حرفًا.", merchant_id: "رقم التاجر أحرف إنجليزية وأرقام فقط (حتى 80).",
   publishable_key: "المفتاح العام بلا مسافات (حتى 200 حرف).", secret_key: "المفتاح السري بين 8 و300 خانة وبلا مسافات.",
   pos_terminal_id: "رقم جهاز نقاط البيع أحرف إنجليزية وأرقام فقط (حتى 40).", payment_incomplete: "لا يُفعَّل الدفع الإلكتروني قبل إكمال: المزوّد ورقم التاجر والمفتاح العام والمفتاح السري.",
-  question: "السؤال مطلوب (3 أحرف على الأقل).", answer: "الإجابة مطلوبة (حرفان على الأقل).",
+  question: "اكتب السؤال كما يطرحه النزيل (3 أحرف على الأقل).", answer: "الإجابة مطلوبة (حرفان على الأقل).",
   reference_required: "رقم المرجع أو رقم العملية مطلوب.",
   idempotency_key: "مفتاح العملية مفقود.",
   code_must_be_4_to_8_digits: "الرمز يجب أن يكون من 4 إلى 8 أرقام.",
@@ -827,6 +827,8 @@ export interface InvoicePreview {
 export interface ReviewItem {
   id: string; kind: string; entity_type: string; entity_id: string | null; reservation_id: string | null; internal_ref: string | null; branch_id: string | null; branch_name: string | null;
   summary: string; reason: string | null; details: Record<string, unknown> | null; created_at: string; created_by: string | null; reviewed_at: string | null; reviewed_by: string | null; review_note: string | null;
+  /** 0060 (OWNER-13): the owner's objection (the item stays open), and whether the caller can still take back their «تمت المراجعة» */
+  objection_note?: string | null; objection_at?: string | null; objection_by?: string | null; reviewed_by_me?: boolean;
 }
 export interface ReviewSummary { open: number; oldest_at: string | null; monitors: number; by_kind: Record<string, number> }
 
@@ -847,6 +849,10 @@ export const invoiceApi = {
 export const reviewApi = {
   list: (p: { status?: "open" | "reviewed" | "all"; kind?: string; branch_id?: string; before?: string; limit?: number }) => rpc<{ items: ReviewItem[]; open_count: number }>("fn_review_list", { p }),
   mark: (ids: string[], note?: string) => rpc<{ ok: boolean; marked: number }>("fn_review_mark", { p: { ids, note: note ?? null } }),
+  /** 0060 (OWNER-13): an objection with its note; the item stays open and the branch's supervisors are told */
+  object: (ids: string[], note: string) => rpc<{ ok: boolean; objected: number }>("fn_review_mark", { p: { ids, note, outcome: "objection" } }),
+  /** take back a «تمت المراجعة» within 10 minutes */
+  undo: (ids: string[]) => rpc<{ ok: boolean; undone: number }>("fn_review_undo", { p: { ids } }),
   summary: () => rpc<ReviewSummary | null>("fn_review_summary", {}),
   monitorsIfDue: (branchId: string) => rpc<{ ran: boolean; last_run_at: string | null; found?: Record<string, number>; summary: ReviewSummary | null }>("fn_monitors_if_due", { p_branch: branchId }),
 };
@@ -857,7 +863,7 @@ export interface GroupSummary {
   units: Array<{ id: string; internal_ref: string; status: string; check_in: string; check_out: string; adults: number; companions: number; room_number: string | null; category_name: string | null; total_halalas: number | null; paid_halalas: number | null; balance_due_halalas: number | null; deposit_balance_halalas: number | null }>;
   totals: { units: number; active_units?: number; total_halalas?: number; paid_halalas?: number; balance_due_halalas?: number; deposit_balance_halalas?: number };
 }
-export interface GuestProfileRow { id: string; full_name: string; phone_masked: string | null; nationality: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; stays: number; last_check_in: string | null; banned: boolean; ban_reason: string | null; duplicates: number; incomplete?: boolean; created_at: string }
+export interface GuestProfileRow { id: string; full_name: string; phone_masked: string | null; nationality: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; stays: number; last_check_in: string | null; banned: boolean; ban_reason: string | null; duplicates: number; incomplete?: boolean; created_at: string; /** 0060 (OWNER-12): found as a near name, not an exact match */ near?: boolean }
 export interface GuestProfileDetail {
   profile: { id: string; full_name: string; phone: string | null; nationality: string | null; email: string | null; identity_type: string | null; identity_last4: string | null; rating: number | null; rating_note: string | null; rated_at: string | null; rated_by: string | null; created_at: string };
   ban: { id: string; reason: string; since: string; own: boolean; by: string | null } | null;
@@ -868,7 +874,7 @@ export interface GuestProfileDetail {
 }
 /** Guest profiles (decisions 2, 21): search, one profile with its stays, the rating, the ban. */
 export const guestProfileApi = {
-  list: (p: { q?: string; filter?: "all" | "banned" | "duplicates" | "rated" | "low" | "incomplete"; limit?: number; offset?: number }) => rpc<{ total: number; rows: GuestProfileRow[] }>("fn_guest_profiles", { p }),
+  list: (p: { q?: string; filter?: "all" | "banned" | "duplicates" | "rated" | "low" | "incomplete"; limit?: number; offset?: number }) => rpc<{ total: number; near?: number; rows: GuestProfileRow[] }>("fn_guest_profiles", { p }),
   get: (id: string) => rpc<GuestProfileDetail>("fn_guest_profile", { p_id: id }),
   rate: (profileId: string, rating: number | null, note: string | null) => rpc<{ ok: boolean; rating: number | null }>("fn_guest_rate", { p: { profile_id: profileId, rating, note } }),
   ban: (profileId: string, reason: string) => rpc<{ ok: boolean; duplicate: boolean; ban_id?: string }>("fn_guest_ban", { p: { profile_id: profileId, ban: true, reason } }),

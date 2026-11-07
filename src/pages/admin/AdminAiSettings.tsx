@@ -104,7 +104,15 @@ export default function AdminAiSettings() {
 
   useEffect(() => { load(); }, [load]);
 
-  function set<K extends keyof AiSettings>(k: K, v: AiSettings[K]) { setForm((f) => ({ ...f, [k]: v })); setSaved(false); }
+  const [dirty, setDirty] = useState(false);
+  function set<K extends keyof AiSettings>(k: K, v: AiSettings[K]) { setForm((f) => ({ ...f, [k]: v })); setSaved(false); setDirty(true); }
+  // OWNER-19: leaving with unsaved changes asks first (closing or reloading the tab)
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   const fallbackList = parseModelList(fallbackText);
   const fallbackError = fallbackList.length > 3 ? "ثلاثة نماذج احتياطية كحد أقصى." : fallbackList.some((m) => !MODEL_ID.test(m)) ? "اكتب معرّفات نماذج فقط (حروف لاتينية صغيرة وأرقام و . -) مفصولة بفواصل." : null;
@@ -112,6 +120,9 @@ export default function AdminAiSettings() {
   async function save() {
     if (!isOwner) return;
     if (fallbackError) { setError(fallbackError); return; }
+    // OWNER-19: every number within the range its field states, before anything is sent
+    const bad = (Object.entries(NUMBER_RANGES) as Array<[keyof AiSettings, [number, number, string]]>).find(([k, [lo, hi]]) => { const v = Number(form[k]); return !Number.isFinite(v) || v < lo || v > hi; });
+    if (bad) { setError(`«${bad[1][2]}» خارج النطاق المسموح (${bad[1][0].toLocaleString("en-US")}–${bad[1][1].toLocaleString("en-US")}).`); return; }
     setSaving(true); setError(null); setSaved(false);
     try {
       const patch: Record<string, unknown> = {
@@ -124,7 +135,7 @@ export default function AdminAiSettings() {
         guard_conversation_tokens: form.guard_conversation_tokens,
       };
       await staffApi.updateAiSettings(patch);
-      setSaved(true);
+      setSaved(true); setDirty(false);
       await load();
     } catch (e) { setError(toArabicError(e)); }
     setSaving(false);
@@ -203,6 +214,7 @@ export default function AdminAiSettings() {
           <div className="mt-4 flex items-center gap-3">
             <button onClick={save} disabled={!isOwner || saving} className="btn-primary text-sm">{saving ? <Spinner className="h-4 w-4" /> : "حفظ الإعدادات"}</button>
             {saved && <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> تم الحفظ</Badge>}
+            {dirty && !saved && <Badge className="bg-warning-500/10 text-warning-700" testId="ai-unsaved">تغييرات غير محفوظة</Badge>}
             {form.updated_at && <span className="text-xs text-ink-400">آخر تحديث: {formatDateTime(form.updated_at)}</span>}
           </div>
         </Card>
@@ -246,6 +258,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
       {/* Usage */}
       <Card className="mt-4">
         <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink-700"><Gauge className="h-4 w-4 text-brand-600" /> الاستهلاك — آخر 14 يومًا</h3>
+        <p className="-mt-2 mb-3 text-xs text-ink-500">«طلبات» كل ما وصل إلى المساعد، و«تقليدي» ما أُجيب بالمسار الثابت دون الذكاء الاصطناعي (وهو كل الطلبات حين يكون المساعد متوقفًا).</p>
         {usage.length === 0 ? <p className="text-sm text-ink-400">لا يوجد استهلاك مسجّل بعد.</p> : (
           <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <ResponsiveContainer width="100%" height={220}>
@@ -337,11 +350,23 @@ function Toggle({ label, checked, onChange, disabled, hint }: { label: string; c
   );
 }
 
+/** OWNER-19: the ranges the server keeps (0005), checked before saving; the field names them */
+const NUMBER_RANGES: Partial<Record<keyof AiSettings, [number, number, string]>> = {
+  temperature: [0, 1, "درجة الحرارة"], max_output_tokens: [50, 2000, "الحد الأقصى لتوكنز الرد"], timeout_ms: [2000, 60000, "المهلة"],
+  daily_request_limit: [0, 1000000, "حد الطلبات اليومي"], ops_daily_request_limit: [0, 1000000, "حد طلبات مساعد العمليات اليومي"],
+  daily_token_budget: [0, 1000000000, "ميزانية التوكنز اليومية"], per_session_message_limit: [1, 500, "حد الرسائل لكل جلسة"],
+  guard_repeat_limit: [2, 20, "الرسالة نفسها متتالية"], guard_burst_messages: [3, 200, "عدد الرسائل"], guard_burst_minutes: [1, 120, "الدقائق"],
+  guard_conversation_tokens: [1000, 1000000, "توكنز المحادثة الواحدة"],
+};
+
 function NumberField({ label, value, onChange, min, max, step, disabled, range }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; range?: boolean }) {
+  const bad = !range && (!Number.isFinite(value) || (min != null && value < min) || (max != null && value > max));
   return (
     <div>
       <label className="label">{label}</label>
-      <input type={range ? "range" : "number"} className={range ? "w-full accent-brand-600" : "input"} dir="ltr" value={value} min={min} max={max} step={step} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
+      <input type={range ? "range" : "number"} className={range ? "w-full accent-brand-600" : "input"} dir="ltr" value={Number.isFinite(value) ? value : ""} min={min} max={max} step={step} disabled={disabled}
+        aria-invalid={bad || undefined} onChange={(e) => onChange(e.target.value === "" ? NaN : Number(e.target.value))} />
+      {bad && <p className="mt-1 text-xs text-danger-600" role="alert">خارج النطاق المسموح{min != null ? ` (${min.toLocaleString("en-US")}${max != null ? `–${max.toLocaleString("en-US")}` : " فأكثر"})` : ""}.</p>}
     </div>
   );
 }
