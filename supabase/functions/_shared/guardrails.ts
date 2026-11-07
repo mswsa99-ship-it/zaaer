@@ -89,6 +89,9 @@ const OFF_SCOPE_PATTERNS: Array<[RegExp, string]> = [
   [/(اكتب|أكتب)\s.{0,15}(كود|برنامج|سكربت|دالة)/, "programming"],
   [/\b(bitcoin|crypto|stock market|forex|invest(ment|ing)?)\b/i, "finance_advice"],
   [/(اسهم|أسهم|بتكوين|عملات رقمية|استثمار|تداول)/, "finance_advice"],
+  // OWNER-20: an exchange rate or a gold price is not a booking price question
+  [/(سعر (ال)?(دولار|يورو|ذهب|صرف|عمله|عملة|جنيه|باوند)|صرف (ال)?عملات|اسعار (ال)?عملات|أسعار (ال)?عملات)/, "finance_advice"],
+  [/\b(exchange rate|currency rate|dollar rate|price of (the )?(dollar|euro|gold)|gold price)\b/i, "finance_advice"],
   [/\b(diagnos(e|is)|symptoms?|medication|dosage|prescri(be|ption))\b/i, "medical"],
   [/(تشخيص|اعراض|أعراض|جرعة|دواء|علاج مرض)/, "medical"],
   [/\b(lawsuit|sue|legal advice|court case)\b/i, "legal"],

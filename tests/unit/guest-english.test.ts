@@ -80,3 +80,12 @@ describe("GUEST-17 one time format on the guest's pages", () => {
     expect(formatClock(null)).toBe("");
   });
 });
+
+describe("OWNER-20 an exchange-rate question is out of scope, not a booking price", () => {
+  it("QL11 «ما هو سعر الدولار اليوم؟» and «dollar exchange rate» get the out-of-scope reply", async () => {
+    const { gateInput } = await import("../../supabase/functions/_shared/guardrails");
+    expect(gateInput("ما هو سعر الدولار اليوم؟").scope).toBe("off_scope");
+    expect(gateInput("what is the dollar exchange rate").scope).toBe("off_scope");
+    expect(gateInput("كم سعر الليلة؟").scope).not.toBe("off_scope");
+  });
+});

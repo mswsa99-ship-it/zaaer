@@ -184,6 +184,10 @@ export function buildBriefing(ctx: Record<string, any>): { headline: string; ite
 
 /** Keyword-driven fallback: answers the most common ops questions from the context without a model. */
 export function fallbackOpsReply(message: string, ctx: Record<string, any>): string { // deno-lint-ignore no-explicit-any
+  // OWNER-20: a question about every branch is told plainly that this answer is for the selected branch only
+  if (/(كل الفروع|جميع الفروع|الفرعين|all branches|every branch)/i.test(message)) {
+    return `أستطيع الإجابة عن الفرع المختار فقط${ctx.branch?.name ? ` (${ctx.branch.name})` : ""}. أرقام كل الفروع في «لوحة الإدارة» ← «الفروع اليوم».\n\n` + fallbackOpsReply(message.replace(/(كل الفروع|جميع الفروع|الفرعين|all branches|every branch)/gi, ""), ctx);
+  }
   const m = message.toLowerCase();
   const list = (rows: any[], f: (r: any) => string, empty: string) => rows.length ? rows.slice(0, 12).map((r, i) => `${i + 1}. ${f(r)}`).join("\n") : empty; // deno-lint-ignore no-explicit-any
   if (/(وصول|قادم|يوصل|arrival)/.test(m)) return "وصول اليوم:\n" + list(ctx.arrivals ?? [], (r) => `${r.ref} — ${r.guest ?? "—"} — ${r.room ? "وحدة " + r.room : r.category ?? ""} — ${r.status === "checked_in" ? "وصل" : "لم يصل"} — هوية: ${r.identity_status} — متبقٍ ${sar(r.balance_due)}`, "لا يوجد وصول متوقع اليوم.");
