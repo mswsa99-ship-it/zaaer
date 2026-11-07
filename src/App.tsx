@@ -69,6 +69,7 @@ import PosSettlement from "./pages/staff/PosSettlement";
 import DayClosing from "./pages/staff/DayClosing";
 import Expenses from "./pages/staff/Expenses";
 import Ledger from "./pages/staff/Ledger";
+import Accounts from "./pages/staff/Accounts";
 const AdminCashAccounts = lazy(() => import("./pages/admin/AdminCashAccounts"));
 const AdminPlatformPayouts = lazy(() => import("./pages/admin/AdminPlatformPayouts"));
 const AdminRates = lazy(() => import("./pages/admin/AdminRates"));
@@ -122,6 +123,7 @@ export default function App() {
           <Route path="/staff/day-close" element={<DayClosing />} />
           <Route path="/staff/expenses" element={<Expenses />} />
           <Route path="/staff/ledger" element={<Ledger />} />
+          <Route path="/staff/accounts" element={<Accounts />} />
           <Route path="/staff/access-approvals" element={<AccessApprovals />} />
           <Route path="/staff/followups" element={<StayFollowups />} />
           <Route path="/staff/platforms" element={<PlatformCheck />} />

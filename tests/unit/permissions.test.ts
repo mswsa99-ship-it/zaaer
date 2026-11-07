@@ -24,9 +24,9 @@ describe("the permissions matrix — one catalogue in two places", () => {
     expect(PERMISSION_CATALOG.map((r) => ({ ...r, defaultRoles: [...r.defaultRoles], fullRoles: r.fullRoles ? [...r.fullRoles] : null }))).toEqual(sql);
   });
 
-  it("PC02 the approved shape: 60 operations (55 of 26 October, the closing's two of 0063, the expenses and ledger's three of 0064), unique codes, the owner in every row, only the matrix itself locked, conditions only where full roles narrow it", () => {
-    expect(PERMISSION_CATALOG.length).toBe(60);
-    expect(new Set(PERMISSION_CATALOG.map((r) => r.code)).size).toBe(60);
+  it("PC02 the approved shape: 62 operations (55 of 26 October, the closing's two of 0063, the expenses and ledger's three of 0064, the accounts' two of 0065), unique codes, the owner in every row, only the matrix itself locked, conditions only where full roles narrow it", () => {
+    expect(PERMISSION_CATALOG.length).toBe(62);
+    expect(new Set(PERMISSION_CATALOG.map((r) => r.code)).size).toBe(62);
     for (const r of PERMISSION_CATALOG) expect(r.defaultRoles, r.code).toContain("owner");
     expect(PERMISSION_CATALOG.filter((r) => r.locked).map((r) => r.code)).toEqual(["admin.permissions"]);
     for (const r of PERMISSION_CATALOG) expect(Boolean(r.limitNote), r.code).toBe(r.fullRoles !== null);

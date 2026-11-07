@@ -75,6 +75,8 @@ const ERROR_AR: Record<string, string> = {
   REQUEST_PENDING: "يوجد طلب تعديل لهذا الإقفال بانتظار قرار الإدارة.",
   REQUEST_DECIDED: "قُرّر هذا الطلب من قبل.",
   CLOSING_SENT_DAY: "أُرسل إقفال هذا اليوم؛ سند صرف من الصندوق عليه تُصدره الإدارة، ويصل للمراجعة.",
+  PERIOD_LOCKED: "هذا الشهر مقفل محاسبيًا؛ لا يُسجَّل فيه سند ولا إلغاء. يفتحه المالك بسبب إن لزم.",
+  JOURNAL_UNBALANCED: "القيد غير متوازن فرُفض. أبلغ الدعم الفني.",
   SELF_DECISION: "لا يقرّر الطلب من رفعه؛ يقرّره المالك أو مدير آخر.",
   ACCOUNT_EXISTS: "لهذا الفرع صندوق واحد وحساب بنكي واحد. لاستبدال الحالي: أرشفه بسبب، ثم أضف الجديد.",
   DUPLICATE_ACCOUNT_RULE: "بداية رقم الحساب ونهايته مسجلتان لحساب فرع آخر؛ كل حساب بنكي لفرع واحد.",
@@ -695,6 +697,26 @@ export const expenseApi = {
   upsertCategory: (p: { id?: string; name: string; sort_order?: number; is_active?: boolean; version?: number }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_expense_category", { p }),
   ledger: (accountId: string, from: string, to: string) => rpc<Ledger>("fn_account_ledger", { p_account: accountId, p_from: from, p_to: to }),
   setOpening: (accountId: string, halalas: number, on: string, reason: string) => rpc<{ ok: boolean }>("fn_admin_set_account_opening", { p_account: accountId, p_halalas: halalas, p_on: on, p_reason: reason }),
+};
+
+export type GlType = "asset" | "liability" | "equity" | "revenue" | "expense";
+export interface TrialBalance { from: string; to: string; branch_id: string | null; total_debit_halalas: number; total_credit_halalas: number; difference_halalas: number; locked_months: string[];
+  rows: Array<{ account_id: string; code: string; name: string; type: GlType; opening_halalas: number; debit_halalas: number; credit_halalas: number; closing_halalas: number }> }
+export interface AccountStatement { account: { id: string; code: string; name: string; type: GlType }; from: string; to: string; opening_halalas: number;
+  lines: Array<{ entry_id: string; number: string; entry_date: string; description: string; debit_halalas: number; credit_halalas: number; balance_halalas: number }> }
+export interface IncomeStatement { from: string; to: string; revenue_halalas: number; expenses_halalas: number; net_income_halalas: number; rows: Array<{ code: string; name: string; type: GlType; amount_halalas: number }> }
+export interface BalanceSheet { as_of: string; assets_halalas: number; liabilities_halalas: number; equity_halalas: number; retained_income_halalas: number; difference_halalas: number;
+  rows: Array<{ code: string; name: string; type: GlType; amount_halalas: number }> }
+export interface GlChartRow { id: string; code: string; name: string; type: GlType; parent_id: string | null; is_postable: boolean; balance_halalas: number }
+
+export const glApi = {
+  trialBalance: (from: string, to: string, branchId: string | null) => rpc<TrialBalance>("fn_trial_balance", { p_from: from, p_to: to, p_branch: branchId }),
+  statement: (accountId: string, from: string, to: string, branchId: string | null) => rpc<AccountStatement>("fn_account_statement", { p_account: accountId, p_from: from, p_to: to, p_branch: branchId }),
+  income: (from: string, to: string, branchId: string | null) => rpc<IncomeStatement>("fn_income_statement", { p_from: from, p_to: to, p_branch: branchId }),
+  balanceSheet: (asOf: string, branchId: string | null) => rpc<BalanceSheet>("fn_balance_sheet", { p_as_of: asOf, p_branch: branchId }),
+  chart: (asOf: string, branchId: string | null) => rpc<GlChartRow[]>("fn_gl_chart", { p_as_of: asOf, p_branch: branchId }),
+  months: () => rpc<{ locked_months: string[]; today: string }>("fn_accounting_months", {}),
+  lockMonth: (month: string, lock: boolean, reason: string) => rpc<{ ok: boolean; month: string; locked: boolean; unchanged?: boolean }>("fn_accounting_lock_month", { p_month: month, p_lock: lock, p_reason: reason }),
 };
 
 export const moneyApi = {

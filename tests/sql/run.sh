@@ -70,5 +70,7 @@ echo "== running accounting A2/A3 tests (0063: the day's closing computed, the m
 psql -d "$DB" -f tests/sql/accounting_a2_tests.sql
 echo "== running accounting A4 tests (0064: the expense voucher and its receipt, the ledger and its running balance)"
 psql -d "$DB" -f tests/sql/accounting_a4_tests.sql
+echo "== running accounting A5 tests (0065: the double entry, trial balance, statements, month lock)"
+psql -d "$DB" -f tests/sql/accounting_a5_tests.sql
 echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql

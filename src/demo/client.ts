@@ -15,6 +15,7 @@ import { phase6Rpcs } from "./phase6";
 import { phase2Rpcs } from "./phase2";
 import { accountingRpcs } from "./accounting";
 import { expensesRpcs } from "./expenses";
+import { glRpcs, lockedEntryAdded } from "./gl";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
@@ -147,6 +148,12 @@ function demoFailure(target: string, detail: string[]): string | null {
 const later = <V>(ms: number, v: V) => (ms > 0 ? new Promise<V>((r) => window.setTimeout(() => r(v), ms)) : Promise.resolve(v));
 
 /** An RPC call like the real client's: awaitable, with setHeader(); runs once, when first awaited. */
+/** 0065: the month lock refuses every write that would date an entry in a locked month, whatever the path (as its trigger) */
+function glGuarded<V>(fn: () => V): V {
+  if (!T("accounting_periods").some((p) => p.locked)) return fn();
+  const before = gl.journal();
+  return atomically(() => { const out = fn(); const err = lockedEntryAdded(before, gl.journal(), gl.lockedMonths()); if (err) throw new Error(err); return out; });
+}
 function rpcCall(lookup: (fn: string) => ((a: any) => any) | undefined, fn: string, args: any) {
   const headers: Record<string, string> = {};
   let run: Promise<{ data: any; error: any }> | null = null;
@@ -157,7 +164,7 @@ function rpcCall(lookup: (fn: string) => ((a: any) => any) | undefined, fn: stri
     const impl = lookup(fn);
     if (!impl) return { data: null, error: { message: `FN_NOT_IMPLEMENTED_IN_DEMO: ${fn}` } };
     requestHeaders = headers;
-    try { return { data: impl(args) ?? null, error: null }; }
+    try { return { data: glGuarded(() => impl(args)) ?? null, error: null }; }
     catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" } }; }
     finally { requestHeaders = null; }
   };
@@ -2066,6 +2073,9 @@ Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch,
 Object.assign(rpcs, accountingRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), role: () => me()?.role ?? null }));
 // the expenses and the ledger (0064: A4)
 Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), nextNumber, role: () => me()?.role ?? null }));
+// the double entry (0065: A5): the chart, the journal derived from the money, the statements and the month lock
+const gl = glRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, dayOf: (iso) => dayOf(iso) /* every demo branch keeps Riyadh time */, today: (b) => branchToday(b ?? undefined) });
+Object.assign(rpcs, gl.rpcs);
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));

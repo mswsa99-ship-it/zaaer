@@ -373,6 +373,42 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_account_ledger", { p_account: box.id, p_from: today(), p_to: today() })).rejects.toThrow(/FORBIDDEN/);
   });
 
+  it("GL01–GL05 the double entry in the demo: every voucher and expense in a balanced entry, the trial balance with no difference, the deposit a liability, a locked month refuses the voucher and opens again with a reason", async () => {
+    await login("owner@demo.sa");
+    const r = await createRes({ ci: 50, co: 52 });
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "deposit", amount_halalas: 7000, method: "cash", idempotency_key: uid() } });
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 9000, method: "cash", idempotency_key: uid() } });
+    const tb = await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null });
+    expect(tb.difference_halalas).toBe(0);
+    expect(tb.total_debit_halalas).toBeGreaterThan(0);
+    const dep = tb.rows.find((x: any) => x.code === "21");
+    expect(dep.type).toBe("liability");
+    expect(dep.credit_halalas).toBeGreaterThanOrEqual(7000);
+    expect(tb.rows.filter((x: any) => x.type === "revenue").every((x: any) => x.code !== "21")).toBe(true);
+    const bs = await rpc<any>("fn_balance_sheet", { p_as_of: today(), p_branch: null });
+    expect(bs.difference_halalas).toBe(0);
+    const inc = await rpc<any>("fn_income_statement", { p_from: today(), p_to: today(), p_branch: null });
+    expect(inc.net_income_halalas).toBe(inc.revenue_halalas - inc.expenses_halalas);
+    const chart = await rpc<any[]>("fn_gl_chart", { p_as_of: today(), p_branch: null });
+    const box = chart.find((a) => /^111\d\d$/.test(a.code))!;
+    const st = await rpc<any>("fn_account_statement", { p_account: box.id, p_from: today().slice(0, 8) + "01", p_to: today(), p_branch: null });
+    let run = st.opening_halalas; for (const l of st.lines) { run += l.debit_halalas - l.credit_halalas; expect(l.balance_halalas).toBe(run); }
+    // the month lock
+    await expect(rpc("fn_accounting_lock_month", { p_month: today(), p_lock: true, p_reason: "" })).rejects.toThrow(/reason/);
+    await rpc("fn_accounting_lock_month", { p_month: today(), p_lock: true, p_reason: "مراجعة" });
+    const before = (await rpc<any>("fn_reservation_finance", { p_reservation: r.id })).paid_halalas;
+    await expect(rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 1000, method: "cash", idempotency_key: uid() } })).rejects.toThrow(/PERIOD_LOCKED/);
+    expect((await rpc<any>("fn_reservation_finance", { p_reservation: r.id })).paid_halalas).toBe(before);
+    await login("manager@demo.sa");
+    await expect(rpc("fn_accounting_lock_month", { p_month: today(), p_lock: false, p_reason: "x" })).rejects.toThrow(/FORBIDDEN/);
+    await login("owner@demo.sa");
+    await rpc("fn_accounting_lock_month", { p_month: today(), p_lock: false, p_reason: "تصحيح" });
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 1000, method: "cash", idempotency_key: uid() } });
+    expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
+    await login("reception@demo.sa");
+    await expect(rpc("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).rejects.toThrow(/FORBIDDEN/);
+  });
+
   it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
     const r = await createRes({ ci: 64, co: 66 });
     const d = await defaults(BRANCH);
@@ -2262,7 +2298,7 @@ describe("Permissions matrix in the demo (0043)", () => {
   let CATALOG: typeof import("../../src/lib/permissionCatalog");
   beforeAll(async () => { CATALOG = await import("../../src/lib/permissionCatalog"); });
 
-  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 60 rows (0063 added the closing's two, 0064 the expenses and ledger's three), five columns, the owner's always allowed, nothing changed yet", async () => {
+  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 62 rows (0063 added the closing's two, 0064 the expenses and ledger's three, 0065 the accounts' two), five columns, the owner's always allowed, nothing changed yet", async () => {
     const { PERMISSION_CATALOG } = CATALOG;
     for (const role of ROLES) {
       await login(EMAIL[role]); const m = await mine();
@@ -2277,7 +2313,7 @@ describe("Permissions matrix in the demo (0043)", () => {
     await login(EMAIL.owner);
     const mx = await rpc<any>("fn_permissions_matrix", {});
     expect(mx.roles).toEqual([...ROLES]); expect(mx.editable_roles).toEqual(["manager", "supervisor", "finance", "housekeeping"]);
-    expect(mx.rows).toHaveLength(60); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
+    expect(mx.rows).toHaveLength(62); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
     expect(mx.rows.every((r: any) => r.cells.owner.allowed === true && Object.keys(r.cells).length === 5)).toBe(true);
     const row = (code: string) => mx.rows.find((r: any) => r.code === code);
     expect(row("voucher.correct")).toMatchObject({ limit_note: "سنداته خلال 24 ساعة", full_roles: ["owner", "manager"], locked: false });

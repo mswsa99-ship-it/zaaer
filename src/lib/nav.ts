@@ -15,7 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins, ClipboardList, BellRing, ClipboardCheck, Activity, Building } from "lucide-react";
+  Calculator, Vault, HandCoins, ClipboardList, Scale, BellRing, ClipboardCheck, Activity, Building } from "lucide-react";
 import type { Role } from "./types";
 
 export type StaffRole = Exclude<Role, "guest">;
@@ -74,6 +74,8 @@ export const PAGES: readonly NavPage[] = [
   // A4 (0064): the expense vouchers and the ledger of the box and the bank account
   { path: "/staff/expenses", label: "المصروفات", icon: HandCoins, area: "staff", roles: MONEY_ROLES, cap: ["expense.create", "expense.cancel", "ledger.view"] },
   { path: "/staff/ledger", label: "دفتر الحركة", icon: ClipboardList, area: "staff", roles: MONEY_ROLES, cap: ["ledger.view"] },
+  // A5 (0065): the double entry — trial balance, income statement, balance sheet, chart and statements, the month lock
+  { path: "/staff/accounts", label: "الحسابات", icon: Scale, area: "staff", roles: ["owner", "manager", "finance"], cap: ["accounts.view", "accounts.close_month"] },
   { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, area: "staff", roles: MONEY_ROLES, cap: ["pos.settle"] },
   { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["checkin", "code.deliver"] },
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)

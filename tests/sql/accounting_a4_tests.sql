@@ -40,7 +40,7 @@ create or replace function t_accid(p_branch uuid, p_kind text) returns uuid lang
 
 -- ---------------------------------------------------------------- EX01 the matrix
 select t_record('EX01 the permissions matrix has «expense.create» (owner, manager, supervisor, finance), «expense.cancel» (owner, manager), «ledger.view» (owner, manager, supervisor, finance)',
-  (select count(*) from fn_permission_catalog()) = 60
+  (select count(*) from fn_permission_catalog()) >= 60
   and exists (select 1 from fn_permission_catalog() c where c.code = 'expense.create' and c.default_roles = '{owner,manager,supervisor,finance}')
   and exists (select 1 from fn_permission_catalog() c where c.code = 'expense.cancel' and c.default_roles = '{owner,manager}')
   and exists (select 1 from fn_permission_catalog() c where c.code = 'ledger.view' and c.default_roles = '{owner,manager,supervisor,finance}'));
