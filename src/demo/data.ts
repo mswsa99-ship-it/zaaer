@@ -51,7 +51,7 @@ export function seed(): Store {
   ]);
   put("whatsapp_outbox", []);
   // cash boxes and bank accounts per branch, a default for each kind (0028, decision 25)
-  const acct = (id: string, branch: string, kind: string, name: string, bank: string | null, last4: string | null) => ({ id, organization_id: ORG, branch_id: branch, kind, name, bank_name: bank, account_last4: last4, account_prefix: null, account_suffix: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) });
+  const acct = (id: string, branch: string, kind: string, name: string, bank: string | null, last4: string | null) => ({ id, organization_id: ORG, branch_id: branch, kind, name, bank_name: bank, account_last4: last4, account_prefix: null, account_suffix: null, opening_balance_halalas: 0, opening_on: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) });
   put("cash_accounts", [
     acct(CASH_A, BRANCH_A, "cash_box", "صندوق الاستقبال", null, null),
     acct(BANK_A, BRANCH_A, "bank_account", "حساب الشبكة والتحويل", "البنك (للتجربة)", "4321"),
@@ -64,6 +64,19 @@ export function seed(): Store {
   put("day_closings", []);
   put("day_closing_lines", []);
   put("day_closing_requests", []);
+  // the expenses and the ledger (0064)
+  put("expense_categories", [
+    { id: "e0000000-0000-0000-0000-000000000001", organization_id: ORG, name: "صيانة وإصلاح", sort_order: 10, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000002", organization_id: ORG, name: "نظافة ومستلزمات", sort_order: 20, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000003", organization_id: ORG, name: "كهرباء وماء", sort_order: 30, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000004", organization_id: ORG, name: "إنترنت واتصالات", sort_order: 40, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000005", organization_id: ORG, name: "رواتب وأجور", sort_order: 50, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000006", organization_id: ORG, name: "رسوم بنكية ونقاط بيع", sort_order: 60, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000007", organization_id: ORG, name: "إيجار ومرافق", sort_order: 70, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) },
+    { id: "e0000000-0000-0000-0000-000000000008", organization_id: ORG, name: "أخرى", sort_order: 90, is_active: true, version: 1, created_by: null, created_at: ts(-400), updated_at: ts(-400) }
+  ]);
+  put("expense_vouchers", []);
+  put("expense_attachments", []);
   put("staff_profiles", Object.values(STAFF).map((x) => ({ id: x.id, auth_user_id: x.auth, organization_id: ORG, full_name: x.name, email: x.email, phone: null, role: x.role, is_active: true, created_at: ts(-300), sessions_ended_at: null, updated_at: null })));
   // memberships are retired, never erased (0040, decision 35): removed_at marks one taken away
   const member = (staff_id: string, branch_id: string) => ({ id: uid(), staff_id, branch_id, created_at: ts(-300), removed_at: null, removed_by: null });

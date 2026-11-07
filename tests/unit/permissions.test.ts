@@ -4,15 +4,17 @@
  * shape the owner approved; PC03 the money list matches fn_sees_money().
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PERMISSION_CATALOG, MONEY_PERMISSIONS, EDITABLE_ROLES } from "../../src/lib/permissionCatalog";
 
 const m43 = readFileSync(join(__dirname, "..", "..", "supabase/migrations/20261029020000_0043_permissions_matrix.sql"), "utf8");
 const body = (fn: string) => { const s = m43.indexOf(`create or replace function ${fn}(`); return m43.slice(s, m43.indexOf("$$;", s)); };
-// the catalogue in force: 0063 re-created it with the closing's two operations (A2/A3)
-const m63 = readFileSync(join(__dirname, "..", "..", "supabase/migrations/20261108020000_0063_day_closing.sql"), "utf8");
-const catalogBody = () => { const s = m63.indexOf("create or replace function fn_permission_catalog("); return m63.slice(s, m63.indexOf("$$;", s)); };
+// the catalogue in force: the last migration that re-created it (0063 the closing's two, 0064 the expenses and ledger's three)
+const MIG = join(__dirname, "..", "..", "supabase/migrations");
+const mCat = readdirSync(MIG).filter((f) => f.endsWith(".sql")).sort().map((f) => readFileSync(join(MIG, f), "utf8"))
+  .filter((t) => t.includes("create or replace function fn_permission_catalog(")).pop()!;
+const catalogBody = () => { const s = mCat.indexOf("create or replace function fn_permission_catalog("); return mCat.slice(s, mCat.indexOf("$$;", s)); };
 const roles = (x: string | undefined) => (x === undefined ? null : x.split(",").filter(Boolean));
 
 describe("the permissions matrix — one catalogue in two places", () => {
@@ -22,9 +24,9 @@ describe("the permissions matrix — one catalogue in two places", () => {
     expect(PERMISSION_CATALOG.map((r) => ({ ...r, defaultRoles: [...r.defaultRoles], fullRoles: r.fullRoles ? [...r.fullRoles] : null }))).toEqual(sql);
   });
 
-  it("PC02 the approved shape: 57 operations (55 of 26 October and the closing's two of 0063), unique codes, the owner in every row, only the matrix itself locked, conditions only where full roles narrow it", () => {
-    expect(PERMISSION_CATALOG.length).toBe(57);
-    expect(new Set(PERMISSION_CATALOG.map((r) => r.code)).size).toBe(57);
+  it("PC02 the approved shape: 60 operations (55 of 26 October, the closing's two of 0063, the expenses and ledger's three of 0064), unique codes, the owner in every row, only the matrix itself locked, conditions only where full roles narrow it", () => {
+    expect(PERMISSION_CATALOG.length).toBe(60);
+    expect(new Set(PERMISSION_CATALOG.map((r) => r.code)).size).toBe(60);
     for (const r of PERMISSION_CATALOG) expect(r.defaultRoles, r.code).toContain("owner");
     expect(PERMISSION_CATALOG.filter((r) => r.locked).map((r) => r.code)).toEqual(["admin.permissions"]);
     for (const r of PERMISSION_CATALOG) expect(Boolean(r.limitNote), r.code).toBe(r.fullRoles !== null);

@@ -71,13 +71,19 @@ export function accountingRpcs(c: AccountingCtx): Record<string, (a: any) => any
     const matrix = [...cells.values()].sort((a, b) => (a.box < b.box ? -1 : a.box > b.box ? 1 : String(a.source).localeCompare(String(b.source))));
     const account = (kind: string) => T("cash_accounts").filter((a) => a.branch_id === branch && a.kind === kind && !a.archived_at).sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default))[0]?.id ?? null;
     const sum = (box: string) => matrix.filter((m) => m.box === box).reduce((s, m) => s + m.net, 0);
+    // A4 (0064): the day's expenses leave the cash box (cash) or the bank account (with the transfers)
+    const dayExp = T("expense_vouchers").filter((e) => e.branch_id === branch && e.status === "approved" && dayOf(e.occurred_at) === date);
+    const kindOf = (e: Row) => byId("cash_accounts", e.account_id)?.kind;
+    const expenses = { cash: dayExp.filter((e) => kindOf(e) === "cash_box").reduce((t, e) => t + e.amount_halalas, 0),
+                       bank_transfer: dayExp.filter((e) => kindOf(e) === "bank_account").reduce((t, e) => t + e.amount_halalas, 0), count: dayExp.length };
+    const exp = (box: string) => (box === "cash" ? expenses.cash : 0);   /* bank expenses are shown, not subtracted */
     const boxes: Row[] = [
-      { key: "cash", box: "cash", sort: "1", label: "النقد", source_id: null, account_id: account("cash_box"), system_halalas: sum("cash"), required: true },
-      { key: "pos", box: "pos", sort: "2", label: "الشبكة", source_id: null, account_id: account("bank_account"), system_halalas: sum("pos"), required: true },
-      { key: "bank_transfer", box: "bank_transfer", sort: "3", label: "التحويل", source_id: null, account_id: account("bank_account"), system_halalas: sum("bank_transfer"), required: false },
+      { key: "cash", box: "cash", sort: "1", label: "النقد", source_id: null, account_id: account("cash_box"), system_halalas: sum("cash") - exp("cash"), expenses_halalas: exp("cash"), required: true },
+      { key: "pos", box: "pos", sort: "2", label: "الشبكة", source_id: null, account_id: account("bank_account"), system_halalas: sum("pos"), expenses_halalas: 0, required: true },
+      { key: "bank_transfer", box: "bank_transfer", sort: "3", label: "التحويل", source_id: null, account_id: account("bank_account"), system_halalas: sum("bank_transfer") - exp("bank_transfer"), expenses_halalas: exp("bank_transfer"), required: false },
       ...matrix.filter((m) => m.box === "platform").map((m) => ({ key: `platform:${m.source_id ?? "direct"}`, box: "platform", sort: "4", label: `آجل — ${m.source}`, source_id: m.source_id, account_id: null, system_halalas: m.net, required: false })),
     ];
-    return { business_date: date, rooms: roomsOut, matrix, boxes };
+    return { business_date: date, rooms: roomsOut, matrix, boxes, expenses };
   };
 
   /** fn_day_closing_put_lines */

@@ -71,6 +71,9 @@ export const PAGES: readonly NavPage[] = [
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   // A2/A3 (0063): the closing of the day — the boxes counted against the system, the review, the edit window
   { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
+  // A4 (0064): the expense vouchers and the ledger of the box and the bank account
+  { path: "/staff/expenses", label: "المصروفات", icon: HandCoins, area: "staff", roles: MONEY_ROLES, cap: ["expense.create", "expense.cancel", "ledger.view"] },
+  { path: "/staff/ledger", label: "دفتر الحركة", icon: ClipboardList, area: "staff", roles: MONEY_ROLES, cap: ["ledger.view"] },
   { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, area: "staff", roles: MONEY_ROLES, cap: ["pos.settle"] },
   { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["checkin", "code.deliver"] },
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)

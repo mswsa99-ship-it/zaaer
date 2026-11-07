@@ -74,6 +74,7 @@ const ERROR_AR: Record<string, string> = {
   REVIEW_STALE: "تغيّرت أرقام اليوم بعد المراجعة (سند جديد أو تعديل). راجع الملخص من جديد ثم أرسله.",
   REQUEST_PENDING: "يوجد طلب تعديل لهذا الإقفال بانتظار قرار الإدارة.",
   REQUEST_DECIDED: "قُرّر هذا الطلب من قبل.",
+  CLOSING_SENT_DAY: "أُرسل إقفال هذا اليوم؛ سند صرف من الصندوق عليه تُصدره الإدارة، ويصل للمراجعة.",
   SELF_DECISION: "لا يقرّر الطلب من رفعه؛ يقرّره المالك أو مدير آخر.",
   ACCOUNT_EXISTS: "لهذا الفرع صندوق واحد وحساب بنكي واحد. لاستبدال الحالي: أرشفه بسبب، ثم أضف الجديد.",
   DUPLICATE_ACCOUNT_RULE: "بداية رقم الحساب ونهايته مسجلتان لحساب فرع آخر؛ كل حساب بنكي لفرع واحد.",
@@ -194,6 +195,19 @@ export const VALIDATION_AR: Record<string, string> = {
   closing_counts: "أدخل عدّ النقد وإجمالي جهاز الشبكة قبل الإرسال (صفر إن لم يوجد شيء).",
   closing_reason: "لكل فرق سبب: اكتب سبب كل فرق قبل الإرسال.",
   edit_minutes: "مهلة التعديل بين 5 و240 دقيقة.",
+  // the expenses and the ledger (0064)
+  attachment_required: "أرفق صورة الفاتورة أو الإيصال (صورة أو PDF).",
+  attachments_count: "خمسة مرفقات على الأكثر للسند.",
+  attachment: "تعذّرت قراءة المرفق؛ اختره من جديد.",
+  attachment_too_large: "حجم المرفق أكبر من 2 ميجابايت.",
+  attachment_type: "المرفق صورة (PNG أو JPEG أو WebP) أو ملف PDF فقط.",
+  category: "اختر تصنيف المصروف.",
+  description: "اكتب وصف المصروف (500 حرف على الأكثر).",
+  payee: "اسم المستفيد 120 حرفًا على الأكثر.",
+  occurred_on: "تاريخ المصروف اليوم أو خلال 31 يومًا مضت.",
+  opening_on: "تاريخ الرصيد الافتتاحي لا يكون بعد اليوم.",
+  range_too_large: "الفترة فيها حركات كثيرة؛ اختر فترة أقصر.",
+  before_opening: "الفترة كلها قبل تاريخ الرصيد الافتتاحي لهذا الحساب؛ اختر فترة بعده.",
   decision: "اختر الموافقة أو الرفض.",
   received_on: "تاريخ الاستلام لا يكون بعد اليوم.",
   vouchers: "اختر دفعة واحدة على الأقل.",
@@ -662,6 +676,25 @@ export const closingApi = {
   decide: (requestId: string, approve: boolean, note: string | null) => rpc<{ ok: boolean; status: string; edit_until: string | null }>("fn_day_closing_decide", { p_request: requestId, p_approve: approve, p_note: note }),
   list: (branchId: string, from: string, to: string) => rpc<ClosingList>("fn_day_closing_list", { p_branch: branchId, p_from: from, p_to: to }),
   setMinutes: (branchId: string, minutes: number) => rpc<{ ok: boolean; minutes: number }>("fn_admin_set_day_close_minutes", { p_branch: branchId, p_minutes: minutes }),
+};
+
+/** The expenses and the ledger (0064: A4) */
+export interface ExpenseCategory { id: string; name: string; sort_order: number; is_active: boolean; version: number }
+export interface ExpenseRow { id: string; number: string; occurred_at: string; amount_halalas: number; account_id: string; account: string | null; account_kind: "cash_box" | "bank_account" | null;
+  category_id: string; category: string | null; payee: string | null; description: string; reference: string | null; status: "approved" | "cancelled"; cancel_reason: string | null; created_by: string | null;
+  attachments: Array<{ id: string; mime: string; size_bytes: number; file_name: string | null }> }
+export interface LedgerLine { at: string; kind: string; number: string; description: string; in_halalas: number; out_halalas: number; balance_halalas: number; ref_id: string }
+export interface Ledger { account: { id: string; name: string; kind: string; branch_id: string; opening_balance_halalas: number; opening_on: string | null }; from: string; to: string;
+  opening_halalas: number; in_halalas: number; out_halalas: number; closing_halalas: number; lines: LedgerLine[] }
+export const expenseApi = {
+  create: (p: { branch_id: string; account_id: string; category_id: string; amount_halalas: number; description: string; payee?: string | null; reference?: string | null; occurred_on?: string;
+                idempotency_key: string; attachments: Array<{ data_base64: string; file_name?: string }> }) => rpc<{ ok: boolean; id: string; number: string; replayed?: boolean }>("fn_expense_create", { p }),
+  cancel: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_expense_cancel", { p_id: id, p_reason: reason }),
+  list: (branchId: string, from: string, to: string) => rpc<ExpenseRow[]>("fn_expense_list", { p_branch: branchId, p_from: from, p_to: to }),
+  attachment: (id: string) => rpc<{ id: string; mime: string; file_name: string | null; size_bytes: number; data_base64: string }>("fn_expense_attachment", { p_id: id }),
+  upsertCategory: (p: { id?: string; name: string; sort_order?: number; is_active?: boolean; version?: number }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_expense_category", { p }),
+  ledger: (accountId: string, from: string, to: string) => rpc<Ledger>("fn_account_ledger", { p_account: accountId, p_from: from, p_to: to }),
+  setOpening: (accountId: string, halalas: number, on: string, reason: string) => rpc<{ ok: boolean }>("fn_admin_set_account_opening", { p_account: accountId, p_halalas: halalas, p_on: on, p_reason: reason }),
 };
 
 export const moneyApi = {

@@ -339,6 +339,40 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_day_closing_get", { p_branch: BRANCH, p_date: day })).rejects.toThrow(/FORBIDDEN/);
   });
 
+  it("EX03–EX07 the expenses and the ledger in the demo: the receipt required, cancelled with a reason, the running balance on every line", async () => {
+    await login("owner@demo.sa");
+    const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const accs = (await client.from("cash_accounts").select("id, branch_id, kind, archived_at")).data as any[];
+    const box = accs.find((a) => a.branch_id === BRANCH && a.kind === "cash_box" && !a.archived_at)!;
+    const other = accs.find((a) => a.branch_id !== BRANCH && a.kind === "cash_box" && !a.archived_at)!;
+    const cat = ((await client.from("expense_categories").select("id, name")).data as any[])[0];
+    const base = { branch_id: BRANCH, account_id: box.id, category_id: cat.id, amount_halalas: 4500, description: "قطع غيار" };
+    await expect(rpc("fn_expense_create", { p: base })).rejects.toThrow(/attachment_required/);
+    await expect(rpc("fn_expense_create", { p: { ...base, attachments: [{ data_base64: btoa("hello") }] } })).rejects.toThrow(/attachment_type/);
+    await expect(rpc("fn_expense_create", { p: { ...base, account_id: other.id, attachments: [{ data_base64: PNG }] } })).rejects.toThrow(/BRANCH_MISMATCH/);
+    const e = await rpc<any>("fn_expense_create", { p: { ...base, idempotency_key: "u-exp-1", attachments: [{ data_base64: PNG }] } });
+    expect(e.number).toMatch(/^EXP-/);
+    expect((await rpc<any>("fn_expense_create", { p: { ...base, idempotency_key: "u-exp-1", attachments: [{ data_base64: PNG }] } })).replayed).toBe(true);
+    const list = await rpc<any[]>("fn_expense_list", { p_branch: BRANCH, p_from: today(), p_to: today() });
+    expect(list.find((x) => x.id === e.id).attachments).toHaveLength(1);
+    expect((await rpc<any>("fn_expense_attachment", { p_id: list.find((x) => x.id === e.id).attachments[0].id })).mime).toBe("image/png");
+    // the ledger: opening + in − out on every line
+    await expect(rpc("fn_admin_set_account_opening", { p_account: box.id, p_halalas: 50000, p_on: today(), p_reason: "" })).rejects.toThrow(/reason/);
+    await rpc("fn_admin_set_account_opening", { p_account: box.id, p_halalas: 50000, p_on: today(), p_reason: "بداية" });
+    const l = await rpc<any>("fn_account_ledger", { p_account: box.id, p_from: today(), p_to: today() });
+    let run = l.opening_halalas;
+    for (const x of l.lines) { run += x.in_halalas - x.out_halalas; expect(x.balance_halalas).toBe(run); }
+    expect(l.closing_halalas).toBe(l.opening_halalas + l.in_halalas - l.out_halalas);
+    expect(l.lines.some((x: any) => x.ref_id === e.id && x.out_halalas === 4500)).toBe(true);
+    // cancelled only with a reason; then no movement
+    await expect(rpc("fn_expense_cancel", { p_id: e.id, p_reason: " " })).rejects.toThrow(/reason/);
+    await rpc("fn_expense_cancel", { p_id: e.id, p_reason: "سُجّل مرتين" });
+    const l2 = await rpc<any>("fn_account_ledger", { p_account: box.id, p_from: today(), p_to: today() });
+    expect(l2.lines.some((x: any) => x.ref_id === e.id)).toBe(false);
+    await login("housekeeping@demo.sa");
+    await expect(rpc("fn_account_ledger", { p_account: box.id, p_from: today(), p_to: today() })).rejects.toThrow(/FORBIDDEN/);
+  });
+
   it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
     const r = await createRes({ ci: 64, co: 66 });
     const d = await defaults(BRANCH);
@@ -2228,7 +2262,7 @@ describe("Permissions matrix in the demo (0043)", () => {
   let CATALOG: typeof import("../../src/lib/permissionCatalog");
   beforeAll(async () => { CATALOG = await import("../../src/lib/permissionCatalog"); });
 
-  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 57 rows (0063 added the closing's two), five columns, the owner's always allowed, nothing changed yet", async () => {
+  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 60 rows (0063 added the closing's two, 0064 the expenses and ledger's three), five columns, the owner's always allowed, nothing changed yet", async () => {
     const { PERMISSION_CATALOG } = CATALOG;
     for (const role of ROLES) {
       await login(EMAIL[role]); const m = await mine();
@@ -2243,7 +2277,7 @@ describe("Permissions matrix in the demo (0043)", () => {
     await login(EMAIL.owner);
     const mx = await rpc<any>("fn_permissions_matrix", {});
     expect(mx.roles).toEqual([...ROLES]); expect(mx.editable_roles).toEqual(["manager", "supervisor", "finance", "housekeeping"]);
-    expect(mx.rows).toHaveLength(57); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
+    expect(mx.rows).toHaveLength(60); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
     expect(mx.rows.every((r: any) => r.cells.owner.allowed === true && Object.keys(r.cells).length === 5)).toBe(true);
     const row = (code: string) => mx.rows.find((r: any) => r.code === code);
     expect(row("voucher.correct")).toMatchObject({ limit_note: "سنداته خلال 24 ساعة", full_roles: ["owner", "manager"], locked: false });

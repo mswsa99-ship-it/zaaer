@@ -14,6 +14,7 @@ import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, valid
 import { phase6Rpcs } from "./phase6";
 import { phase2Rpcs } from "./phase2";
 import { accountingRpcs } from "./accounting";
+import { expensesRpcs } from "./expenses";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
@@ -192,7 +193,7 @@ function voucherAccount(branch: string, method: string, account: string | null |
 function bootstrapAccounts(branch: string) {
   for (const [kind, name] of [["cash_box", "الصندوق الرئيسي"], ["bank_account", "الحساب البنكي الرئيسي"]] as const) {
     if (T("cash_accounts").some((a) => a.branch_id === branch && a.kind === kind)) continue;
-    const a = { id: uid(), organization_id: ORG, branch_id: branch, kind, name, bank_name: null, account_last4: null, account_prefix: null, account_suffix: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() };
+    const a = { id: uid(), organization_id: ORG, branch_id: branch, kind, name, bank_name: null, account_last4: null, account_prefix: null, account_suffix: null, opening_balance_halalas: 0, opening_on: null, is_default: true, is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: staffId(), created_at: nowISO(), updated_at: nowISO() };
     T("cash_accounts").push(a); audit(branch, "cash_account.created", "cash_account", a.id, { after: a, reason: "حساب أولي للفرع" });
   }
   emit("cash_accounts");
@@ -274,6 +275,9 @@ function visible(table: string, r: Row): boolean {
   if (["cash_accounts", "pos_settlements"].includes(table)) return seesMoney() && branches.includes(r.branch_id);
   if (table === "platform_payouts") return can("platform.payouts") && branches.includes(r.branch_id);
   if (["day_closings", "day_closing_requests"].includes(table)) return (can("day.close") || can("day.close.approve")) && branches.includes(r.branch_id);
+  if (table === "expense_vouchers") return (can("expense.create") || can("expense.cancel") || can("ledger.view")) && branches.includes(r.branch_id);
+  if (table === "expense_attachments") return false;
+  if (table === "expense_categories") return r.organization_id === ORG;
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
   if (table === "reservation_nights") return seesMoney() && branches.includes(r.branch_id);
@@ -2060,6 +2064,8 @@ Object.assign(rpcs, phase6Rpcs(phase6Ctx));
 Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, validHttpsUrl }));
 // the closing of the day (0063: A2 and A3)
 Object.assign(rpcs, accountingRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), role: () => me()?.role ?? null }));
+// the expenses and the ledger (0064: A4)
+Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), nextNumber, role: () => me()?.role ?? null }));
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));
