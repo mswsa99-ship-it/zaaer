@@ -437,6 +437,39 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_bank_movements", { p_branch: null, p_from: today(), p_to: today() })).rejects.toThrow(/FORBIDDEN/);
   });
 
+  it("MT01–MT06 matching in the demo: a movement matched once with its transfer voucher, a record once, a difference needs a reason, undo, a cancelled voucher lets go, money in turned into income and undone", async () => {
+    await login("owner@demo.sa");
+    const all = await rpc<any[]>("fn_bank_movements", { p_branch: null, p_from: today().slice(0, 8) + "01", p_to: today() });
+    const un = all.find((x) => !x.branch_id)!;
+    const accs = (await client.from("cash_accounts").select("id, branch_id, kind")).data as any[];
+    const bankA = accs.find((a) => a.branch_id === BRANCH && a.kind === "bank_account")!;
+    await rpc("fn_bank_assign_account", { p_movement: un.id, p_account: bankA.id, p_reason: "حساب الفرع" });
+    const r = await createRes({ ci: 60, co: 62 });
+    const v = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 200, method: "bank_transfer", reference: "DM-T1", account_id: bankA.id, idempotency_key: uid() } });
+    const c = await rpc<any[]>("fn_bank_candidates", { p_movement: un.id });
+    expect(c[0]).toMatchObject({ type: "voucher", id: v.voucher_id, exact: true });
+    await rpc("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v.voucher_id, p_reason: null });
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v.voucher_id, p_reason: null })).rejects.toThrow(/movement_used/);
+    let m = (await rpc<any[]>("fn_bank_movements", { p_branch: BRANCH, p_from: today().slice(0, 8) + "01", p_to: today() })).find((x) => x.id === un.id);
+    expect(m.status).toBe("matched"); expect(m.match.label).toContain("سند");
+    await expect(rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "" })).rejects.toThrow(/reason/);
+    await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "خطأ" });
+    const v2 = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 250, method: "bank_transfer", reference: "DM-T2", account_id: bankA.id, idempotency_key: uid() } });
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v2.voucher_id, p_reason: null })).rejects.toThrow(/difference_reason/);
+    expect((await rpc<any>("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v2.voucher_id, p_reason: "رسوم" })).difference_halalas).toBe(-50);
+    expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
+    await rpc("fn_cancel_voucher", { p_voucher: v2.voucher_id, p_reason: "مكرر" });
+    m = (await rpc<any[]>("fn_bank_movements", { p_branch: BRANCH, p_from: today().slice(0, 8) + "01", p_to: today() })).find((x) => x.id === un.id);
+    expect(m.status).toBe("pending");
+    await expect(rpc("fn_bank_convert", { p_movement: un.id, p: { description: "" } })).rejects.toThrow(/description/);
+    const e = await rpc<any>("fn_bank_convert", { p_movement: un.id, p: { description: "فرق من البنك" } });
+    expect(e.expense_number).toBeNull();
+    expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
+    await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "ليست إيرادًا" });
+    await login("manager@demo.sa");
+    await expect(rpc("fn_bank_candidates", { p_movement: un.id })).rejects.toThrow(/FORBIDDEN/);
+  });
+
   it("MC09 a refund leaves through an account too (cash box, or bank with its number); applying the deposit carries the method and account of its deposit (0054)", async () => {
     const r = await createRes({ ci: 64, co: 66 });
     const d = await defaults(BRANCH);

@@ -69,4 +69,33 @@ test.describe("bank messages", () => {
     await expect(page.getByRole("tab", { name: "الرسائل كما وصلت" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "بريد البنك" })).toHaveCount(0);
   });
+
+  test("BK33 the owner gives a movement its branch account, records it as income, and undoes that with a reason (A8)", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/staff/bank");
+    await page.getByRole("tab", { name: "غير المنسوبة" }).click();
+    await page.getByTestId("bank-movement").filter({ hasText: "777****555" }).getByRole("button", { name: "نسبتها لحساب فرع" }).click();
+    const d1 = page.getByRole("dialog");
+    const select = d1.getByLabel("حساب الفرع");
+    const value = await select.locator("option", { hasText: "الرياض" }).first().getAttribute("value");
+    await select.selectOption(value!);
+    await d1.locator("textarea").fill("حساب فرع الرياض");
+    await d1.getByRole("button", { name: "نسبتها", exact: true }).click();
+    await expect(d1).toBeHidden();
+    await page.getByRole("tab", { name: "حركات الفرع" }).click();
+    const mv = page.getByTestId("bank-movement").filter({ hasText: "+2.00" });
+    await expect(mv).toContainText("بانتظار المطابقة");
+    await mv.getByRole("button", { name: "تسجيلها إيرادًا" }).click();
+    const d2 = page.getByRole("dialog");
+    await d2.getByLabel("الوصف").fill("فرق من البنك");
+    await d2.getByRole("button", { name: "تسجيل الإيراد" }).click();
+    await expect(d2).toBeHidden();
+    await expect(mv.getByTestId("bank-match")).toContainText("حُوّلت إلى: إيراد");
+    await mv.getByRole("button", { name: "فك المطابقة" }).click();
+    const d3 = page.getByRole("dialog");
+    await d3.locator("textarea").fill("ليست إيرادًا");
+    await d3.getByRole("button", { name: "فك المطابقة", exact: true }).click();
+    await expect(d3).toBeHidden();
+    await expect(mv).toContainText("بانتظار المطابقة");
+  });
 });

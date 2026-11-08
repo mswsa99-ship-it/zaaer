@@ -209,6 +209,14 @@ export const VALIDATION_AR: Record<string, string> = {
   priority: "الأولوية رقم من 0 إلى 9999.",
   message_status: "تُعاد قراءة الرسالة غير المفهومة أو المرفوضة فقط.",
   movement_assigned: "نُسبت هذه الحركة لحساب من قبل.",
+  movement_used: "هذه الحركة طوبقت أو حُوّلت لسند من قبل.",
+  movement_unassigned: "انسب الحركة لحساب فرعها أولًا.",
+  target_type: "نوع السجل غير معروف.",
+  target: "هذا السجل لا يناسب الحركة (حساب آخر أو اتجاه آخر أو أُلغي).",
+  target_used: "هذا السجل مطابَق مع حركة أخرى.",
+  difference_reason: "المبلغ يختلف عن السجل؛ اكتب سبب الفرق (حتى 300 حرف).",
+  movement_not_matched: "الحركة ليست مطابقة.",
+  cancel_the_expense: "هذا السند صُنع من الحركة؛ ألغِ سند الصرف بسبب فتعود الحركة للانتظار.",
   enabled: "قيمة التشغيل غير صحيحة.",
   attachments_count: "خمسة مرفقات على الأكثر للسند.",
   attachment: "تعذّرت قراءة المرفق؛ اختره من جديد.",
@@ -738,7 +746,9 @@ export interface BankRule { id: string; keyword: string; kind: BankKind; directi
 export interface BankMessage { id: string; received_at: string; mail_from: string | null; sms_sender: string | null; channel: string | null; sms_received_at: string | null;
   text: string; status: "received" | "rejected" | "unparsed" | "parsed" | "duplicate_movement"; reason: string | null; movement_id: string | null }
 export interface BankMovement { id: string; branch_id: string | null; branch: string | null; account: string | null; kind: BankKind; direction: "in" | "out"; amount_halalas: number;
-  occurred_at: string; reference: string | null; balance_halalas: number | null; account_hint: string | null; status: "pending" | "matched" | "converted"; text: string | null; channel: string | null }
+  occurred_at: string; reference: string | null; balance_halalas: number | null; account_hint: string | null; status: "pending" | "matched" | "converted"; text: string | null; channel: string | null;
+  match?: { type: string; kind: "link" | "convert"; difference_halalas: number; reason: string | null; label: string } | null }
+export interface BankCandidate { type: "voucher" | "expense" | "pos_settlement" | "platform_payout"; id: string; number: string; label: string; amount_halalas: number; at: string; exact: boolean }
 
 export const bankApi = {
   settings: () => rpc<BankMailSettings>("fn_admin_bank_mail_get", {}),
@@ -747,6 +757,10 @@ export const bankApi = {
   messages: (status: string | null) => rpc<BankMessage[]>("fn_bank_messages", { p_status: status, p_limit: 200 }),
   movements: (branchId: string | null, from: string, to: string) => rpc<BankMovement[]>("fn_bank_movements", { p_branch: branchId, p_from: from, p_to: to }),
   reparse: (id: string) => rpc<{ ok: boolean; status: string; reason?: string }>("fn_bank_reparse", { p_message: id }),
+  candidates: (movementId: string) => rpc<BankCandidate[]>("fn_bank_candidates", { p_movement: movementId }),
+  match: (movementId: string, type: string, targetId: string, reason: string | null) => rpc<{ ok: boolean; difference_halalas: number }>("fn_bank_match", { p_movement: movementId, p_type: type, p_target: targetId, p_reason: reason }),
+  unmatch: (movementId: string, reason: string) => rpc<{ ok: boolean }>("fn_bank_unmatch", { p_movement: movementId, p_reason: reason }),
+  convert: (movementId: string, p: { description: string; category_id?: string }) => rpc<{ ok: boolean; expense_number: string | null }>("fn_bank_convert", { p_movement: movementId, p }),
   assign: (movementId: string, accountId: string, reason: string) => rpc<{ ok: boolean; branch_id: string }>("fn_bank_assign_account", { p_movement: movementId, p_account: accountId, p_reason: reason }),
   pollNow: async () => {
     const { data, error } = await supabase.functions.invoke<{ configured: boolean; fetched: number; results: unknown[]; error?: string }>("bank-mail", { body: { action: "poll" } });

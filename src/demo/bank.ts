@@ -17,6 +17,7 @@ export interface BankCtx {
   audit: (branch: string | null, action: string, entity: string, entityId: string | null, details: Row) => void;
   emit: (table: string) => void;
   dayOf: (iso: string) => string;
+  nextNumber: (prefix: string) => string;
 }
 
 const KINDS = ["deposit", "transfer_in", "pos_settlement", "other_in", "transfer_out", "withdrawal", "fee", "pos_fee", "purchase", "other_out"];
@@ -118,7 +119,7 @@ export function seedBank(T: (t: string) => Row[]) {
     [`تسوية نقاط البيع\nمبلغ: 1,280.00 SAR\nحساب: 605****4321\nالرصيد: 15,000 SAR\n${today} 06:30`, "sms"],
     [`رسوم نقاط البيع\nمبلغ: 9.60 SAR\nحساب: **4321\n${today} 06:31`, "sms"],
     [`قيد عكسي\nمبلغ: 40 SAR\nحساب: **4321\n${today} 08:00`, "sms"],
-    [`رسوم\nمبلغ: 2 SAR\nحساب: 777****555\n${today} 08:10`, "sms"],
+    [`إيداع\nمبلغ: 2 SAR\nحساب: 777****555\n${today} 08:10`, "sms"],
   ];
   samples.forEach(([text, channel], i) => {
     const at = new Date(Date.now() - (60 - i) * 60_000).toISOString();
@@ -134,6 +135,39 @@ export function seedBank(T: (t: string) => Row[]) {
 export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
   const { T, can, requireCap, requireBranch, myBranches, audit, emit, dayOf } = c;
   const settings = () => T("bank_mail_settings").find((s) => s.organization_id === ORG);
+  // 0067: a cancelled record lets its movement go (the SQL does it by trigger when the record is cancelled)
+  const targetState = (type: string, id: string) => {
+    if (type === "voucher") return c.byId("financial_vouchers", id)?.status === "approved";
+    if (type === "expense") return c.byId("expense_vouchers", id)?.status === "approved";
+    if (type === "platform_payout") return c.byId("platform_payouts", id)?.status === "confirmed";
+    return true;
+  };
+  const release = (m: Row, reason: string) => {
+    Object.assign(m, { active: false, released_at: nowISO(), release_reason: reason });
+    const v = T("bank_movements").find((x) => x.id === m.movement_id); if (v) v.status = "pending";
+  };
+  const syncReleases = () => { for (const m of T("bank_matches").filter((x) => x.active && !targetState(x.target_type, x.target_id))) release(m, "أُلغي السجل المطابق"); };
+  /** fn_bank_target */
+  const target = (v: Row, type: string, id: string): Row | null => {
+    if (type === "voucher") { const f = c.byId("financial_vouchers", id);
+      if (!f || f.account_id !== v.cash_account_id || f.status !== "approved" || !["bank_transfer", "pos"].includes(f.method) || !((v.direction === "in" && ["receipt", "deposit"].includes(f.kind)) || (v.direction === "out" && ["refund", "deposit_refund"].includes(f.kind)))) return null;
+      return { type, id, number: f.number, amount_halalas: f.amount_halalas, at: f.occurred_at, label: ({ receipt: "سند قبض", deposit: "قبض تأمين", refund: "رد مبلغ", deposit_refund: "رد تأمين" } as Record<string, string>)[f.kind] + (f.method === "pos" ? " (شبكة)" : " (تحويل)") }; }
+    if (type === "expense") { const x = c.byId("expense_vouchers", id); if (!x || x.account_id !== v.cash_account_id || x.status !== "approved" || v.direction !== "out") return null;
+      return { type, id, number: x.number, amount_halalas: x.amount_halalas, at: x.occurred_at, label: "سند صرف: " + x.description }; }
+    if (type === "pos_settlement") { const x = c.byId("pos_settlements", id); if (!x || x.account_id !== v.cash_account_id || v.direction !== "in") return null;
+      return { type, id, number: "تسوية " + x.business_date, amount_halalas: x.terminal_total_halalas, at: x.business_date + "T00:00:00Z", label: "تسوية الشبكة ليوم " + x.business_date }; }
+    if (type === "platform_payout") { const x = c.byId("platform_payouts", id); if (!x || x.account_id !== v.cash_account_id || x.status !== "confirmed" || v.direction !== "in") return null;
+      return { type, id, number: x.reference, amount_halalas: x.received_halalas, at: x.received_on + "T00:00:00Z", label: "دفعة منصة " + (c.byId("booking_sources", x.source_id)?.name ?? "") }; }
+    return null;
+  };
+  const targetLabel = (m: Row) => {
+    if (m.target_type === "journal") return "إيراد: " + (m.reason ?? "");
+    if (m.target_type === "voucher") return "سند " + (c.byId("financial_vouchers", m.target_id)?.number ?? "");
+    if (m.target_type === "expense") { const x = c.byId("expense_vouchers", m.target_id); return x ? `سند صرف ${x.number}: ${x.description}` : ""; }
+    if (m.target_type === "pos_settlement") return "تسوية الشبكة ليوم " + (c.byId("pos_settlements", m.target_id)?.business_date ?? "");
+    return "دفعة منصة " + (c.byId("platform_payouts", m.target_id)?.reference ?? "");
+  };
+  const movementForOwner = (id: string) => { requireCap("bank.manage"); const v = T("bank_movements").find((x) => x.id === id); if (!v) throw new Error("NOT_FOUND"); return v; };
   const incomplete = (s: Row | undefined) => !s || !s.mailbox_address || !s.imap_user || !s.has_password || !s.has_relay_key;
   return {
     fn_admin_bank_mail_get: () => {
@@ -188,6 +222,7 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
         .map((m) => ({ id: m.id, received_at: m.received_at, mail_from: m.mail_from, sms_sender: m.sms_sender, channel: m.channel, sms_received_at: m.sms_received_at, text: m.sms_text ?? String(m.raw_body).slice(0, 2000), status: m.status, reason: m.reject_reason, movement_id: m.movement_id }));
     },
     fn_bank_movements: ({ p_branch, p_from, p_to }) => {
+      syncReleases();
       if (!(can("bank.view") || can("bank.manage"))) throw new Error("FORBIDDEN: bank.view");
       if (p_branch) requireBranch(p_branch); else if (!can("bank.manage")) throw new Error("FORBIDDEN: bank.manage");
       if (!p_from || !p_to || p_from > p_to || (Date.parse(p_to) - Date.parse(p_from)) / 86400000 > 366) throw new Error("VALIDATION: range");
@@ -195,8 +230,10 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
       return T("bank_movements").filter((v) => (p_branch ? v.branch_id === p_branch : v.branch_id == null || mine.includes(v.branch_id)) && dayOf(v.occurred_at) >= p_from && dayOf(v.occurred_at) <= p_to)
         .sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : a.occurred_at > b.occurred_at ? -1 : a.created_at < b.created_at ? 1 : -1))
         .map((v) => { const m = T("bank_messages").find((x) => x.id === v.message_id); const a = c.byId("cash_accounts", v.cash_account_id);
+          const mt = T("bank_matches").find((x) => x.movement_id === v.id && x.active);
+          const match = mt ? { type: mt.target_type, kind: mt.kind, difference_halalas: mt.difference_halalas, reason: mt.reason, label: targetLabel(mt) } : null;
           return { id: v.id, branch_id: v.branch_id, branch: c.byId("branches", v.branch_id)?.name_ar ?? null, account: a?.name ?? null, kind: v.kind, direction: v.direction, amount_halalas: v.amount_halalas,
-            occurred_at: v.occurred_at, reference: v.reference, balance_halalas: v.balance_halalas, account_hint: v.account_hint, status: v.status, text: m?.sms_text ?? null, channel: m?.channel ?? null }; });
+            occurred_at: v.occurred_at, reference: v.reference, balance_halalas: v.balance_halalas, account_hint: v.account_hint, status: v.status, text: m?.sms_text ?? null, channel: m?.channel ?? null, match }; });
     },
     fn_bank_assign_account: ({ p_movement, p_account, p_reason }) => {
       requireCap("bank.manage"); const v = T("bank_movements").find((x) => x.id === p_movement); if (!v) throw new Error("NOT_FOUND");
@@ -206,6 +243,60 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
       Object.assign(v, { cash_account_id: a.id, branch_id: a.branch_id }); emit("bank_movements");
       audit(a.branch_id, "bank_movement.assigned", "bank_movement", v.id, { after: { account: a.name, amount_halalas: v.amount_halalas }, reason });
       return { ok: true, branch_id: a.branch_id };
+    },
+    fn_bank_candidates: ({ p_movement }) => {
+      const v = movementForOwner(p_movement); syncReleases(); if (!v.cash_account_id) return [];
+      const d = dayOf(v.occurred_at); const within = (iso: string) => { const x = dayOf(iso); const lo = new Date(Date.parse(d + "T00:00:00Z") - 7 * 86400_000).toISOString().slice(0, 10); const hi = new Date(Date.parse(d + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10); return x >= lo && x <= hi; };
+      const used = (type: string, id: string) => T("bank_matches").some((m) => m.active && m.target_type === type && m.target_id === id);
+      const rows: Row[] = [
+        ...T("financial_vouchers").filter((f) => within(f.occurred_at)).map((f) => ["voucher", f.id] as const),
+        ...T("expense_vouchers").filter((x) => within(x.occurred_at)).map((x) => ["expense", x.id] as const),
+        ...T("pos_settlements").filter((x) => within(x.business_date + "T12:00:00Z")).map((x) => ["pos_settlement", x.id] as const),
+        ...T("platform_payouts").filter((x) => within(x.received_on + "T12:00:00Z")).map((x) => ["platform_payout", x.id] as const),
+      ].filter(([t, id]) => !used(t, id)).map(([t, id]) => target(v, t, id)).filter((x): x is Row => !!x);
+      return rows.map((r): Row => ({ ...r, exact: r.amount_halalas === v.amount_halalas }))
+        .sort((a, b) => Math.abs(a.amount_halalas - v.amount_halalas) - Math.abs(b.amount_halalas - v.amount_halalas) || Math.abs(Date.parse(a.at) - Date.parse(v.occurred_at)) - Math.abs(Date.parse(b.at) - Date.parse(v.occurred_at)));
+    },
+    fn_bank_match: ({ p_movement, p_type, p_target, p_reason }) => {
+      const v = movementForOwner(p_movement); syncReleases();
+      if (v.status !== "pending") throw new Error("VALIDATION: movement_used"); if (!v.cash_account_id) throw new Error("VALIDATION: movement_unassigned");
+      if (!["voucher", "expense", "pos_settlement", "platform_payout"].includes(p_type)) throw new Error("VALIDATION: target_type");
+      const t = target(v, p_type, p_target); if (!t) throw new Error("VALIDATION: target");
+      if (T("bank_matches").some((m) => m.active && m.target_type === p_type && m.target_id === p_target)) throw new Error("VALIDATION: target_used");
+      const diff = v.amount_halalas - t.amount_halalas; const reason = String(p_reason ?? "").trim() || null;
+      if (diff !== 0 && (!reason || reason.length > 300)) throw new Error("VALIDATION: difference_reason");
+      if (reason && reason.length > 300) throw new Error("VALIDATION: reason");
+      const m = { id: uid(), organization_id: ORG, movement_id: v.id, target_type: p_type, target_id: p_target, kind: "link", difference_halalas: diff, reason, active: true, created_at: nowISO(), released_at: null, release_reason: null };
+      T("bank_matches").push(m); v.status = "matched"; emit("bank_movements");
+      audit(v.branch_id, "bank_movement.matched", "bank_movement", v.id, { after: { target: t.number, type: p_type, amount_halalas: v.amount_halalas, difference_halalas: diff }, reason });
+      return { ok: true, match_id: m.id, difference_halalas: diff };
+    },
+    fn_bank_unmatch: ({ p_movement, p_reason }) => {
+      const v = movementForOwner(p_movement); syncReleases(); const reason = String(p_reason ?? "").trim();
+      if (!reason || reason.length > 300) throw new Error("VALIDATION: reason");
+      const m = T("bank_matches").find((x) => x.movement_id === v.id && x.active); if (!m) throw new Error("VALIDATION: movement_not_matched");
+      if (m.target_type === "expense" && m.kind === "convert") throw new Error("VALIDATION: cancel_the_expense");
+      release(m, reason); emit("bank_movements");
+      audit(v.branch_id, "bank_movement.unmatched", "bank_movement", v.id, { before: { type: m.target_type, kind: m.kind }, reason });
+      return { ok: true };
+    },
+    fn_bank_convert: ({ p_movement, p }) => {
+      const v = movementForOwner(p_movement); syncReleases(); const q: Row = p ?? {}; const desc = String(q.description ?? "").trim();
+      if (v.status !== "pending") throw new Error("VALIDATION: movement_used"); if (!v.cash_account_id) throw new Error("VALIDATION: movement_unassigned");
+      if (!desc || desc.length > 300) throw new Error("VALIDATION: description");
+      const mid = uid(); let expense: Row | null = null;
+      if (v.direction === "out") {
+        const cat = T("expense_categories").find((x) => x.id === q.category_id && x.is_active); if (!cat) throw new Error("VALIDATION: category");
+        expense = { id: uid(), organization_id: ORG, branch_id: v.branch_id, number: c.nextNumber("EXP"), account_id: v.cash_account_id, category_id: cat.id, amount_halalas: v.amount_halalas, occurred_at: v.occurred_at,
+          payee: null, description: desc, reference: v.reference ?? "حركة بنكية", status: "approved", cancel_reason: null, cancelled_at: null, cancelled_by: null, idempotency_key: null, created_by: null, created_at: nowISO() };
+        T("expense_vouchers").push(expense); emit("expense_vouchers");
+        T("bank_matches").push({ id: mid, organization_id: ORG, movement_id: v.id, target_type: "expense", target_id: expense.id, kind: "convert", difference_halalas: 0, reason: desc, active: true, created_at: nowISO() });
+      } else {
+        T("bank_matches").push({ id: mid, organization_id: ORG, movement_id: v.id, target_type: "journal", target_id: mid, kind: "convert", difference_halalas: 0, reason: desc, active: true, created_at: nowISO() });
+      }
+      v.status = "converted"; emit("bank_movements");
+      audit(v.branch_id, "bank_movement.converted", "bank_movement", v.id, { after: { direction: v.direction, amount_halalas: v.amount_halalas, expense: expense?.number ?? null }, reason: desc });
+      return { ok: true, match_id: mid, expense_id: expense?.id ?? null, expense_number: expense?.number ?? null };
     },
     fn_bank_reparse: ({ p_message }) => {
       requireCap("bank.manage"); const m = T("bank_messages").find((x) => x.id === p_message); if (!m) throw new Error("NOT_FOUND");

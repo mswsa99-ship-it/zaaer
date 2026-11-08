@@ -8,7 +8,8 @@
 import { useEffect, useState } from "react";
 import { Landmark, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
-import { bankApi, toArabicError, type BankMovement, type BankMessage, type BankMailSettings } from "../../lib/api";
+import { bankApi, toArabicError, type BankMovement, type BankMessage, type BankMailSettings, type BankCandidate } from "../../lib/api";
+import { supabase } from "../../lib/supabase";
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
 import { SectionTitle, Card, Spinner, LoadErrorCard, EmptyState, Badge, AmountBox, AmountGrid } from "../../components/ui";
@@ -63,6 +64,11 @@ function Movements({ branch, from, to, unassignedOnly }: { branch: string | null
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [assigning, setAssigning] = useState<BankMovement | null>(null);
+  const [act, setAct] = useState<{ m: BankMovement; what: "match" | "convert" | "unmatch" } | null>(null);
+  const [waitingOnly, setWaitingOnly] = useState(false);
+  const { can } = useAuth();
+  const owner = can("bank.manage");
+  const done = () => { setAct(null); setTick((t) => t + 1); };
   useEffect(() => {
     let alive = true; setRows(null); setError(null);
     bankApi.movements(branch, from, to).then((d) => { if (alive) setRows(unassignedOnly ? d.filter((x) => !x.branch_id) : d); }, (e) => { if (alive) setError(toArabicError(e)); });
@@ -70,18 +76,22 @@ function Movements({ branch, from, to, unassignedOnly }: { branch: string | null
   }, [branch, from, to, unassignedOnly, tick]);
   if (error) return <LoadErrorCard message={error} onRetry={() => setTick((t) => t + 1)} />;
   if (!rows) return <div className="py-10 text-center"><Spinner /></div>;
+  const waiting = rows.filter((r) => r.status === "pending").length;
+  const shown = waitingOnly ? rows.filter((r) => r.status === "pending") : rows;
   const tin = rows.filter((r) => r.direction === "in").reduce((s, r) => s + r.amount_halalas, 0);
   const tout = rows.filter((r) => r.direction === "out").reduce((s, r) => s + r.amount_halalas, 0);
   return (
     <>
       {!unassignedOnly && <Card className="mb-4"><AmountGrid testId="bank-totals">
-        <AmountBox label="الداخل" value={sar(tin)} tone="text-success-600" /><AmountBox label="الخارج" value={sar(tout)} tone="text-danger-600" /><AmountBox label="عدد الحركات" value={rows.length} />
-      </AmountGrid></Card>}
+        <AmountBox label="الداخل" value={sar(tin)} tone="text-success-600" /><AmountBox label="الخارج" value={sar(tout)} tone="text-danger-600" /><AmountBox label="بانتظار المطابقة" value={<span data-testid="bank-waiting">{waiting}</span>} tone={waiting ? "text-warning-700" : "text-success-600"} />
+      </AmountGrid>
+        <label className="mt-3 flex min-h-[44px] items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={waitingOnly} onChange={(e) => setWaitingOnly(e.target.checked)} /> بانتظار المطابقة فقط</label>
+      </Card>}
       {unassignedOnly && <p className="mb-3 text-sm text-ink-600">أرقام الحساب في هذه الرسائل لا تطابق حسابًا واحدًا من حسابات الفروع (مثل نهاية يشترك فيها حسابان)، فلا تُنسب تلقائيًا ولا تُدمج. انسب كل حركة لحساب فرعها بسبب. ولتقليل ذلك راجع قاعدة رقم الحساب في <Link to="/admin/cash-accounts" className="text-brand-700 underline">الصناديق والحسابات</Link>.</p>}
-      {rows.length === 0 ? <EmptyState icon={<Landmark className="h-10 w-10" />} title={unassignedOnly ? "لا حركات تنتظر النسبة" : "لا حركات في هذه الفترة"} /> : (
+      {shown.length === 0 ? <EmptyState icon={<Landmark className="h-10 w-10" />} title={unassignedOnly ? "لا حركات تنتظر النسبة" : "لا حركات في هذه الفترة"} /> : (
         <Card>
           <ul className="divide-y divide-ink-50" data-testid="bank-movements">
-            {rows.map((r) => (
+            {shown.map((r) => (
               <li key={r.id} className="py-3" data-testid="bank-movement">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="font-semibold">{KIND_AR[r.kind]}{r.reference ? <span className="ms-2 font-mono text-xs text-ink-400" dir="ltr">{r.reference}</span> : null}</span>
@@ -93,17 +103,85 @@ function Movements({ branch, from, to, unassignedOnly }: { branch: string | null
                   {r.balance_halalas != null && <span>الرصيد بعدها: <span dir="ltr">{sar(r.balance_halalas)}</span></span>}
                   <span>{r.status === "pending" ? "بانتظار المطابقة" : r.status === "matched" ? "مطابقة" : "حُوّلت لسند"}</span>
                 </div>
-                {!r.branch_id && <button type="button" className="btn-ghost mt-1 min-h-[44px] text-xs" onClick={() => setAssigning(r)}>نسبتها لحساب فرع</button>}
+                {r.match && <p className="mt-1 text-xs text-ink-600" data-testid="bank-match">{r.match.kind === "convert" ? "حُوّلت إلى: " : "طوبقت مع: "}{r.match.label}
+                  {r.match.difference_halalas ? <> — فرق <span dir="ltr">{sar(r.match.difference_halalas)}</span>{r.match.reason ? ` (${r.match.reason})` : ""}</> : null}</p>}
+                <div className="flex flex-wrap gap-1">
+                  {!r.branch_id && owner && <button type="button" className="btn-ghost mt-1 min-h-[44px] text-xs" onClick={() => setAssigning(r)}>نسبتها لحساب فرع</button>}
+                  {owner && r.branch_id && r.status === "pending" && <>
+                    <button type="button" className="btn-secondary mt-1 min-h-[44px] text-xs" onClick={() => setAct({ m: r, what: "match" })}>مطابقة</button>
+                    <button type="button" className="btn-ghost mt-1 min-h-[44px] text-xs" onClick={() => setAct({ m: r, what: "convert" })}>{r.direction === "out" ? "تحويلها لسند صرف" : "تسجيلها إيرادًا"}</button>
+                  </>}
+                  {owner && r.match && !(r.match.kind === "convert" && r.match.type === "expense") && <button type="button" className="btn-ghost mt-1 min-h-[44px] text-xs" onClick={() => setAct({ m: r, what: "unmatch" })}>فك المطابقة</button>}
+                </div>
                 {r.text && <details className="mt-1 text-xs text-ink-500"><summary className="cursor-pointer">نص الرسالة{r.channel === "notification" ? " (إشعار)" : ""}</summary><p className="mt-1 whitespace-pre-line">{r.text}</p></details>}
               </li>
             ))}
           </ul>
         </Card>
       )}
+      <Modal open={!!act} title={act?.what === "match" ? "مطابقة الحركة" : act?.what === "convert" ? (act.m.direction === "out" ? "تحويل الحركة إلى سند صرف" : "تسجيل الحركة إيرادًا") : "فك المطابقة"} onClose={() => setAct(null)}>
+        {act?.what === "match" && <MatchForm m={act.m} onDone={done} onCancel={() => setAct(null)} />}
+        {act?.what === "convert" && <ConvertForm m={act.m} onDone={done} onCancel={() => setAct(null)} />}
+        {act?.what === "unmatch" && <UnmatchForm m={act.m} onDone={done} onCancel={() => setAct(null)} />}
+      </Modal>
       <Modal open={!!assigning} title="نسبة الحركة لحساب فرع" onClose={() => setAssigning(null)}>
         {assigning && <AssignForm m={assigning} onDone={() => { setAssigning(null); setTick((t) => t + 1); }} onCancel={() => setAssigning(null)} />}
       </Modal>
     </>
+  );
+}
+
+function MatchForm({ m, onDone, onCancel }: { m: BankMovement; onDone: () => void; onCancel: () => void }) {
+  const [rows, setRows] = useState<BankCandidate[] | null>(null);
+  const [pick, setPick] = useState<string>("");
+  const [reason, setReason] = useState("");
+  useEffect(() => { bankApi.candidates(m.id).then((c) => { setRows(c); if (c[0]?.exact) setPick(c[0].type + ":" + c[0].id); }, () => setRows([])); }, [m.id]);
+  const chosen = rows?.find((c) => c.type + ":" + c.id === pick);
+  const diff = chosen ? m.amount_halalas - chosen.amount_halalas : 0;
+  return (
+    <ActionForm onSubmit={async () => { if (!chosen) throw new Error("VALIDATION: target"); await bankApi.match(m.id, chosen.type, chosen.id, reason.trim() || null); onDone(); }}>
+      <p className="mb-3 text-sm text-ink-600">{KIND_AR[m.kind]} <span dir="ltr">{sar(m.amount_halalas)}</span> — {formatDateTime(m.occurred_at)}. السجلات المعروضة من نفس الحساب حول يوم الحركة، والمبلغ المطابق أولًا.</p>
+      {!rows ? <div className="py-4 text-center"><Spinner /></div> : rows.length === 0 ? <p className="text-sm text-ink-500">لا سجل مناسب. يمكنك تحويل الحركة إلى سند بدلًا من ذلك.</p> : (
+        <ul className="max-h-72 space-y-1 overflow-y-auto" data-testid="bank-candidates">
+          {rows.map((c) => (
+            <li key={c.type + c.id}><label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-ink-100 p-2 text-sm">
+              <input type="radio" name="pick" checked={pick === c.type + ":" + c.id} onChange={() => setPick(c.type + ":" + c.id)} />
+              <span className="min-w-0 flex-1">{c.label} <span className="font-mono text-xs text-ink-400" dir="ltr">{c.number}</span><span className="block text-xs text-ink-500">{formatDateTime(c.at)}</span></span>
+              <span dir="ltr" className={`tabular-nums ${c.exact ? "font-semibold text-success-600" : "text-ink-700"}`}>{sar(c.amount_halalas)}</span>
+            </label></li>
+          ))}
+        </ul>
+      )}
+      {diff !== 0 && <><p className="mt-3 text-sm text-warning-700">المبلغ يختلف بـ <span dir="ltr">{sar(diff)}</span>؛ يُقيَّد الفرق {(m.direction === "in") === (diff > 0) ? "إيرادًا آخر" : "رسومًا بنكية"}.</p>
+        <ReasonInput value={reason} onChange={setReason} label="سبب الفرق (إلزامي)" /></>}
+      <Submit label="مطابقة" onCancel={onCancel} />
+    </ActionForm>
+  );
+}
+
+function ConvertForm({ m, onDone, onCancel }: { m: BankMovement; onDone: () => void; onCancel: () => void }) {
+  const [cats, setCats] = useState<Array<{ id: string; name: string }>>([]);
+  const [cat, setCat] = useState("");
+  const [desc, setDesc] = useState("");
+  useEffect(() => { if (m.direction === "out") supabase.from("expense_categories").select("id, name").eq("is_active", true).order("sort_order").then(({ data }) => { const c = (data ?? []) as Array<{ id: string; name: string }>; setCats(c); setCat((x) => x || (c.find((y) => y.name.includes("بنك"))?.id ?? c[0]?.id ?? "")); }); }, [m.direction]);
+  return (
+    <ActionForm onSubmit={async () => { if (!desc.trim()) throw new Error("VALIDATION: description"); await bankApi.convert(m.id, { description: desc.trim(), ...(m.direction === "out" ? { category_id: cat } : {}) }); onDone(); }}>
+      <p className="mb-3 text-sm text-ink-600">{m.direction === "out" ? "يصدر سند صرف من الحساب البنكي بمبلغ الحركة وتاريخها، ورسالة البنك إيصاله." : "يُقيَّد المبلغ إيرادًا آخر في الحساب البنكي."} <span dir="ltr">{sar(m.amount_halalas)}</span></p>
+      {m.direction === "out" && <Field label="تصنيف المصروف"><select className="input" value={cat} onChange={(e) => setCat(e.target.value)} aria-label="تصنيف المصروف">{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
+      <Field label="الوصف"><input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} aria-label="الوصف" maxLength={300} /></Field>
+      <Submit label={m.direction === "out" ? "إصدار سند الصرف" : "تسجيل الإيراد"} onCancel={onCancel} />
+    </ActionForm>
+  );
+}
+
+function UnmatchForm({ m, onDone, onCancel }: { m: BankMovement; onDone: () => void; onCancel: () => void }) {
+  const [reason, setReason] = useState("");
+  return (
+    <ActionForm onSubmit={async () => { if (!reason.trim()) throw new Error("VALIDATION: reason"); await bankApi.unmatch(m.id, reason.trim()); onDone(); }}>
+      <p className="mb-3 text-sm text-ink-600">تعود الحركة «بانتظار المطابقة»، ويبقى ما جرى في السجل. {m.match?.label}</p>
+      <ReasonInput value={reason} onChange={setReason} />
+      <Submit label="فك المطابقة" onCancel={onCancel} />
+    </ActionForm>
   );
 }
 

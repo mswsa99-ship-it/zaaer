@@ -263,7 +263,7 @@ type Filter = (r: Row) => boolean;
 const WRITE_RULES: Record<string, () => boolean> = {
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
-  bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false,
+  bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false, bank_matches: () => false,
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
@@ -291,6 +291,7 @@ function visible(table: string, r: Row): boolean {
   if (table === "bank_parse_rules") return can("bank.view") || can("bank.manage");
   if (table === "bank_messages") return can("bank.manage");
   if (table === "bank_movements") return can("bank.manage") || (can("bank.view") && branches.includes(r.branch_id));
+  if (table === "bank_matches") return can("bank.manage");
   if (table === "expense_categories") return r.organization_id === ORG;
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
@@ -2084,7 +2085,7 @@ Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staf
 const gl = glRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, dayOf: (iso) => dayOf(iso) /* every demo branch keeps Riyadh time */, today: (b) => branchToday(b ?? undefined) });
 Object.assign(rpcs, gl.rpcs);
 // the bank's messages (0066: A6 and A7)
-Object.assign(rpcs, bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso) }));
+Object.assign(rpcs, bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso), nextNumber }));
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));
