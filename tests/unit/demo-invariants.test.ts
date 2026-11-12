@@ -437,7 +437,7 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_bank_movements", { p_branch: null, p_from: today(), p_to: today() })).rejects.toThrow(/FORBIDDEN/);
   });
 
-  it("MT01–MT06 matching in the demo: a movement matched once with its transfer voucher, a record once, a difference needs a reason, undo, a cancelled voucher lets go, money in turned into income and undone", async () => {
+  it("MT01–MT06 matching in the demo: a movement matched once with its transfer voucher, a record once, a difference needs a reason, undo, a cancelled voucher lets go, money in turned into income and undone; the day's settlement at the vouchers' total, never also voucher by voucher", async () => {
     await login("owner@demo.sa");
     const all = await rpc<any[]>("fn_bank_movements", { p_branch: null, p_from: today().slice(0, 8) + "01", p_to: today() });
     const un = all.find((x) => !x.branch_id)!;
@@ -466,6 +466,22 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     expect(e.expense_number).toBeNull();
     expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
     await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "ليست إيرادًا" });
+    // MT11–MT12: the day's terminal money is matched as the settlement, at the vouchers' total, never also voucher by voucher
+    const pre = (await rpc<any>("fn_pos_settlement_preview", { p_branch: BRANCH, p_account: bankA.id, p_date: today() })).system_total_halalas as number;
+    const p1 = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 150, method: "pos", reference: "DM-P1", account_id: bankA.id, idempotency_key: uid() } });
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 100, method: "pos", reference: "DM-P2", account_id: bankA.id, idempotency_key: uid() } });
+    const st = await rpc<any>("fn_pos_settle", { p: { branch_id: BRANCH, account_id: bankA.id, business_date: today(), terminal_total_halalas: pre + 240, note: "فرق الجهاز" } });
+    const sc = (await rpc<any[]>("fn_bank_candidates", { p_movement: un.id })).find((x) => x.type === "pos_settlement");
+    expect(sc.amount_halalas).toBe(pre + 250);
+    expect((await rpc<any>("fn_bank_match", { p_movement: un.id, p_type: "pos_settlement", p_target: st.settlement.id, p_reason: "عمولة" })).difference_halalas).toBe(200 - pre - 250);
+    await expect(rpc("fn_pos_settle", { p: { branch_id: BRANCH, account_id: bankA.id, business_date: today(), terminal_total_halalas: pre + 230, note: "x", version: st.settlement.version } })).rejects.toThrow(/settlement_matched/);
+    await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "تجربة" });
+    expect((await rpc<any[]>("fn_bank_candidates", { p_movement: un.id })).some((x) => x.id === p1.voucher_id)).toBe(true);
+    await rpc("fn_bank_match", { p_movement: un.id, p_type: "pos_settlement", p_target: st.settlement.id, p_reason: "عمولة" });
+    expect((await rpc<any[]>("fn_bank_candidates", { p_movement: un.id })).some((x) => x.id === p1.voucher_id)).toBe(false);
+    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 30, method: "pos", reference: "DM-P3", account_id: bankA.id, idempotency_key: uid() } });
+    m = (await rpc<any[]>("fn_bank_movements", { p_branch: BRANCH, p_from: today().slice(0, 8) + "01", p_to: today() })).find((x) => x.id === un.id);
+    expect(m.status).toBe("pending");
     await login("manager@demo.sa");
     await expect(rpc("fn_bank_candidates", { p_movement: un.id })).rejects.toThrow(/FORBIDDEN/);
   });

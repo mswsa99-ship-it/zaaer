@@ -80,11 +80,14 @@ function Movements({ branch, from, to, unassignedOnly }: { branch: string | null
   const shown = waitingOnly ? rows.filter((r) => r.status === "pending") : rows;
   const tin = rows.filter((r) => r.direction === "in").reduce((s, r) => s + r.amount_halalas, 0);
   const tout = rows.filter((r) => r.direction === "out").reduce((s, r) => s + r.amount_halalas, 0);
+  const win = rows.filter((r) => r.status === "pending" && r.direction === "in").reduce((s, r) => s + r.amount_halalas, 0);
+  const wout = rows.filter((r) => r.status === "pending" && r.direction === "out").reduce((s, r) => s + r.amount_halalas, 0);
   return (
     <>
       {!unassignedOnly && <Card className="mb-4"><AmountGrid testId="bank-totals">
         <AmountBox label="الداخل" value={sar(tin)} tone="text-success-600" /><AmountBox label="الخارج" value={sar(tout)} tone="text-danger-600" /><AmountBox label="بانتظار المطابقة" value={<span data-testid="bank-waiting">{waiting}</span>} tone={waiting ? "text-warning-700" : "text-success-600"} />
       </AmountGrid>
+        {waiting > 0 && <p className="mt-3 text-sm text-ink-600" data-testid="bank-waiting-money">غير المطابَق: داخل <span dir="ltr" className="tabular-nums">{sar(win)}</span> · خارج <span dir="ltr" className="tabular-nums">{sar(wout)}</span>. هذا الفرق بين كشف البنك وما سُجّل في النظام، ولا يدخل الدفاتر حتى تطابقه أو تحوّله لسند.</p>}
         <label className="mt-3 flex min-h-[44px] items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={waitingOnly} onChange={(e) => setWaitingOnly(e.target.checked)} /> بانتظار المطابقة فقط</label>
       </Card>}
       {unassignedOnly && <p className="mb-3 text-sm text-ink-600">أرقام الحساب في هذه الرسائل لا تطابق حسابًا واحدًا من حسابات الفروع (مثل نهاية يشترك فيها حسابان)، فلا تُنسب تلقائيًا ولا تُدمج. انسب كل حركة لحساب فرعها بسبب. ولتقليل ذلك راجع قاعدة رقم الحساب في <Link to="/admin/cash-accounts" className="text-brand-700 underline">الصناديق والحسابات</Link>.</p>}
@@ -135,13 +138,14 @@ function MatchForm({ m, onDone, onCancel }: { m: BankMovement; onDone: () => voi
   const [rows, setRows] = useState<BankCandidate[] | null>(null);
   const [pick, setPick] = useState<string>("");
   const [reason, setReason] = useState("");
-  useEffect(() => { bankApi.candidates(m.id).then((c) => { setRows(c); if (c[0]?.exact) setPick(c[0].type + ":" + c[0].id); }, () => setRows([])); }, [m.id]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  useEffect(() => { bankApi.candidates(m.id).then((c) => { setRows(c); if (c[0]?.exact) setPick(c[0].type + ":" + c[0].id); }, (e) => { setLoadError(toArabicError(e)); setRows([]); }); }, [m.id]);
   const chosen = rows?.find((c) => c.type + ":" + c.id === pick);
   const diff = chosen ? m.amount_halalas - chosen.amount_halalas : 0;
   return (
     <ActionForm onSubmit={async () => { if (!chosen) throw new Error("VALIDATION: target"); await bankApi.match(m.id, chosen.type, chosen.id, reason.trim() || null); onDone(); }}>
       <p className="mb-3 text-sm text-ink-600">{KIND_AR[m.kind]} <span dir="ltr">{sar(m.amount_halalas)}</span> — {formatDateTime(m.occurred_at)}. السجلات المعروضة من نفس الحساب حول يوم الحركة، والمبلغ المطابق أولًا.</p>
-      {!rows ? <div className="py-4 text-center"><Spinner /></div> : rows.length === 0 ? <p className="text-sm text-ink-500">لا سجل مناسب. يمكنك تحويل الحركة إلى سند بدلًا من ذلك.</p> : (
+      {!rows ? <div className="py-4 text-center"><Spinner /></div> : loadError ? <p role="alert" className="text-sm text-danger-600">تعذّر جلب السجلات: {loadError}</p> : rows.length === 0 ? <p className="text-sm text-ink-500">لا سجل مناسب. يمكنك تحويل الحركة إلى سند بدلًا من ذلك.</p> : (
         <ul className="max-h-72 space-y-1 overflow-y-auto" data-testid="bank-candidates">
           {rows.map((c) => (
             <li key={c.type + c.id}><label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-ink-100 p-2 text-sm">

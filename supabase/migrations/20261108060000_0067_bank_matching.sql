@@ -6,7 +6,8 @@
 --   · a movement is used once and a record is matched once (unique while active); a different amount needs a reason and
 --     the difference is booked (fees 57 or other income 49); undoing a match, or cancelling its record, lets the movement
 --     wait again (released, never erased);
---   · in the books a waiting movement of a known account is held in the suspense account (129) until it is explained.
+--   · a waiting movement is a reconciliation item, not an entry (an entry would count a transfer already received by
+--     voucher twice); the day's terminal money is matched either as the settlement or voucher by voucher, never both.
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 1. The log lines
@@ -130,36 +131,20 @@ revoke all on bank_matches from anon, authenticated;
 grant select on bank_matches to authenticated;
 
 -- ---------------------------------------------------------------------------------------------------------------
--- 4. The books: a movement of a known account not yet matched is booked against the suspense account (129), so the
---    bank account follows the bank and the suspense account shows what is not explained yet; matching or turning it
---    into a voucher reverses that entry (the voucher books itself); undoing it books it again
+-- 4. The books: a waiting movement is not an entry — it is a reconciliation item («بانتظار المطابقة»), the gap between
+--    what the hotel recorded on the bank account and what the bank says. (Booking it bank against suspense as well
+--    would count a transfer already received by voucher twice until it is matched.) Only what matching adds is booked:
+--    a difference, or the income a movement is turned into. Their date is the movement's day while its month is open,
+--    otherwise today (a locked month is never written); reversals are dated today.
 -- ---------------------------------------------------------------------------------------------------------------
-create or replace function fn_gl_post_bank_movement(p_id uuid) returns void
-language plpgsql security definer set search_path = public as $$
-declare v bank_movements%rowtype; n int; live int; acc uuid; sus uuid;
-begin
-  select * into v from bank_movements where id = p_id;
-  select count(*) into live from journal_entries je where je.source_type = 'bank_movement' and je.source_id = v.id and je.posting like 'post%'
-     and je.reversal_of is null and not exists (select 1 from journal_entries r where r.reversal_of = je.id);
-  if v.cash_account_id is null then return; end if;
-  if v.status = 'pending' then
-    if live > 0 then return; end if;
-    select count(*) into n from journal_entries where source_type = 'bank_movement' and source_id = v.id and reversal_of is null;
-    acc := fn_gl_for_cash(v.cash_account_id); sus := fn_gl_system(v.organization_id, 'suspense');
-    perform fn_gl_post(v.organization_id, v.branch_id, fn_branch_date(v.branch_id, v.occurred_at), 'bank_movement', v.id, 'post:' || (n + 1),
-                       'حركة بنكية بانتظار المطابقة' || coalesce(' — ' || v.reference, ''),
-                       case when v.direction = 'in' then
-                         jsonb_build_array(jsonb_build_object('account_id', acc, 'debit', v.amount_halalas), jsonb_build_object('account_id', sus, 'credit', v.amount_halalas))
-                       else
-                         jsonb_build_array(jsonb_build_object('account_id', sus, 'debit', v.amount_halalas), jsonb_build_object('account_id', acc, 'credit', v.amount_halalas)) end);
-  elsif live > 0 then
-    -- matched or turned into a voucher: the suspense entry goes (the entries made from the movement itself stay)
-    perform fn_gl_reverse_live(v.id, 'post', fn_branch_today(v.branch_id), 'مطابقة الحركة البنكية');
-  end if;
-end $$;
-revoke all on function fn_gl_post_bank_movement(uuid) from public, anon, authenticated;
+create or replace function fn_gl_open_date(p_org uuid, p_branch uuid, p_date date) returns date
+language sql stable security definer set search_path = public as $$
+  select case when exists (select 1 from accounting_periods where organization_id = p_org and month = date_trunc('month', p_date)::date and locked)
+              then fn_branch_today(p_branch) else p_date end
+$$;
+revoke all on function fn_gl_open_date(uuid, uuid, date) from public, anon, authenticated;
 
--- the reversal of the live entries of a movement whose posting starts with p_prefix (post / diff / convert)
+-- the reversal of the live entries of a movement whose posting starts with p_prefix (diff / convert)
 create or replace function fn_gl_reverse_live(p_movement uuid, p_prefix text, p_date date, p_reason text) returns void
 language plpgsql security definer set search_path = public as $$
 declare e journal_entries%rowtype;
@@ -173,26 +158,6 @@ begin
   end loop;
 end $$;
 revoke all on function fn_gl_reverse_live(uuid, text, date, text) from public, anon, authenticated;
-
-create or replace function fn_trg_gl_bank_movement() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  if tg_op = 'INSERT' or new.status is distinct from old.status or new.cash_account_id is distinct from old.cash_account_id then
-    perform fn_gl_post_bank_movement(new.id);
-  end if;
-  return null;
-end $$;
-revoke all on function fn_trg_gl_bank_movement() from public, anon, authenticated;
-create or replace trigger trg_gl_bank_movement after insert or update of status, cash_account_id on bank_movements for each row execute function fn_trg_gl_bank_movement();
-
--- what exists already (assigned and pending) is booked
-do $$
-declare r record;
-begin
-  for r in select id from bank_movements where cash_account_id is not null and status = 'pending' order by occurred_at loop
-    perform fn_gl_post_bank_movement(r.id);
-  end loop;
-end $$;
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 5. What a movement can be matched with: the records of the same bank account, the right direction, not matched yet
@@ -209,14 +174,24 @@ begin
                                        || case f.method::text when 'pos' then ' (شبكة)' when 'bank_transfer' then ' (تحويل)' else '' end)
       into r from financial_vouchers f
      where f.id = p_id and f.account_id = v.cash_account_id and f.status = 'approved' and f.method::text in ('bank_transfer', 'pos')
-       and ((v.direction = 'in' and f.kind in ('receipt', 'deposit')) or (v.direction = 'out' and f.kind in ('refund', 'deposit_refund')));
+       and ((v.direction = 'in' and f.kind in ('receipt', 'deposit')) or (v.direction = 'out' and f.kind in ('refund', 'deposit_refund')))
+       -- the day's terminal money is matched as its settlement or voucher by voucher, never both
+       and not (f.method::text = 'pos' and exists (select 1 from bank_matches bm join pos_settlements s on s.id = bm.target_id
+                                                    where bm.active and bm.target_type = 'pos_settlement' and s.account_id = f.account_id
+                                                      and s.business_date = fn_branch_date(f.branch_id, f.occurred_at)));
   elsif p_type = 'expense' then
     select jsonb_build_object('type', 'expense', 'id', x.id, 'number', x.number, 'amount_halalas', x.amount_halalas, 'at', x.occurred_at, 'label', 'سند صرف: ' || x.description)
       into r from expense_vouchers x where x.id = p_id and x.account_id = v.cash_account_id and x.status = 'approved' and v.direction = 'out';
   elsif p_type = 'pos_settlement' then
-    select jsonb_build_object('type', 'pos_settlement', 'id', s.id, 'number', 'تسوية ' || to_char(s.business_date, 'YYYY-MM-DD'), 'amount_halalas', s.terminal_total_halalas,
+    -- its amount is what the books hold for that day: the terminal vouchers' total now (not the terminal's own figure)
+    select jsonb_build_object('type', 'pos_settlement', 'id', s.id, 'number', 'تسوية ' || to_char(s.business_date, 'YYYY-MM-DD'),
+                              'amount_halalas', (fn_pos_day_total(s.branch_id, s.account_id, s.business_date)->>'system_total_halalas')::bigint,
                               'at', s.business_date::timestamptz, 'label', 'تسوية الشبكة ليوم ' || to_char(s.business_date, 'YYYY-MM-DD'))
-      into r from pos_settlements s where s.id = p_id and s.account_id = v.cash_account_id and v.direction = 'in';
+      into r from pos_settlements s where s.id = p_id and s.account_id = v.cash_account_id and v.direction = 'in'
+       and not exists (select 1 from bank_matches bm join financial_vouchers f on f.id = bm.target_id
+                        where bm.active and bm.target_type = 'voucher' and f.method::text = 'pos' and f.account_id = s.account_id
+                          and fn_branch_date(f.branch_id, f.occurred_at) = s.business_date);
+    if r is not null and (r->>'amount_halalas')::bigint <= 0 then r := null; end if;
   elsif p_type = 'platform_payout' then
     select jsonb_build_object('type', 'platform_payout', 'id', p.id, 'number', p.reference, 'amount_halalas', p.received_halalas, 'at', p.received_on::timestamptz,
                               'label', 'دفعة منصة ' || coalesce((select name from booking_sources where id = p.source_id), ''))
@@ -235,6 +210,7 @@ begin
   select * into v from bank_movements where id = p_movement and organization_id = fn_user_org_id();
   if not found then raise exception 'NOT_FOUND'; end if;
   if v.cash_account_id is null then return '[]'::jsonb; end if;
+  perform fn_require_branch(v.branch_id);
   d := fn_branch_date(v.branch_id, v.occurred_at);
   return coalesce((select jsonb_agg(c || jsonb_build_object('exact', (c->>'amount_halalas')::bigint = v.amount_halalas)
                                     order by abs((c->>'amount_halalas')::bigint - v.amount_halalas), abs(extract(epoch from (c->>'at')::timestamptz - v.occurred_at)))
@@ -257,13 +233,29 @@ grant execute on function fn_bank_candidates(uuid) to authenticated;
 create or replace function fn_bank_match(p_movement uuid, p_type text, p_target uuid, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v bank_movements%rowtype; t jsonb; diff bigint; v_reason text := nullif(btrim(coalesce(p_reason, '')), ''); acc uuid; m uuid; d date;
+        pos_acc uuid; pos_day date;
 begin
   perform fn_require_cap('bank.manage');
   select * into v from bank_movements where id = p_movement and organization_id = fn_user_org_id() for update;
   if not found then raise exception 'NOT_FOUND'; end if;
   if v.status <> 'pending' then raise exception 'VALIDATION: movement_used'; end if;
   if v.cash_account_id is null then raise exception 'VALIDATION: movement_unassigned'; end if;
+  perform fn_require_branch(v.branch_id);
   if p_type not in ('voucher', 'expense', 'pos_settlement', 'platform_payout') then raise exception 'VALIDATION: target_type'; end if;
+  -- the record is held while it is matched: a cancellation (or a settlement's new figures) waits, then sees the match.
+  -- Taken before the day's lock, in the order a cancellation takes them (its row, then the day's lock in its trigger)
+  if p_type = 'voucher' then perform 1 from financial_vouchers where id = p_target for share;
+  elsif p_type = 'expense' then perform 1 from expense_vouchers where id = p_target for share;
+  elsif p_type = 'pos_settlement' then perform 1 from pos_settlements where id = p_target for share;
+  else perform 1 from platform_payouts where id = p_target for share;
+  end if;
+  -- a day's terminal money (its settlement, its terminal vouchers) is matched by one at a time
+  if p_type = 'voucher' then
+    select account_id, fn_branch_date(branch_id, occurred_at) into pos_acc, pos_day from financial_vouchers where id = p_target and method::text = 'pos';
+  elsif p_type = 'pos_settlement' then
+    select account_id, business_date into pos_acc, pos_day from pos_settlements where id = p_target;
+  end if;
+  if pos_acc is not null then perform pg_advisory_xact_lock(hashtext('bank_pos_day:' || pos_acc::text || ':' || pos_day::text)); end if;
   perform pg_advisory_xact_lock(hashtext('bank_target:' || p_type || ':' || p_target::text));
   t := fn_bank_target(v.id, p_type, p_target);
   if t is null then raise exception 'VALIDATION: target'; end if;
@@ -275,7 +267,7 @@ begin
   values (v.organization_id, v.id, p_type, p_target, 'link', diff, v_reason, fn_staff_id()) returning id into m;
   update bank_movements set status = 'matched' where id = v.id;
   if diff <> 0 then
-    acc := fn_gl_for_cash(v.cash_account_id); d := fn_branch_date(v.branch_id, v.occurred_at);
+    acc := fn_gl_for_cash(v.cash_account_id); d := fn_gl_open_date(v.organization_id, v.branch_id, fn_branch_date(v.branch_id, v.occurred_at));
     -- the bank moved diff more (+) or less (−) than the record booked: the bank account takes the difference
     perform fn_gl_post(v.organization_id, v.branch_id, d, 'bank_movement', v.id, 'diff:' || m::text,
                        'فرق مطابقة ' || (t->>'number') || ': ' || v_reason,
@@ -294,11 +286,14 @@ grant execute on function fn_bank_match(uuid, text, uuid, text) to authenticated
 -- the release of a movement's match (by the owner, or because its record was cancelled): the movement waits again
 create or replace function fn_bank_release(p_match uuid, p_reason text) returns void
 language plpgsql security definer set search_path = public as $$
-declare m bank_matches%rowtype; v bank_movements%rowtype;
+declare m bank_matches%rowtype; v bank_movements%rowtype; mv uuid;
 begin
+  -- the movement first, then its match (the order matching and undoing take too)
+  select movement_id into mv from bank_matches where id = p_match;
+  if not found then return; end if;
+  select * into v from bank_movements where id = mv for update;
   select * into m from bank_matches where id = p_match and active for update;
   if not found then return; end if;
-  select * into v from bank_movements where id = m.movement_id for update;
   update bank_matches set active = false, released_at = now(), released_by = fn_staff_id(), release_reason = left(p_reason, 300) where id = m.id;
   perform fn_gl_reverse_live(v.id, 'diff:' || m.id::text, fn_branch_today(v.branch_id), p_reason);
   if m.target_type = 'journal' then perform fn_gl_reverse_live(v.id, 'convert:' || m.id::text, fn_branch_today(v.branch_id), p_reason); end if;
@@ -313,6 +308,7 @@ begin
   perform fn_require_cap('bank.manage');
   select * into v from bank_movements where id = p_movement and organization_id = fn_user_org_id() for update;
   if not found then raise exception 'NOT_FOUND'; end if;
+  if v.branch_id is not null then perform fn_require_branch(v.branch_id); end if;
   if v_reason is null or char_length(v_reason) > 300 then raise exception 'VALIDATION: reason'; end if;
   select * into m from bank_matches where movement_id = v.id and active;
   if not found then raise exception 'VALIDATION: movement_not_matched'; end if;
@@ -330,20 +326,25 @@ grant execute on function fn_bank_unmatch(uuid, text) to authenticated;
 create or replace function fn_bank_convert(p_movement uuid, p jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare v bank_movements%rowtype; cat expense_categories%rowtype; v_desc text := nullif(btrim(coalesce(p->>'description', '')), ''); x expense_vouchers%rowtype;
-        m uuid := gen_random_uuid(); je uuid;
+        m uuid := gen_random_uuid(); je uuid; d date; d0 date;
 begin
   perform fn_require_cap('bank.manage');
   select * into v from bank_movements where id = p_movement and organization_id = fn_user_org_id() for update;
   if not found then raise exception 'NOT_FOUND'; end if;
   if v.status <> 'pending' then raise exception 'VALIDATION: movement_used'; end if;
   if v.cash_account_id is null then raise exception 'VALIDATION: movement_unassigned'; end if;
+  perform fn_require_branch(v.branch_id);
+  if exists (select 1 from cash_accounts where id = v.cash_account_id and archived_at is not null) then raise exception 'VALIDATION: account_archived'; end if;
   if v_desc is null or char_length(v_desc) > 300 then raise exception 'VALIDATION: description'; end if;
+  -- the movement's day while its month is open, otherwise today
+  d0 := fn_branch_date(v.branch_id, v.occurred_at); d := fn_gl_open_date(v.organization_id, v.branch_id, d0);
   if v.direction = 'out' then
     select * into cat from expense_categories where id = (p->>'category_id')::uuid and organization_id = v.organization_id and is_active;
     if not found then raise exception 'VALIDATION: category'; end if;
     update bank_movements set status = 'converted' where id = v.id;
     insert into expense_vouchers(organization_id, branch_id, number, account_id, category_id, amount_halalas, occurred_at, payee, description, reference, created_by)
-    values (v.organization_id, v.branch_id, fn_next_document_number(v.organization_id, 'expense', 'EXP'), v.cash_account_id, cat.id, v.amount_halalas, v.occurred_at,
+    values (v.organization_id, v.branch_id, fn_next_document_number(v.organization_id, 'expense', 'EXP'), v.cash_account_id, cat.id, v.amount_halalas,
+            case when d = d0 then v.occurred_at else now() end,
             null, v_desc, coalesce(v.reference, 'حركة بنكية'), fn_staff_id())
     returning * into x;
     insert into bank_matches(id, organization_id, movement_id, target_type, target_id, kind, reason, created_by)
@@ -351,7 +352,7 @@ begin
     perform fn_audit_change(v.branch_id, 'expense.created', 'expense_voucher', x.id, null, jsonb_build_object('number', x.number, 'amount_halalas', x.amount_halalas, 'from', 'bank_movement'), v_desc);
   else
     update bank_movements set status = 'converted' where id = v.id;
-    je := fn_gl_post(v.organization_id, v.branch_id, fn_branch_date(v.branch_id, v.occurred_at), 'bank_movement', v.id, 'convert:' || m::text,
+    je := fn_gl_post(v.organization_id, v.branch_id, d, 'bank_movement', v.id, 'convert:' || m::text,
                      'إيراد من حركة بنكية: ' || v_desc,
                      jsonb_build_array(jsonb_build_object('account_id', fn_gl_for_cash(v.cash_account_id), 'debit', v.amount_halalas),
                                        jsonb_build_object('account_id', fn_gl_system(v.organization_id, 'other_income'), 'credit', v.amount_halalas)));
@@ -381,6 +382,44 @@ revoke all on function fn_trg_bank_release_target() from public, anon, authentic
 create or replace trigger trg_bank_release_voucher after update of status on financial_vouchers for each row execute function fn_trg_bank_release_target();
 create or replace trigger trg_bank_release_expense after update of status on expense_vouchers for each row execute function fn_trg_bank_release_target();
 create or replace trigger trg_bank_release_payout after update of status on platform_payouts for each row execute function fn_trg_bank_release_target();
+
+-- a terminal voucher added to or cancelled from a day whose settlement is matched changes what the books hold for that
+-- day: the settlement's match is released, and the owner matches it again at the new total
+create or replace function fn_trg_bank_pos_day() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare m uuid; d record;
+begin
+  if tg_op = 'UPDATE' and new.status is not distinct from old.status and new.occurred_at is not distinct from old.occurred_at
+     and new.account_id is not distinct from old.account_id and new.method is not distinct from old.method then return null; end if;
+  -- the day (or days, when a correction moves the voucher) whose terminal total changes
+  for d in select distinct x.acc, x.day from (
+             select new.account_id as acc, fn_branch_date(new.branch_id, new.occurred_at) as day where new.method::text = 'pos'
+             union all
+             select old.account_id, fn_branch_date(old.branch_id, old.occurred_at) where tg_op = 'UPDATE' and old.method::text = 'pos') x
+           where x.acc is not null order by 1, 2 loop
+    -- waits for a match of that day in progress, then sees it
+    perform pg_advisory_xact_lock(hashtext('bank_pos_day:' || d.acc::text || ':' || d.day::text));
+    for m in select bm.id from bank_matches bm join pos_settlements s on s.id = bm.target_id
+              where bm.active and bm.target_type = 'pos_settlement' and s.account_id = d.acc and s.business_date = d.day loop
+      perform fn_bank_release(m, 'تغيّرت سندات الشبكة لذلك اليوم');
+    end loop;
+  end loop;
+  return null;
+end $$;
+revoke all on function fn_trg_bank_pos_day() from public, anon, authenticated;
+create or replace trigger trg_bank_pos_day after insert or update of status, occurred_at, account_id, method on financial_vouchers for each row execute function fn_trg_bank_pos_day();
+
+-- a matched settlement keeps its figures: the match is undone first
+create or replace function fn_trg_bank_settlement_matched() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from bank_matches where active and target_type = 'pos_settlement' and target_id = old.id) then
+    raise exception 'VALIDATION: settlement_matched';
+  end if;
+  return new;
+end $$;
+revoke all on function fn_trg_bank_settlement_matched() from public, anon, authenticated;
+create or replace trigger trg_bank_settlement_matched before update on pos_settlements for each row execute function fn_trg_bank_settlement_matched();
 
 -- the movements list carries what each one is matched with
 create or replace function fn_bank_movements(p_branch uuid, p_from date, p_to date) returns jsonb

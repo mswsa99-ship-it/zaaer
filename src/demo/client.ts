@@ -291,7 +291,7 @@ function visible(table: string, r: Row): boolean {
   if (table === "bank_parse_rules") return can("bank.view") || can("bank.manage");
   if (table === "bank_messages") return can("bank.manage");
   if (table === "bank_movements") return can("bank.manage") || (can("bank.view") && branches.includes(r.branch_id));
-  if (table === "bank_matches") return can("bank.manage");
+  if (table === "bank_matches") { const v = byId("bank_movements", r.movement_id); return can("bank.manage") || (can("bank.view") && !!v && branches.includes(v.branch_id)); }
   if (table === "expense_categories") return r.organization_id === ORG;
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
@@ -990,6 +990,8 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (!p.business_date || p.business_date > todayISO()) throw new Error("VALIDATION: business_date"); if (!/^-?[0-9]{1,15}$/.test(String(p.terminal_total_halalas ?? ""))) throw new Error("VALIDATION: amount");
     const terminal = Number(p.terminal_total_halalas); const t = posDayTotal(p.branch_id, p.account_id, p.business_date); const diff = terminal - t.system_total_halalas; const note = String(p.note ?? "").trim() || null; if (diff !== 0 && !note) throw new Error("VALIDATION: note_required");
     let s = T("pos_settlements").find((x) => x.account_id === p.account_id && x.business_date === p.business_date); const before = s ? { ...s } : null;
+    // 0067: a matched settlement keeps its figures (a match left behind by a changed day no longer counts)
+    if (s && T("bank_matches").some((m) => m.active && m.target_type === "pos_settlement" && m.target_id === s!.id && m.day_vouchers === t.vouchers.map((x) => x.id).sort().join(","))) throw new Error("VALIDATION: settlement_matched");
     const fields = { terminal_total_halalas: terminal, system_total_halalas: t.system_total_halalas, difference_halalas: diff, voucher_count: t.voucher_count, status: diff === 0 ? "matched" : "difference", note, updated_by: staffId(), updated_at: nowISO() };
     if (s) { checkVersion(s.version, p.version); Object.assign(s, fields, { version: s.version + 1 }); }
     else { s = { id: uid(), organization_id: ORG, branch_id: p.branch_id, account_id: p.account_id, business_date: p.business_date, ...fields, version: 1, created_by: staffId(), created_at: nowISO() }; T("pos_settlements").push(s); }
@@ -2085,7 +2087,7 @@ Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staf
 const gl = glRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, dayOf: (iso) => dayOf(iso) /* every demo branch keeps Riyadh time */, today: (b) => branchToday(b ?? undefined) });
 Object.assign(rpcs, gl.rpcs);
 // the bank's messages (0066: A6 and A7)
-Object.assign(rpcs, bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso), nextNumber }));
+Object.assign(rpcs, bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso), nextNumber, posDayTotal }));
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));

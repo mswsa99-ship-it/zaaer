@@ -18,6 +18,8 @@ export interface BankCtx {
   emit: (table: string) => void;
   dayOf: (iso: string) => string;
   nextNumber: (prefix: string) => string;
+  /** the terminal vouchers' total of an account's day (fn_pos_day_total) */
+  posDayTotal: (branch: string, account: string, date: string) => { system_total_halalas: number; vouchers: { id: string }[] };
 }
 
 const KINDS = ["deposit", "transfer_in", "pos_settlement", "other_in", "transfer_out", "withdrawal", "fee", "pos_fee", "purchase", "other_out"];
@@ -135,27 +137,41 @@ export function seedBank(T: (t: string) => Row[]) {
 export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
   const { T, can, requireCap, requireBranch, myBranches, audit, emit, dayOf } = c;
   const settings = () => T("bank_mail_settings").find((s) => s.organization_id === ORG);
-  // 0067: a cancelled record lets its movement go (the SQL does it by trigger when the record is cancelled)
-  const targetState = (type: string, id: string) => {
+  // 0067: a cancelled record lets its movement go, and so does a change to a matched settlement's day (the SQL does both
+  // by trigger at the moment of the change; the demo catches up whenever a bank function is called)
+  const dayTotal = (s: Row) => c.posDayTotal(s.branch_id, s.account_id, s.business_date).system_total_halalas;
+  /** which terminal vouchers make the day (any added, cancelled or moved one changes it, as the SQL's trigger sees it) */
+  const daySig = (s: Row) => c.posDayTotal(s.branch_id, s.account_id, s.business_date).vouchers.map((x) => x.id).sort().join(",");
+  const targetState = (type: string, id: string, m?: Row) => {
     if (type === "voucher") return c.byId("financial_vouchers", id)?.status === "approved";
     if (type === "expense") return c.byId("expense_vouchers", id)?.status === "approved";
     if (type === "platform_payout") return c.byId("platform_payouts", id)?.status === "confirmed";
+    if (type === "pos_settlement" && m) { const s = c.byId("pos_settlements", id); return !!s && daySig(s) === m.day_vouchers; }
     return true;
   };
+  const matchedSettlementOf = (account: string, day: string) => T("bank_matches").some((m) => m.active && m.target_type === "pos_settlement"
+    && (() => { const s = c.byId("pos_settlements", m.target_id); return !!s && s.account_id === account && s.business_date === day; })());
+  const matchedPosVoucherOf = (account: string, day: string) => T("bank_matches").some((m) => m.active && m.target_type === "voucher"
+    && (() => { const f = c.byId("financial_vouchers", m.target_id); return !!f && f.method === "pos" && f.account_id === account && c.dayOf(f.occurred_at) === day; })());
   const release = (m: Row, reason: string) => {
     Object.assign(m, { active: false, released_at: nowISO(), release_reason: reason });
     const v = T("bank_movements").find((x) => x.id === m.movement_id); if (v) v.status = "pending";
   };
-  const syncReleases = () => { for (const m of T("bank_matches").filter((x) => x.active && !targetState(x.target_type, x.target_id))) release(m, "أُلغي السجل المطابق"); };
+  const syncReleases = () => { for (const m of T("bank_matches").filter((x) => x.active && !targetState(x.target_type, x.target_id, x)))
+    release(m, m.target_type === "pos_settlement" ? "تغيّرت سندات الشبكة لذلك اليوم" : "أُلغي السجل المطابق"); };
   /** fn_bank_target */
   const target = (v: Row, type: string, id: string): Row | null => {
     if (type === "voucher") { const f = c.byId("financial_vouchers", id);
       if (!f || f.account_id !== v.cash_account_id || f.status !== "approved" || !["bank_transfer", "pos"].includes(f.method) || !((v.direction === "in" && ["receipt", "deposit"].includes(f.kind)) || (v.direction === "out" && ["refund", "deposit_refund"].includes(f.kind)))) return null;
+      // the day's terminal money is matched as its settlement or voucher by voucher, never both
+      if (f.method === "pos" && matchedSettlementOf(f.account_id, c.dayOf(f.occurred_at))) return null;
       return { type, id, number: f.number, amount_halalas: f.amount_halalas, at: f.occurred_at, label: ({ receipt: "سند قبض", deposit: "قبض تأمين", refund: "رد مبلغ", deposit_refund: "رد تأمين" } as Record<string, string>)[f.kind] + (f.method === "pos" ? " (شبكة)" : " (تحويل)") }; }
     if (type === "expense") { const x = c.byId("expense_vouchers", id); if (!x || x.account_id !== v.cash_account_id || x.status !== "approved" || v.direction !== "out") return null;
       return { type, id, number: x.number, amount_halalas: x.amount_halalas, at: x.occurred_at, label: "سند صرف: " + x.description }; }
-    if (type === "pos_settlement") { const x = c.byId("pos_settlements", id); if (!x || x.account_id !== v.cash_account_id || v.direction !== "in") return null;
-      return { type, id, number: "تسوية " + x.business_date, amount_halalas: x.terminal_total_halalas, at: x.business_date + "T00:00:00Z", label: "تسوية الشبكة ليوم " + x.business_date }; }
+    if (type === "pos_settlement") { const x = c.byId("pos_settlements", id); if (!x || x.account_id !== v.cash_account_id || v.direction !== "in" || matchedPosVoucherOf(x.account_id, x.business_date)) return null;
+      // its amount is what the books hold for that day: the terminal vouchers' total now
+      const total = dayTotal(x); if (total <= 0) return null;
+      return { type, id, number: "تسوية " + x.business_date, amount_halalas: total, at: x.business_date + "T00:00:00Z", label: "تسوية الشبكة ليوم " + x.business_date }; }
     if (type === "platform_payout") { const x = c.byId("platform_payouts", id); if (!x || x.account_id !== v.cash_account_id || x.status !== "confirmed" || v.direction !== "in") return null;
       return { type, id, number: x.reference, amount_halalas: x.received_halalas, at: x.received_on + "T00:00:00Z", label: "دفعة منصة " + (c.byId("booking_sources", x.source_id)?.name ?? "") }; }
     return null;
@@ -168,6 +184,7 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
     return "دفعة منصة " + (c.byId("platform_payouts", m.target_id)?.reference ?? "");
   };
   const movementForOwner = (id: string) => { requireCap("bank.manage"); const v = T("bank_movements").find((x) => x.id === id); if (!v) throw new Error("NOT_FOUND"); return v; };
+  const inMyBranch = (v: Row) => { if (v.branch_id) requireBranch(v.branch_id); };
   const incomplete = (s: Row | undefined) => !s || !s.mailbox_address || !s.imap_user || !s.has_password || !s.has_relay_key;
   return {
     fn_admin_bank_mail_get: () => {
@@ -245,7 +262,7 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
       return { ok: true, branch_id: a.branch_id };
     },
     fn_bank_candidates: ({ p_movement }) => {
-      const v = movementForOwner(p_movement); syncReleases(); if (!v.cash_account_id) return [];
+      const v = movementForOwner(p_movement); syncReleases(); if (!v.cash_account_id) return []; inMyBranch(v);
       const d = dayOf(v.occurred_at); const within = (iso: string) => { const x = dayOf(iso); const lo = new Date(Date.parse(d + "T00:00:00Z") - 7 * 86400_000).toISOString().slice(0, 10); const hi = new Date(Date.parse(d + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10); return x >= lo && x <= hi; };
       const used = (type: string, id: string) => T("bank_matches").some((m) => m.active && m.target_type === type && m.target_id === id);
       const rows: Row[] = [
@@ -260,19 +277,22 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
     fn_bank_match: ({ p_movement, p_type, p_target, p_reason }) => {
       const v = movementForOwner(p_movement); syncReleases();
       if (v.status !== "pending") throw new Error("VALIDATION: movement_used"); if (!v.cash_account_id) throw new Error("VALIDATION: movement_unassigned");
+      inMyBranch(v);
       if (!["voucher", "expense", "pos_settlement", "platform_payout"].includes(p_type)) throw new Error("VALIDATION: target_type");
       const t = target(v, p_type, p_target); if (!t) throw new Error("VALIDATION: target");
       if (T("bank_matches").some((m) => m.active && m.target_type === p_type && m.target_id === p_target)) throw new Error("VALIDATION: target_used");
       const diff = v.amount_halalas - t.amount_halalas; const reason = String(p_reason ?? "").trim() || null;
       if (diff !== 0 && (!reason || reason.length > 300)) throw new Error("VALIDATION: difference_reason");
       if (reason && reason.length > 300) throw new Error("VALIDATION: reason");
-      const m = { id: uid(), organization_id: ORG, movement_id: v.id, target_type: p_type, target_id: p_target, kind: "link", difference_halalas: diff, reason, active: true, created_at: nowISO(), released_at: null, release_reason: null };
+      const m = { id: uid(), organization_id: ORG, movement_id: v.id, target_type: p_type, target_id: p_target, kind: "link", difference_halalas: diff, reason, active: true, created_at: nowISO(), released_at: null, release_reason: null,
+        day_vouchers: p_type === "pos_settlement" ? daySig(c.byId("pos_settlements", p_target)!) : null };
       T("bank_matches").push(m); v.status = "matched"; emit("bank_movements");
       audit(v.branch_id, "bank_movement.matched", "bank_movement", v.id, { after: { target: t.number, type: p_type, amount_halalas: v.amount_halalas, difference_halalas: diff }, reason });
       return { ok: true, match_id: m.id, difference_halalas: diff };
     },
     fn_bank_unmatch: ({ p_movement, p_reason }) => {
       const v = movementForOwner(p_movement); syncReleases(); const reason = String(p_reason ?? "").trim();
+      inMyBranch(v);
       if (!reason || reason.length > 300) throw new Error("VALIDATION: reason");
       const m = T("bank_matches").find((x) => x.movement_id === v.id && x.active); if (!m) throw new Error("VALIDATION: movement_not_matched");
       if (m.target_type === "expense" && m.kind === "convert") throw new Error("VALIDATION: cancel_the_expense");
@@ -283,11 +303,13 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
     fn_bank_convert: ({ p_movement, p }) => {
       const v = movementForOwner(p_movement); syncReleases(); const q: Row = p ?? {}; const desc = String(q.description ?? "").trim();
       if (v.status !== "pending") throw new Error("VALIDATION: movement_used"); if (!v.cash_account_id) throw new Error("VALIDATION: movement_unassigned");
+      inMyBranch(v); if (c.byId("cash_accounts", v.cash_account_id)?.archived_at) throw new Error("VALIDATION: account_archived");
       if (!desc || desc.length > 300) throw new Error("VALIDATION: description");
       const mid = uid(); let expense: Row | null = null;
       if (v.direction === "out") {
         const cat = T("expense_categories").find((x) => x.id === q.category_id && x.is_active); if (!cat) throw new Error("VALIDATION: category");
-        expense = { id: uid(), organization_id: ORG, branch_id: v.branch_id, number: c.nextNumber("EXP"), account_id: v.cash_account_id, category_id: cat.id, amount_halalas: v.amount_halalas, occurred_at: v.occurred_at,
+        expense = { id: uid(), organization_id: ORG, branch_id: v.branch_id, number: c.nextNumber("EXP"), account_id: v.cash_account_id, category_id: cat.id, amount_halalas: v.amount_halalas,
+          occurred_at: T("accounting_periods").some((x) => x.locked && String(x.month).slice(0, 7) === c.dayOf(v.occurred_at).slice(0, 7)) ? nowISO() : v.occurred_at,
           payee: null, description: desc, reference: v.reference ?? "حركة بنكية", status: "approved", cancel_reason: null, cancelled_at: null, cancelled_by: null, idempotency_key: null, created_by: null, created_at: nowISO() };
         T("expense_vouchers").push(expense); emit("expense_vouchers");
         T("bank_matches").push({ id: mid, organization_id: ORG, movement_id: v.id, target_type: "expense", target_id: expense.id, kind: "convert", difference_halalas: 0, reason: desc, active: true, created_at: nowISO() });
