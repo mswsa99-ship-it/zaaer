@@ -39,26 +39,32 @@ public final class Relayer {
     }
 
     public static final class Result {
-        public final int sent; public final int waiting; public final IOException error;
-        Result(int sent, int waiting, IOException error) { this.sent = sent; this.waiting = waiting; this.error = error; }
-        public boolean refused() { return error instanceof Smtp.Refused; }
+        public final int sent; public final int setAside; public final int waiting; public final IOException error;
+        Result(int sent, int setAside, int waiting, IOException error) { this.sent = sent; this.setAside = setAside; this.waiting = waiting; this.error = error; }
+        /** the login was refused: nothing goes until the password (or the login) is corrected */
+        public boolean refused() { return error instanceof Smtp.Refused && ((Smtp.Refused) error).login; }
     }
 
-    /** sends what waits, in batches of 20, oldest first; stops at the first failure (the rest waits) */
+    /**
+     * Sends what waits, in batches of 20, oldest first. Each message leaves the outbox as soon as the server accepted
+     * it; one the server refuses is set aside and the rest go on; a lost connection or a refused login stops the round
+     * (what is left waits for the next try).
+     */
     public Result flush(Config c, Smtp smtp) {
-        int sent = 0;
+        final int[] sent = { 0 }, aside = { 0 };
         while (true) {
-            List<File> batch = outbox.files();
-            if (batch.isEmpty()) return new Result(sent, 0, null);
-            if (batch.size() > 20) batch = batch.subList(0, 20);
+            List<File> files = outbox.files();
+            if (files.isEmpty()) return new Result(sent[0], aside[0], 0, null);
+            final List<File> batch = files.size() > 20 ? files.subList(0, 20) : files;
             List<String> mails = new ArrayList<>();
             try {
                 for (File f : batch) mails.add(Outbox.read(f));
-                int n = smtp.send(c.mailbox, mails);
-                for (int i = 0; i < n; i++) outbox.remove(batch.get(i));
-                sent += n;
+                smtp.send(c.mailbox, mails, new Smtp.Listener() {
+                    @Override public void accepted(int i) { outbox.remove(batch.get(i)); sent[0]++; }
+                    @Override public void refused(int i, Smtp.Refused why) { outbox.setAside(batch.get(i)); aside[0]++; }
+                });
             } catch (IOException e) {
-                return new Result(sent, outbox.size(), e);
+                return new Result(sent[0], aside[0], outbox.size(), e);
             }
         }
     }

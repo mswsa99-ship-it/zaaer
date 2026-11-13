@@ -101,7 +101,14 @@ export default function AdminBankMail() {
           <div className="flex items-center gap-2"><Smartphone className="h-5 w-5 text-ink-500" /><span className="font-semibold">تطبيق الجوال</span></div>
           <button type="button" className="btn-secondary min-h-[44px]" disabled={!!setupProblem(s)} onClick={() => setSetup(true)}>نص الإعداد</button>
         </div>
-        <p className="mt-2 text-sm text-ink-600">على جوال الإدارة (أندرويد): ثبّت التطبيق، واسمح له بقراءة الرسائل وإشعارات تطبيق البنك، ثم الصق فيه نص الإعداد واكتب كلمة مرور البريد. ينقل رسالة البنك التي تحمل رقم أحد حسابات الفروع كما هي إلى البريد المخصّص، ولا يرسل غير ذلك، ويعيد المحاولة إذا انقطع الإنترنت.</p>
+        <p className="mt-2 text-sm text-ink-600">ينقل رسالة البنك التي تحمل رقم أحد حسابات الفروع كما هي إلى البريد المخصّص، ولا يرسل غير ذلك، ويعيد المحاولة إذا انقطع الإنترنت.</p>
+        <ol className="mt-2 list-decimal space-y-1 ps-5 text-sm text-ink-600">
+          <li>على جوال الإدارة (أندرويد) افتح ملف التثبيت واسمح بالتثبيت.</li>
+          <li>اسمح للتطبيق بقراءة الرسائل. ولإشعارات تطبيق البنك: إن ظهر أن الإعداد مقيّد افتح «معلومات التطبيق» ← ⋮ ← «السماح بالإعدادات المقيدة» ثم اسمح بالإشعارات.</li>
+          <li>اجعل البطارية «غير مقيّدة» للتطبيق حتى لا يتأخر الإرسال.</li>
+          <li>الصق نص الإعداد واكتب كلمة مرور تطبيق البريد (كلمة مرور التطبيقات، لا كلمة الحساب).</li>
+          <li>للإشعارات: يُقبل التطبيق باسم حزمته (مثل com.…). إن ظهر اسمه في التطبيق تحت «لم تُسمح» فأضفه إلى «المرسلون المسموحون» هنا ثم انسخ نص الإعداد من جديد.</li>
+        </ol>
         {setupProblem(s) && <p className="mt-2 text-sm text-warning-700">{setupProblem(s) === "mailbox" ? "حدّد البريد المخصّص أولًا." : "حدّد قاعدة رقم الحساب لفرع واحد على الأقل أولًا."}</p>}
         <a href="https://github.com/mswsa99-ship-it/zaaer/actions/workflows/android.yml" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-brand-700 underline">ملف التثبيت (APK): آخر تشغيل ناجح في GitHub ← «fivehours-relay-apk»</a>
       </Card>

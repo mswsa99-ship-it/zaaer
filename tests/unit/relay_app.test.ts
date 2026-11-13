@@ -31,11 +31,14 @@ describe("the phone app's email (A9)", () => {
 
 describe("the setup text «بريد البنك» makes for the phone (A9)", () => {
   it("RL12 the setup text carries the mailbox, its SMTP server, the senders and each branch's account rule, the key only when given — the format the app reads (RelayCoreTests RL01)", () => {
-    const s = { mailbox_address: "relay.test@example.com", imap_host: "imap.gmail.com", allowed_senders: ["AlRajhiBank", "الراجحي"],
+    const s = { mailbox_address: "relay.test@example.com", imap_user: "relay.test@example.com", imap_host: "imap.gmail.com", allowed_senders: ["AlRajhiBank", "الراجحي"],
       accounts: [{ id: "1", branch: "أ", name: "بنك أ", prefix: "605", suffix: "4321" }, { id: "2", branch: "ب", name: "بنك ب", prefix: null, suffix: null }] };
     expect(setupText(s)).toBe("FIVEHOURS-SETUP 1\nmailbox: relay.test@example.com\nsmtp: smtp.gmail.com:465\nsenders: AlRajhiBank, الراجحي\naccount: 605…4321\n");
     expect(setupText(s, "abc123abc123abc123")).toMatch(/\nkey: abc123abc123abc123\n$/);
     expect(smtpFor("mail.example.org")).toBe("mail.example.org:465");
+    expect(smtpFor("outlook.office365.com")).toBe("smtp.office365.com:587");
+    // a login that is not the address goes in the text too
+    expect(setupText({ ...s, imap_user: "owner@workspace.example" })).toContain("\nuser: owner@workspace.example\n");
     expect(setupProblem(s)).toBeNull();
     expect(setupProblem({ ...s, mailbox_address: null })).toBe("mailbox");
     expect(setupProblem({ ...s, accounts: [s.accounts[1]] })).toBe("accounts");

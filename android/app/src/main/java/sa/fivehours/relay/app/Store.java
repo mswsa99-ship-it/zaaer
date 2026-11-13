@@ -56,12 +56,27 @@ final class Store {
     void result(Relayer.Result r) {
         SharedPreferences.Editor e = p.edit();
         if (r.sent > 0) e.putLong("last_sent", System.currentTimeMillis());
+        if (r.setAside > 0) e.putInt("set_aside", p.getInt("set_aside", 0) + r.setAside);
         if (r.error == null) e.remove("error");
         else e.putString("error", r.refused() ? "refused" : "network");
         e.apply();
     }
 
     long lastSent() { return p.getLong("last_sent", 0); }
+
+    /** apps whose notification carried an account number but are not allowed senders (their package names only, the
+     *  last five), so the owner sees which one to add */
+    void noteUnknownApp(String pkg) {
+        String prev = p.getString("unknown_apps", "");
+        java.util.LinkedHashSet<String> s = new java.util.LinkedHashSet<>();
+        s.add(pkg);
+        for (String x : prev.split(",")) if (!x.isEmpty() && s.size() < 5) s.add(x);
+        p.edit().putString("unknown_apps", String.join(",", s)).apply();
+    }
+
+    String unknownApps() { return p.getString("unknown_apps", ""); }
+
+    int setAside() { return p.getInt("set_aside", 0); }
 
     String error() { return p.getString("error", null); }
 

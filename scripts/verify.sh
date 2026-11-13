@@ -80,8 +80,8 @@ if [[ "${QUICK:-}" != "1" ]]; then
     run_gate migration P0 SKIP_SQL bash scripts/migration-check.sh
     run_gate android P0 SKIP_ANDROID bash tests/android/run.sh
   else
-    NAMES+=("sql" "race" "migration"); STATUSES+=("SKIPPED (P0, PostgreSQL not reachable — set PGHOST/PGUSER)" "SKIPPED (P0, PostgreSQL not reachable)" "SKIPPED (P0, PostgreSQL not reachable)"); TIMES+=("-" "-" "-")
-    for g in sql race migration; do record "$g" P0 "SKIPPED (PostgreSQL not reachable)" "-"; done
+    NAMES+=("sql" "race" "migration" "android"); STATUSES+=("SKIPPED (P0, PostgreSQL not reachable — set PGHOST/PGUSER)" "SKIPPED (P0, PostgreSQL not reachable)" "SKIPPED (P0, PostgreSQL not reachable)" "SKIPPED (P0, PostgreSQL not reachable)"); TIMES+=("-" "-" "-" "-")
+    for g in sql race migration android; do record "$g" P0 "SKIPPED (PostgreSQL not reachable)" "-"; done
     echo "== [sql] SKIPPED: PostgreSQL not reachable (set PGHOST/PGUSER/PGPASSWORD, or start a local 16 cluster)"
     overall=1
   fi

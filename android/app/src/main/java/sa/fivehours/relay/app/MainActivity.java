@@ -7,13 +7,17 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.Insets;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -41,6 +45,8 @@ public final class MainActivity extends Activity {
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         int pad = dp(16);
         root.setPadding(pad, pad, pad, pad);
+        // Android 15 draws apps under the status and navigation bars: keep the content clear of them
+        sv.setOnApplyWindowInsetsListener((v, insets) -> { pad(v, insets); return insets; });
         sv.addView(root);
         setContentView(sv);
     }
@@ -62,20 +68,31 @@ public final class MainActivity extends Activity {
         line(sms ? "قراءة الرسائل النصية: مسموحة" : "قراءة الرسائل النصية: غير مسموحة", sms);
         if (!sms) button("السماح بقراءة الرسائل", v -> requestPermissions(new String[] { Manifest.permission.RECEIVE_SMS }, 1));
         line(notes ? "قراءة إشعارات تطبيق البنك: مسموحة" : "قراءة إشعارات تطبيق البنك: غير مسموحة", notes);
-        if (!notes) button("فتح إعداد الإشعارات", v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        if (!notes) {
+            text("إن ظهر أن الإعداد مقيّد: افتح «معلومات التطبيق» ← ⋮ ← «السماح بالإعدادات المقيدة»، ثم ارجع هنا.", 13, 0xFF5B6472);
+            button("فتح إعداد الإشعارات", v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+            button("معلومات التطبيق", v -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + getPackageName()))));
+        }
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        boolean free = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        line(free ? "توفير البطارية: لا يؤخّر التطبيق" : "توفير البطارية قد يؤخّر الإرسال ساعات: اجعل التطبيق «غير مقيّد»", free);
+        if (!free) button("إعداد البطارية", v -> startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)));
         int waiting = store.outbox().size();
         text("بانتظار الإرسال: " + waiting, 16, 0xFF1F2937);
         long last = store.lastSent();
         text("آخر إرسال ناجح: " + (last == 0 ? "لا يوجد بعد" : DateFormat.getDateTimeInstance().format(new Date(last))), 14, 0xFF5B6472);
         String err = store.error();
-        if ("refused".equals(err)) line("رفض خادم البريد كلمة المرور أو الرسالة. صحّح كلمة المرور ثم احفظ.", false);
+        if ("refused".equals(err)) line("رفض خادم البريد الدخول: صحّح كلمة مرور التطبيق (أو اسم الدخول في نص الإعداد) ثم احفظ.", false);
         else if ("network".equals(err)) line("تعذّر الوصول لخادم البريد؛ سيُعاد الإرسال تلقائيًا عند توفر الإنترنت.", false);
-        if (waiting > 0 && ready) button("أرسل المنتظر الآن", v -> { SendJob.schedule(this); render(); });
+        if (store.setAside() > 0) line("رسائل رفضها خادم البريد وتُركت جانبًا: " + store.setAside() + " (راجع البريد المخصّص)", false);
+        String unknown = store.unknownApps();
+        if (!unknown.isEmpty()) text("تطبيقات وصل منها إشعار فيه رقم حساب ولم تُسمح (أضف تطبيق البنك منها إلى «المرسلون المسموحون» في النظام ثم انسخ نص الإعداد من جديد): " + unknown.replace(",", "، "), 13, 0xFFB54708);
+        if (waiting > 0 && ready) button("أرسل المنتظر الآن", v -> { SendJob.now(this); render(); });
 
         section("الإعداد");
         if (c != null) {
             StringBuilder s = new StringBuilder();
-            s.append("البريد: ").append(c.mailbox).append("\nالخادم: ").append(c.smtpHost).append(':').append(c.smtpPort)
+            s.append("البريد: ").append(c.mailbox).append(c.user.equals(c.mailbox) ? "" : "\nاسم الدخول: " + c.user).append("\nالخادم: ").append(c.smtpHost).append(':').append(c.smtpPort)
              .append("\nالمرسلون: ").append(TextUtils.join("، ", c.senders)).append("\nالحسابات: ");
             for (int i = 0; i < c.accounts.size(); i++) { AccountRules.Rule r = c.accounts.get(i); s.append(i == 0 ? "" : "، ").append('⁦').append(r.toString()).append('⁩'); }
             String end = store.keyEnd();
@@ -98,13 +115,23 @@ public final class MainActivity extends Activity {
                 if (nc.key == null && store.key() == null) { msg.setText("نص الإعداد بلا مفتاح النقل. أنشئ مفتاحًا في «بريد البنك» وانسخ النص الذي يظهر معه."); return; }
                 if (p.isEmpty() && store.password() == null) { msg.setText("اكتب كلمة مرور تطبيق البريد."); return; }
                 store.save(nc, p.isEmpty() ? null : p);
-                SendJob.schedule(this);
+                SendJob.now(this);
                 render();
             } catch (Config.Invalid e) {
                 msg.setText("نص الإعداد غير صالح (" + e.field + "). انسخه كاملًا من «بريد البنك».");
             }
         });
         text("كلمة المرور تُحفظ مشفّرة في هذا الجوال ولا تُرسل إلا لخادم البريد. لا يحفظ التطبيق الرسائل بعد إرسالها.", 12, 0xFF5B6472);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static void pad(View v, WindowInsets insets) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            Insets i = insets.getInsets(WindowInsets.Type.systemBars());
+            v.setPadding(i.left, i.top, i.right, i.bottom);
+        } else {
+            v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+        }
     }
 
     private boolean notificationAccess() {

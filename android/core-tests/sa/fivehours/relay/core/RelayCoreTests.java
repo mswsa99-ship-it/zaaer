@@ -15,6 +15,11 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.security.KeyStore;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * The phone app's rules, tried without a phone (A9; RL* in tests/acceptance-library.json). Plain Java, no test
@@ -49,7 +54,8 @@ public final class RelayCoreTests {
         check("RL01 the setup text from «بريد البنك» gives the mailbox, the mail server, the senders and each account's rule; a broken one is refused; without a key line the phone keeps its key",
             !bad && c.mailbox.equals("relay.test@example.com") && c.smtpPort == 465 && c.senders.size() == 3 && c.accounts.size() == 2
                 && c.accounts.get(1).prefix.equals("346") && c.accounts.get(1).suffix.equals("7788") && KEY.equals(c.key) && noKey.key == null
-                && Config.parse(c.format()).accounts.size() == 2, null);
+                && Config.parse(c.format()).accounts.size() == 2 && c.user.equals(c.mailbox)
+                && Config.parse(SETUP.replace("smtp:", "user: owner@workspace.example\nsmtp:")).user.equals("owner@workspace.example"), null);
 
         // RL02 the account rule, as the server reads it
         List<AccountRules.Rule> rules = c.accounts;
@@ -89,18 +95,56 @@ public final class RelayCoreTests {
         // RL05 sending: a fake mail server; down, then up; a refused password keeps everything
         AtomicInteger accepted = new AtomicInteger();
         List<String> received = Collections.synchronizedList(new ArrayList<>());
-        Relayer.Result down = r.flush(c, new Smtp("127.0.0.1", 1, c.mailbox, "pw", Smtp.PLAIN, false));
+        Relayer.Result down = r.flush(c, Smtp.forTest("127.0.0.1", 1, c.mailbox, "pw", null));
         int afterDown = box.size();
         try (FakeSmtp srv = new FakeSmtp("app-password", accepted, received)) {
-            Relayer.Result wrong = r.flush(c, new Smtp("127.0.0.1", srv.port(), c.mailbox, "wrong", Smtp.PLAIN, false));
+            Relayer.Result wrong = r.flush(c, Smtp.forTest("127.0.0.1", srv.port(), c.mailbox, "wrong", null));
             int afterWrong = box.size();
             r.accept(c, KEY, "Alrajhi", SAMPLE_AT + 60_000, "notification", "تم خصم 9.60 ر.س رسوم نقاط البيع من حساب **4321\n.\n.hidden");
-            Relayer.Result ok = r.flush(c, new Smtp("127.0.0.1", srv.port(), c.mailbox, "app-password", Smtp.PLAIN, false));
+            Relayer.Result ok = r.flush(c, Smtp.forTest("127.0.0.1", srv.port(), c.mailbox, "app-password", null));
             check("RL05 with no internet the message waits; a refused password is told apart and keeps it; when the server takes it the outbox is emptied (a line that starts with a dot arrives whole)",
                 down.error != null && !down.refused() && afterDown == 1 && wrong.refused() && afterWrong == 1 && ok.error == null && ok.sent == 2 && box.size() == 0
                     && accepted.get() == 2 && received.stream().anyMatch(m -> m.contains("Subject: FIVEHOURS-RELAY"))
                     && received.stream().anyMatch(m -> new String(Base64.getMimeDecoder().decode(m.substring(m.indexOf("\r\n\r\n") + 4)), StandardCharsets.UTF_8).endsWith("\n.\n.hidden\n")),
                 "down=" + down.error + " wrong=" + wrong.error + " ok=" + ok.error + " sent=" + ok.sent + " left=" + box.size());
+        }
+
+        // RL07 the mail server's certificate must be for its name before the password goes
+        File ks = new File(work, "tls");
+        ks.mkdirs();
+        SSLContext evil = tlsContext(ks, "evil", "CN=evil.example", "dns:evil.example");
+        SSLContext good = tlsContext(ks, "good", "CN=localhost", "dns:localhost");
+        List<String> evilGot = Collections.synchronizedList(new ArrayList<>());
+        boolean evilRefused = false, goodOk = false;
+        try (FakeSmtp srv = new FakeSmtp("app-password", new AtomicInteger(), evilGot, evil.getServerSocketFactory(), null)) {
+            Outbox ob = new Outbox(new File(work, "tls-out"));
+            new Relayer(ob).accept(c, KEY, "AlRajhiBank", SAMPLE_AT, "sms", SAMPLE_TEXT);
+            Relayer.Result res = new Relayer(ob).flush(c, Smtp.forTest("localhost", srv.port(), c.mailbox, "app-password", evil.getSocketFactory()));
+            evilRefused = res.error != null && !res.refused() && ob.size() == 1 && srv.passwords.isEmpty();
+        }
+        try (FakeSmtp srv = new FakeSmtp("app-password", new AtomicInteger(), new ArrayList<>(), good.getServerSocketFactory(), null)) {
+            Outbox ob = new Outbox(new File(work, "tls-ok"));
+            new Relayer(ob).accept(c, KEY, "AlRajhiBank", SAMPLE_AT, "sms", SAMPLE_TEXT);
+            Relayer.Result res = new Relayer(ob).flush(c, Smtp.forTest("localhost", srv.port(), c.mailbox, "app-password", good.getSocketFactory()));
+            goodOk = res.error == null && res.sent == 1 && ob.size() == 0;
+        }
+        check("RL07 over TLS the password goes only to a server whose certificate is for its name: a certificate for another name gets no login and the message waits",
+            evilRefused && goodOk, "evil=" + evilRefused + " good=" + goodOk);
+
+        // RL08 one message the server refuses does not hold the others back, and none is sent twice
+        AtomicInteger acc8 = new AtomicInteger();
+        List<String> got8 = Collections.synchronizedList(new ArrayList<>());
+        try (FakeSmtp srv = new FakeSmtp("app-password", acc8, got8, null, "4444")) {
+            Outbox ob = new Outbox(new File(work, "hol"));
+            Relayer r8 = new Relayer(ob);
+            r8.accept(c, KEY, "AlRajhiBank", SAMPLE_AT, "sms", "حوالة 1 إلى 605****4321");
+            r8.accept(c, KEY, "AlRajhiBank", SAMPLE_AT + 1000, "sms", "حوالة 2 إلى 605****4321 4444");
+            r8.accept(c, KEY, "AlRajhiBank", SAMPLE_AT + 2000, "sms", "حوالة 3 إلى 605****4321");
+            Relayer.Result res = r8.flush(c, Smtp.forTest("127.0.0.1", srv.port(), c.mailbox, "app-password", null));
+            Relayer.Result again = r8.flush(c, Smtp.forTest("127.0.0.1", srv.port(), c.mailbox, "app-password", null));
+            check("RL08 a message the mail server refuses is set aside and the others are sent once each; the outbox is not blocked",
+                res.error == null && res.sent == 2 && res.setAside == 1 && ob.size() == 0 && ob.setAsideCount() == 1 && acc8.get() == 2 && again.sent == 0,
+                "sent=" + res.sent + " aside=" + res.setAside + " left=" + ob.size() + " accepted=" + acc8.get() + " err=" + res.error);
         }
 
         // RL06 the sample the server-side checks read
@@ -122,12 +166,16 @@ public final class RelayCoreTests {
     static final class FakeSmtp implements AutoCloseable {
         private final ServerSocket ss;
         private final Thread t;
+        final List<String> passwords = Collections.synchronizedList(new ArrayList<>());
 
-        FakeSmtp(String password, AtomicInteger accepted, List<String> received) throws Exception {
-            ss = new ServerSocket(0);
+        FakeSmtp(String password, AtomicInteger accepted, List<String> received) throws Exception { this(password, accepted, received, null, null); }
+
+        /** tls: a TLS server (465 style); refuse: a message whose text has it is refused with 552 */
+        FakeSmtp(String password, AtomicInteger accepted, List<String> received, SSLServerSocketFactory tls, String refuse) throws Exception {
+            ss = tls == null ? new ServerSocket(0) : tls.createServerSocket(0);
             t = new Thread(() -> {
                 while (!ss.isClosed()) {
-                    try (Socket s = ss.accept()) { session(s, password, accepted, received); } catch (Exception ignored) { }
+                    try (Socket s = ss.accept()) { session(s, password, accepted, received, passwords, refuse); } catch (Exception ignored) { }
                 }
             });
             t.setDaemon(true);
@@ -136,7 +184,7 @@ public final class RelayCoreTests {
 
         int port() { return ss.getLocalPort(); }
 
-        static void session(Socket s, String password, AtomicInteger accepted, List<String> received) throws Exception {
+        static void session(Socket s, String password, AtomicInteger accepted, List<String> received, List<String> passwords, String refuse) throws Exception {
             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
             OutputStream out = s.getOutputStream();
             java.util.function.Consumer<String> say = l -> { try { out.write((l + "\r\n").getBytes(StandardCharsets.UTF_8)); out.flush(); } catch (Exception e) { throw new RuntimeException(e); } };
@@ -148,6 +196,7 @@ public final class RelayCoreTests {
                 else if (step == 1) { say.accept("334 UGFzc3dvcmQ6"); step = 2; }
                 else if (step == 2) {
                     String pw = new String(Base64.getDecoder().decode(line), StandardCharsets.UTF_8);
+                    passwords.add(pw);
                     if (pw.equals(password)) { say.accept("235 ok"); step = 3; } else { say.accept("535 5.7.8 bad credentials"); return; }
                 }
                 else if (line.startsWith("MAIL FROM") || line.startsWith("RCPT TO")) say.accept(step == 3 ? "250 ok" : "530 auth first");
@@ -155,14 +204,38 @@ public final class RelayCoreTests {
                     say.accept("354 go");
                     StringBuilder m = new StringBuilder(); String d;
                     while ((d = in.readLine()) != null && !d.equals(".")) m.append(d.startsWith("..") ? d.substring(1) : d).append("\r\n");
-                    received.add(m.toString()); accepted.incrementAndGet(); say.accept("250 queued");
+                    String text = m.toString();
+                    String plain = text.contains("\r\n\r\n") ? new String(Base64.getMimeDecoder().decode(text.substring(text.indexOf("\r\n\r\n") + 4)), StandardCharsets.UTF_8) : "";
+                    if (refuse != null && plain.contains(refuse)) { say.accept("552 5.3.4 message refused"); continue; }
+                    received.add(text); accepted.incrementAndGet(); say.accept("250 queued");
                 }
+                else if (line.equals("RSET")) say.accept("250 reset");
                 else if (line.equals("QUIT")) { say.accept("221 bye"); return; }
                 else say.accept("500 what");
             }
         }
 
         @Override public void close() throws Exception { ss.close(); }
+    }
+
+    /** a key pair and certificate (keytool, as the JDK ships it) for a test TLS server, and a client that trusts it */
+    static SSLContext tlsContext(File dir, String name, String dname, String san) throws Exception {
+        File store = new File(dir, name + ".p12");
+        String keytool = new File(System.getProperty("java.home"), "bin/keytool").getPath();
+        Process p = new ProcessBuilder(keytool, "-genkeypair", "-alias", name, "-keyalg", "RSA", "-keysize", "2048", "-validity", "2",
+            "-dname", dname, "-ext", "SAN=" + san, "-storetype", "PKCS12", "-keystore", store.getPath(), "-storepass", "changeit", "-keypass", "changeit")
+            .redirectErrorStream(true).start();
+        p.getInputStream().readAllBytes();
+        if (p.waitFor() != 0) throw new IllegalStateException("keytool");
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        try (java.io.FileInputStream in = new java.io.FileInputStream(store)) { ks.load(in, "changeit".toCharArray()); }
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        kmf.init(ks, "changeit".toCharArray());
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init(ks);
+        SSLContext ctx = SSLContext.getInstance("TLS");
+        ctx.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+        return ctx;
     }
 
     static { Arrays.asList(Date.class); }
