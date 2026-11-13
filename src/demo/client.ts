@@ -292,10 +292,11 @@ function visible(table: string, r: Row): boolean {
   // 0065/0066: the books and the bank's messages are read through their functions; these mirror the tables' policies
   if (["gl_accounts", "journal_entries", "journal_lines", "accounting_periods", "bank_mail_settings"].includes(table)) return false;
   if (table === "bank_parse_rules") return can("bank.view") || can("bank.manage");
-  if (table === "bank_messages") return can("bank.manage");
-  if (table === "bank_movements") return can("bank.manage") || (can("bank.view") && branches.includes(r.branch_id));
-  if (table === "bank_matches" || table === "bank_match_items") { const v = byId("bank_movements", table === "bank_matches" ? r.movement_id : byId("bank_matches", r.match_id)?.movement_id);
-    return can("bank.manage") || (can("bank.view") && !!v && branches.includes(v.branch_id)); }
+  // 0067: in the branches one works in; a message or movement of no branch yet by who manages the bank
+  const bankSeen = (v: Row | undefined) => !!v && (can("bank.view") || can("bank.manage")) && (branches.includes(v.branch_id) || (v.branch_id == null && can("bank.manage")));
+  if (table === "bank_messages") return can("bank.manage") && (!r.movement_id || bankSeen(byId("bank_movements", r.movement_id)));
+  if (table === "bank_movements") return bankSeen(r);
+  if (table === "bank_matches" || table === "bank_match_items") return bankSeen(byId("bank_movements", table === "bank_matches" ? r.movement_id : byId("bank_matches", r.match_id)?.movement_id));
   if (table === "expense_categories") return r.organization_id === ORG;
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);

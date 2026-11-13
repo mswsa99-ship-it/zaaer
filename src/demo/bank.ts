@@ -247,7 +247,9 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
     fn_bank_messages: ({ p_status, p_limit }) => {
       requireCap("bank.manage");
       if (p_status && !["received", "rejected", "unparsed", "parsed", "duplicate_movement"].includes(p_status)) throw new Error("VALIDATION: status");
-      return T("bank_messages").filter((m) => !p_status || m.status === p_status).sort((a, b) => (a.received_at < b.received_at ? 1 : -1)).slice(0, Math.min(Math.max(p_limit ?? 100, 1), 500))
+      // a message of a movement in a branch one does not work in stays unseen (0067)
+      const mine = myBranches(); const seen = (m: Row) => { const v = m.movement_id ? T("bank_movements").find((x) => x.id === m.movement_id) : null; return !v || v.branch_id == null || mine.includes(v.branch_id); };
+      return T("bank_messages").filter((m) => (!p_status || m.status === p_status) && seen(m)).sort((a, b) => (a.received_at < b.received_at ? 1 : -1)).slice(0, Math.min(Math.max(p_limit ?? 100, 1), 500))
         .map((m) => ({ id: m.id, received_at: m.received_at, mail_from: m.mail_from, sms_sender: m.sms_sender, channel: m.channel, sms_received_at: m.sms_received_at, text: m.sms_text ?? String(m.raw_body).slice(0, 2000), status: m.status, reason: m.reject_reason, movement_id: m.movement_id }));
     },
     fn_bank_movements: ({ p_branch, p_from, p_to }) => {
@@ -269,6 +271,7 @@ export function bankRpcs(c: BankCtx): Record<string, (a: any) => any> {
       if (v.cash_account_id) throw new Error("VALIDATION: movement_assigned");
       const reason = String(p_reason ?? "").trim(); if (!reason || reason.length > 300) throw new Error("VALIDATION: reason");
       const a = c.byId("cash_accounts", p_account); if (!a || a.kind !== "bank_account" || a.archived_at) throw new Error("VALIDATION: account");
+      requireBranch(a.branch_id);
       Object.assign(v, { cash_account_id: a.id, branch_id: a.branch_id }); emit("bank_movements");
       audit(a.branch_id, "bank_movement.assigned", "bank_movement", v.id, { after: { account: a.name, amount_halalas: v.amount_halalas }, reason });
       return { ok: true, branch_id: a.branch_id };

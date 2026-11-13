@@ -303,13 +303,16 @@ reset role;
 update cash_accounts set opening_balance_halalas = 500000, opening_on = fn_branch_today(branch_id) - 1 where id = t_accid(t_id('b2'), 'bank_account');
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
-do $$ declare f jsonb; d date; led jsonb; begin
+do $$ declare f jsonb; d date; led jsonb; led1 jsonb; begin
   f := fn_bank_convert(t_id('m7'), jsonb_build_object('as', 'fees'));
+  -- the ledger of the opening day alone carries the fees too (the line stands on its date, not on the day it was written)
+  led1 := fn_account_ledger(t_accid(t_id('b2'), 'bank_account'), t_today(t_id('b2')) - 1, t_today(t_id('b2')) - 1);
   select e.entry_date into d from journal_entries e where e.source_type = 'bank_movement' and e.source_id = t_id('m7');
   led := fn_account_ledger(t_accid(t_id('b2'), 'bank_account'), t_today(t_id('b2')) - 7, t_today(t_id('b2')));
   perform t_record('MT19 fees of a movement older than the account''s opening day are dated on the opening day, so the ledger still ends where the journal stands',
-    d = t_today(t_id('b2')) - 1 and (led->>'closing_halalas')::bigint = t_bal(t_id('b2'), 'bank') and t_bal(t_id('b2'), 'bank') = 500000 - 700,
-    concat_ws(' / ', d::text, led->>'closing_halalas', t_bal(t_id('b2'), 'bank')::text));
+    d = t_today(t_id('b2')) - 1 and (led->>'closing_halalas')::bigint = t_bal(t_id('b2'), 'bank') and t_bal(t_id('b2'), 'bank') = 500000 - 700
+    and (led1->>'closing_halalas')::bigint = 500000 - 700,
+    concat_ws(' / ', d::text, led->>'closing_halalas', led1->>'closing_halalas', t_bal(t_id('b2'), 'bank')::text));
 exception when others then perform t_record('MT19 fees of a movement older than the account''s opening day are dated on the opening day, so the ledger still ends where the journal stands', false, sqlerrm);
 end $$;
 reset role;
@@ -326,7 +329,12 @@ select t_record('MT24 a manager who may match reads neither the movements nor th
   and (select count(*) from bank_movements where branch_id = t_id('b2')) = 0
   and (select count(*) from bank_matches where movement_id = t_id('m7')) = 0
   and (select count(*) from bank_match_items i where i.match_id in (select id from bank_matches x where x.movement_id = t_id('m7'))) = 0
-  and (select count(*) from bank_movements where branch_id is null) > 0);
+  and (select count(*) from bank_movements where branch_id is null) > 0
+  -- nor their raw messages; and an unassigned movement is not given to that branch's account
+  and not exists (select 1 from jsonb_array_elements(fn_bank_messages(null, 500)) x where x->>'movement_id' in (t_id('m7')::text, t_id('mx')::text))
+  and exists (select 1 from jsonb_array_elements(fn_bank_messages(null, 500)) x where x->>'movement_id' = t_id('mu')::text)
+  and (select count(*) from bank_messages where movement_id in (t_id('m7'), t_id('mx'))) = 0
+  and t_fails(format('select fn_bank_assign_account(%L, %L, %L)', t_id('mu'), t_accid(t_id('b2'), 'bank_account'), 'x'), 'FORBIDDEN: branch%') = 'ok');
 reset role;
 update role_permissions set allowed = false where capability = 'bank.manage' and role = 'manager';
 select t_record('MT24b the owner still reads every branch''s movements and the match made in the other branch',

@@ -13,7 +13,8 @@
 --     movement turned into fees or income, a closing's cash difference), so it ends where the journal stands;
 --   · a voucher reversed by a correction leaves its match as a cancelled one does, and a reversal pair is never offered;
 --   · what matching books is never dated before the account's opening day (the ledger starts there);
---   · the movements and their matches are read only in the branches one works in (the unassigned ones by the owner).
+--   · the movements, their matches and their messages are read, and a movement assigned, only in the branches one works
+--     in (the unassigned ones by who manages the bank).
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 1. The log lines
@@ -519,6 +520,48 @@ end $$;
 revoke all on function fn_bank_movements(uuid, date, date) from public, anon;
 grant execute on function fn_bank_movements(uuid, date, date) to authenticated;
 
+-- the messages (0066) of a movement in a branch one does not work in stay unseen; one with no movement, or of a movement
+-- not assigned yet, is seen by who manages the bank
+alter policy "bank_messages_read" on bank_messages
+  using (organization_id = fn_user_org_id() and fn_can('bank.manage')
+         and (movement_id is null or movement_id in (select id from bank_movements)));
+create or replace function fn_bank_messages(p_status text default null, p_limit int default 100) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform fn_require_cap('bank.manage');
+  if p_status is not null and p_status not in ('received', 'rejected', 'unparsed', 'parsed', 'duplicate_movement') then raise exception 'VALIDATION: status'; end if;
+  return coalesce((select jsonb_agg(x order by x->>'received_at' desc) from (
+    select jsonb_build_object('id', m.id, 'received_at', m.received_at, 'mail_from', m.mail_from, 'sms_sender', m.sms_sender, 'channel', m.channel,
+                              'sms_received_at', m.sms_received_at, 'text', coalesce(m.sms_text, left(m.raw_body, 2000)), 'status', m.status,
+                              'reason', m.reject_reason, 'movement_id', m.movement_id) as x
+    from bank_messages m left join bank_movements v on v.id = m.movement_id
+    where m.organization_id = fn_user_org_id() and (p_status is null or m.status = p_status)
+      and (v.id is null or v.branch_id is null or v.branch_id in (select fn_user_branch_ids()))
+    order by m.received_at desc limit least(greatest(coalesce(p_limit, 100), 1), 500)) q), '[]'::jsonb);
+end $$;
+revoke all on function fn_bank_messages(text, int) from public, anon;
+grant execute on function fn_bank_messages(text, int) to authenticated;
+
+-- a movement is assigned only to the bank account of a branch one works in
+create or replace function fn_bank_assign_account(p_movement uuid, p_account uuid, p_reason text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v bank_movements%rowtype; a cash_accounts%rowtype; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  perform fn_require_cap('bank.manage');
+  select * into v from bank_movements where id = p_movement and organization_id = fn_user_org_id() for update;
+  if not found then raise exception 'NOT_FOUND'; end if;
+  if v.cash_account_id is not null then raise exception 'VALIDATION: movement_assigned'; end if;
+  if v_reason is null or char_length(v_reason) > 300 then raise exception 'VALIDATION: reason'; end if;
+  select * into a from cash_accounts where id = p_account and organization_id = v.organization_id and kind = 'bank_account' and archived_at is null;
+  if not found then raise exception 'VALIDATION: account'; end if;
+  perform fn_require_branch(a.branch_id);
+  update bank_movements set cash_account_id = a.id, branch_id = a.branch_id where id = v.id;
+  perform fn_audit_change(a.branch_id, 'bank_movement.assigned', 'bank_movement', v.id, null, jsonb_build_object('account', a.name, 'amount_halalas', v.amount_halalas), v_reason);
+  return jsonb_build_object('ok', true, 'branch_id', a.branch_id);
+end $$;
+revoke all on function fn_bank_assign_account(uuid, uuid, text) from public, anon;
+grant execute on function fn_bank_assign_account(uuid, uuid, text) to authenticated;
+
 -- ---------------------------------------------------------------------------------------------------------------
 -- 8. The ledger of a box or a bank account (0064) shows what the books hold: besides its vouchers, payouts and
 --    expenses, the entries that have no voucher of their own are lines of it too — a match's difference, a movement
@@ -541,9 +584,12 @@ language sql stable security definer set search_path = public as $$
   union all
   -- an entry of a bank movement stands at the movement's time when it is dated on its day, otherwise when it was written;
   -- a closing's difference stands at the end of its day
+  -- (moved to its account's opening day, or written on another day: noon of its date; a reversal: when it was written)
   select case when je.source_type = 'bank_movement'
               then coalesce((select bm.occurred_at from bank_movements bm
-                              where bm.id = je.source_id and je.reversal_of is null and je.entry_date = fn_branch_date(bm.branch_id, bm.occurred_at)), je.created_at)
+                              where bm.id = je.source_id and je.reversal_of is null and je.entry_date = fn_branch_date(bm.branch_id, bm.occurred_at)),
+                            case when je.entry_date = fn_branch_date(je.branch_id, je.created_at) then je.created_at
+                                 else (je.entry_date::timestamp + interval '12 hours') at time zone coalesce((select timezone from branches where id = je.branch_id), 'Asia/Riyadh') end)
               else ((je.entry_date + 1)::timestamp at time zone coalesce((select timezone from branches where id = je.branch_id), 'Asia/Riyadh')) - interval '1 second' end,
          case je.source_type when 'bank_movement' then 'bank_adjustment' else 'closing_difference' end,
          je.number, je.description, jl.debit_halalas, jl.credit_halalas, je.id
