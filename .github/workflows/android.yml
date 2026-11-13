@@ -24,7 +24,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: The app's rules (RL01–RL06)
+      - name: The app's rules (RA01–RA06)
         run: bash tests/android/run.sh
       - uses: gradle/actions/setup-gradle@v4
         with:

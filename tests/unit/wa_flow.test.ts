@@ -3,7 +3,7 @@
  * + Cloud API) and in the demo's WhatsApp simulator; here it runs against fakes, so every branch of the flow is pinned.
  */
 import { describe, it, expect } from "vitest";
-import { runWaFlow, WA_TEXTS, type WaBooking, type WaFlowPorts, type WaThread } from "../../supabase/functions/_shared/wa_flow";
+import { runWaFlow, WA_TEXTS, type WaBooking, type WaFlowPorts, type WaThread, type WaShop, type WaOrder, type WaOrderResult } from "../../supabase/functions/_shared/wa_flow";
 import { BTN, type WaInbound } from "../../supabase/functions/_shared/whatsapp";
 
 const FROM = "966501110006";
@@ -209,5 +209,114 @@ describe("WhatsApp conversation flow", () => {
     const old = world();
     for (let i = 0; i < 2; i++) await runWaFlow(photo(), old.ports);
     expect(old.sent).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// W1 (migration 0068): ordering products from the room. The shop's ports are fakes keyed by the guest token: the
+// in-house stay "GT-R-IN" can order; anything else cannot.
+// ---------------------------------------------------------------------------------------------------------------
+const SHOP = (): WaShop => ({
+  can_order: true, open_order: null,
+  categories: [
+    { id: "c1", name: "مشروبات", products: [{ id: "p1", name: "ماء صغير", description: null, price_halalas: 200 }, { id: "p2", name: "قهوة", description: "ظرفان", price_halalas: 500 }] },
+    { id: "c2", name: "مستلزمات", products: [{ id: "p3", name: "شاحن جوال", description: null, price_halalas: 2500 }] },
+  ],
+});
+function shopWorld(bookings: WaBooking[], over: { refuse?: string; cancelRefuse?: string } = {}) {
+  const w = world(bookings);
+  const orders: Array<{ token: string; thread: string; items: Array<{ product_id: string; quantity: number }> }> = [];
+  const cancels: string[] = [];
+  let order: WaOrder | null = null;
+  w.ports.products = async (token) => (token === "GT-R-IN" ? { ...SHOP(), open_order: order } : { ...SHOP(), can_order: false });
+  w.ports.orderProducts = async (token, thread, items): Promise<WaOrderResult> => {
+    orders.push({ token, thread, items });
+    if (over.refuse) return { error: over.refuse };
+    const p = SHOP().categories.flatMap((c) => c.products).find((x) => x.id === items[0].product_id)!;
+    const prev = order?.lines ?? [];
+    order = { id: "o1", number: "ORD-2026-000501", status: "pending_payment", total_halalas: 0,
+      lines: [...prev, { product_id: p.id, name: p.name, quantity: items[0].quantity, total_halalas: p.price_halalas * items[0].quantity }] };
+    order.total_halalas = order.lines.reduce((x, l) => x + l.total_halalas, 0);
+    return { order };
+  };
+  w.ports.cancelOrder = async (_token, number): Promise<WaOrderResult> => { cancels.push(number); return over.cancelRefuse ? { error: over.cancelRefuse } : { order: { ...order!, status: "cancelled" } }; };
+  return Object.assign(w, { orders, cancels });
+}
+const rowsOf = (p: Record<string, any>) => p.interactive?.action?.sections?.[0]?.rows ?? []; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+describe("ordering products on WhatsApp (W1)", () => {
+  it("WF18 a guest in the house: «المنتجات» → categories → a category's products with their prices → a quantity → the order, waiting for the payment at reception", async () => {
+    const w = shopWorld([b("IN", "checked_in")]);
+    await runWaFlow(text("المنتجات"), w.ports);
+    expect(w.threads[0].guest_token).toBe("GT-R-IN");                       // the in-house stay, found from the number
+    expect(rowsOf(w.sent[0]).map((r: { id: string }) => r.id)).toEqual(["PCAT:c1", "PCAT:c2"]);
+    expect(rowsOf(w.sent[0])[0].description).toBe("منتجان");
+    await runWaFlow(tap("PCAT:c1", "مشروبات"), w.ports);
+    expect(rowsOf(w.sent[1]).map((r: { id: string; description: string }) => [r.id, r.description])).toEqual([["PADD:p1", "2.00 ر.س"], ["PADD:p2", "5.00 ر.س · ظرفان"]]);
+    await runWaFlow(tap("PADD:p2", "قهوة"), w.ports);
+    expect(bodyOf(w.sent[2])).toBe("قهوة — 5.00 ر.س\nاختر الكمية:");
+    expect(buttonIds(w.sent[2])).toEqual(["PQ:p2:1", "PQ:p2:2", "PQ:p2:3"]);
+    await runWaFlow(tap("PQ:p2:2", "قطعتان"), w.ports);
+    expect(w.orders).toEqual([{ token: "GT-R-IN", thread: "T1", items: [{ product_id: "p2", quantity: 2 }] }]);
+    expect(bodyOf(w.sent[3])).toContain("أضفت 2 × قهوة إلى طلبك.\nرقم الطلب: ORD-2026-000501\n• 2 × قهوة — 10.00 ر.س");
+    expect(bodyOf(w.sent[3])).toContain("الإجمالي: 10.00 ر.س");
+    expect(bodyOf(w.sent[3])).toContain(WA_TEXTS.orderPay);
+    expect(buttonIds(w.sent[3])).toEqual([BTN.PRODUCTS, "PCANCEL:ORD-2026-000501", BTN.HUMAN]);
+    // the next look at the shop says what waits for the payment
+    await runWaFlow(tap(BTN.PRODUCTS, "إضافة منتج"), w.ports);
+    expect(bodyOf(w.sent[4])).toContain("لديك طلب بانتظار الدفع بمبلغ 10.00 ر.س — رقمه ORD-2026-000501");
+    // nothing of this reached the assistant
+    expect(w.asked).toEqual([]);
+  });
+
+  it("WF19 a guest not in the house is told ordering is for guests in their room, with «حجوزاتي» and «موظف»; nothing is ordered", async () => {
+    const w = shopWorld([b("BK-1")]);
+    await runWaFlow(tap(BTN.PRODUCTS, "طلب منتجات"), w.ports);
+    expect(bodyOf(w.sent[0])).toBe(WA_TEXTS.shopNeedsStay);
+    expect(buttonIds(w.sent[0])).toEqual([BTN.BOOKINGS, BTN.HUMAN]);
+    // a forged quantity reply orders nothing either
+    await runWaFlow(tap("PQ:p1:3", "3 قطع"), w.ports);
+    expect(w.orders).toEqual([]);
+  });
+
+  it("WF20 two rooms on the number: the guest picks the stay first; a booking card of a stay in the house offers «طلب منتجات» instead of «وصلت»", async () => {
+    const w = shopWorld([b("IN", "checked_in"), b("IN2", "checked_in")]);
+    await runWaFlow(text("المنتجات"), w.ports);
+    expect(rowsOf(w.sent[0]).map((r: { id: string }) => r.id)).toEqual(["OPEN:R-IN", "OPEN:R-IN2"]);
+    await runWaFlow(tap("OPEN:R-IN", "استوديو"), w.ports);
+    expect(buttonIds(w.sent[1])).toEqual([BTN.PRODUCTS, BTN.HUMAN, BTN.BOOKINGS]);
+    expect(bodyOf(w.sent[1])).toContain("أو اطلب من المنتجات");
+    // without the shop's ports (an older caller) the card is as before
+    const old = world([b("IN", "checked_in")]);
+    await runWaFlow(text("حجوزاتي"), old.ports);
+    expect(buttonIds(old.sent[0])).toEqual(["SAY:" + WA_TEXTS.arrived, BTN.HUMAN]);
+  });
+
+  it("WF22 the assistant's own button «المنتجات» opens the shop (it never reaches the assistant); other words still do", async () => {
+    const w = shopWorld([b("IN", "checked_in")]);
+    await runWaFlow(tap("SAY:المنتجات", "المنتجات"), w.ports);
+    expect(rowsOf(w.sent[0]).map((r: { id: string }) => r.id)).toEqual(["PCAT:c1", "PCAT:c2"]);
+    await runWaFlow(text("عندكم ماء؟"), w.ports);
+    expect(w.asked.map((a) => a.message)).toEqual(["عندكم ماء؟"]);
+  });
+
+  it("WF21 the guest cancels the order while it waits; once paid it is not cancelled here; a refused product says so", async () => {
+    const w = shopWorld([b("IN", "checked_in")]);
+    await runWaFlow(text("المنتجات"), w.ports);
+    await runWaFlow(tap("PQ:p1:1", "قطعة واحدة"), w.ports);
+    await runWaFlow(tap("PCANCEL:ORD-2026-000501", "إلغاء الطلب"), w.ports);
+    expect(w.cancels).toEqual(["ORD-2026-000501"]);
+    expect(bodyOf(w.sent[2])).toBe("أُلغي طلبك رقم ORD-2026-000501");
+    const paid = shopWorld([b("IN", "checked_in")], { cancelRefuse: "VALIDATION: order_status" });
+    await runWaFlow(text("المنتجات"), paid.ports);
+    await runWaFlow(tap("PCANCEL:ORD-2026-000501", "إلغاء الطلب"), paid.ports);
+    expect(bodyOf(paid.sent[1])).toContain("لم يعد بانتظار الدفع");
+    const gone = shopWorld([b("IN", "checked_in")], { refuse: "VALIDATION: product_unavailable" });
+    await runWaFlow(text("المنتجات"), gone.ports);
+    await runWaFlow(tap("PQ:p3:1", "قطعة واحدة"), gone.ports);
+    expect(bodyOf(gone.sent[1])).toBe(WA_TEXTS.shopGone);
+    // a product the shop does not offer is never sent to the order
+    await runWaFlow(tap("PQ:p9:1", "قطعة واحدة"), gone.ports);
+    expect(gone.orders.map((o) => o.items[0].product_id)).toEqual(["p3"]);
   });
 });

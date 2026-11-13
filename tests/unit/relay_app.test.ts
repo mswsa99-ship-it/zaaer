@@ -1,6 +1,6 @@
 /**
  * A9: the email the phone app writes (tests/android/fixtures/relay-sample.eml, produced by the app's own code in
- * tests/android/run.sh, RL06) is read by the bank-mail function as the server expects: from the app's mailbox, the
+ * tests/android/run.sh, RA06) is read by the bank-mail function as the server expects: from the app's mailbox, the
  * v1 body, a signature that checks with the relay key, the bank's text unchanged.
  */
 import { describe, it, expect } from "vitest";
@@ -12,7 +12,7 @@ import { setupText, smtpFor, setupProblem } from "../../src/lib/relaySetup";
 const KEY = "0123456789abcdef0123456789abcdef0123456789abcdef";   // the test key of RelayCoreTests, not a real one
 
 describe("the phone app's email (A9)", () => {
-  it("RL10 the bank-mail function reads the app's email: from its mailbox, the v1 body whose signature checks with the relay key, the text as the bank wrote it", () => {
+  it("RA10 the bank-mail function reads the app's email: from its mailbox, the v1 body whose signature checks with the relay key, the text as the bank wrote it", () => {
     const raw = readFileSync("tests/android/fixtures/relay-sample.eml", "latin1");
     const m = readMail(raw);
     expect(m.from).toBe("<relay.test@example.com>");
@@ -30,7 +30,7 @@ describe("the phone app's email (A9)", () => {
 });
 
 describe("the setup text «بريد البنك» makes for the phone (A9)", () => {
-  it("RL12 the setup text carries the mailbox, its SMTP server, the senders and each branch's account rule, the key only when given — the format the app reads (RelayCoreTests RL01)", () => {
+  it("RA12 the setup text carries the mailbox, its SMTP server, the senders and each branch's account rule, the key only when given — the format the app reads (RelayCoreTests RA01)", () => {
     const s = { mailbox_address: "relay.test@example.com", imap_user: "relay.test@example.com", imap_host: "imap.gmail.com", allowed_senders: ["AlRajhiBank", "الراجحي"],
       accounts: [{ id: "1", branch: "أ", name: "بنك أ", prefix: "605", suffix: "4321" }, { id: "2", branch: "ب", name: "بنك ب", prefix: null, suffix: null }] };
     expect(setupText(s)).toBe("FIVEHOURS-SETUP 1\nmailbox: relay.test@example.com\nsmtp: smtp.gmail.com:465\nsenders: AlRajhiBank, الراجحي\naccount: 605…4321\n");

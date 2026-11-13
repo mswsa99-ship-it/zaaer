@@ -155,6 +155,7 @@ npm run verify
 | T10، T16، T18، T20، T22، T29 | T10a/b، T16a/b، T18a/b، T20a/b، T22a/b/c، T29a/b | `tests/sql/security_tests.sql` | المعرّف الواحد كان يسمّي عدة اختبارات |
 | G01، G02/G03، G09، G06 | G05، G10–G13، G16، G09 | `tests/unit/demo-invariants.test.ts` | ترقيم داخلي قديم؛ الآن بضوابط السجل نفسها |
 | A01، A02، A05، A06، A08 | GAP01، GAP02، GAP05، GAP06، GAP08 | `تعليقات الشيفرة في src` | فجوات تقرير المقارنة السابق، لا اختبارات |
+| RL01–RL13 (تطبيق الجوال) | RA01–RA13 | `RelayCoreTests.java` و`tests/android/run.sh` و`tests/unit/relay_app.test.ts` و`tests/e2e/bank.spec.ts` | RL مسجلة من قبل لقائمة «بحاجة لمراجعة وتدقيق»؛ وتبقى لها في `invoices_review_tests.sql` |
 
 تقريرا التسليم والتدقيق السابقان (`DELIVERY_REPORT.md` و`AUDIT_REPORT.md`) يبقيان بمعرّفاتهما القديمة كما سُلّما؛ هذا الجدول يربطها بالجديدة. وF01–F13 في `AUDIT_REPORT.md` ملاحظات تدقيق لا اختبارات.
 

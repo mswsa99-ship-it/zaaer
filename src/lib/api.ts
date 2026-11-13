@@ -238,6 +238,24 @@ export const VALIDATION_AR: Record<string, string> = {
   payout_vouchers: "بعض الدفعات المختارة ليست دفعات آجلة غير مطابقة لهذه المنصة في هذا الفرع.",
   payout_status: "هذه المطابقة ملغاة مسبقًا.",
   tax_rate: "نسبة الضريبة بين 0 و100%.",
+  // products and orders (0068, W1)
+  category_name: "اسم الفئة مطلوب، 40 حرفًا على الأكثر.",
+  product_name: "اسم المنتج مطلوب، 40 حرفًا على الأكثر.",
+  product_description: "وصف المنتج 200 حرف على الأكثر.",
+  product_price: "سعر المنتج من 0.01 إلى 100,000 ريال.",
+  product_category: "اختر فئة المنتج.",
+  product_branch: "الفرع غير موجود.",
+  available: "حدّد إتاحة المنتج في الفرع أو إيقافها.",
+  items: "اختر منتجًا واحدًا على الأقل (حتى 20 صنفًا، والكمية من 1 إلى 50).",
+  order_quantity: "الكمية من المنتج الواحد في الطلب 50 على الأكثر.",
+  not_in_stay: "الطلب للنزيل المقيم في وحدته بعد تسجيل وصوله.",
+  product_unavailable: "أحد المنتجات لم يعد متاحًا في هذا الفرع؛ حدّث القائمة.",
+  order_status: "تغيّرت حالة الطلب (دُفع أو أُلغي)؛ حدّث القائمة.",
+  order_method: "طلب المنتجات يُدفع في المنشأة: نقدًا أو بالشبكة أو بالتحويل.",
+  order_voucher: "هذا السند لطلب منتجات: لا يُلغى ولا يُصحَّح وحده؛ ألغِ الطلب نفسه من «طلبات المنتجات».",
+  order_task: "هذه مهمة تسليم طلب مدفوع: لا تُلغى وحدها؛ ألغِ الطلب نفسه من «طلبات المنتجات».",
+  order_delivered: "سُلّم الطلب فلا يُلغى. لرد مبلغ للنزيل استخدم «رد مبلغ» في الحجز.",
+  days: "الفترة من يوم إلى 90 يومًا.",
   // 0059 (OWNER-08): one limit for the reports' period
   period_too_long: "الفترة أطول من 366 يومًا؛ اختر فترة أقصر.", objection_note: "اكتب ما تعترض عليه أو ما تطلب توضيحه (3 أحرف على الأقل).", outcome: "نتيجة المراجعة غير صحيحة.", period_future: "الفترة كلها بعد اليوم؛ لا حركة فيها بعد.",
   full_name_three_parts: "الاسم الثلاثي مطلوب كما في الوثيقة.",
@@ -786,6 +804,36 @@ export const moneyApi = {
   platformUnsettled: (branchId: string) => rpc<PlatformPayment[]>("fn_platform_unsettled", { p_branch: branchId }),
   platformConfirm: (p: { branch_id: string; source_id: string; voucher_ids: string[]; received_halalas: number; received_on: string; account_id?: string; reference: string; note?: string }) => rpc<{ ok: boolean }>("fn_platform_payout_confirm", { p }),
   platformCancel: (id: string, reason: string) => rpc<{ ok: boolean }>("fn_platform_payout_cancel", { p_payout: id, p_reason: reason }),
+};
+
+// ---------------------------------------------------------------------------
+// Products and orders (0068, W1): the catalogue in «المنتجات»; the orders of a guest in their room, paid at reception
+// (the voucher and the delivery task come with the payment), delivered when the task is done
+// ---------------------------------------------------------------------------
+export type ProductOrderStatus = "pending_payment" | "paid" | "delivered" | "cancelled";
+export interface ProductCategoryRow { id: string; name: string; sort_order: number; is_active: boolean; version: number; products: number }
+export interface ProductRow { id: string; category_id: string; name: string; description: string | null; price_halalas: number; taxable: boolean; is_active: boolean;
+  sort_order: number; version: number; /** the branches that offer it */ branches: string[] }
+export interface ProductsAdmin { categories: ProductCategoryRow[]; products: ProductRow[]; branches: Array<{ id: string; name: string; mine: boolean }> }
+export interface MenuCategory { id: string; name: string; products: Array<{ id: string; name: string; description: string | null; price_halalas: number }> }
+export interface ProductOrderLine { product_id: string; name: string; quantity: number; unit_price_halalas: number; total_halalas: number }
+export interface ProductOrder { id: string; number: string; status: ProductOrderStatus; source: "whatsapp" | "staff"; total_halalas: number; reservation_id: string;
+  internal_ref: string | null; room_number: string | null; branch_id: string; created_at: string; paid_at: string | null; delivered_at: string | null;
+  cancelled_at: string | null; cancel_reason: string | null; voucher_number: string | null; task_status: string | null; version: number; lines: ProductOrderLine[] }
+export interface ProductMenu { categories: MenuCategory[]; stays: Array<{ id: string; internal_ref: string; room_number: string | null }> }
+
+export const productsApi = {
+  admin: () => rpc<ProductsAdmin>("fn_admin_products", {}),
+  upsertCategory: (p: { id?: string; name: string; sort_order?: number; is_active?: boolean; version?: number }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_product_category", { p }),
+  upsertProduct: (p: { id?: string; category_id: string; name: string; description?: string | null; price_halalas: number; taxable?: boolean; is_active?: boolean; sort_order?: number; version?: number }) =>
+    rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_product", { p }),
+  setBranch: (productId: string, branchId: string, available: boolean) => rpc<{ ok: boolean }>("fn_admin_set_product_branch", { p_product: productId, p_branch: branchId, p_available: available }),
+  orders: (branchId: string, status: ProductOrderStatus | null, days: number) => rpc<ProductOrder[]>("fn_staff_product_orders", { p_branch: branchId, p_status: status, p_days: days }),
+  menu: (branchId: string) => rpc<ProductMenu>("fn_staff_product_menu", { p_branch: branchId }),
+  create: (reservationId: string, items: Array<{ product_id: string; quantity: number }>) => rpc<ProductOrder>("fn_staff_create_product_order", { p_reservation: reservationId, p_items: items }),
+  pay: (p: { order_id: string; method: "cash" | "pos" | "bank_transfer"; reference?: string | null; account_id?: string | null; idempotency_key: string; duplicate_reference_ok?: boolean }) =>
+    rpc<{ ok: boolean; duplicate: boolean; voucher_number?: string; order: ProductOrder }>("fn_staff_pay_product_order", { p }),
+  cancel: (orderId: string, reason: string) => rpc<ProductOrder>("fn_staff_cancel_product_order", { p_order: orderId, p_reason: reason }),
 };
 
 function fingerprint(): string {

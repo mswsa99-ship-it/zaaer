@@ -6,7 +6,8 @@
 # one voucher corrected twice, the departure's invoice against a partial one), and 4, 21 and 69 (PX01–PX03: one platform
 # number on two bookings at once, one platform cancellation number twice, a guest ban against the guest's arrival), and
 # of the bank matching of 0067 (MT30–MT33: one movement against two vouchers, one voucher against two movements, a match
-# against the cancellation of its voucher in both orders).
+# against the cancellation of its voucher in both orders), and of the product orders of 0068 (PD30–PD32: one order paid
+# twice at once, an item added while the order is paid, the payment while an item is added).
 # Session A starts a transaction and holds it open for 3s before committing; session B fires 1s later and must
 # block on the row/exclusion lock, then observe A's committed result. Running the two calls sequentially would
 # NOT prove anything — this script is the evidence.
@@ -351,5 +352,37 @@ race "fn_cancel_voucher('$VE', 'سباق')->>'ok'" "fn_bank_match('$M5', $(one "
 ST=$(qs "select (select status from bank_movements where id = '$M5') || ' ' || (select status from financial_vouchers where id = '$VE') || ' ' || (select count(*) from bank_matches where movement_id = '$M5')")
 echo "MT33 A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"VALIDATION: target"* && "$ST" == "pending cancelled 0" ]] && rc=0 || rc=1; check "MT33 the cancellation of a voucher against a match with it (the cancellation first) → the match is refused; the movement still waits" $rc "A=$RA B=$RB $ST"
+
+# ---------- PD30–PD32 (0068, W1): an order paid twice at once; an item added while it is paid, in both orders ----------
+psql -d "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+insert into rooms(id, branch_id, organization_id, category_id, room_number, is_active, status)
+values ('00000000-0000-0000-0000-000000000197','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-RACE-PR', true, 'available')
+on conflict (id) do nothing;
+SQL
+RP=$(in_house 00000000-0000-0000-0000-000000000197)
+PC=$(q "select (fn_admin_upsert_product_category('{\"name\":\"فئة السباق\"}'))->>'id'")
+PP=$(q "select (fn_admin_upsert_product(jsonb_build_object('category_id','$PC','name','منتج السباق','price_halalas',300)))->>'id'")
+q "select fn_admin_set_product_branch('$PP','$BR',true)->>'ok'" >/dev/null
+item() { echo "jsonb_build_array(jsonb_build_object('product_id','$PP','quantity',1))"; }
+order() { q "select (fn_staff_create_product_order('$RP', $(item)))->>'id'"; }
+pay() { echo "fn_staff_pay_product_order(jsonb_build_object('order_id','$1','method','cash','idempotency_key','$2'))->>'ok'"; }
+ostate() { qs "select o.status || ' ' || o.total_halalas || ' ' || (select count(*) from financial_vouchers v where v.product_order_id = o.id and v.status = 'approved') || ' ' || (select coalesce(sum(amount_halalas), 0) from financial_vouchers v where v.product_order_id = o.id and v.status = 'approved') || ' ' || (select count(*) from housekeeping_tasks t where t.id = o.task_id) from product_orders o where o.id = '$1'"; }
+O1=$(order)
+race "$(pay "$O1" race-pr-a)" "$(pay "$O1" race-pr-b)"
+ST=$(ostate "$O1")
+echo "PD30 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"order_status"* && "$ST" == "paid 300 1 300 1" ]] && rc=0 || rc=1; check "PD30 one order paid twice at once → one voucher and one delivery task; the second payment is told the order is no longer waiting" $rc "A=$RA B=$RB state=$ST"
+# the payment first: an item added meanwhile waits, then goes to a new order (the paid one keeps its lines and total)
+O2=$(order)
+race "$(pay "$O2" race-pr-c)" "(fn_staff_create_product_order('$RP', $(item)))->>'id' <> '$O2'"
+ST=$(ostate "$O2"); NEW=$(qs "select count(*) || ' ' || coalesce(max(total_halalas), 0) from product_orders where reservation_id = '$RP' and status = 'pending_payment'")
+echo "PD31 A=$RA B=$RB state=$ST new=$NEW"
+[[ "$RA" == "R:true" && "$RB" == "R:true" && "$ST" == "paid 300 1 300 1" && "$NEW" == "1 300" ]] && rc=0 || rc=1; check "PD31 an item added while its order is paid → it waits, then opens a new order; the paid order keeps its lines, its total and its voucher" $rc "A=$RA B=$RB state=$ST new=$NEW"
+# the item first: the payment waits, then pays the order with that item
+O3=$(qs "select id from product_orders where reservation_id = '$RP' and status = 'pending_payment'")
+race "(fn_staff_create_product_order('$RP', $(item)))->>'id' = '$O3'" "$(pay "$O3" race-pr-d)"
+ST=$(ostate "$O3")
+echo "PD32 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == "R:true" && "$ST" == "paid 600 1 600 1" ]] && rc=0 || rc=1; check "PD32 the payment of an order while an item is added to it → it waits, then pays the order with that item (the voucher is the whole total)" $rc "A=$RA B=$RB state=$ST"
 
 exit $fail

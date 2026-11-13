@@ -26,16 +26,22 @@ export async function simGuests(): Promise<SimGuest[]> {
   const { data: guests } = await db.from("reservation_guests").select("reservation_id, full_name, phone, is_primary").eq("is_primary", true);
   const { data: res } = await db.from("reservations").select("id, status");
   const live = new Set(((res as any[]) ?? []).filter((r) => ["confirmed", "checked_in", "pending_verification"].includes(r.status)).map((r) => r.id));
-  const byPhone = new Map<string, { name: string; n: number }>();
+  const inHouse = new Set(((res as any[]) ?? []).filter((r) => r.status === "checked_in").map((r) => r.id));
+  const byPhone = new Map<string, { name: string; n: number; inHouse: boolean }>();
   for (const g of (guests as any[]) ?? []) {
     const ph = normalize(g.phone);
     if (!ph || !live.has(g.reservation_id)) continue;
-    const cur = byPhone.get(ph) ?? { name: String(g.full_name ?? "").split(" ")[0], n: 0 };
+    const cur = byPhone.get(ph) ?? { name: String(g.full_name ?? "").split(" ")[0], n: 0, inHouse: false };
     cur.n += 1;
+    cur.inHouse ||= inHouse.has(g.reservation_id);
     byPhone.set(ph, cur);
   }
-  const list = [...byPhone.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 4)
-    .map(([phone, x]) => ({ phone, bookings: x.n, label: `${x.name} — ${x.n === 1 ? "حجز واحد" : x.n === 2 ? "حجزان" : `${x.n} حجوزات`}` }));
+  const ranked = [...byPhone.entries()].sort((a, b) => b[1].n - a[1].n);
+  const picked = ranked.slice(0, 4);
+  // W1: a guest in their room is always among them (they order products: «المنتجات»)
+  if (!picked.some(([, x]) => x.inHouse)) { const h = ranked.find(([, x]) => x.inHouse); if (h) picked.splice(3, 1, h); }
+  const list = picked.map(([phone, x]) => ({ phone, bookings: x.n,
+    label: `${x.name} — ${x.n === 1 ? "حجز واحد" : x.n === 2 ? "حجزان" : `${x.n} حجوزات`}${x.inHouse ? " (مقيم)" : ""}` }));
   return [...list, { phone: "966509990000", bookings: 0, label: "رقم جديد — بلا حجوزات" }];
 }
 

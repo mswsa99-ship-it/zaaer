@@ -15,7 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins, ClipboardList, Scale, Mail, BellRing, ClipboardCheck, Activity, Building } from "lucide-react";
+  Calculator, Vault, HandCoins, ClipboardList, Scale, Mail, BellRing, ClipboardCheck, Activity, Building, ShoppingBag, Package } from "lucide-react";
 import type { Role } from "./types";
 
 export type StaffRole = Exclude<Role, "guest">;
@@ -68,6 +68,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/reservations/:id", label: "تفاصيل الحجز", icon: BookCheck, area: "staff", roles: ALL_STAFF, hidden: true },
   { path: "/staff/identity-verification", label: "مطابقة الهويات", icon: UserCheck, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["identity.approve", "guest.enter"] },
   { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt", "voucher.refund", "invoice.issue"] },
+  // 0068 (W1): the guests' product orders — the payment at reception, then the voucher and the delivery task
+  { path: "/staff/orders", label: "طلبات المنتجات", icon: ShoppingBag, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt"] },
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   // A2/A3 (0063): the closing of the day — the boxes counted against the system, the review, the edit window
   { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
@@ -101,6 +103,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/facilities", label: "المرافق", icon: Landmark, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
   { path: "/admin/task-types", label: "أنواع المهام", icon: ListChecks, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
   { path: "/admin/services", label: "الخدمات", icon: ConciergeBell, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
+  { path: "/admin/products", label: "المنتجات", icon: Package, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, scope: "org", cap: ["definitions"] },
   // decision 33: one price calendar; «التوفر» and «قواعد الكشف» are hidden, their data kept and their pages still reachable
   { path: "/admin/rates", label: "تقويم الأسعار", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["rates"] },
   { path: "/admin/availability", label: "التوفر", icon: CalendarRange, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, hidden: true },

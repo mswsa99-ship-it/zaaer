@@ -174,7 +174,7 @@ export function parseInbound(body: unknown): WaInbound[] {
 export interface AssistantAction { label: string; route?: string; value?: string }
 
 /** Buttons the webhook understands; everything else is a link to a page of the website. */
-export const BTN = { BOOKINGS: "MY_BOOKINGS", HUMAN: "HUMAN", NEW: "NEW_CHAT", BOOK: "BOOK_NOW" } as const;
+export const BTN = { BOOKINGS: "MY_BOOKINGS", HUMAN: "HUMAN", NEW: "NEW_CHAT", BOOK: "BOOK_NOW", PRODUCTS: "PRODUCTS" } as const;
 
 export function toWhatsAppMessage(to: string, reply: string, actions: AssistantAction[], appBaseUrl: string): Record<string, unknown> {
   const buttons: Array<{ id: string; title: string }> = [];

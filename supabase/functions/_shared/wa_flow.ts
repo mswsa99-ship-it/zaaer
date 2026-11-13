@@ -11,6 +11,8 @@
  *   - everything else goes to the reception assistant (ai-reception: same guardrails, tools, knowledge base and
  *     handoff as everywhere), and its answer comes back as buttons, a list, or links to the secure pages
  *   - identity documents and card numbers are never taken in the chat; only text is read
+ *   - W1: a guest in their room orders products («المنتجات»): a category, a product, how many; the order waits for the
+ *     payment at reception (the voucher and the delivery task come with it), and is cancelled here while it waits
  */
 import { BTN, buttonsPayload, ctaUrlPayload, listPayload, shortDate, textPayload, toWhatsAppMessage, type AssistantAction, type WaInbound } from "./whatsapp.ts";
 import { gateInput } from "./guardrails.ts";
@@ -31,6 +33,13 @@ export interface WaBooking {
   branch_name?: string | null; category_name?: string | null;
 }
 export interface WaThread { id: string; guest_token: string | null }
+/** W1: what the stay's branch offers (fn_guest_products) and an order (fn_product_order_json) */
+export interface WaProduct { id: string; name: string; description: string | null; price_halalas: number }
+export interface WaProductCategory { id: string; name: string; products: WaProduct[] }
+export interface WaOrder { id: string; number: string; status: string; total_halalas: number; lines: Array<{ product_id: string; name: string; quantity: number; total_halalas: number }> }
+export interface WaShop { can_order: boolean; categories: WaProductCategory[]; open_order: WaOrder | null }
+/** an order placed or cancelled, or the refusal (the server's message: VALIDATION: …, NOT_FOUND, TOKEN_INVALID) */
+export type WaOrderResult = { order: WaOrder } | { error: string };
 export interface WaAssistantAnswer { reply: string; actions: AssistantAction[] }
 
 export interface WaFlowPorts {
@@ -57,6 +66,12 @@ export interface WaFlowPorts {
   recentBot?(threadId: string, withinMs: number): Promise<string[]>;
   /** one WhatsApp message (Cloud API payload without messaging_product) */
   send(payload: Record<string, unknown>): Promise<unknown>;
+  /** W1: what the stay's branch offers, whether the guest can order now, and the open order — by the guest token */
+  products?(guestToken: string): Promise<WaShop | null>;
+  /** W1: adds items to the stay's open WhatsApp order, or opens one */
+  orderProducts?(guestToken: string, threadId: string, items: Array<{ product_id: string; quantity: number }>): Promise<WaOrderResult>;
+  /** W1: the guest cancels their order while it waits for the payment */
+  cancelOrder?(guestToken: string, number: string): Promise<WaOrderResult>;
 }
 
 export const WA_TEXTS = {
@@ -68,9 +83,22 @@ export const WA_TEXTS = {
   human: "أرغب بالتحدث مع موظف الاستقبال",
   arrived: "لقد وصلت وأرغب بتسجيل الدخول",
   bookingsWord: /^(حجوزاتي|حجزي|حجوزات|my bookings?)$/i,
+  // W1: ordering from the room
+  shopWord: /^(المنتجات|منتجات|طلب منتجات|اطلب|المتجر|القائمة|menu|products?|order)$/i,
+  shopNeedsStay: "الطلب من المنتجات للنزيل المقيم بعد تسجيل وصوله. اختر إقامتك من «حجوزاتي»، أو اطلب موظف الاستقبال.",
+  shopEmpty: "لا توجد منتجات متاحة للطلب الآن.",
+  shopGone: "هذا المنتج لم يعد متاحًا.",
+  shopFailed: "تعذر إتمام الطلب الآن. حاول بعد قليل أو اطلب موظف الاستقبال.",
+  orderPay: "يتواصل معك الاستقبال لإتمام الدفع (نقدًا أو بالشبكة أو بالتحويل)، ثم يصلك الطلب إلى غرفتك.",
 };
 
 const nightsAr = (n: number) => (n === 1 ? "ليلة" : "ليالٍ");
+/** halalas → "12.50 ر.س" */
+export const sarText = (h: number) => (h / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ر.س";
+/** the quantities offered for a product (more of it: add it again) */
+const QUANTITIES = ["قطعة واحدة", "قطعتان", "3 قطع"];
+/** Arabic counting of products: منتج واحد، منتجان، 3–10 منتجات، 11+ منتجًا */
+const productsAr = (n: number) => (n === 1 ? "منتج واحد" : n === 2 ? "منتجان" : n <= 10 ? `${n} منتجات` : `${n} منتجًا`);
 
 export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
   const base = p.appBaseUrl.replace(/\/$/, "");
@@ -89,6 +117,7 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     await p.bindThread(t.id, guestToken);
     t.guest_token = guestToken;
     if (announce) {
+      const inHouse = b.status === "checked_in" && !!p.products;
       const lines = [
         `حجزك ${b.ref}${b.category_name ? ` — ${b.category_name}` : ""}`,
         `من ${shortDate(b.check_in)} إلى ${shortDate(b.check_out)} (${b.nights} ${nightsAr(b.nights)}) · ${WA_STATUS_AR[b.status] ?? b.status}`,
@@ -96,9 +125,9 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
         base ? `• حالة الحجز ورمز الدخول: ${base}/booking/status/${guestToken}` : "",
         base ? `• تسجيل بيانات النزلاء (الهوية تُدخل هناك فقط): ${base}/booking/registration/${guestToken}` : "",
         "",
-        "اسألني هنا عن السداد أو الوصول أو أي شيء يخص إقامتك.",
+        inHouse ? "اسألني هنا عن أي شيء يخص إقامتك، أو اطلب من المنتجات ويصلك الطلب إلى غرفتك." : "اسألني هنا عن السداد أو الوصول أو أي شيء يخص إقامتك.",
       ].filter((l, i, a) => l !== "" || (a[i - 1] ?? "") !== "").join("\n");
-      const btns = [{ id: "SAY:" + WA_TEXTS.arrived, title: "وصلت" }, { id: BTN.HUMAN, title: "التحدث مع موظف" }];
+      const btns = [inHouse ? { id: BTN.PRODUCTS, title: "طلب منتجات" } : { id: "SAY:" + WA_TEXTS.arrived, title: "وصلت" }, { id: BTN.HUMAN, title: "التحدث مع موظف" }];
       if (many) btns.push({ id: BTN.BOOKINGS, title: "حجوزاتي" });
       await p.send(buttonsPayload(m.from, lines, btns));
       // the stored copy never keeps the tokens of the secure pages
@@ -141,6 +170,83 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     await p.send(toWhatsAppMessage(m.from, reply, actions, base));
   };
 
+  // ---- W1: products ordered from the room (a category, a product, how many) ----
+  const say = async (payload: Record<string, unknown>, text: string) => { await p.send(payload); await saveBot(text); };
+  const staffBtn = { id: BTN.HUMAN, title: "التحدث مع موظف" };
+  /** the stay the guest orders for: the thread's booking when it is in the house, else the only in-house one on the number */
+  const shop = async (): Promise<{ token: string; data: WaShop } | null> => {
+    if (t.guest_token) {
+      const d = await p.products!(t.guest_token).catch(() => null);
+      if (d?.can_order) return { token: t.guest_token, data: d };
+    }
+    const { token, list } = await p.bookings();
+    const inHouse = list.filter((b) => b.status === "checked_in");
+    if (inHouse.length === 1 && (await bind(token, inHouse[0], false, list.length > 1))) {
+      const d = await p.products!(t.guest_token!).catch(() => null);
+      if (d?.can_order) return { token: t.guest_token!, data: d };
+    }
+    if (inHouse.length > 1) { await showBookings(); return null; }      // two rooms: the guest picks the stay first
+    await say(buttonsPayload(m.from, WA_TEXTS.shopNeedsStay, [{ id: BTN.BOOKINGS, title: "حجوزاتي" }, staffBtn]), WA_TEXTS.shopNeedsStay);
+    return null;
+  };
+  const showProducts = async (c: WaProductCategory, lead = "") => {
+    const text = `${lead}${c.name} — اختر المنتج:`;
+    await say(listPayload(m.from, text, "المنتجات", c.products.slice(0, 10).map((x) => ({
+      id: "PADD:" + x.id, title: x.name, description: [sarText(x.price_halalas), x.description].filter(Boolean).join(" · "),
+    }))), text);
+  };
+  const showCategories = async (data: WaShop, lead = "") => {
+    if (!data.categories.length) return say(buttonsPayload(m.from, WA_TEXTS.shopEmpty, [staffBtn]), WA_TEXTS.shopEmpty);
+    const open = data.open_order ? `\n\nلديك طلب بانتظار الدفع بمبلغ ${sarText(data.open_order.total_halalas)} — رقمه ${data.open_order.number}` : "";
+    if (data.categories.length === 1) return showProducts(data.categories[0], lead + (open ? open.trim() + "\n\n" : ""));
+    const text = `${lead}المنتجات المتاحة لك — اختر الفئة:${open}`;
+    await say(listPayload(m.from, text, "الفئات", data.categories.slice(0, 10).map((c) => ({ id: "PCAT:" + c.id, title: c.name, description: productsAr(c.products.length) }))), text);
+  };
+  const orderText = (o: WaOrder) => [...o.lines.map((l) => `• ${l.quantity} × ${l.name} — ${sarText(l.total_halalas)}`), `الإجمالي: ${sarText(o.total_halalas)}`].join("\n");
+  const shopTurn = async (id: string) => {
+    if (id.startsWith("PCANCEL:")) {
+      const number = id.slice(8);
+      if (!t.guest_token || !p.cancelOrder) return say(buttonsPayload(m.from, WA_TEXTS.shopNeedsStay, [{ id: BTN.BOOKINGS, title: "حجوزاتي" }, staffBtn]), WA_TEXTS.shopNeedsStay);
+      const r = await p.cancelOrder(t.guest_token, number).catch((): WaOrderResult => ({ error: "unreachable" }));
+      if ("error" in r) {
+        const text = /order_status/.test(r.error) ? `هذا الطلب لم يعد بانتظار الدفع، فلا يُلغى من هنا. تواصل مع الاستقبال، واذكر له رقم الطلب ${number}`
+          : /NOT_FOUND/.test(r.error) ? "لم أجد هذا الطلب في إقامتك." : WA_TEXTS.shopFailed;
+        return say(buttonsPayload(m.from, text, [staffBtn]), text);
+      }
+      const text = `أُلغي طلبك رقم ${number}`;
+      return say(buttonsPayload(m.from, text, [{ id: BTN.PRODUCTS, title: "المنتجات" }, staffBtn]), text);
+    }
+    const s = await shop();
+    if (!s) return;
+    const all = s.data.categories.flatMap((c) => c.products);
+    if (id.startsWith("PCAT:")) {
+      const c = s.data.categories.find((x) => x.id === id.slice(5));
+      return c ? showProducts(c) : showCategories(s.data, "هذه الفئة لم تعد متاحة.\n");
+    }
+    if (id.startsWith("PADD:")) {
+      const x = all.find((y) => y.id === id.slice(5));
+      if (!x) return showCategories(s.data, WA_TEXTS.shopGone + "\n");
+      // the quantity as options (on the reception computer a typed «2» is the second option: two pieces)
+      const text = `${x.name} — ${sarText(x.price_halalas)}\nاختر الكمية:`;
+      return say(buttonsPayload(m.from, text, QUANTITIES.map((title, i) => ({ id: `PQ:${x.id}:${i + 1}`, title }))), text);
+    }
+    if (id.startsWith("PQ:")) {
+      const [, pid, qs] = id.split(":");
+      const n = Number(qs);
+      const x = all.find((y) => y.id === pid);
+      if (!x || !Number.isInteger(n) || n < 1 || n > 50) return showCategories(s.data, WA_TEXTS.shopGone + "\n");
+      const r = await p.orderProducts!(s.token, t.id, [{ product_id: x.id, quantity: n }]).catch((): WaOrderResult => ({ error: "unreachable" }));
+      if ("error" in r) {
+        const text = /product_unavailable/.test(r.error) ? WA_TEXTS.shopGone : /order_quantity/.test(r.error) ? "لا يزيد المنتج الواحد في الطلب على 50."
+          : /not_in_stay/.test(r.error) ? WA_TEXTS.shopNeedsStay : WA_TEXTS.shopFailed;
+        return say(buttonsPayload(m.from, text, [{ id: BTN.PRODUCTS, title: "المنتجات" }, staffBtn]), text);
+      }
+      const text = [`أضفت ${n} × ${x.name} إلى طلبك.`, `رقم الطلب: ${r.order.number}`, orderText(r.order), "", WA_TEXTS.orderPay].join("\n");
+      return say(buttonsPayload(m.from, text, [{ id: BTN.PRODUCTS, title: "إضافة منتج" }, { id: "PCANCEL:" + r.order.number, title: "إلغاء الطلب" }, staffBtn]), text);
+    }
+    return showCategories(s.data);
+  };
+
   // ---- not text: say what works (documents are never taken in the chat) ----
   if (!["text", "interactive", "button"].includes(m.type)) {
     // the notice once: the next photos of an album (each one a message) are recorded without repeating it
@@ -176,6 +282,15 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
       await p.send(textPayload(m.from, WA_TEXTS.openFailed));
       await saveBot(WA_TEXTS.openFailed);
     }
+    await p.touch(t.id);
+    return;
+  }
+  // «المنتجات» typed, the button, a step of the shop, or the assistant's own suggestion of it
+  const shopAsked = id === BTN.PRODUCTS || /^(PCAT|PADD|PQ|PCANCEL):/.test(id) || (!id && WA_TEXTS.shopWord.test(typed))
+    || (id.startsWith("SAY:") && WA_TEXTS.shopWord.test(id.slice(4).trim()));
+  if (p.products && shopAsked) {
+    await saveGuest(typed || "المنتجات");
+    await shopTurn(id);
     await p.touch(t.id);
     return;
   }

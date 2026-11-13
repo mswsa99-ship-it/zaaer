@@ -33,7 +33,7 @@ test.describe("bank messages", () => {
     await expect(page.getByTestId("bank-mail-state")).toHaveText("يعمل");
   });
 
-  test("RL13 the owner gets the phone app's setup text: with the new key once, then without it; the mailbox password is never in it", async ({ page, loginAs, go }) => {
+  test("RA13 the owner gets the phone app's setup text: with the new key once, then without it; the mailbox password is never in it", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/admin/bank-mail");
     await expect(page.getByTestId("relay-app").getByRole("button", { name: "نص الإعداد" })).toBeDisabled();

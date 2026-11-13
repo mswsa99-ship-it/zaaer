@@ -258,13 +258,15 @@ function ReasonDialog({ open, title, warning, onClose, onSubmit }: { open: boole
  * bank account (the default is chosen, any other active one can be), nothing for the platform; the terminal and the
  * transfer need their transaction number. The server applies the same rules.
  */
-export function PaymentFields({ method, setMethod, accountId, setAccountId, reference, setReference, accounts, verb, deposit = false }: {
+export function PaymentFields({ method, setMethod, accountId, setAccountId, reference, setReference, accounts, verb, deposit = false, atProperty = false }: {
   method: PaymentMethod; setMethod: (m: PaymentMethod) => void; accountId: string; setAccountId: (id: string) => void;
   reference: string; setReference: (r: string) => void; accounts: CashAccount[]; verb: "receive" | "return";
   /** The deposit is held and returned by the property itself; a platform never collects it. */
   deposit?: boolean;
+  /** Paid at the property only (a product order, 0068): cash, card or transfer — a platform never collects it. */
+  atProperty?: boolean;
 }) {
-  const methods = deposit ? ACTIVE_PAYMENT_METHODS.filter((m) => m !== "ota_deferred") : ACTIVE_PAYMENT_METHODS;
+  const methods = deposit || atProperty ? ACTIVE_PAYMENT_METHODS.filter((m) => m !== "ota_deferred") : ACTIVE_PAYMENT_METHODS;
   const kind = METHOD_ACCOUNT_KIND[method];
   const options = kind ? accounts.filter((a) => a.kind === kind) : [];
   const needsRef = METHOD_NEEDS_REFERENCE.includes(method);

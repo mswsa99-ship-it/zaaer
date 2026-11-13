@@ -2,12 +2,12 @@
 # =====================================================================
 #  The phone app that relays the bank's messages (A9; RL* in tests/acceptance-library.json).
 #  1. Its rules (android/app/src/main/java/sa/fivehours/relay/core, plain Java with no Android in it) are compiled
-#     with javac and tried by android/core-tests (RL01–RL06): the setup text, the account rule, what is queued and
+#     with javac and tried by android/core-tests (RA01–RA06): the setup text, the account rule, what is queued and
 #     what is not, the signed email, sending with no internet / a refused password / a working server.
-#  2. The email it writes is the one kept in tests/android/fixtures (RL06); the mail reader reads it (RL10, vitest).
+#  2. The email it writes is the one kept in tests/android/fixtures (RA06); the mail reader reads it (RA10, vitest).
 #  3. When a database is given (PGHOST), the server's own intake takes that email: inside a transaction that is
 #     rolled back, the mailbox and the key are the test ones and an account has the rule 605…4321; fn_bank_ingest
-#     must read it as one movement (RL11).
+#     must read it as one movement (RA11).
 #  The Android screens and receivers are built into the APK by .github/workflows/android.yml.
 # =====================================================================
 set -euo pipefail
@@ -21,9 +21,9 @@ java -Dstdout.encoding=UTF-8 -cp "$OUT" sa.fivehours.relay.core.RelayCoreTests t
 status=${PIPESTATUS[0]}
 [[ $status -eq 0 ]] || exit $status
 
-if [[ -z "${PGHOST:-}" ]]; then echo "RL11 not run here: no database (PGHOST); the verify gate runs it"; exit 0; fi
+if [[ -z "${PGHOST:-}" ]]; then echo "RA11 not run here: no database (PGHOST); the verify gate runs it"; exit 0; fi
 DB="${TEST_DB:-airec_test}"
-psql -d "$DB" -Atc "select 1" >/dev/null 2>&1 || { echo "RL11 needs the test database $DB (tests/sql/run.sh builds it)"; exit 1; }
+psql -d "$DB" -Atc "select 1" >/dev/null 2>&1 || { echo "RA11 needs the test database $DB (tests/sql/run.sh builds it)"; exit 1; }
 BODY=$(python3 -I - tests/android/fixtures/relay-sample.eml <<'PY'
 import base64, sys
 raw = open(sys.argv[1], 'rb').read().decode('latin-1').replace('\r\n', '\n')
@@ -51,7 +51,7 @@ SQL
 )
 RES=$(echo "$RES" | grep '|' | tail -1)
 if [[ "$RES" == "parsed|45000|in|AND1001" ]]; then
-  echo "PASS RL11 the server takes the app's email as one movement: 450.00 in, reference AND1001 (rolled back)"
+  echo "PASS RA11 the server takes the app's email as one movement: 450.00 in, reference AND1001 (rolled back)"
 else
-  echo "FAIL RL11 the server takes the app's email as one movement — got: $RES"; exit 1
+  echo "FAIL RA11 the server takes the app's email as one movement — got: $RES"; exit 1
 fi

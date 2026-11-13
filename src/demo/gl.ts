@@ -34,7 +34,7 @@ const SYSTEM: [string, string, Acc["type"], string | null, boolean, string][] = 
   ["21", "تأمينات الضيوف", "liability", "2", true, "deposits"], ["3", "حقوق الملكية", "equity", null, false, "equity"],
   ["31", "الأرصدة الافتتاحية", "equity", "3", true, "opening"], ["4", "الإيرادات", "revenue", null, false, "revenue"],
   ["41", "إيراد الإيجار", "revenue", "4", true, "rent_revenue"], ["42", "مردودات الإيجار", "revenue", "4", true, "rent_returns"],
-  ["49", "إيرادات أخرى وزيادات", "revenue", "4", true, "other_income"], ["5", "المصروفات", "expense", null, false, "expenses"],
+  ["43", "إيراد المنتجات", "revenue", "4", true, "product_revenue"], ["49", "إيرادات أخرى وزيادات", "revenue", "4", true, "other_income"], ["5", "المصروفات", "expense", null, false, "expenses"],
   ["51", "المصروفات التشغيلية", "expense", "5", false, "expense_parent"], ["57", "رسوم وفروق المطابقة البنكية", "expense", "5", true, "bank_fees"], ["58", "عمولات المنصات", "expense", "5", true, "platform_commission"],
   ["59", "عجز الصندوق", "expense", "5", true, "cash_shortage"],
 ];
@@ -73,8 +73,9 @@ export function glRpcs(c: GlCtx): { rpcs: Record<string, (a: any) => any>; journ
     for (const v of T("financial_vouchers").filter((x) => x.status === "approved" || x.status === "cancelled")) {
       const res = byId("reservations", v.reservation_id);
       const money = v.account_id ? cashAcc(v.account_id) : ["ota_deferred", "booking_platform"].includes(v.method) ? srcAcc(res?.source_id) : sys("suspense");
-      const label = `${v.number} — ` + (({ receipt: "قبض إيجار", refund: "رد مبلغ", deposit: "قبض تأمين", deposit_refund: "رد تأمين" } as Record<string, string>)[v.kind] ?? "خصم من التأمين");
-      const lines = v.kind === "receipt" ? two(money, sys("rent_revenue"), v.amount_halalas) : v.kind === "refund" ? two(sys("rent_returns"), money, v.amount_halalas)
+      const label = `${v.number} — ` + (({ receipt: v.product_order_id ? "قبض طلب منتجات" : "قبض إيجار", refund: "رد مبلغ", deposit: "قبض تأمين", deposit_refund: "رد تأمين" } as Record<string, string>)[v.kind] ?? "خصم من التأمين");
+      // 0068: a receipt for a product order is product revenue
+      const lines = v.kind === "receipt" ? two(money, sys(v.product_order_id ? "product_revenue" : "rent_revenue"), v.amount_halalas) : v.kind === "refund" ? two(sys("rent_returns"), money, v.amount_halalas)
         : v.kind === "deposit" ? two(money, sys("deposits"), v.amount_halalas) : v.kind === "deposit_refund" ? two(sys("deposits"), money, v.amount_halalas)
         : two(sys("deposits"), sys("rent_revenue"), v.amount_halalas);
       push("voucher:" + v.id, v.branch_id, dayOf(v.occurred_at, v.branch_id), v.occurred_at, label, lines);

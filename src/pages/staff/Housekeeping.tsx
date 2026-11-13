@@ -17,6 +17,8 @@ interface HkData { tasks: Task[]; rooms: RoomLite[]; facilities: Opt[]; types: O
 const NO_HK: HkData = { tasks: [], rooms: [], facilities: [], types: [], staff: [], inspected: {} };
 /** the cleaning a departure creates: its inspection is recorded from the task (decision 5) */
 const DEPARTURE_CLEANING = "تنظيف بعد المغادرة";
+/** 0068 (W1): the task created with a product order's payment; done = the order delivered */
+const PRODUCT_DELIVERY = "تسليم طلب منتجات";
 /** the local clock as a datetime-local value (minutes), and back to an instant */
 const localNow = () => { const d = new Date(); d.setSeconds(0, 0); const p = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const toIso = (local: string) => new Date(local).toISOString();
@@ -80,7 +82,7 @@ export default function Housekeeping() {
       {view === "open" && (openTasks.length === 0 ? <EmptyState icon={<Sparkles className="h-10 w-10" />} title="لا مهام مفتوحة" description="تُنشأ مهام التنظيف تلقائيًا بعد المغادرة، ويمكن إنشاء مهام للوحدات والمرافق يدويًا." /> : (
         <div className="space-y-3">
           {openTasks.map((t) => (
-            <Card key={t.id} className="flex flex-wrap items-center justify-between gap-3">
+            <Card key={t.id} className="flex flex-wrap items-center justify-between gap-3" data-testid="hk-task">
               <div className="flex items-center gap-3">
                 {t.room_id ? <DoorClosed className="h-5 w-5 text-brand-600" /> : <Landmark className="h-5 w-5 text-accent-700" />}
                 <div>
@@ -100,7 +102,7 @@ export default function Housekeeping() {
                 {t.room && t.reservation_id && t.description === DEPARTURE_CLEANING && !inspected[t.reservation_id] && <button onClick={() => { setInspect(t); setInspResult("ok"); setInspNotes(""); setInspSuggested(null); }} className="btn-outline text-xs"><ClipboardCheck className="h-3.5 w-3.5" /> فحص المغادرة</button>}
                 {t.room && <button onClick={() => { setMaintTarget({ id: t.room_id!, room_number: t.room!.room_number, status: t.room!.status, cleanliness: t.room!.cleanliness }); setMaintTitle(""); setMaintDesc(""); }} className="btn-outline text-xs"><Wrench className="h-3.5 w-3.5" /> بلاغ صيانة</button>}
                 {t.status === "pending" && mine(t) && <button onClick={() => act(t.id, async () => { await opsApi.startTask(t.id); })} disabled={acting === t.id} className="btn-outline text-xs"><Play className="h-3.5 w-3.5" /> بدء</button>}
-                {mine(t) && <button onClick={() => { if (t.status === "pending" && confirmDone !== t.id) { setConfirmDone(t.id); return; } setConfirmDone(null); act(t.id, async () => { const r = await opsApi.completeTask(t.id, undefined, t.version); return r.room_status === "cleaning" ? "تم الإتمام. الوحدة نظيفة وتنتظر تغيير رمز الصندوق من «الرموز» (الإشغال لا يتغير بالتنظيف)." : r.room_status ? `تم الإتمام. حالة الوحدة الآن: ${roomStatusLabel(r.room_status, "clean")} (الإشغال لا يتغير بالتنظيف)` : "تم الإتمام."; }); }} disabled={acting === t.id} className="btn-accent text-xs">{acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {confirmDone === t.id ? "لم تبدأ بعد — تأكيد الإتمام" : "إتمام"}</button>}
+                {mine(t) && <button onClick={() => { if (t.status === "pending" && confirmDone !== t.id) { setConfirmDone(t.id); return; } setConfirmDone(null); act(t.id, async () => { const r = await opsApi.completeTask(t.id, undefined, t.version); if (t.task_type_name_snapshot === PRODUCT_DELIVERY) return "سُلِّم الطلب للغرفة."; return r.room_status === "cleaning" ? "تم الإتمام. الوحدة نظيفة وتنتظر تغيير رمز الصندوق من «الرموز» (الإشغال لا يتغير بالتنظيف)." : r.room_status ? `تم الإتمام. حالة الوحدة الآن: ${roomStatusLabel(r.room_status, "clean")} (الإشغال لا يتغير بالتنظيف)` : "تم الإتمام."; }); }} disabled={acting === t.id} className="btn-accent text-xs">{acting === t.id ? <Spinner className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {confirmDone === t.id ? "لم تبدأ بعد — تأكيد الإتمام" : "إتمام"}</button>}
                 {canManage && <button onClick={() => { setCancelTask(t); setCancelReason(""); }} className="btn-ghost text-xs text-danger-600" aria-label="إلغاء المهمة" title="إلغاء المهمة"><XCircle className="h-3.5 w-3.5" /></button>}
               </div>
             </Card>

@@ -62,6 +62,7 @@ const AdminStructure = lazy(() => import("./pages/admin/AdminStructure"));
 const AdminFacilities = lazy(() => import("./pages/admin/AdminFacilities"));
 const AdminTaskTypes = lazy(() => import("./pages/admin/AdminTaskTypes"));
 const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
+const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"));
 const AdminAssistant = lazy(() => import("./pages/admin/AdminAssistant"));
 const AdminDataPurge = lazy(() => import("./pages/admin/AdminDataPurge"));
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
@@ -71,6 +72,7 @@ import Expenses from "./pages/staff/Expenses";
 import Ledger from "./pages/staff/Ledger";
 import Accounts from "./pages/staff/Accounts";
 import BankMovements from "./pages/staff/BankMovements";
+import ProductOrders from "./pages/staff/ProductOrders";
 const AdminCashAccounts = lazy(() => import("./pages/admin/AdminCashAccounts"));
 const AdminBankMail = lazy(() => import("./pages/admin/AdminBankMail"));
 const AdminPlatformPayouts = lazy(() => import("./pages/admin/AdminPlatformPayouts"));
@@ -121,6 +123,7 @@ export default function App() {
           <Route path="/staff/reservations/:id" element={<StaffReservationDetail />} />
           <Route path="/staff/identity-verification" element={<IdentityVerification />} />
           <Route path="/staff/payments" element={<StaffPayments />} />
+          <Route path="/staff/orders" element={<ProductOrders />} />
           <Route path="/staff/pos-settlement" element={<PosSettlement />} />
           <Route path="/staff/day-close" element={<DayClosing />} />
           <Route path="/staff/expenses" element={<Expenses />} />
@@ -151,6 +154,7 @@ export default function App() {
           <Route path="/admin/facilities" element={<AdminFacilities />} />
           <Route path="/admin/task-types" element={<AdminTaskTypes />} />
           <Route path="/admin/services" element={<AdminServices />} />
+          <Route path="/admin/products" element={<AdminProducts />} />
           <Route path="/admin/rates" element={<AdminRates />} />
           <Route path="/admin/availability" element={<AdminAvailability />} />
           <Route path="/admin/availability-rules" element={<AdminAvailabilityRules />} />

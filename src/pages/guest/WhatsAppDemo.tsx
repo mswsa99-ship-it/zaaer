@@ -15,7 +15,7 @@ import { demoBridgeKey } from "../../demo/client";
  * Staff replies sent from the inbox arrive here too, the way the program picks them up.
  */
 interface Bubble { id: number; from: "guest" | "bot" | "staff" | "note"; text: string; at: string }
-const QUICK = ["حجوزاتي", "1", "2", "متى الدخول والخروج؟", "وصلت", "التحدث مع موظف"];
+const QUICK = ["حجوزاتي", "1", "2", "متى الدخول والخروج؟", "وصلت", "المنتجات", "التحدث مع موظف"];
 const SILENT: Record<string, string> = {
   human: "لا رد آلي: موظف يتابع هذه المحادثة الآن (تصل رسالتك إلى الوارد).",
   auto_reply_off: "الرد الآلي متوقف من الإدارة لهذا الفرع؛ رسالتك في الوارد للموظفين.",

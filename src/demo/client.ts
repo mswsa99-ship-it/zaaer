@@ -17,13 +17,14 @@ import { accountingRpcs } from "./accounting";
 import { expensesRpcs } from "./expenses";
 import { glRpcs, lockedEntryAdded } from "./gl";
 import { bankRpcs, seedBank } from "./bank";
+import { productRpcs, seedProducts } from "./products";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v9";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
-function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); return s; }
+function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); return s; }
 const SESSION_KEY = "zaaer_demo_session";
 
 // ---------------------------------------------------------------------------
@@ -267,6 +268,8 @@ const WRITE_RULES: Record<string, () => boolean> = {
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
   bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false, bank_matches: () => false, bank_match_items: () => false,
+  // 0068: the catalogue and the orders are written only through their functions
+  product_categories: () => false, products: () => false, product_branches: () => false, product_orders: () => false, product_order_lines: () => false,
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
@@ -298,6 +301,10 @@ function visible(table: string, r: Row): boolean {
   if (table === "bank_movements") return bankSeen(r);
   if (table === "bank_matches" || table === "bank_match_items") return bankSeen(byId("bank_movements", table === "bank_matches" ? r.movement_id : byId("bank_matches", r.match_id)?.movement_id));
   if (table === "expense_categories") return r.organization_id === ORG;
+  // 0068: the catalogue by the organisation's staff; an order (its amounts are money) in the branches one works in, by who sees money
+  if (["product_categories", "products", "product_branches"].includes(table)) return r.organization_id === ORG;
+  if (table === "product_orders") return seesMoney() && branches.includes(r.branch_id);
+  if (table === "product_order_lines") { const o = byId("product_orders", r.order_id); return !!o && seesMoney() && branches.includes(o.branch_id); }
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
   if (table === "reservation_nights") return seesMoney() && branches.includes(r.branch_id);
@@ -1093,7 +1100,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (p.room_id && tt.code === "room_cleaning") { const rm = byId("rooms", p.room_id)!; if (rm.cleanliness === "clean") rm.cleanliness = "dirty"; recomputeRoomReady(p.room_id); } emit("housekeeping_tasks"); audit(target.branch_id, "task.created", "housekeeping_task", t.id, { after: t }); return { ok: true, id: t.id }; },
   fn_hk_start_task: ({ p_task }) => { requireCap("task.work"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); requireBranch(t.branch_id); if (t.status !== "pending") throw new Error("TASK_STATUS_INVALID"); if (hasRole("housekeeping") && t.assignee_id && t.assignee_id !== staffId()) throw new Error("FORBIDDEN: not assignee"); Object.assign(t, { status: "in_progress", started_at: nowISO(), assignee_id: t.assignee_id ?? staffId(), version: t.version + 1 }); if (t.room_id && byId("task_types", t.task_type_id)?.code === "room_cleaning") { byId("rooms", t.room_id)!.cleanliness = "in_progress"; emit("rooms"); } emit("housekeeping_tasks"); return { ok: true }; },
   fn_hk_complete_task: ({ p_task, p_note, p_expected_version }) => { requireCap("task.work"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); requireBranch(t.branch_id); checkVersion(t.version, p_expected_version); if (!["pending", "in_progress"].includes(t.status)) throw new Error("TASK_STATUS_INVALID"); if (hasRole("housekeeping") && t.assignee_id && t.assignee_id !== staffId()) throw new Error("FORBIDDEN: not assignee"); Object.assign(t, { status: "completed", completed_at: nowISO(), completed_by: staffId(), assignee_id: t.assignee_id ?? staffId(), result_note: p_note ?? null, version: t.version + 1 }); let st: string | undefined; if (t.room_id) { if (byId("task_types", t.task_type_id)?.code === "room_cleaning") byId("rooms", t.room_id)!.cleanliness = "clean"; st = recomputeRoomReady(t.room_id); } emit("housekeeping_tasks"); audit(t.branch_id, "task.completed", "housekeeping_task", t.id, { after: { room_status: st, note: p_note } }); return { ok: true, room_status: st }; },
-  fn_hk_cancel_task: ({ p_task, p_reason }) => { requireCap("task.manage"); nonEmpty(p_reason, "reason"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); if (!["pending", "in_progress"].includes(t.status)) throw new Error("TASK_STATUS_INVALID"); Object.assign(t, { status: "cancelled", cancelled_at: nowISO(), cancel_reason: p_reason, version: t.version + 1 }); if (t.room_id && byId("task_types", t.task_type_id)?.code === "room_cleaning") { const rm = byId("rooms", t.room_id)!; if (rm.cleanliness === "in_progress") rm.cleanliness = "dirty"; recomputeRoomReady(t.room_id); } emit("housekeeping_tasks"); return { ok: true }; },
+  fn_hk_cancel_task: ({ p_task, p_reason }) => { requireCap("task.manage"); nonEmpty(p_reason, "reason"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); if (!["pending", "in_progress"].includes(t.status)) throw new Error("TASK_STATUS_INVALID"); products.taskGuard(t); Object.assign(t, { status: "cancelled", cancelled_at: nowISO(), cancel_reason: p_reason, version: t.version + 1 }); if (t.room_id && byId("task_types", t.task_type_id)?.code === "room_cleaning") { const rm = byId("rooms", t.room_id)!; if (rm.cleanliness === "in_progress") rm.cleanliness = "dirty"; recomputeRoomReady(t.room_id); } emit("housekeeping_tasks"); return { ok: true }; },
   fn_hk_assign_task: ({ p_task, p_assignee }) => { requireCap("task.manage"); const t = byId("housekeeping_tasks", p_task); if (!t) throw new Error("TASK_NOT_FOUND"); if (p_assignee && !staffInBranch(p_assignee, t.branch_id)) throw new Error("ASSIGNEE_NOT_IN_BRANCH"); t.assignee_id = p_assignee; t.version++; emit("housekeeping_tasks"); return { ok: true }; },
   // decision 12: a manual change is free and recorded (who, when, and whether a cleaning task was open); the task keeps its own state
   fn_hk_set_cleanliness: ({ p_room, p_state, p_reason }) => { requireCap("cleanliness"); if (!["clean", "dirty"].includes(p_state)) throw new Error("VALIDATION: cleanliness"); const rm = byId("rooms", p_room); if (!rm) throw new Error("ROOM_NOT_FOUND"); requireBranch(rm.branch_id);
@@ -1747,6 +1754,7 @@ const rpcsInvoices: Record<string, (a: any) => any> = {
     if (String(amt) === String(v.amount_halalas) && (v.kind === "deposit_apply" || m === v.method) && ref === (v.reference ?? null) && acc === (v.account_id ?? null) && note === (v.note ?? null)) throw new Error("VALIDATION: nothing_changed");
     // 0054 (MONEY-01): a voucher of a settled POS day is never touched — a reversing voucher and the correct one, today
     const settled = v.kind !== "deposit_apply" && voucherSettled(v);
+    products.voucherGuard(v);   // 0068: an order's voucher is not corrected on its own
     return atomically(() => {
       let rv: Row | null = null;
       if (settled) {
@@ -2092,7 +2100,6 @@ Object.assign(rpcs, gl.rpcs);
 // the bank's messages (0066: A6 and A7)
 const { __sync: bankSync, ...bankFns } = bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso), nextNumber });
 Object.assign(rpcs, bankFns);
-afterRpc = () => bankSync({});
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));
@@ -2222,6 +2229,7 @@ function nightRow(r: Row, night: string, price: number, basis: string): Row { re
 function cancelVoucherCore(p_voucher: string, p_reason: string) {
   const v = byId("financial_vouchers", p_voucher); if (!v) throw new Error("NOT_FOUND"); requireBranch(v.branch_id); if (v.status !== "approved") throw new Error("VOUCHER_STATUS_INVALID");
     if (v.payout_id) throw new Error("VOUCHER_IN_PAYOUT");   // a voucher in a platform payout: the payout is cancelled first (0036)
+    products.voucherGuard(v);   // 0068: an order's voucher goes with its order
     v.status = "cancelled"; const f = financeOf(v.reservation_id); if (f.deposit_balance < 0 || f.received - f.refunded < 0) { v.status = "approved"; throw new Error("CANCEL_WOULD_GO_NEGATIVE"); }
     Object.assign(v, { cancelled_at: nowISO(), cancelled_by: staffId(), cancel_reason: p_reason }); emit("financial_vouchers"); recompute(v.reservation_id);
     addReview(v.branch_id, "voucher_cancelled", "voucher", v.id, v.reservation_id, `إلغاء السند ${v.number}`, p_reason, { number: v.number, kind: v.kind, amount_halalas: v.amount_halalas, method: v.method });
@@ -2436,6 +2444,15 @@ const serviceRpcs: Record<string, (a: any) => any> = {
     m.meta = { ...(m.meta ?? {}), channel: "whatsapp", delivery: "queued" }; emit("conversations"); emit("conversation_messages");
     return { queued: true, bridge_online: bridgeOnline(c) }; },
 };
+
+// products and orders (0068, W1): the reception's and the owner's functions, the guest's ones for the WhatsApp ports
+// (server only), the guards on an order's voucher and task, and the order delivered when its task is done
+const products = productRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, nextNumber,
+  checkVersion, atomically, addCharge: (resId, kind, description, qty, unit, taxable, reason, from, to) => addCharge(resId, kind, description, qty, unit, taxable, reason, null, from ?? null, to ?? null),
+  reservationTax, recompute, createVoucher: (p) => rpcs.fn_create_voucher({ p }), cancelVoucher: (id, reason) => rpcs.fn_cancel_voucher({ p_voucher: id, p_reason: reason }) });
+Object.assign(rpcs, products.staff);
+Object.assign(serviceRpcs, products.service);
+afterRpc = () => { bankSync({}); products.sync(); };
 
 function invoke(name: string, opts: any) {
   const body = opts?.body ?? {};
