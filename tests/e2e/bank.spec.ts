@@ -33,6 +33,35 @@ test.describe("bank messages", () => {
     await expect(page.getByTestId("bank-mail-state")).toHaveText("يعمل");
   });
 
+  test("RL13 the owner gets the phone app's setup text: with the new key once, then without it; the mailbox password is never in it", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/admin/bank-mail");
+    await expect(page.getByTestId("relay-app").getByRole("button", { name: "نص الإعداد" })).toBeDisabled();
+    await page.getByRole("button", { name: "تعديل" }).first().click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByLabel("البريد المخصّص").fill("relay@example.com");
+    await dlg.getByLabel("اسم الدخول").fill("relay@example.com");
+    await dlg.getByLabel("كلمة مرور البريد").fill("app-pass-rl13");
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(dlg).toBeHidden();
+    await page.getByRole("button", { name: "إنشاء المفتاح" }).click();
+    const key = (await page.getByTestId("relay-key").textContent())!;
+    const withKey = page.getByTestId("relay-setup-with-key");
+    await expect(withKey).toContainText("FIVEHOURS-SETUP 1");
+    await expect(withKey).toContainText("mailbox: relay@example.com");
+    await expect(withKey).toContainText("smtp: smtp.gmail.com:465");
+    await expect(withKey).toContainText("account: 605…4321");
+    await expect(withKey).toContainText(`key: ${key}`);
+    await expect(withKey).not.toContainText("app-pass-rl13");
+    await page.getByRole("button", { name: "نسخته" }).click();
+    await page.getByTestId("relay-app").getByRole("button", { name: "نص الإعداد" }).click();
+    const plain = page.getByTestId("relay-setup");
+    await expect(plain).toContainText("account: 605…4321");
+    await expect(plain).not.toContainText("key:");
+    await expect(page.locator("body")).not.toContainText(key);
+    await expect(page.locator("body")).not.toContainText("app-pass-rl13");
+  });
+
   test("BK31 the owner reads an unread message again after adding its word; the SMS and the notification are one movement; an unassigned movement gets its branch account", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/staff/bank");

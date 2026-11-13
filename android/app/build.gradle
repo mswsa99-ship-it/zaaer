@@ -1,0 +1,42 @@
+// The bank-relay app (plan A9). No library: only the Android framework and Java's own crypto and sockets.
+plugins { id 'com.android.application' }
+
+def ks = System.getenv('RELAY_KEYSTORE')
+
+android {
+    namespace 'sa.fivehours.relay'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'sa.fivehours.relay'
+        minSdk 26
+        targetSdk 35
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName '1.0.' + (System.getenv('VERSION_CODE') ?: '1')
+    }
+    signingConfigs {
+        // the owner's key when it was added to the repository's secrets; otherwise the build's debug key
+        if (ks) {
+            relay {
+                storeFile file(ks)
+                storePassword System.getenv('RELAY_KEYSTORE_PASSWORD')
+                keyAlias 'relay'
+                keyPassword System.getenv('RELAY_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig ks ? signingConfigs.relay : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint {
+        abortOnError true
+        warningsAsErrors false
+        checkReleaseBuilds true
+    }
+}

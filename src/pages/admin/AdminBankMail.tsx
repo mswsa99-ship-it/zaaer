@@ -7,13 +7,14 @@
  * the mailbox is complete the page says «غير مربوط بعد».
  */
 import { useCallback, useEffect, useState } from "react";
-import { Mail, KeyRound, Plus, Pencil, RefreshCw, Copy } from "lucide-react";
+import { Mail, KeyRound, Plus, Pencil, RefreshCw, Copy, Smartphone } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { bankApi, toArabicError, type BankMailSettings, type BankRule, type BankKind } from "../../lib/api";
 import { SectionTitle, Card, Spinner, LoadErrorCard, Badge } from "../../components/ui";
 import { Field, Modal, ActionForm, Submit, Toggle } from "../../components/forms";
 import { formatDateTime } from "../../lib/utils";
+import { setupText, setupProblem } from "../../lib/relaySetup";
 
 export const KIND_AR: Record<BankKind, string> = {
   deposit: "إيداع", transfer_in: "تحويل وارد", pos_settlement: "تسوية نقاط البيع", other_in: "دخل آخر",
@@ -33,6 +34,7 @@ export default function AdminBankMail() {
   const [rule, setRule] = useState<Partial<BankRule> | null>(null);
   const [key, setKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [setup, setSetup] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => setTick((t) => t + 1), []);
@@ -94,6 +96,16 @@ export default function AdminBankMail() {
         </div>
       </Card>
 
+      <Card className="mb-4" data-testid="relay-app">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2"><Smartphone className="h-5 w-5 text-ink-500" /><span className="font-semibold">تطبيق الجوال</span></div>
+          <button type="button" className="btn-secondary min-h-[44px]" disabled={!!setupProblem(s)} onClick={() => setSetup(true)}>نص الإعداد</button>
+        </div>
+        <p className="mt-2 text-sm text-ink-600">على جوال الإدارة (أندرويد): ثبّت التطبيق، واسمح له بقراءة الرسائل وإشعارات تطبيق البنك، ثم الصق فيه نص الإعداد واكتب كلمة مرور البريد. ينقل رسالة البنك التي تحمل رقم أحد حسابات الفروع كما هي إلى البريد المخصّص، ولا يرسل غير ذلك، ويعيد المحاولة إذا انقطع الإنترنت.</p>
+        {setupProblem(s) && <p className="mt-2 text-sm text-warning-700">{setupProblem(s) === "mailbox" ? "حدّد البريد المخصّص أولًا." : "حدّد قاعدة رقم الحساب لفرع واحد على الأقل أولًا."}</p>}
+        <a href="https://github.com/mswsa99-ship-it/zaaer/actions/workflows/android.yml" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-brand-700 underline">ملف التثبيت (APK): آخر تشغيل ناجح في GitHub ← «fivehours-relay-apk»</a>
+      </Card>
+
       <Card className="mb-4">
         <SectionTitle level={2} title="قاعدة رقم الحساب لكل فرع" subtitle="تُنسب الحركة لحساب الفرع الذي يبدأ رقمه وينتهي بما في الرسالة" />
         <ul className="divide-y divide-ink-50 text-sm" data-testid="bank-account-rules">
@@ -129,11 +141,20 @@ export default function AdminBankMail() {
       <Modal open={!!rule} title={rule?.id ? "تعديل كلمة" : "كلمة جديدة"} onClose={() => setRule(null)}>
         {rule && <RuleForm r={rule} onDone={() => { setRule(null); load(); }} onCancel={() => setRule(null)} />}
       </Modal>
+      <Modal open={setup} title="نص إعداد تطبيق الجوال" onClose={() => setSetup(false)}>
+        {setup && <div>
+          <p className="mb-3 text-sm text-ink-600">للصقه في التطبيق بعد تعديل حساب أو مرسل. لا يحمل المفتاح، فيبقى التطبيق على مفتاحه؛ ولجوال جديد أنشئ مفتاحًا جديدًا فيظهر النص معه.</p>
+          <div className="flex items-start gap-2 rounded-xl bg-ink-50 p-3"><pre dir="ltr" className="min-w-0 flex-1 whitespace-pre-wrap break-all text-left text-sm" data-testid="relay-setup">{setupText(s)}</pre>
+            <button type="button" className="btn-ghost min-h-[44px]" aria-label="نسخ نص الإعداد" onClick={() => { navigator.clipboard?.writeText(setupText(s)).catch(() => undefined); }}><Copy className="h-4 w-4" /></button></div>
+          <div className="mt-4 text-left"><button type="button" className="btn-primary min-h-[44px]" onClick={() => setSetup(false)}>تم</button></div>
+        </div>}
+      </Modal>
       <Modal open={!!key} title="مفتاح تطبيق الجوال" onClose={() => setKey(null)}>
         {key && <div>
-          <p className="mb-3 text-sm text-ink-600">اكتبه في تطبيق الجوال الآن. لن يظهر مرة أخرى، ومن يملكه يستطيع إرسال رسائل يقبلها النظام.</p>
-          <div className="flex items-center gap-2 rounded-xl bg-ink-50 p-3"><code dir="ltr" className="min-w-0 flex-1 break-all text-sm" data-testid="relay-key">{key}</code>
-            <button type="button" className="btn-ghost min-h-[44px]" aria-label="نسخ المفتاح" onClick={() => { navigator.clipboard?.writeText(key).catch(() => undefined); }}><Copy className="h-4 w-4" /></button></div>
+          <p className="mb-3 text-sm text-ink-600">انسخ نص الإعداد والصقه في تطبيق الجوال الآن؛ فيه المفتاح، ولن يظهر مرة أخرى. من يملكه يستطيع إرسال رسائل يقبلها النظام.</p>
+          <div className="flex items-start gap-2 rounded-xl bg-ink-50 p-3"><pre dir="ltr" className="min-w-0 flex-1 whitespace-pre-wrap break-all text-left text-sm" data-testid="relay-setup-with-key">{setupText(s, key)}</pre>
+            <button type="button" className="btn-ghost min-h-[44px]" aria-label="نسخ نص الإعداد" onClick={() => { navigator.clipboard?.writeText(setupText(s, key)).catch(() => undefined); }}><Copy className="h-4 w-4" /></button></div>
+          <p className="mt-3 text-xs text-ink-500">المفتاح وحده: <code dir="ltr" className="break-all" data-testid="relay-key">{key}</code></p>
           <div className="mt-4 text-left"><button type="button" className="btn-primary min-h-[44px]" onClick={() => setKey(null)}>نسخته</button></div>
         </div>}
       </Modal>

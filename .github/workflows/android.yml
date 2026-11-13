@@ -1,0 +1,56 @@
+# The bank-relay phone app (plan A9): its rules are tried (tests/android/run.sh, without a database), then the APK is
+# built with Android's own lint and kept as this run's artifact «fivehours-relay-apk» (installed on the management
+# phone by opening the file; Google Play does not allow an app that reads SMS).
+# Signing: with the secrets RELAY_KEYSTORE_B64 and RELAY_KEYSTORE_PASSWORD (added by the owner in the repository's
+# settings) every build is signed with the same key, so a new version installs over the old one; without them the
+# build's debug key is used, and a new version needs the old one removed first (its settings are entered again).
+name: android
+
+on:
+  push:
+    paths: ['android/**', 'tests/android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: The app's rules (RL01–RL06)
+        run: bash tests/android/run.sh
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: The owner's signing key (when added)
+        env:
+          KS: ${{ secrets.RELAY_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/relay.jks"
+            echo "RELAY_KEYSTORE=$RUNNER_TEMP/relay.jks" >> "$GITHUB_ENV"
+            echo "signed with the owner's key"
+          else
+            echo "::notice title=APK signing::no RELAY_KEYSTORE_B64 secret: signed with the build's debug key (a new version needs the old one removed first)"
+          fi
+      - name: Build and lint the APK
+        env:
+          RELAY_KEYSTORE_PASSWORD: ${{ secrets.RELAY_KEYSTORE_PASSWORD }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: gradle -p android --no-daemon lintRelease assembleRelease
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fivehours-relay-apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/reports/lint-results-release.html
+          if-no-files-found: warn
+          retention-days: 90

@@ -11,6 +11,7 @@
 #    P0  sql           tests/sql/run.sh            migrations from scratch + 51 security + 90+ core acceptance tests
 #    P0  race          tests/sql/concurrency.sh    two real sessions: booking race, refund race
 #    P0  migration     scripts/migration-check.sh  pending migrations on synthetic history: nothing lost, restore drill (G28)
+#    P0  android       tests/android/run.sh        the bank-relay phone app's rules (javac), its email read by the server (A9)
 #    P0  bridge        scripts/bridge/check.sh     the reception-computer WhatsApp program packages and loads
 #    P0  build         vite build                  production bundle
 #    P0  build:demo    VITE_DEMO=1 vite build      demo bundle (what the E2E suite runs against)
@@ -77,6 +78,7 @@ if [[ "${QUICK:-}" != "1" ]]; then
     run_gate sql   P0 SKIP_SQL  bash tests/sql/run.sh
     run_gate race  P0 SKIP_SQL  bash tests/sql/concurrency.sh
     run_gate migration P0 SKIP_SQL bash scripts/migration-check.sh
+    run_gate android P0 SKIP_ANDROID bash tests/android/run.sh
   else
     NAMES+=("sql" "race" "migration"); STATUSES+=("SKIPPED (P0, PostgreSQL not reachable — set PGHOST/PGUSER)" "SKIPPED (P0, PostgreSQL not reachable)" "SKIPPED (P0, PostgreSQL not reachable)"); TIMES+=("-" "-" "-")
     for g in sql race migration; do record "$g" P0 "SKIPPED (PostgreSQL not reachable)" "-"; done
