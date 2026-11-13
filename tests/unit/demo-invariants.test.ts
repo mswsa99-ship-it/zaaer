@@ -317,6 +317,10 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_day_closing_submit", { p_id: saved.id, p_version: rv.version + 1, p_hash: rv.hash })).rejects.toThrow(/REVIEW_STALE/);
     rv = await rpc<any>("fn_day_closing_review", { p_id: saved.id });
     await rpc("fn_day_closing_submit", { p_id: saved.id, p_version: rv.version, p_hash: rv.hash });
+    // 0067: the closing's cash difference is a line of the box's ledger, so the ledger ends where the journal stands
+    const cashBox = ((await client.from("cash_accounts").select("id, branch_id, kind")).data as any[]).find((a) => a.branch_id === BRANCH && a.kind === "cash_box")!;
+    const boxLedger = await rpc<any>("fn_account_ledger", { p_account: cashBox.id, p_from: day, p_to: day });
+    expect(boxLedger.lines.some((l: any) => l.kind === "closing_difference" && l.out_halalas === 100)).toBe(true);
     let now = await rpc<any>("fn_day_closing_get", { p_branch: BRANCH, p_date: day });
     expect(now.state).toBe("open");
     await expect(rpc("fn_day_closing_amend", { p: { id: saved.id, version: now.closing.version, reason: "", lines: [] } })).rejects.toThrow(/reason/);
@@ -437,51 +441,73 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await expect(rpc("fn_bank_movements", { p_branch: null, p_from: today(), p_to: today() })).rejects.toThrow(/FORBIDDEN/);
   });
 
-  it("MT01–MT06 matching in the demo: a movement matched once with its transfer voucher, a record once, a difference needs a reason, undo, a cancelled voucher lets go, money in turned into income and undone; the day's settlement at the vouchers' total, never also voucher by voucher", async () => {
+  it("MT01–MT06 matching in the demo: a movement matched once with its transfer voucher, a record once, a difference needs a reason, undo, a cancelled voucher lets go, money in turned into income and undone; a deposit against the card vouchers it covers; the bank's fees in one step; the ledger carries what matching booked", async () => {
     await login("owner@demo.sa");
-    const all = await rpc<any[]>("fn_bank_movements", { p_branch: null, p_from: today().slice(0, 8) + "01", p_to: today() });
+    const month = { p_from: today().slice(0, 8) + "01", p_to: today() };
+    const movements = (branch: string | null) => rpc<any[]>("fn_bank_movements", { p_branch: branch, ...month });
+    const balanced = async () => expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
+    const one = (id: string) => [{ type: "voucher", id }];
+    const all = await movements(null);
     const un = all.find((x) => !x.branch_id)!;
+    const fee = all.find((x) => x.kind === "pos_fee")!;
     const accs = (await client.from("cash_accounts").select("id, branch_id, kind")).data as any[];
     const bankA = accs.find((a) => a.branch_id === BRANCH && a.kind === "bank_account")!;
     await rpc("fn_bank_assign_account", { p_movement: un.id, p_account: bankA.id, p_reason: "حساب الفرع" });
     const r = await createRes({ ci: 60, co: 62 });
     const v = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 200, method: "bank_transfer", reference: "DM-T1", account_id: bankA.id, idempotency_key: uid() } });
-    const c = await rpc<any[]>("fn_bank_candidates", { p_movement: un.id });
-    expect(c[0]).toMatchObject({ type: "voucher", id: v.voucher_id, exact: true });
-    await rpc("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v.voucher_id, p_reason: null });
-    await expect(rpc("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v.voucher_id, p_reason: null })).rejects.toThrow(/movement_used/);
-    let m = (await rpc<any[]>("fn_bank_movements", { p_branch: BRANCH, p_from: today().slice(0, 8) + "01", p_to: today() })).find((x) => x.id === un.id);
-    expect(m.status).toBe("matched"); expect(m.match.label).toContain("سند");
+    const c = await rpc<any>("fn_bank_candidates", { p_movement: un.id });
+    expect(c.records[0]).toMatchObject({ type: "voucher", id: v.voucher_id, exact: true, method: "bank_transfer", signed_halalas: 200, day: today() });
+    expect(Array.isArray(c.pos_closings)).toBe(true);
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_targets: [], p_reason: null })).rejects.toThrow(/targets/);
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_targets: [{ type: "journal", id: v.voucher_id }], p_reason: null })).rejects.toThrow(/target_type/);
+    expect(await rpc<any>("fn_bank_match", { p_movement: un.id, p_targets: one(v.voucher_id), p_reason: null })).toMatchObject({ records: 1, difference_halalas: 0 });
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_targets: one(v.voucher_id), p_reason: null })).rejects.toThrow(/movement_used/);
+    const find = async () => (await movements(BRANCH)).find((x) => x.id === un.id);
+    let m = await find();
+    expect(m.status).toBe("matched"); expect(m.match).toMatchObject({ kind: "link", records: 1, type: "voucher" }); expect(m.match.label).toContain("سند");
     await expect(rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "" })).rejects.toThrow(/reason/);
     await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "خطأ" });
     const v2 = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 250, method: "bank_transfer", reference: "DM-T2", account_id: bankA.id, idempotency_key: uid() } });
-    await expect(rpc("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v2.voucher_id, p_reason: null })).rejects.toThrow(/difference_reason/);
-    expect((await rpc<any>("fn_bank_match", { p_movement: un.id, p_type: "voucher", p_target: v2.voucher_id, p_reason: "رسوم" })).difference_halalas).toBe(-50);
-    expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_targets: one(v2.voucher_id), p_reason: null })).rejects.toThrow(/difference_reason/);
+    expect((await rpc<any>("fn_bank_match", { p_movement: un.id, p_targets: one(v2.voucher_id), p_reason: "رسوم" })).difference_halalas).toBe(-50);
+    await balanced();
     await rpc("fn_cancel_voucher", { p_voucher: v2.voucher_id, p_reason: "مكرر" });
-    m = (await rpc<any[]>("fn_bank_movements", { p_branch: BRANCH, p_from: today().slice(0, 8) + "01", p_to: today() })).find((x) => x.id === un.id);
-    expect(m.status).toBe("pending");
+    // released at once, as the SQL trigger does: the table says so before any bank function is called
+    expect(((await client.from("bank_movements").select("id, status")).data as any[]).find((x) => x.id === un.id).status).toBe("pending");
+    expect((await find()).status).toBe("pending");
     await expect(rpc("fn_bank_convert", { p_movement: un.id, p: { description: "" } })).rejects.toThrow(/description/);
+    await expect(rpc("fn_bank_convert", { p_movement: un.id, p: { as: "fees" } })).rejects.toThrow(/convert_as/);
     const e = await rpc<any>("fn_bank_convert", { p_movement: un.id, p: { description: "فرق من البنك" } });
-    expect(e.expense_number).toBeNull();
-    expect((await rpc<any>("fn_trial_balance", { p_from: today(), p_to: today(), p_branch: null })).difference_halalas).toBe(0);
+    expect(e).toMatchObject({ as: "income", expense_number: null });
+    await balanced();
     await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "ليست إيرادًا" });
-    // MT11–MT12: the day's terminal money is matched as the settlement, at the vouchers' total, never also voucher by voucher
-    const pre = (await rpc<any>("fn_pos_settlement_preview", { p_branch: BRANCH, p_account: bankA.id, p_date: today() })).system_total_halalas as number;
+    // MT11–MT12: a deposit against the card vouchers it covers — two card payments less a card refund, with the fee as the difference
     const p1 = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 150, method: "pos", reference: "DM-P1", account_id: bankA.id, idempotency_key: uid() } });
-    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 100, method: "pos", reference: "DM-P2", account_id: bankA.id, idempotency_key: uid() } });
-    const st = await rpc<any>("fn_pos_settle", { p: { branch_id: BRANCH, account_id: bankA.id, business_date: today(), terminal_total_halalas: pre + 240, note: "فرق الجهاز" } });
-    const sc = (await rpc<any[]>("fn_bank_candidates", { p_movement: un.id })).find((x) => x.type === "pos_settlement");
-    expect(sc.amount_halalas).toBe(pre + 250);
-    expect((await rpc<any>("fn_bank_match", { p_movement: un.id, p_type: "pos_settlement", p_target: st.settlement.id, p_reason: "عمولة" })).difference_halalas).toBe(200 - pre - 250);
-    await expect(rpc("fn_pos_settle", { p: { branch_id: BRANCH, account_id: bankA.id, business_date: today(), terminal_total_halalas: pre + 230, note: "x", version: st.settlement.version } })).rejects.toThrow(/settlement_matched/);
-    await rpc("fn_bank_unmatch", { p_movement: un.id, p_reason: "تجربة" });
-    expect((await rpc<any[]>("fn_bank_candidates", { p_movement: un.id })).some((x) => x.id === p1.voucher_id)).toBe(true);
-    await rpc("fn_bank_match", { p_movement: un.id, p_type: "pos_settlement", p_target: st.settlement.id, p_reason: "عمولة" });
-    expect((await rpc<any[]>("fn_bank_candidates", { p_movement: un.id })).some((x) => x.id === p1.voucher_id)).toBe(false);
-    await rpc("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 30, method: "pos", reference: "DM-P3", account_id: bankA.id, idempotency_key: uid() } });
-    m = (await rpc<any[]>("fn_bank_movements", { p_branch: BRANCH, p_from: today().slice(0, 8) + "01", p_to: today() })).find((x) => x.id === un.id);
-    expect(m.status).toBe("pending");
+    const p2 = await rpc<any>("fn_create_voucher", { p: { reservation_id: r.id, kind: "receipt", amount_halalas: 100, method: "pos", reference: "DM-P2", account_id: bankA.id, idempotency_key: uid() } });
+    const pr = await rpc<any>("fn_refund", { p: { reservation_id: r.id, kind: "refund", amount_halalas: 30, method: "pos", reference: "DM-PR", account_id: bankA.id, reason: "رد جزء من بطاقة", idempotency_key: uid() } });
+    const cs = await rpc<any>("fn_bank_candidates", { p_movement: un.id });
+    expect(cs.records.find((x: any) => x.id === pr.voucher_id)).toMatchObject({ method: "pos", signed_halalas: -30 });
+    const set = [p1, p2, pr].map((x) => ({ type: "voucher", id: x.voucher_id }));
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_targets: one(pr.voucher_id), p_reason: "x" })).rejects.toThrow(/target_total/);
+    await expect(rpc("fn_bank_match", { p_movement: un.id, p_targets: set, p_reason: null })).rejects.toThrow(/difference_reason/);
+    expect(await rpc<any>("fn_bank_match", { p_movement: un.id, p_targets: set, p_reason: "عمولة الشبكة" })).toMatchObject({ records: 3, difference_halalas: 200 - 220 });
+    m = await find();
+    expect(m.match.records).toBe(3); expect(m.match.label).toMatch(/^السجلات \(3\): /);
+    await balanced();
+    const ledA = await rpc<any>("fn_account_ledger", { p_account: bankA.id, p_from: today(), p_to: today() });
+    expect(ledA.lines.some((l: any) => l.kind === "bank_adjustment" && l.out_halalas === 20)).toBe(true);
+    // one of its vouchers is cancelled: the whole match is let go, and the others are free again
+    await rpc("fn_cancel_voucher", { p_voucher: p2.voucher_id, p_reason: "مكرر" });
+    expect((await find()).status).toBe("pending");
+    expect((await rpc<any>("fn_bank_candidates", { p_movement: un.id })).records.some((x: any) => x.id === p1.voucher_id)).toBe(true);
+    // MT15: the bank's fees in one step, named by the movement's kind; a line of its account's ledger
+    const f = await rpc<any>("fn_bank_convert", { p_movement: fee.id, p: { as: "fees" } });
+    expect(f.as).toBe("fees");
+    expect((await movements(null)).find((x) => x.id === fee.id).match.label).toBe("رسوم بنكية: رسوم نقاط البيع");
+    await balanced();
+    const bankB = accs.find((a) => a.branch_id === fee.branch_id && a.kind === "bank_account")!;
+    const ledB = await rpc<any>("fn_account_ledger", { p_account: bankB.id, p_from: today(), p_to: today() });
+    expect(ledB.lines.some((l: any) => l.kind === "bank_adjustment" && l.out_halalas === fee.amount_halalas)).toBe(true);
     await login("manager@demo.sa");
     await expect(rpc("fn_bank_candidates", { p_movement: un.id })).rejects.toThrow(/FORBIDDEN/);
   });

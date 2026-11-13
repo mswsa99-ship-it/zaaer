@@ -4,7 +4,9 @@
 # against an extension read at the same version; one correction run twice at once), 49 (deactivating a unit and
 # archiving a type, each against a booking, in both orders), 11 and 27 (IR01–IR03: overlapping partial invoices,
 # one voucher corrected twice, the departure's invoice against a partial one), and 4, 21 and 69 (PX01–PX03: one platform
-# number on two bookings at once, one platform cancellation number twice, a guest ban against the guest's arrival).
+# number on two bookings at once, one platform cancellation number twice, a guest ban against the guest's arrival), and
+# of the bank matching of 0067 (MT30–MT33: one movement against two vouchers, one voucher against two movements, a match
+# against the cancellation of its voucher in both orders).
 # Session A starts a transaction and holds it open for 3s before committing; session B fires 1s later and must
 # block on the row/exclusion lock, then observe A's committed result. Running the two calls sequentially would
 # NOT prove anything — this script is the evidence.
@@ -306,5 +308,48 @@ race "fn_staff_rotate_keybox_code('00000000-0000-0000-0000-000000000190', '73914
 ST=$(qs "select count(*) from keyboxes where room_id in ('00000000-0000-0000-0000-000000000190', '00000000-0000-0000-0000-000000000191')")
 echo "VD08 A=$RA B=$RB boxes=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"CODE_IN_USE"* && "$ST" == "1" ]] && rc=0 || rc=1; check "VD08 one new code saved for two units of a branch at once → one box takes it; the other is refused as in use" $rc "A=$RA B=$RB $ST"
+
+# ---------- MT30–MT33 (0067, A8): matching a bank movement at the same time as another match, or as a cancellation ----------
+psql -d "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+-- a movement as 0066 would have read it, on the account given
+create or replace function t_race_movement(p_account uuid, p_amount bigint, p_ref text) returns uuid language plpgsql security definer set search_path = public as $$
+declare m uuid; v uuid; a cash_accounts%rowtype;
+begin
+  select * into a from cash_accounts where id = p_account;
+  insert into bank_messages(organization_id, raw_body, content_hash, sms_text, status)
+  values (a.organization_id, 'رسالة سباق ' || p_ref, md5(p_ref || clock_timestamp()::text), 'رسالة سباق ' || p_ref, 'parsed') returning id into m;
+  insert into bank_movements(organization_id, branch_id, cash_account_id, message_id, kind, direction, amount_halalas, occurred_at, reference, account_hint, dedupe_key)
+  values (a.organization_id, a.branch_id, a.id, m, 'transfer_in', 'in', p_amount, now(), p_ref, '**000', 'msg:' || m) returning id into v;
+  update bank_messages set movement_id = v where id = m;
+  return v;
+end $$;
+SQL
+BANK=$(qs "select id from cash_accounts where branch_id = '$BR' and kind = 'bank_account' and archived_at is null order by is_default desc limit 1")
+RM=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-03-01','check_out','2031-03-03','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق مطابقة','source_id','$SRC'))->>'id');")
+tv() { q "select (fn_create_voucher(jsonb_build_object('reservation_id','$RM','kind','receipt','amount_halalas',$1,'method','bank_transfer','account_id','$BANK','reference','$2','idempotency_key','$2')))->>'voucher_id';"; }
+mv() { qs "select t_race_movement('$BANK', $1, '$2')"; }
+one() { echo "jsonb_build_array(jsonb_build_object('type','voucher','id','$1'))"; }
+VA=$(tv 5100 race-mt-a); VB=$(tv 5100 race-mt-b); VC=$(tv 5200 race-mt-c); VD=$(tv 5300 race-mt-d); VE=$(tv 5400 race-mt-e)
+M1=$(mv 5100 RACE-MT-1); M2=$(mv 5200 RACE-MT-2); M3=$(mv 5200 RACE-MT-3); M4=$(mv 5300 RACE-MT-4); M5=$(mv 5400 RACE-MT-5)
+# one movement matched with two different vouchers at once: used once
+race "fn_bank_match('$M1', $(one "$VA"), null)->>'ok'" "fn_bank_match('$M1', $(one "$VB"), null)->>'ok'"
+ST=$(qs "select (select status from bank_movements where id = '$M1') || ' ' || (select count(*) from bank_matches where movement_id = '$M1' and active) || ' ' || (select count(*) from bank_match_items i join bank_matches m on m.id = i.match_id where m.movement_id = '$M1' and i.active)")
+echo "MT30 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"movement_used"* && "$ST" == "matched 1 1" ]] && rc=0 || rc=1; check "MT30 one movement matched with two vouchers at once → used once; the second is told it is used" $rc "A=$RA B=$RB $ST"
+# two movements matched with one voucher at once: the voucher is matched once
+race "fn_bank_match('$M2', $(one "$VC"), null)->>'ok'" "fn_bank_match('$M3', $(one "$VC"), null)->>'ok'"
+ST=$(qs "select (select count(*) from bank_match_items where target_type = 'voucher' and target_id = '$VC' and active) || ' ' || (select status from bank_movements where id = '$M2') || ' ' || (select status from bank_movements where id = '$M3')")
+echo "MT31 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"target_used"* && "$ST" == "1 matched pending" ]] && rc=0 || rc=1; check "MT31 two movements matched with one voucher at once → the voucher is matched once; the other movement still waits" $rc "A=$RA B=$RB $ST"
+# a match against the cancellation of its voucher, the match first: the cancellation waits, then lets the match go
+race "fn_bank_match('$M4', $(one "$VD"), null)->>'ok'" "fn_cancel_voucher('$VD', 'سباق')->>'ok'"
+ST=$(qs "select (select status from bank_movements where id = '$M4') || ' ' || (select status from financial_vouchers where id = '$VD') || ' ' || (select count(*) from bank_matches where movement_id = '$M4' and active) || ' ' || (select count(*) from bank_matches where movement_id = '$M4' and not active and release_reason is not null)")
+echo "MT32 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == "R:true" && "$ST" == "pending cancelled 0 1" ]] && rc=0 || rc=1; check "MT32 a match against the cancellation of its voucher (the match first) → the cancellation waits, then the match is let go: no movement stays matched with a cancelled voucher" $rc "A=$RA B=$RB $ST"
+# the cancellation first: the match waits, then finds the voucher cancelled
+race "fn_cancel_voucher('$VE', 'سباق')->>'ok'" "fn_bank_match('$M5', $(one "$VE"), null)->>'ok'"
+ST=$(qs "select (select status from bank_movements where id = '$M5') || ' ' || (select status from financial_vouchers where id = '$VE') || ' ' || (select count(*) from bank_matches where movement_id = '$M5')")
+echo "MT33 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"VALIDATION: target"* && "$ST" == "pending cancelled 0" ]] && rc=0 || rc=1; check "MT33 the cancellation of a voucher against a match with it (the cancellation first) → the match is refused; the movement still waits" $rc "A=$RA B=$RB $ST"
 
 exit $fail

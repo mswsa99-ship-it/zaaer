@@ -5,6 +5,7 @@
  * argument names, errors and return shapes as the SQL functions.
  */
 import { uid, nowISO, ORG, type Row } from "./data";
+import type { Entry } from "./gl";
 
 export interface ExpensesCtx {
   T: (t: string) => Row[];
@@ -21,6 +22,8 @@ export interface ExpensesCtx {
   today: (branch: string) => string;
   nextNumber: (prefix: string) => string;
   role: () => string | null;
+  /** the journal the demo derives (gl.ts): its entries with no voucher of their own are lines of the ledger too (0067) */
+  journal: () => Entry[];
 }
 
 /** the file's kind from its first bytes, as the SQL reads them */
@@ -51,6 +54,11 @@ export function expensesRpcs(c: ExpensesCtx): Record<string, (a: any) => any> {
       .map((p) => ({ at: new Date(p.received_on + "T09:00:00Z").toISOString(), kind: "platform_payout", number: p.reference, description: "دفعة منصة", in_halalas: p.received_halalas, out_halalas: 0, ref_id: p.id })),
     ...T("expense_vouchers").filter((e) => e.account_id === account && e.status === "approved")
       .map((e) => ({ at: e.occurred_at, kind: "expense", number: e.number, description: e.description, in_halalas: 0, out_halalas: e.amount_halalas, ref_id: e.id })),
+    // what the books hold with no voucher of its own: a match's difference, a movement turned into fees or income (at the
+    // entry's time), a closing's cash difference (at the end of its day)
+    ...c.journal().filter((e) => e.key.startsWith("bank:") || e.key.startsWith("day_closing:")).flatMap((e) => e.lines.filter((l) => l.account_id === "gl-cash-" + account)
+      .map((l) => ({ at: e.key.startsWith("bank:") ? e.at : new Date(Date.parse(e.entry_date + "T00:00:00Z") + 86400_000 - 3 * 3600_000 - 1000).toISOString(),
+        kind: e.key.startsWith("bank:") ? "bank_adjustment" : "closing_difference", number: e.number ?? "", description: e.description, in_halalas: l.debit, out_halalas: l.credit, ref_id: e.key }))),
   ];
 
   return {

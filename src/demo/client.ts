@@ -155,6 +155,9 @@ function glGuarded<V>(fn: () => V): V {
   const before = gl.journal();
   return atomically(() => { const out = fn(); const err = lockedEntryAdded(before, gl.journal(), gl.lockedMonths()); if (err) throw new Error(err); return out; });
 }
+// run after every successful call: what the SQL does by trigger in the same transaction (0067: a match released when
+// one of its records is cancelled or reversed)
+let afterRpc: () => void = () => {};
 function rpcCall(lookup: (fn: string) => ((a: any) => any) | undefined, fn: string, args: any) {
   const headers: Record<string, string> = {};
   let run: Promise<{ data: any; error: any }> | null = null;
@@ -165,7 +168,7 @@ function rpcCall(lookup: (fn: string) => ((a: any) => any) | undefined, fn: stri
     const impl = lookup(fn);
     if (!impl) return { data: null, error: { message: `FN_NOT_IMPLEMENTED_IN_DEMO: ${fn}` } };
     requestHeaders = headers;
-    try { return { data: glGuarded(() => impl(args)) ?? null, error: null }; }
+    try { const data = glGuarded(() => impl(args)) ?? null; afterRpc(); return { data, error: null }; }
     catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" } }; }
     finally { requestHeaders = null; }
   };
@@ -263,7 +266,7 @@ type Filter = (r: Row) => boolean;
 const WRITE_RULES: Record<string, () => boolean> = {
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
-  bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false, bank_matches: () => false,
+  bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false, bank_matches: () => false, bank_match_items: () => false,
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
@@ -291,7 +294,8 @@ function visible(table: string, r: Row): boolean {
   if (table === "bank_parse_rules") return can("bank.view") || can("bank.manage");
   if (table === "bank_messages") return can("bank.manage");
   if (table === "bank_movements") return can("bank.manage") || (can("bank.view") && branches.includes(r.branch_id));
-  if (table === "bank_matches") { const v = byId("bank_movements", r.movement_id); return can("bank.manage") || (can("bank.view") && !!v && branches.includes(v.branch_id)); }
+  if (table === "bank_matches" || table === "bank_match_items") { const v = byId("bank_movements", table === "bank_matches" ? r.movement_id : byId("bank_matches", r.match_id)?.movement_id);
+    return can("bank.manage") || (can("bank.view") && !!v && branches.includes(v.branch_id)); }
   if (table === "expense_categories") return r.organization_id === ORG;
   if (table === "day_closing_lines") { const cl = byId("day_closings", r.closing_id); return !!cl && (can("day.close") || can("day.close.approve")) && branches.includes(cl.branch_id); }
   if (table === "rate_calendar") return can("rates") && branches.includes(r.branch_id);
@@ -990,8 +994,6 @@ const rpcsMore: Record<string, (a: any) => any> = {
     if (!p.business_date || p.business_date > todayISO()) throw new Error("VALIDATION: business_date"); if (!/^-?[0-9]{1,15}$/.test(String(p.terminal_total_halalas ?? ""))) throw new Error("VALIDATION: amount");
     const terminal = Number(p.terminal_total_halalas); const t = posDayTotal(p.branch_id, p.account_id, p.business_date); const diff = terminal - t.system_total_halalas; const note = String(p.note ?? "").trim() || null; if (diff !== 0 && !note) throw new Error("VALIDATION: note_required");
     let s = T("pos_settlements").find((x) => x.account_id === p.account_id && x.business_date === p.business_date); const before = s ? { ...s } : null;
-    // 0067: a matched settlement keeps its figures (a match left behind by a changed day no longer counts)
-    if (s && T("bank_matches").some((m) => m.active && m.target_type === "pos_settlement" && m.target_id === s!.id && m.day_vouchers === t.vouchers.map((x) => x.id).sort().join(","))) throw new Error("VALIDATION: settlement_matched");
     const fields = { terminal_total_halalas: terminal, system_total_halalas: t.system_total_halalas, difference_halalas: diff, voucher_count: t.voucher_count, status: diff === 0 ? "matched" : "difference", note, updated_by: staffId(), updated_at: nowISO() };
     if (s) { checkVersion(s.version, p.version); Object.assign(s, fields, { version: s.version + 1 }); }
     else { s = { id: uid(), organization_id: ORG, branch_id: p.branch_id, account_id: p.account_id, business_date: p.business_date, ...fields, version: 1, created_by: staffId(), created_at: nowISO() }; T("pos_settlements").push(s); }
@@ -2082,12 +2084,14 @@ Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch,
 // the closing of the day (0063: A2 and A3)
 Object.assign(rpcs, accountingRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), role: () => me()?.role ?? null }));
 // the expenses and the ledger (0064: A4)
-Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), nextNumber, role: () => me()?.role ?? null }));
+Object.assign(rpcs, expensesRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), nextNumber, role: () => me()?.role ?? null, journal: () => gl.journal() }));
 // the double entry (0065: A5): the chart, the journal derived from the money, the statements and the month lock
 const gl = glRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, dayOf: (iso) => dayOf(iso) /* every demo branch keeps Riyadh time */, today: (b) => branchToday(b ?? undefined) });
 Object.assign(rpcs, gl.rpcs);
 // the bank's messages (0066: A6 and A7)
-Object.assign(rpcs, bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso), nextNumber, posDayTotal }));
+const { __sync: bankSync, ...bankFns } = bankRpcs({ T, byId, can, requireCap, requireBranch, myBranches, audit: (b, a, e, id, d) => audit(b, a, e, id as string, d), emit, dayOf: (iso) => dayOf(iso), nextNumber });
+Object.assign(rpcs, bankFns);
+afterRpc = () => bankSync({});
 // the permissions matrix (0043): the owner's editor and «ما يحق لي»
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));

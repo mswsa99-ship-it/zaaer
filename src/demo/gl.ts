@@ -35,7 +35,7 @@ const SYSTEM: [string, string, Acc["type"], string | null, boolean, string][] = 
   ["31", "الأرصدة الافتتاحية", "equity", "3", true, "opening"], ["4", "الإيرادات", "revenue", null, false, "revenue"],
   ["41", "إيراد الإيجار", "revenue", "4", true, "rent_revenue"], ["42", "مردودات الإيجار", "revenue", "4", true, "rent_returns"],
   ["49", "إيرادات أخرى وزيادات", "revenue", "4", true, "other_income"], ["5", "المصروفات", "expense", null, false, "expenses"],
-  ["51", "المصروفات التشغيلية", "expense", "5", false, "expense_parent"], ["57", "رسوم بنكية ونقاط البيع", "expense", "5", true, "bank_fees"], ["58", "عمولات المنصات", "expense", "5", true, "platform_commission"],
+  ["51", "المصروفات التشغيلية", "expense", "5", false, "expense_parent"], ["57", "رسوم وفروق المطابقة البنكية", "expense", "5", true, "bank_fees"], ["58", "عمولات المنصات", "expense", "5", true, "platform_commission"],
   ["59", "عجز الصندوق", "expense", "5", true, "cash_shortage"],
 ];
 
@@ -109,16 +109,22 @@ export function glRpcs(c: GlCtx): { rpcs: Record<string, (a: any) => any>; journ
       push("opening:" + a.id, a.branch_id, on, on + "T00:00:00Z", "الرصيد الافتتاحي لـ" + a.name + (before ? " (الفرق عن الدفاتر قبله)" : ""), two(cashAcc(a.id), sys("opening"), (a.opening_balance_halalas ?? 0) - before));
     }
     // 0067: a waiting movement is a reconciliation item, not an entry; a match's difference goes to fees or other income;
-    // money in turned into income is bank against other income (money out turned into an expense is the expense above).
-    // Dated on the movement's day while its month is open, otherwise the day of the match. (The SQL keeps a released
-    // match's entry and its reversal; the demo drops both, which nets the same.)
+    // a movement turned into income is bank against other income, one turned into fees is the bank's fees against the bank
+    // (one turned into an expense is the expense above). Dated on the movement's day while its month is open, otherwise
+    // the day of the match. (The SQL keeps a released match's entry and its reversal; the demo drops both, which nets the same.)
     for (const v of T("bank_movements").filter((x) => x.cash_account_id)) {
-      const acc = cashAcc(v.cash_account_id);
       const m = T("bank_matches").find((x) => x.movement_id === v.id && x.active);
-      const d0 = dayOf(v.occurred_at, v.branch_id); const day = m && lockedMonths().includes(d0.slice(0, 7)) ? dayOf(m.created_at, v.branch_id) : d0;
-      if (m && m.difference_halalas) { const d = Math.abs(m.difference_halalas); const gain = (v.direction === "in") === (m.difference_halalas > 0);
-        push("bank:" + v.id + ":diff", v.branch_id, day, v.occurred_at, "فرق مطابقة: " + (m.reason ?? ""), gain ? two(acc, sys("other_income"), d) : two(sys("bank_fees"), acc, d)); }
-      if (m && m.target_type === "journal") push("bank:" + v.id + ":convert", v.branch_id, day, v.occurred_at, "إيراد من حركة بنكية: " + (m.reason ?? ""), two(acc, sys("other_income"), v.amount_halalas));
+      if (!m) continue;
+      const acc = cashAcc(v.cash_account_id);
+      // not before the account's opening day (fn_bank_entry_date): the ledger starts there
+      const own = dayOf(v.occurred_at, v.branch_id); const opening = byId("cash_accounts", v.cash_account_id)?.opening_on as string | undefined;
+      const d0 = opening && opening > own ? opening : own; const moved = lockedMonths().includes(d0.slice(0, 7));
+      const day = moved ? dayOf(m.created_at, v.branch_id) : d0; const at = moved ? m.created_at : d0 === own ? v.occurred_at : d0 + "T09:00:00Z";
+      if (m.difference_halalas) { const d = Math.abs(m.difference_halalas); const gain = (v.direction === "in") === (m.difference_halalas > 0);
+        push("bank:" + v.id + ":diff", v.branch_id, day, at, "فرق مطابقة: " + (m.reason ?? ""), gain ? two(acc, sys("other_income"), d) : two(sys("bank_fees"), acc, d)); }
+      if (T("bank_match_items").some((i) => i.match_id === m.id && i.target_type === "journal"))
+        push("bank:" + v.id + ":convert", v.branch_id, day, at, (v.direction === "in" ? "إيراد من حركة بنكية: " : "رسوم بنكية من حركة: ") + (m.reason ?? ""),
+             v.direction === "in" ? two(acc, sys("other_income"), v.amount_halalas) : two(sys("bank_fees"), acc, v.amount_halalas));
     }
     e.sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key));
     e.forEach((x, i) => { x.number = "JE-" + String(i + 1).padStart(6, "0"); });

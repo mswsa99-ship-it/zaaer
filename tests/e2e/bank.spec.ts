@@ -2,9 +2,11 @@
  * The bank's messages through the UI (A6/A7, migration 0066) — the UI facet of tests/sql/accounting_a6_tests.sql and the
  * demo test BK01–BK05: the owner sets the mailbox (the password never shown back), makes the relay key (shown once), adds
  * a word and reads an unread message again; the movements show with their kind, amount and account; the manager sees
- * the movements but not the raw messages.
+ * the movements but not the raw messages. And matching them (A8, migration 0067; tests/sql/accounting_a8_tests.sql): a
+ * movement turned into income and undone, a deposit matched with the card vouchers it covers, a fee recorded as the
+ * bank's fees and shown in the ledger.
  */
-import { test, expect } from "./fixtures";
+import { test, expect, createReservation } from "./fixtures";
 
 test.describe("bank messages", () => {
   test("BK30 the owner sets the bank mailbox: not connected until complete, the password kept hidden, the relay key shown once", async ({ page, loginAs, go }) => {
@@ -97,5 +99,76 @@ test.describe("bank messages", () => {
     await d3.getByRole("button", { name: "فك المطابقة", exact: true }).click();
     await expect(d3).toBeHidden();
     await expect(mv).toContainText("بانتظار المطابقة");
+  });
+
+  test("BK34 the owner matches a deposit with the card vouchers it covers: a day's vouchers are ticked in one tap, the total is shown, and a total that differs asks for the reason (A8)", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await createReservation(page, "ضيف المطابقة", "0501117788");
+    for (const [amount, trx] of [["1.20", "TRX-MT-1"], ["0.80", "TRX-MT-2"]]) {
+      await page.getByRole("button", { name: "سند قبض إقامة" }).click();
+      const dlg = page.getByRole("dialog");
+      await dlg.getByRole("radio", { name: "شبكة" }).click();
+      await dlg.locator("input[data-money]").first().fill(amount);
+      await dlg.getByLabel("رقم العملية").fill(trx);
+      await dlg.getByRole("button", { name: "حفظ السند" }).click();
+      await expect(dlg).toBeHidden();
+    }
+    await go("/staff/bank");
+    await page.getByRole("tab", { name: "غير المنسوبة" }).click();
+    await page.getByTestId("bank-movement").filter({ hasText: "777****555" }).getByRole("button", { name: "نسبتها لحساب فرع" }).click();
+    const d1 = page.getByRole("dialog");
+    const select = d1.getByLabel("حساب الفرع");
+    await select.selectOption((await select.locator("option", { hasText: "الرياض" }).first().getAttribute("value"))!);
+    await d1.locator("textarea").fill("حساب فرع الرياض");
+    await d1.getByRole("button", { name: "نسبتها", exact: true }).click();
+    await expect(d1).toBeHidden();
+    await page.getByRole("tab", { name: "حركات الفرع" }).click();
+    const mv = page.getByTestId("bank-movement").filter({ hasText: "+2.00" });
+    await mv.getByRole("button", { name: "مطابقة", exact: true }).click();
+    const d = page.getByRole("dialog");
+    // nothing equals the deposit alone, so nothing is ticked yet; the card vouchers are also offered a day at a time
+    const total = d.getByTestId("bank-match-total");
+    await expect(total).toContainText("0.00");
+    await d.getByText("سندات الشبكة حسب اليوم").click();
+    const today = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
+    const day = d.getByTestId("bank-pos-days").getByRole("button").filter({ hasText: today });
+    await day.click();
+    await expect(day).toHaveAttribute("aria-pressed", "true");
+    // the whole day is more than the deposit: the difference is named and the server asks for its reason
+    await expect(d.getByTestId("bank-match-diff")).toContainText("المحدّد أكثر من الحركة");
+    await d.getByRole("button", { name: "مطابقة", exact: true }).click();
+    await expect(d.getByText(/اكتب سبب الفرق/)).toBeVisible();
+    await day.click();
+    await expect(day).toHaveAttribute("aria-pressed", "false");
+    // the two card payments this deposit covers (the nearest amounts come first)
+    const boxes = d.getByTestId("bank-candidates").getByRole("checkbox");
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await expect(total).toContainText("2.00");
+    await expect(d.getByTestId("bank-match-diff")).toHaveCount(0);
+    await d.getByRole("button", { name: "مطابقة", exact: true }).click();
+    await expect(d).toBeHidden();
+    await expect(mv.getByTestId("bank-match")).toContainText("طوبقت مع: السجلات (2)");
+    await expect(mv).not.toContainText("بانتظار المطابقة");
+  });
+
+  test("BK35 the owner records a fee movement as the bank's fees in one step, and it becomes a line of the bank account's ledger (A8)", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/staff/bank");
+    await page.getByLabel("الفرع النشط").selectOption("00000000-0000-0000-0000-000000000012");
+    const fee = page.getByTestId("bank-movement").filter({ hasText: "9.60" });
+    await expect(fee).toContainText("بانتظار المطابقة");
+    await fee.getByRole("button", { name: "تحويلها لسند" }).click();
+    const d = page.getByRole("dialog");
+    await expect(d.getByRole("radio", { name: /رسوم بنكية/ })).toBeChecked();
+    await d.getByRole("button", { name: "تسجيل الرسوم" }).click();
+    await expect(d).toBeHidden();
+    await expect(fee.getByTestId("bank-match")).toContainText("حُوّلت إلى: رسوم بنكية: رسوم نقاط البيع");
+    await go("/staff/ledger");
+    const account = page.getByLabel("الحساب");
+    await account.selectOption((await account.locator("option", { hasText: "البنكي" }).first().getAttribute("value"))!);
+    const line = page.getByTestId("ledger-line").filter({ hasText: "تسوية بنكية" });
+    await expect(line).toContainText("9.60");
+    await expect(line).toContainText("رسوم بنكية من حركة: رسوم نقاط البيع");
   });
 });

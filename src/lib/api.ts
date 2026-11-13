@@ -210,12 +210,14 @@ export const VALIDATION_AR: Record<string, string> = {
   message_status: "تُعاد قراءة الرسالة غير المفهومة أو المرفوضة فقط.",
   movement_assigned: "نُسبت هذه الحركة لحساب من قبل.",
   movement_used: "هذه الحركة طوبقت أو حُوّلت لسند من قبل.",
-  settlement_matched: "تسوية الشبكة لهذا اليوم مطابقة مع حركة بنكية؛ فُكّ المطابقة أولًا ثم عدّلها.",
   movement_unassigned: "انسب الحركة لحساب فرعها أولًا.",
+  targets: "اختر سجلًا واحدًا على الأقل لمطابقة الحركة.",
   target_type: "نوع السجل غير معروف.",
-  target: "هذا السجل لا يناسب الحركة (حساب آخر أو اتجاه آخر أو أُلغي).",
-  target_used: "هذا السجل مطابَق مع حركة أخرى.",
-  difference_reason: "المبلغ يختلف عن السجل؛ اكتب سبب الفرق (حتى 300 حرف).",
+  target: "أحد السجلات لا يناسب الحركة (حساب آخر أو اتجاه آخر أو أُلغي).",
+  target_used: "أحد السجلات مطابَق مع حركة أخرى.",
+  target_total: "مجموع السجلات المحددة يجب أن يكون أكبر من صفر في اتجاه الحركة.",
+  difference_reason: "مجموع السجلات يختلف عن مبلغ الحركة؛ اكتب سبب الفرق (حتى 300 حرف).",
+  convert_as: "هذا النوع لا يناسب اتجاه الحركة: الخارج مصروف أو رسوم بنكية، والداخل إيراد.",
   movement_not_matched: "الحركة ليست مطابقة.",
   cancel_the_expense: "هذا السند صُنع من الحركة؛ ألغِ سند الصرف بسبب فتعود الحركة للانتظار.",
   enabled: "قيمة التشغيل غير صحيحة.",
@@ -748,8 +750,14 @@ export interface BankMessage { id: string; received_at: string; mail_from: strin
   text: string; status: "received" | "rejected" | "unparsed" | "parsed" | "duplicate_movement"; reason: string | null; movement_id: string | null }
 export interface BankMovement { id: string; branch_id: string | null; branch: string | null; account: string | null; kind: BankKind; direction: "in" | "out"; amount_halalas: number;
   occurred_at: string; reference: string | null; balance_halalas: number | null; account_hint: string | null; status: "pending" | "matched" | "converted"; text: string | null; channel: string | null;
-  match?: { type: string; kind: "link" | "convert"; difference_halalas: number; reason: string | null; label: string } | null }
-export interface BankCandidate { type: "voucher" | "expense" | "pos_settlement" | "platform_payout"; id: string; number: string; label: string; amount_halalas: number; at: string; exact: boolean }
+  match?: { kind: "link" | "convert"; type: string | null; records: number; difference_halalas: number; reason: string | null; label: string } | null }
+/** a record a movement can be matched with; signed_halalas is what it counts for in the movement's direction (a card refund inside a terminal deposit: below zero) */
+export interface BankCandidate { type: "voucher" | "expense" | "platform_payout"; id: string; number: string; label: string; amount_halalas: number; signed_halalas: number;
+  at: string; day: string; method: string | null; exact: boolean }
+export interface BankCandidates { records: BankCandidate[];
+  /** what each sent closing of those days says the card terminal took */
+  pos_closings: Array<{ day: string; entered_halalas: number | null; system_halalas: number; state: string }> }
+export type BankConvertAs = "expense" | "fees" | "income";
 
 export const bankApi = {
   settings: () => rpc<BankMailSettings>("fn_admin_bank_mail_get", {}),
@@ -758,10 +766,10 @@ export const bankApi = {
   messages: (status: string | null) => rpc<BankMessage[]>("fn_bank_messages", { p_status: status, p_limit: 200 }),
   movements: (branchId: string | null, from: string, to: string) => rpc<BankMovement[]>("fn_bank_movements", { p_branch: branchId, p_from: from, p_to: to }),
   reparse: (id: string) => rpc<{ ok: boolean; status: string; reason?: string }>("fn_bank_reparse", { p_message: id }),
-  candidates: (movementId: string) => rpc<BankCandidate[]>("fn_bank_candidates", { p_movement: movementId }),
-  match: (movementId: string, type: string, targetId: string, reason: string | null) => rpc<{ ok: boolean; difference_halalas: number }>("fn_bank_match", { p_movement: movementId, p_type: type, p_target: targetId, p_reason: reason }),
+  candidates: (movementId: string) => rpc<BankCandidates>("fn_bank_candidates", { p_movement: movementId }),
+  match: (movementId: string, targets: Array<{ type: string; id: string }>, reason: string | null) => rpc<{ ok: boolean; records: number; difference_halalas: number }>("fn_bank_match", { p_movement: movementId, p_targets: targets, p_reason: reason }),
   unmatch: (movementId: string, reason: string) => rpc<{ ok: boolean }>("fn_bank_unmatch", { p_movement: movementId, p_reason: reason }),
-  convert: (movementId: string, p: { description: string; category_id?: string }) => rpc<{ ok: boolean; expense_number: string | null }>("fn_bank_convert", { p_movement: movementId, p }),
+  convert: (movementId: string, p: { as: BankConvertAs; description?: string; category_id?: string }) => rpc<{ ok: boolean; as: BankConvertAs; expense_number: string | null }>("fn_bank_convert", { p_movement: movementId, p }),
   assign: (movementId: string, accountId: string, reason: string) => rpc<{ ok: boolean; branch_id: string }>("fn_bank_assign_account", { p_movement: movementId, p_account: accountId, p_reason: reason }),
   pollNow: async () => {
     const { data, error } = await supabase.functions.invoke<{ configured: boolean; fetched: number; results: unknown[]; error?: string }>("bank-mail", { body: { action: "poll" } });

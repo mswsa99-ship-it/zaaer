@@ -3,6 +3,9 @@
  * period — the opening balance, every movement in (receipts, deposits, platform payouts) and out (refunds, deposit
  * refunds, expenses), and on every line the running balance = opening + in − out, all computed by the server. The owner
  * (or who holds «الصناديق والحسابات») sets the opening balance with its date and reason.
+ * Since 0067 the entries with no voucher of their own are lines too: «تسوية بنكية» (what matching a bank movement booked:
+ * a difference, fees, other income, and their reversals) and «فرق إقفال» (a day closing's cash difference), so the
+ * ledger ends where the journal stands.
  */
 import { useEffect, useState } from "react";
 import { BookOpen } from "lucide-react";
@@ -16,7 +19,8 @@ import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 
 const sar = (h: number) => formatCurrency(h / 100);
-const KIND: Record<string, string> = { receipt: "سند قبض", deposit: "قبض تأمين", refund: "رد مبلغ", deposit_refund: "رد تأمين", platform_payout: "دفعة منصة", expense: "سند صرف" };
+const KIND: Record<string, string> = { receipt: "سند قبض", deposit: "قبض تأمين", refund: "رد مبلغ", deposit_refund: "رد تأمين", platform_payout: "دفعة منصة", expense: "سند صرف",
+  bank_adjustment: "تسوية بنكية", closing_difference: "فرق إقفال" };
 const monthStart = () => todayISO().slice(0, 8) + "01";
 
 export default function Ledger() {
