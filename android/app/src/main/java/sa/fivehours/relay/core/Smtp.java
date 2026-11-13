@@ -18,8 +18,8 @@ import javax.net.ssl.SSLSocketFactory;
  * login and its app password. The server's certificate must be valid for the server's name (checked before the
  * password is sent). No library: the phone app has no dependency at all.
  * Failures: the login refused → {@link Refused} with {@code login} true (nothing is sent until the settings change);
- * one message refused (5xx after it was offered) → that message only, the others go on; anything else (no network,
- * a timeout, a busy server 4xx) → an IOException, and what was not accepted waits for the next try.
+ * one message's content refused (5xx after its text) → that message only, the others go on; a refusal before the text
+ * (a daily limit, the sender) stops the round like anything else (no network, a timeout, a busy server 4xx): an IOException, and what was not accepted waits for the next try.
  */
 public final class Smtp {
     public static final class Refused extends IOException {
@@ -95,13 +95,16 @@ public final class Smtp {
             cmd(true, b64(user), 334);
             cmd(true, b64(password), 235);
             for (int i = 0; i < messages.size(); i++) {
+                // a refusal before the content (the sender, the recipient, a daily limit) is about the session, not this
+                // message: it stops the round and everything stays queued
+                cmd(false, "MAIL FROM:<" + from + ">", 250);
+                cmd(false, "RCPT TO:<" + from + ">", 250, 251);
+                cmd(false, "DATA", 354);
+                write(dotStuff(messages.get(i)) + ".\r\n");
                 try {
-                    cmd(false, "MAIL FROM:<" + from + ">", 250);
-                    cmd(false, "RCPT TO:<" + from + ">", 250, 251);
-                    cmd(false, "DATA", 354);
-                    write(dotStuff(messages.get(i)) + ".\r\n");
                     expect(false, 250);
                 } catch (Refused r) {
+                    // the content of this one message was refused: it is set aside and the others go on
                     l.refused(i, r);
                     cmd(false, "RSET", 250);
                     continue;

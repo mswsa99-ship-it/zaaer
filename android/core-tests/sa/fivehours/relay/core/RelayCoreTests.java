@@ -147,6 +147,18 @@ public final class RelayCoreTests {
                 "sent=" + res.sent + " aside=" + res.setAside + " left=" + ob.size() + " accepted=" + acc8.get() + " err=" + res.error);
         }
 
+        // RL09 a refusal of the session (the daily sending limit) keeps every message queued for the next try
+        try (FakeSmtp srv = new FakeSmtp("app-password", new AtomicInteger(), new ArrayList<>(), null, null)) {
+            srv.mailFromReply = "550 5.4.5 Daily user sending limit exceeded";
+            Outbox ob = new Outbox(new File(work, "quota"));
+            Relayer r9 = new Relayer(ob);
+            for (int i = 0; i < 5; i++) r9.accept(c, KEY, "AlRajhiBank", SAMPLE_AT + i * 1000L, "sms", "حوالة " + i + " إلى 605****4321");
+            Relayer.Result res = r9.flush(c, Smtp.forTest("127.0.0.1", srv.port(), c.mailbox, "app-password", null));
+            check("RL09 a refusal before any message's text (the daily sending limit) stops the round and keeps all five queued; nothing is set aside",
+                res.error != null && res.sent == 0 && res.setAside == 0 && ob.size() == 5 && ob.setAsideCount() == 0,
+                "sent=" + res.sent + " aside=" + res.setAside + " left=" + ob.size() + " err=" + res.error);
+        }
+
         // RL06 the sample the server-side checks read
         Outbox sampleBox = new Outbox(new File(work, "sample"));
         new Relayer(sampleBox).accept(c, KEY, "AlRajhiBank", SAMPLE_AT, "sms", SAMPLE_TEXT);
@@ -167,6 +179,7 @@ public final class RelayCoreTests {
         private final ServerSocket ss;
         private final Thread t;
         final List<String> passwords = Collections.synchronizedList(new ArrayList<>());
+        volatile String mailFromReply = null;
 
         FakeSmtp(String password, AtomicInteger accepted, List<String> received) throws Exception { this(password, accepted, received, null, null); }
 
@@ -175,7 +188,7 @@ public final class RelayCoreTests {
             ss = tls == null ? new ServerSocket(0) : tls.createServerSocket(0);
             t = new Thread(() -> {
                 while (!ss.isClosed()) {
-                    try (Socket s = ss.accept()) { session(s, password, accepted, received, passwords, refuse); } catch (Exception ignored) { }
+                    try (Socket s = ss.accept()) { session(s, password, accepted, received, passwords, refuse, mailFromReply); } catch (Exception ignored) { }
                 }
             });
             t.setDaemon(true);
@@ -184,7 +197,7 @@ public final class RelayCoreTests {
 
         int port() { return ss.getLocalPort(); }
 
-        static void session(Socket s, String password, AtomicInteger accepted, List<String> received, List<String> passwords, String refuse) throws Exception {
+        static void session(Socket s, String password, AtomicInteger accepted, List<String> received, List<String> passwords, String refuse, String mailFromReply) throws Exception {
             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
             OutputStream out = s.getOutputStream();
             java.util.function.Consumer<String> say = l -> { try { out.write((l + "\r\n").getBytes(StandardCharsets.UTF_8)); out.flush(); } catch (Exception e) { throw new RuntimeException(e); } };
@@ -199,6 +212,7 @@ public final class RelayCoreTests {
                     passwords.add(pw);
                     if (pw.equals(password)) { say.accept("235 ok"); step = 3; } else { say.accept("535 5.7.8 bad credentials"); return; }
                 }
+                else if (line.startsWith("MAIL FROM") && mailFromReply != null) say.accept(mailFromReply);
                 else if (line.startsWith("MAIL FROM") || line.startsWith("RCPT TO")) say.accept(step == 3 ? "250 ok" : "530 auth first");
                 else if (line.equals("DATA")) {
                     say.accept("354 go");
