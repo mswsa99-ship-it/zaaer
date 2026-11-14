@@ -8,12 +8,28 @@ import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } fro
 import { formatCurrency, COUNT } from "../../lib/utils";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput} from "../../components/forms";
 
-interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean; default_deposit_halalas: number; supervisor_max_discount_bp: number; tax_number: string | null; commercial_register: string | null; archived_at: string | null; version: number; rooms?: number;
+interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean;
+  // 0069 (W2): each of rent, services and products has its switch and its rate; tax_rate_bp is the rent rate in force
+  tax_rent_enabled: boolean; tax_rent_rate_bp: number; tax_services_enabled: boolean; tax_services_rate_bp: number; tax_products_enabled: boolean; tax_products_rate_bp: number;
+  default_deposit_halalas: number; supervisor_max_discount_bp: number; tax_number: string | null; commercial_register: string | null; archived_at: string | null; version: number; rooms?: number;
   // decision 31
   map_url: string | null; booking_platform_url: string | null; country_code: string; default_language: "ar" | "en" }
 
-const EMPTY: Partial<Branch> = { name_ar: "", name_en: "", city: "", address: "", phone: "", email: "", check_in_time: "16:00", check_out_time: "12:00", timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, default_deposit_halalas: 5000, supervisor_max_discount_bp: 0, is_active: true, map_url: "", booking_platform_url: "", country_code: "SA", default_language: "ar" };
-const taxText = (b: Pick<Branch, "tax_rate_bp" | "prices_include_tax">) => b.tax_rate_bp === 0 ? "بلا ضريبة" : `ضريبة ${(b.tax_rate_bp / 100).toFixed(2)}% ${b.prices_include_tax ? "(شاملة)" : "(غير شاملة)"}`;
+const EMPTY: Partial<Branch> = { name_ar: "", name_en: "", city: "", address: "", phone: "", email: "", check_in_time: "16:00", check_out_time: "12:00", timezone: "Asia/Riyadh", tax_rate_bp: 0, prices_include_tax: false, tax_rent_enabled: false, tax_rent_rate_bp: 1500, tax_services_enabled: false, tax_services_rate_bp: 1500, tax_products_enabled: false, tax_products_rate_bp: 1500, default_deposit_halalas: 5000, supervisor_max_discount_bp: 0, is_active: true, map_url: "", booking_platform_url: "", country_code: "SA", default_language: "ar" };
+/** What the value-added tax is charged on in a branch: rent, services, products — each with its switch and its rate. */
+const TAX_KINDS = [
+  { key: "rent", label: "الإيجار", hint: "ليالي الإقامة وخصوماتها وتسوياتها" },
+  { key: "services", label: "الخدمات", hint: "ما يُضاف للإقامة من خدمات وإضافات، للخدمة الخاضعة للضريبة" },
+  { key: "products", label: "المنتجات", hint: "طلبات المنتجات، للمنتج الخاضع للضريبة" },
+] as const;
+type TaxKind = (typeof TAX_KINDS)[number]["key"];
+const taxOn = (b: Partial<Branch>, k: TaxKind) => !!b[`tax_${k}_enabled`];
+const taxBp = (b: Partial<Branch>, k: TaxKind) => b[`tax_${k}_rate_bp`] ?? 1500;
+const pct = (bp: number) => `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+const taxText = (b: Partial<Branch>) => {
+  const on = TAX_KINDS.filter((k) => taxOn(b, k.key)).map((k) => `${k.label} ${pct(taxBp(b, k.key))}`);
+  return on.length ? `ضريبة: ${on.join("، ")} ${b.prices_include_tax ? "(شاملة)" : "(غير شاملة)"}` : "بلا ضريبة";
+};
 
 export default function AdminBranches() {
   const { profile, can } = useAuth();
@@ -25,7 +41,7 @@ export default function AdminBranches() {
 
   const load = useCallback(async () => {
     const [b, r] = await Promise.all([
-      supabase.from("branches").select("id, name_ar, name_en, city, address, phone, email, is_active, check_in_time, check_out_time, timezone, tax_rate_bp, prices_include_tax, default_deposit_halalas, supervisor_max_discount_bp, tax_number, commercial_register, archived_at, version, map_url, booking_platform_url, country_code, default_language").order("name_ar"),
+      supabase.from("branches").select("id, name_ar, name_en, city, address, phone, email, is_active, check_in_time, check_out_time, timezone, tax_rate_bp, prices_include_tax, tax_rent_enabled, tax_rent_rate_bp, tax_services_enabled, tax_services_rate_bp, tax_products_enabled, tax_products_rate_bp, default_deposit_halalas, supervisor_max_discount_bp, tax_number, commercial_register, archived_at, version, map_url, booking_platform_url, country_code, default_language").order("name_ar"),
       supabase.from("rooms").select("branch_id").is("archived_at", null),
     ]);
     if (b.error) setError(toArabicError(b.error));
@@ -62,7 +78,7 @@ export default function AdminBranches() {
       )}
       <Modal open={!!draft} title={draft?.id ? "تعديل فرع" : "فرع جديد"} onClose={() => setDraft(null)} wide>
         {draft && (
-          <ActionForm onSubmit={async () => { await opsApi.upsertBranch({ ...draft, rooms: undefined }); setDraft(null); await load(); }}>
+          <ActionForm onSubmit={async () => { await opsApi.upsertBranch({ ...draft, rooms: undefined, tax_rate_bp: undefined }); setDraft(null); await load(); }}>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي (مطلوب)" hint="يظهر في مطبوعات النزيل بالإنجليزية"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} aria-label="الاسم الإنجليزي" /></Field>
@@ -83,13 +99,32 @@ export default function AdminBranches() {
                 <NumberInput decimals value={((draft.supervisor_max_discount_bp ?? 0) / 100)} onChange={(v) => setDraft({ ...draft, supervisor_max_discount_bp: Math.round((v ?? 0) * 100) })} label="أقصى خصم للمشرف" />
               </Field>
             </div>
-            {/* decision 68: the tax policy is the owner's alone (the server refuses anyone else's change too) */}
+            {/* decision 68: the tax policy is the owner's alone (the server refuses anyone else's change too).
+                0069 (W2): off by default; rent, services and products each have their switch and their rate */}
             <fieldset className="mt-4 rounded-xl border border-ink-100 p-3" disabled={!can("branch.tax")} data-testid="branch-tax">
-              <legend className="px-1 text-xs font-semibold text-ink-600">الضريبة {can("branch.tax") ? "" : "— يعدّلها المالك فقط"}</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="نسبة الضريبة %" hint="صفر يعني لا ضريبة على الحجوزات الجديدة؛ أي تغيير يسري على الحجوزات الجديدة فقط، ويُسجَّل."><NumberInput decimals value={((draft.tax_rate_bp ?? 0) / 100)} onChange={(v) => setDraft({ ...draft, tax_rate_bp: Math.round((v ?? 0) * 100) })} label="نسبة الضريبة" /></Field>
+              <legend className="px-1 text-xs font-semibold text-ink-600">ضريبة القيمة المضافة {can("branch.tax") ? "" : "— يعدّلها المالك فقط"}</legend>
+              <p className="mb-3 text-xs text-ink-500">مطفأة ما لم تفعّلها، ولكل من الإيجار والخدمات والمنتجات مفتاحه ونسبته. أي تغيير يسري على الحجوزات الجديدة فقط ويُسجَّل؛ الحجز القائم يبقى على ما أُنشئ عليه في إيجاره وخدماته ومنتجاته.</p>
+              <div className="grid gap-2">
+                {TAX_KINDS.map((k) => {
+                  const on = taxOn(draft, k.key);
+                  return (
+                    <div key={k.key} className="flex flex-wrap items-center gap-3 rounded-lg bg-ink-50 p-2" data-testid={`tax-${k.key}`}>
+                      <button type="button" role="switch" aria-checked={on} aria-label={`ضريبة ${k.label}`} onClick={() => setDraft({ ...draft, [`tax_${k.key}_enabled`]: !on })}
+                        className={`min-h-[44px] min-w-[5.5rem] rounded-full border px-3 text-xs transition ${on ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-200 bg-white text-ink-500"} disabled:cursor-not-allowed disabled:opacity-60`}>
+                        {on ? "✓ مفعّلة" : "مطفأة"}
+                      </button>
+                      <div className="min-w-0 flex-1 basis-40"><p className="text-sm font-medium text-ink-800">{k.label}</p><p className="text-xs text-ink-400">{k.hint}</p></div>
+                      <div className="flex items-center gap-1.5">
+                        <NumberInput decimals className="w-20" disabled={!on} value={taxBp(draft, k.key) / 100} onChange={(v) => setDraft({ ...draft, [`tax_${k.key}_rate_bp`]: Math.round((v ?? 0) * 100) })} label={`نسبة ضريبة ${k.label}`} />
+                        <span className="text-sm text-ink-500">%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="الرقم الضريبي"><input className="input" dir="ltr" value={draft.tax_number ?? ""} onChange={(e) => setDraft({ ...draft, tax_number: e.target.value })} /></Field>
-                {(draft.tax_rate_bp ?? 0) > 0 && <div className="sm:col-span-2"><Toggle checked={draft.prices_include_tax ?? false} onChange={(v) => setDraft({ ...draft, prices_include_tax: v })} label="الأسعار شاملة الضريبة" /></div>}
+                {TAX_KINDS.some((k) => taxOn(draft, k.key)) && <div className="self-end pb-2"><Toggle checked={draft.prices_include_tax ?? false} onChange={(v) => setDraft({ ...draft, prices_include_tax: v })} label="الأسعار شاملة الضريبة" /></div>}
               </div>
             </fieldset>
             {draft.id && <div className="mt-3"><Toggle checked={draft.is_active ?? true} onChange={(v) => setDraft({ ...draft, is_active: v })} label="فرع فعال (التعطيل يمنع حجوزات جديدة ولا يخفي التاريخ)" /></div>}

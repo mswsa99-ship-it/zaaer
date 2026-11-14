@@ -28,7 +28,9 @@ create or replace function t_direct_demote(p uuid) returns void language sql sec
 -- ---------- fixtures (synthetic) ----------
 -- owner 10..01 (all branches), supervisor 10..02 (branch 10), housekeeping 10..03 (branch 10), finance 10..04 (branch 10)
 -- branch B of the same org + a supervisor limited to it; a non-staff authenticated user; a deactivated staff
-insert into branches(id, organization_id, name_ar, tax_rate_bp) values ('00000000-0000-0000-0000-000000000012','00000000-0000-0000-0000-000000000001','فرع B (اختبار)', 1500) on conflict do nothing;
+-- (15% on everything taxable: the three switches of 0069 on at that rate, and the rent rate in force with them)
+insert into branches(id, organization_id, name_ar, tax_rate_bp, tax_rent_enabled, tax_rent_rate_bp, tax_services_enabled, tax_services_rate_bp, tax_products_enabled, tax_products_rate_bp)
+values ('00000000-0000-0000-0000-000000000012','00000000-0000-0000-0000-000000000001','فرع B (اختبار)', 1500, true, 1500, true, 1500, true, 1500) on conflict do nothing;
 insert into staff_profiles(id, auth_user_id, organization_id, full_name, email, role, is_active) values
  ('10000000-0000-0000-0000-000000000006','a0000000-0000-0000-0000-000000000006','00000000-0000-0000-0000-000000000001','استقبال B','supB@test.local','supervisor', true),
  ('10000000-0000-0000-0000-000000000007','a0000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000001','موظف معطل','off@test.local','supervisor', false),

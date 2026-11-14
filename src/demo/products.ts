@@ -22,9 +22,10 @@ export interface ProductsCtx {
   nextNumber: (prefix: string) => string;
   checkVersion: (cur: number, exp?: number | null) => void;
   atomically: <V>(fn: () => V) => V;
-  /** fn_add_charge: the line and its tax line; returns the line's id */
-  addCharge: (resId: string, kind: string, description: string, qty: number, unit: number, taxable: boolean, reason: string | null, from?: string | null, to?: string | null) => string;
-  reservationTax: (resId: string, amount: number, taxable: boolean) => { net: number; tax: number };
+  /** fn_add_charge_in('products', …, 'addon'): the line and its tax line, with the products' tax; returns the line's id */
+  addProductCharge: (resId: string, description: string, qty: number, unit: number, taxable: boolean, reason: string | null) => string;
+  /** fn_charge_tax(…, 'products', …): the products' tax of the policy the stay was made under (0069) */
+  productTax: (resId: string, amount: number, taxable: boolean) => { net: number; tax: number };
   recompute: (resId: string) => unknown;
   /** fn_create_voucher (receipt) */
   createVoucher: (p: Row) => Row;
@@ -76,6 +77,7 @@ export function productRpcs(ctx: ProductsCtx) {
     const r = byId("reservations", o.reservation_id);
     return {
       id: o.id, number: o.number, status: o.status, source: o.source, total_halalas: o.total_halalas,
+      tax_halalas: T("product_order_lines").filter((l) => l.order_id === o.id).reduce((x, l) => x + Number(l.tax_halalas ?? 0), 0), tax_included: !!r?.prices_include_tax,
       reservation_id: o.reservation_id, internal_ref: r?.internal_ref ?? null, room_number: byId("rooms", r?.room_id)?.room_number ?? null, branch_id: o.branch_id,
       created_at: o.created_at, paid_at: o.paid_at, delivered_at: o.delivered_at, cancelled_at: o.cancelled_at, cancel_reason: o.cancel_reason,
       voucher_number: byId("financial_vouchers", o.voucher_id)?.number ?? null, task_status: byId("housekeeping_tasks", o.task_id)?.status ?? null, version: o.version,
@@ -114,9 +116,9 @@ export function productRpcs(ctx: ProductsCtx) {
       const line = T("product_order_lines").find((l) => l.order_id === o.id && l.product_id === x.id);
       const q = (line?.quantity ?? 0) + qty.get(pid)!;
       if (q > 50) throw new Error("VALIDATION: order_quantity");
-      const { net, tax } = ctx.reservationTax(r.id, x.price_halalas * q, !!x.taxable);
-      if (line) Object.assign(line, { quantity: q, total_halalas: net + tax, unit_price_halalas: x.price_halalas, name: x.name, taxable: !!x.taxable });
-      else T("product_order_lines").push({ id: uid(), organization_id: ORG, order_id: o.id, product_id: x.id, name: x.name, unit_price_halalas: x.price_halalas, quantity: q, taxable: !!x.taxable, total_halalas: net + tax, created_at: nowISO() });
+      const { net, tax } = ctx.productTax(r.id, x.price_halalas * q, !!x.taxable);
+      if (line) Object.assign(line, { quantity: q, total_halalas: net + tax, tax_halalas: tax, unit_price_halalas: x.price_halalas, name: x.name, taxable: !!x.taxable });
+      else T("product_order_lines").push({ id: uid(), organization_id: ORG, order_id: o.id, product_id: x.id, name: x.name, unit_price_halalas: x.price_halalas, quantity: q, taxable: !!x.taxable, total_halalas: net + tax, tax_halalas: tax, created_at: nowISO() });
     }
     Object.assign(o, { total_halalas: T("product_order_lines").filter((l) => l.order_id === o.id).reduce((s, l) => s + l.total_halalas, 0), conversation_id: o.conversation_id ?? conversation, version: o.version + 1, updated_at: nowISO() });
     audit(r.branch_id, fresh ? "product_order.created" : "product_order.added", "product_order", o.id, { after: { number: o.number, items, source } });
@@ -226,7 +228,7 @@ export function productRpcs(ctx: ProductsCtx) {
     fn_staff_product_menu: ({ p_branch }) => {
       requireCap("voucher.receipt"); requireBranch(p_branch);
       return { categories: branchProducts(p_branch),
-        stays: T("reservations").filter((r) => r.branch_id === p_branch && r.status === "checked_in" && r.room_id).map((r) => ({ id: r.id, internal_ref: r.internal_ref, room_number: byId("rooms", r.room_id)?.room_number ?? null }))
+        stays: T("reservations").filter((r) => r.branch_id === p_branch && r.status === "checked_in" && r.room_id).map((r) => ({ id: r.id, internal_ref: r.internal_ref, room_number: byId("rooms", r.room_id)?.room_number ?? null, tax_rate_bp: r.tax_products_rate_bp ?? r.tax_rate_bp ?? 0, tax_included: !!r.prices_include_tax }))
           .sort((a, b) => String(a.room_number).localeCompare(String(b.room_number))) };
     },
     fn_staff_create_product_order: ({ p_reservation, p_items }) => {
@@ -251,12 +253,14 @@ export function productRpcs(ctx: ProductsCtx) {
       if (!lines.length) throw new Error("VALIDATION: items");
       if (r.status !== "checked_in" || !r.room_id) throw new Error("VALIDATION: not_in_stay");
       return ctx.atomically(() => {
-        // the lines join the stay's account (with their tax, as any charge)
+        // the lines join the stay's account as products, with the products' tax
         for (const l of lines.slice().sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : String(a.name).localeCompare(String(b.name), "ar")))) {
-          const cid = ctx.addCharge(r.id, "addon", `${l.name} × ${l.quantity}`, l.quantity, l.unit_price_halalas, !!l.taxable, "طلب " + o.number);
+          const cid = ctx.addProductCharge(r.id, `${l.name} × ${l.quantity}`, l.quantity, l.unit_price_halalas, !!l.taxable, "طلب " + o.number);
           for (const c of T("reservation_charges")) if (c.id === cid || c.base_charge_id === cid) c.product_order_id = o.id;
         }
         const amt = T("reservation_charges").filter((c) => c.product_order_id === o.id).reduce((s, c) => s + Number(c.total_halalas), 0);
+        // and they are exactly what the order showed
+        if (amt !== Number(o.total_halalas)) throw new Error("VALIDATION: order_total");
         // the receipt of exactly that amount, marked as this order's (its entry goes to product revenue)
         const v = ctx.createVoucher({ reservation_id: r.id, kind: "receipt", amount_halalas: amt, method: p.method, reference: p.reference ?? null, account_id: p.account_id ?? null,
           idempotency_key: key, duplicate_reference_ok: !!p.duplicate_reference_ok, note: "طلب منتجات " + o.number });
@@ -269,7 +273,7 @@ export function productRpcs(ctx: ProductsCtx) {
           assignee_id: null, scheduled_start: at, scheduled_end: null, started_at: null, completed_at: null, completed_by: null, cancelled_at: null, cancel_reason: null, description: `تسليم ${o.number}: ${items}`,
           result_note: null, images: [], version: 1, created_by: staffId(), created_at: at, updated_at: at };
         T("housekeeping_tasks").push(task);
-        Object.assign(o, { status: "paid", total_halalas: amt, voucher_id: vr.id, task_id: task.id, paid_at: at, paid_by: staffId(), version: o.version + 1, updated_at: at });
+        Object.assign(o, { status: "paid", voucher_id: vr.id, task_id: task.id, paid_at: at, paid_by: staffId(), version: o.version + 1, updated_at: at });
         notify(r.branch_id, DELIVERY, `${o.number} — غرفة ${byId("rooms", r.room_id)?.room_number ?? ""}`, "/staff/housekeeping");
         audit(r.branch_id, "product_order.paid", "product_order", o.id, { before: { status: "pending_payment" }, after: { status: "paid", number: o.number, amount_halalas: amt, voucher: vr.number, method: p.method } });
         emit("housekeeping_tasks"); emit("product_orders"); emit("financial_vouchers"); emit("reservation_charges"); ctx.recompute(r.id);
@@ -318,7 +322,8 @@ export function productRpcs(ctx: ProductsCtx) {
     fn_guest_products: ({ p_token }) => {
       const r = byId("reservations", tokenReservation(p_token))!;
       const open = T("product_orders").filter((o) => o.reservation_id === r.id && o.status === "pending_payment" && o.source === "whatsapp").sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
-      return { can_order: r.status === "checked_in" && !!r.room_id, categories: branchProducts(r.branch_id), open_order: open ? orderJson(open) : null };
+      return { can_order: r.status === "checked_in" && !!r.room_id, categories: branchProducts(r.branch_id),
+        tax: { rate_bp: r.tax_products_rate_bp ?? r.tax_rate_bp ?? 0, included: !!r.prices_include_tax }, open_order: open ? orderJson(open) : null };
     },
     fn_guest_order_products: ({ p_token, p_items, p_conversation = null }) => {
       const rid = tokenReservation(p_token);

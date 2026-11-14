@@ -36,8 +36,10 @@ export interface WaThread { id: string; guest_token: string | null }
 /** W1: what the stay's branch offers (fn_guest_products) and an order (fn_product_order_json) */
 export interface WaProduct { id: string; name: string; description: string | null; price_halalas: number }
 export interface WaProductCategory { id: string; name: string; products: WaProduct[] }
-export interface WaOrder { id: string; number: string; status: string; total_halalas: number; lines: Array<{ product_id: string; name: string; quantity: number; total_halalas: number }> }
-export interface WaShop { can_order: boolean; categories: WaProductCategory[]; open_order: WaOrder | null }
+export interface WaOrder { id: string; number: string; status: string; total_halalas: number; /** 0069: the part of the total that is tax */ tax_halalas?: number; lines: Array<{ product_id: string; name: string; quantity: number; total_halalas: number }> }
+export interface WaShop { can_order: boolean; categories: WaProductCategory[]; open_order: WaOrder | null;
+  /** 0069: the products' tax of the stay — its rate, and whether the prices carry it already */
+  tax?: { rate_bp: number; included: boolean } }
 /** an order placed or cancelled, or the refusal (the server's message: VALIDATION: …, NOT_FOUND, TOKEN_INVALID) */
 export type WaOrderResult = { order: WaOrder } | { error: string };
 export interface WaAssistantAnswer { reply: string; actions: AssistantAction[] }
@@ -190,12 +192,15 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     return null;
   };
   // a WhatsApp list holds 10 rows: a longer category goes in pages of 9 with «المزيد»
-  const showProducts = async (c: WaProductCategory, lead = "", page = 0) => {
+  /** how the listed prices are read when the stay's products are taxed: before the tax, or with it */
+  const priceNote = (d: WaShop) => !d.tax?.rate_bp ? "" : d.tax.included ? "\nالأسعار شاملة ضريبة القيمة المضافة"
+    : `\nالأسعار قبل ضريبة القيمة المضافة ${(d.tax.rate_bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+  const showProducts = async (c: WaProductCategory, lead = "", page = 0, note = "") => {
     const paged = c.products.length > 10;
     const from = paged ? Math.min(page, Math.ceil(c.products.length / 9) - 1) * 9 : 0;
     const part = paged ? c.products.slice(from, from + 9) : c.products;
     const more = paged && from + 9 < c.products.length;
-    const text = `${lead}${c.name} — اختر المنتج:`;
+    const text = `${lead}${c.name} — اختر المنتج:${note}`;
     await say(listPayload(m.from, text, "المنتجات", [
       ...part.map((x) => ({ id: "PADD:" + x.id, title: x.name, description: [sarText(x.price_halalas), x.description].filter(Boolean).join(" · ") })),
       ...(more ? [{ id: `PCAT:${c.id}:${from / 9 + 1}`, title: "المزيد…", description: `بقية ${c.name}` }] : []),
@@ -204,11 +209,12 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
   const showCategories = async (data: WaShop, lead = "") => {
     if (!data.categories.length) return say(buttonsPayload(m.from, WA_TEXTS.shopEmpty, [staffBtn]), WA_TEXTS.shopEmpty);
     const open = data.open_order ? `\n\nلديك طلب بانتظار الدفع بمبلغ ${sarText(data.open_order.total_halalas)} — رقمه ${data.open_order.number}` : "";
-    if (data.categories.length === 1) return showProducts(data.categories[0], lead + (open ? open.trim() + "\n\n" : ""));
-    const text = `${lead}المنتجات المتاحة لك — اختر الفئة:${open}`;
+    if (data.categories.length === 1) return showProducts(data.categories[0], lead + (open ? open.trim() + "\n\n" : ""), 0, priceNote(data));
+    const text = `${lead}المنتجات المتاحة لك — اختر الفئة:${priceNote(data)}${open}`;
     await say(listPayload(m.from, text, "الفئات", data.categories.slice(0, 10).map((c) => ({ id: "PCAT:" + c.id, title: c.name, description: productsAr(c.products.length) }))), text);
   };
-  const orderText = (o: WaOrder) => [...o.lines.map((l) => `• ${l.quantity} × ${l.name} — ${sarText(l.total_halalas)}`), `الإجمالي: ${sarText(o.total_halalas)}`].join("\n");
+  const orderText = (o: WaOrder) => [...o.lines.map((l) => `• ${l.quantity} × ${l.name} — ${sarText(l.total_halalas)}`), `الإجمالي: ${sarText(o.total_halalas)}`,
+    ...(o.tax_halalas ? [`منها ضريبة القيمة المضافة: ${sarText(o.tax_halalas)}`] : [])].join("\n");
   const shopTurn = async (id: string) => {
     if (id.startsWith("PCANCEL:")) {
       const number = id.slice(8);
@@ -228,7 +234,7 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     if (id.startsWith("PCAT:")) {
       const [, cid, pg] = id.split(":");
       const c = s.data.categories.find((x) => x.id === cid);
-      return c ? showProducts(c, "", Math.max(0, Number(pg) || 0)) : showCategories(s.data, "هذه الفئة لم تعد متاحة.\n");
+      return c ? showProducts(c, "", Math.max(0, Number(pg) || 0), priceNote(s.data)) : showCategories(s.data, "هذه الفئة لم تعد متاحة.\n");
     }
     if (id.startsWith("PADD:")) {
       const x = all.find((y) => y.id === id.slice(5));

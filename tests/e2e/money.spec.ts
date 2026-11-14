@@ -138,11 +138,13 @@ test.describe("core money (phase 1)", () => {
     expect(await rows.count()).toBeLessThan(before);
   });
 
-  test("MC13a tax belongs to the owner: the manager sees it locked; at zero tax no tax line is quoted; the owner's 15% applies to new quotes", async ({ page, loginAs, go }) => {
+  test("MC13a tax belongs to the owner: the manager sees it locked; at zero tax no tax line is quoted; the owner's 15% on rent applies to new quotes", async ({ page, loginAs, go }) => {
     await loginAs("manager");
     await go("/admin/branches");
     await page.getByRole("button", { name: /^تعديل فرع الرياض/ }).click();
-    await expect(page.getByLabel("نسبة الضريبة")).toBeDisabled();
+    // 0069 (W2): a switch and a rate for each of rent, services and products — all locked for anyone but the owner
+    for (const k of ["الإيجار", "الخدمات", "المنتجات"]) await expect(page.getByRole("switch", { name: `ضريبة ${k}` })).toBeDisabled();
+    await expect(page.getByLabel("نسبة ضريبة الإيجار")).toBeDisabled();
     await expect(page.getByTestId("branch-tax")).toContainText("يعدّلها المالك فقط");
     await page.getByRole("dialog").getByRole("button", { name: "إلغاء" }).click();
 
@@ -155,13 +157,46 @@ test.describe("core money (phase 1)", () => {
     await go("/admin/branches");
     await expect(page.getByText(/بلا ضريبة/).first()).toBeVisible();
     await page.getByRole("button", { name: /^تعديل فرع الرياض/ }).click();
-    await page.getByLabel("نسبة الضريبة").fill("15");
+    await page.getByRole("switch", { name: "ضريبة الإيجار" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(page.getByText(/ضريبة 15\.00%/).first()).toBeVisible();
+    await expect(page.getByText(/ضريبة: الإيجار 15% \(غير شاملة\)/).first()).toBeVisible();
 
     await go("/staff/reservations/new");
     await expect(page.getByText(/^الضريبة 15%/)).toBeVisible();
+  });
+
+  test("VT40 the tax switches: off by default with a rate ready; the owner turns products on at 5% and services on, the card says what is taxed; a rate of zero is refused with its reason", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/admin/branches");
+    await page.getByRole("button", { name: /^تعديل فرع الرياض/ }).click();
+    const dlg = page.getByRole("dialog");
+    for (const k of ["الإيجار", "الخدمات", "المنتجات"]) {
+      await expect(dlg.getByRole("switch", { name: `ضريبة ${k}` })).toHaveAttribute("aria-checked", "false");
+      await expect(dlg.getByLabel(`نسبة ضريبة ${k}`)).toHaveValue("15");
+      await expect(dlg.getByLabel(`نسبة ضريبة ${k}`)).toBeDisabled();          // a rate is typed once its switch is on
+    }
+    await expect(dlg.getByLabel("الأسعار شاملة الضريبة")).toHaveCount(0);        // asked only when something is taxed
+    await dlg.getByRole("switch", { name: "ضريبة المنتجات" }).click();
+    await dlg.getByLabel("نسبة ضريبة المنتجات").fill("0");
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(dlg.getByRole("alert")).toContainText("نسبة الضريبة بين 0.01% و100%");
+    await dlg.getByLabel("نسبة ضريبة المنتجات").fill("5");
+    await dlg.getByRole("switch", { name: "ضريبة الخدمات" }).click();
+    await expect(dlg.getByLabel("الأسعار شاملة الضريبة")).toBeVisible();
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(dlg).toBeHidden();
+    await expect(page.getByText(/ضريبة: الخدمات 15%، المنتجات 5% \(غير شاملة\)/).first()).toBeVisible();
+    // the rent is not taxed: a new quote has no tax line
+    await go("/staff/reservations/new");
+    await expect(page.getByText("الإجمالي").first()).toBeVisible();
+    await expect(page.getByText(/^الضريبة/)).toHaveCount(0);
+    // opened again, the switches are as saved
+    await go("/admin/branches");
+    await page.getByRole("button", { name: /^تعديل فرع الرياض/ }).click();
+    await expect(dlg.getByRole("switch", { name: "ضريبة المنتجات" })).toHaveAttribute("aria-checked", "true");
+    await expect(dlg.getByLabel("نسبة ضريبة المنتجات")).toHaveValue("5");
+    await expect(dlg.getByRole("switch", { name: "ضريبة الإيجار" })).toHaveAttribute("aria-checked", "false");
   });
 });
 

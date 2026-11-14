@@ -238,7 +238,9 @@ export const VALIDATION_AR: Record<string, string> = {
   vouchers: "اختر دفعة واحدة على الأقل.",
   payout_vouchers: "بعض الدفعات المختارة ليست دفعات آجلة غير مطابقة لهذه المنصة في هذا الفرع.",
   payout_status: "هذه المطابقة ملغاة مسبقًا.",
-  tax_rate: "نسبة الضريبة بين 0 و100%.",
+  tax_rate: "نسبة الضريبة بين 0.01% و100%.",
+  tax_switch: "مفتاح الضريبة إما مفعّل أو مطفأ.",
+  tax_category: "نوع الضريبة غير معروف.",
   // products and orders (0068, W1)
   category_name: "اسم الفئة مطلوب، 40 حرفًا على الأكثر.",
   product_name: "اسم المنتج مطلوب، 40 حرفًا على الأكثر.",
@@ -258,6 +260,7 @@ export const VALIDATION_AR: Record<string, string> = {
   order_delivered: "سُلّم الطلب فلا يُلغى من هنا.",
   order_cancel_day: "دُفع هذا الطلب في يوم سابق أو سُوّيت نقاط بيع يومه، فلا يُلغى سنده من هنا. إن سُلّم فأتمّ مهمته، وإن لم يُسلَّم فراجع المالك لرد المبلغ.",
   order_invoiced: "بنود هذا الطلب على فاتورة صادرة، فلا تُعكس من هنا.",
+  order_total: "مجموع الطلب لا يطابق بنوده؛ ألغِ الطلب وأنشئه من جديد.",
   days: "الفترة من يوم إلى 90 يومًا.",
   // 0059 (OWNER-08): one limit for the reports' period
   period_too_long: "الفترة أطول من 366 يومًا؛ اختر فترة أقصر.", objection_note: "اكتب ما تعترض عليه أو ما تطلب توضيحه (3 أحرف على الأقل).", outcome: "نتيجة المراجعة غير صحيحة.", period_future: "الفترة كلها بعد اليوم؛ لا حركة فيها بعد.",
@@ -820,10 +823,12 @@ export interface ProductRow { id: string; category_id: string; name: string; des
 export interface ProductsAdmin { categories: ProductCategoryRow[]; products: ProductRow[]; branches: Array<{ id: string; name: string; mine: boolean }> }
 export interface MenuCategory { id: string; name: string; products: Array<{ id: string; name: string; description: string | null; price_halalas: number }> }
 export interface ProductOrderLine { product_id: string; name: string; quantity: number; unit_price_halalas: number; total_halalas: number }
-export interface ProductOrder { id: string; number: string; status: ProductOrderStatus; source: "whatsapp" | "staff"; total_halalas: number; reservation_id: string;
+export interface ProductOrder { id: string; number: string; status: ProductOrderStatus; source: "whatsapp" | "staff"; total_halalas: number;
+  /** 0069: the part of the total that is tax, and whether the prices carried it already */
+  tax_halalas: number; tax_included: boolean; reservation_id: string;
   internal_ref: string | null; room_number: string | null; branch_id: string; created_at: string; paid_at: string | null; delivered_at: string | null;
   cancelled_at: string | null; cancel_reason: string | null; voucher_number: string | null; task_status: string | null; version: number; lines: ProductOrderLine[] }
-export interface ProductMenu { categories: MenuCategory[]; stays: Array<{ id: string; internal_ref: string; room_number: string | null }> }
+export interface ProductMenu { categories: MenuCategory[]; stays: Array<{ id: string; internal_ref: string; room_number: string | null; tax_rate_bp: number; tax_included: boolean }> }
 
 export const productsApi = {
   admin: () => rpc<ProductsAdmin>("fn_admin_products", {}),

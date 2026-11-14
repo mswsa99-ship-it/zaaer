@@ -459,6 +459,7 @@ select tp_record('PD14b its own reading gives the order without a stay, not noth
   (select fn_product_order_json(id)->>'number' from product_orders where number = 'ORD-PURGED-1') = 'ORD-PURGED-1');
 
 -- ---------------------------------------------------------------- results
+\set ON_ERROR_STOP on
 select case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from test_results order by name;
 do $$
 declare n int; f int;

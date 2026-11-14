@@ -126,7 +126,10 @@ function OrderCard({ o, canCancelPaid, onPay, onCancel }: { o: ProductOrder; can
             {o.internal_ref && <> · <Link className="text-brand-700 hover:underline" to={`/staff/reservations/${o.reservation_id}`}><span dir="ltr">{o.internal_ref}</span></Link></>}
           </p>
         </div>
-        <span dir="ltr" className="text-lg font-bold tabular-nums text-ink-900" data-testid="order-total">{sar(o.total_halalas)}</span>
+        <div className="text-left">
+          <span dir="ltr" className="text-lg font-bold tabular-nums text-ink-900" data-testid="order-total">{sar(o.total_halalas)}</span>
+          <TaxNote order={o} />
+        </div>
       </div>
       <ul className="mt-3 space-y-1 text-sm" data-testid="order-lines">
         {o.lines.map((l) => (
@@ -179,6 +182,7 @@ function PayForm({ order, branchId, onDone, onChanged, onCancel }: { order: Prod
       <div className="mb-3 rounded-xl bg-ink-50 p-3 text-sm">
         <div className="flex items-baseline justify-between gap-2"><span>الطلب <span dir="ltr" className="font-mono">{order.number}</span> — غرفة {order.room_number ?? "—"}</span>
           <span dir="ltr" className="font-bold tabular-nums">{sar(order.total_halalas)}</span></div>
+        <TaxNote order={order} />
         <ul className="mt-2 space-y-0.5 text-xs text-ink-600">{order.lines.map((l) => <li key={l.product_id}><span dir="ltr">{l.quantity}</span> × {l.name}</li>)}</ul>
       </div>
       <p className="mb-3 text-xs text-ink-500">يُضاف الطلب إلى حساب الإقامة ويُسدَّد بسند قبض بالمبلغ نفسه، فلا يتغير المتبقي على الإقامة، وتُنشأ مهمة التسليم للغرفة.</p>
@@ -206,6 +210,13 @@ function CancelForm({ order, onDone, onCancel }: { order: ProductOrder; onDone: 
   );
 }
 
+const taxPct = (bp: number) => `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+/** How much of an order's total is value-added tax (0069); nothing when it carries none. */
+function TaxNote({ order }: { order: ProductOrder }) {
+  if (!order.tax_halalas) return null;
+  return <p className="text-xs text-ink-500" data-testid="order-tax">{order.tax_included ? "شامل ضريبة" : "منها ضريبة"} <span dir="ltr" className="tabular-nums">{sar(order.tax_halalas)}</span></p>;
+}
+
 function CreateForm({ branchId, onDone, onCancel }: { branchId: string; onDone: () => void; onCancel: () => void }) {
   const [menu, setMenu] = useState<ProductMenu | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -219,6 +230,8 @@ function CreateForm({ branchId, onDone, onCancel }: { branchId: string; onDone: 
   const prices = useMemo(() => new Map((menu?.categories ?? []).flatMap((c) => c.products.map((p) => [p.id, p.price_halalas] as const))), [menu]);
   const items = Object.entries(qty).filter(([, n]) => n > 0).map(([product_id, quantity]) => ({ product_id, quantity }));
   const subtotal = items.reduce((s, i) => s + (prices.get(i.product_id) ?? 0) * i.quantity, 0);
+  // 0069: the products' tax of the policy the chosen stay was made under
+  const tax = menu?.stays.find((x) => x.id === stay);
   const step = (id: string, d: number) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(50, (q[id] ?? 0) + d)) }));
 
   if (err) return <LoadErrorCard message={err} />;
@@ -254,7 +267,8 @@ function CreateForm({ branchId, onDone, onCancel }: { branchId: string; onDone: 
           </section>
         ))}
       </div>
-      <p className="mt-3 text-sm text-ink-700">المجموع بأسعار المنتجات: <span dir="ltr" className="font-semibold tabular-nums" data-testid="order-subtotal">{sar(subtotal)}</span> <span className="text-xs text-ink-400">— وضريبة الفرع عليه كما على خدمات الإقامة.</span></p>
+      <p className="mt-3 text-sm text-ink-700">المجموع بأسعار المنتجات: <span dir="ltr" className="font-semibold tabular-nums" data-testid="order-subtotal">{sar(subtotal)}</span>{" "}
+        <span className="text-xs text-ink-400" data-testid="order-tax-rule">{!tax?.tax_rate_bp ? "— بلا ضريبة على منتجات هذه الإقامة." : tax.tax_included ? `— شامل ضريبة القيمة المضافة ${taxPct(tax.tax_rate_bp)} للخاضع منها.` : `— وتُضاف ضريبة القيمة المضافة ${taxPct(tax.tax_rate_bp)} على الخاضع منها عند الإنشاء.`}</span></p>
       <Submit label="إنشاء الطلب" onCancel={onCancel} />
     </ActionForm>
   );

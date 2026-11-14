@@ -138,7 +138,7 @@ export default function AdminProducts() {
               <Field label="اسم المنتج" className="sm:col-span-2"><input className="input" maxLength={40} value={product.name ?? ""} onChange={(e) => setProduct({ ...product, name: e.target.value })} aria-label="اسم المنتج" /></Field>
               <Field label="الفئة"><select className="input" value={product.category_id ?? ""} onChange={(e) => setProduct({ ...product, category_id: e.target.value })} aria-label="الفئة">
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}{c.is_active ? "" : " (موقوفة)"}</option>)}</select></Field>
-              <Field label="السعر" hint="كما يراه النزيل؛ وضريبة الفرع عليه كما على خدمات الإقامة."><MoneyInput valueHalalas={product.price_halalas ?? null} onChange={(h) => setProduct({ ...product, price_halalas: h as number })} label="السعر" /></Field>
+              <Field label="السعر" hint="كما يراه النزيل؛ وضريبة المنتجات عليه إن فعّلها المالك في إعدادات الفرع."><MoneyInput valueHalalas={product.price_halalas ?? null} onChange={(h) => setProduct({ ...product, price_halalas: h as number })} label="السعر" /></Field>
               <Field label="الوصف (اختياري)" className="sm:col-span-2" hint="سطر قصير يظهر للنزيل تحت الاسم (200 حرف على الأكثر)."><input className="input" maxLength={200} value={product.description ?? ""} onChange={(e) => setProduct({ ...product, description: e.target.value })} aria-label="الوصف" /></Field>
             </div>
             <div className="mt-3 flex flex-wrap gap-4">
