@@ -39,6 +39,24 @@ test.describe("products and orders", () => {
     await expect(dlg.getByRole("alert")).toContainText("الاسم مستخدم مسبقًا");
   });
 
+  test("PD43 the owner pastes a list: it is read line by line first, a bad line says why, then the new products are added and made available", async ({ page, loginAs, go }) => {
+    await loginAs("owner");
+    await go("/admin/products");
+    await page.getByRole("button", { name: "استيراد قائمة" }).click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByLabel("القائمة").fill(["حلويات، كعك، 6.50", "حلويات، معمول، ٤", "مشروبات، ماء صغير، 2", "حلويات، بلا سعر"].join("\n"));
+    await expect(dlg.getByTestId("import-preview")).toContainText("سيُضاف منتجان. وتُنشأ فئة: حلويات.");
+    await expect(dlg.getByTestId("import-line").filter({ hasText: "ماء صغير" })).toContainText("موجود — يُترك");
+    await expect(dlg.getByTestId("import-line").filter({ hasText: "بلا سعر" })).toContainText("السعر غير مقروء");
+    await dlg.getByRole("button", { name: "استيراد منتجان" }).click();
+    await expect(dlg).toBeHidden();
+    const cat = page.getByTestId("product-category").filter({ hasText: "حلويات" });
+    await expect(cat.getByTestId("product-card")).toHaveCount(2);
+    await expect(cat.getByTestId("product-card").filter({ hasText: "معمول" })).toContainText("4.00");
+    // made available in the branches ticked (all of the owner's by default)
+    for (const sw of await cat.getByTestId("product-card").first().getByRole("switch").all()) await expect(sw).toHaveAttribute("aria-checked", "true");
+  });
+
   test("PD41 the reception orders for a guest in their room, takes the payment, and the order is delivered when its task is done", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await go("/staff/orders");

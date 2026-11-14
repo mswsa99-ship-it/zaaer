@@ -192,6 +192,33 @@ describe("products and orders in the demo (W1)", () => {
   });
 });
 
+describe("the owner's list, pasted once («استيراد قائمة», W1)", () => {
+  it("PD28 each line is a category, a product and a price (Arabic digits and «ر.س» read); a bad line says why; a name already there, or twice in the list, is left", async () => {
+    const { parseProductList } = await import("../../src/lib/productImport");
+    const lines = parseProductList([
+      "مشروبات، ماء صغير، 2",
+      "مشروبات، قهوة، ٥٫٥٠ ر.س، ظرفان مع كوب",
+      "مستلزمات شخصية\tشاحن جوال\t25",
+      "",
+      "مشروبات, عصير, 1,250",
+      "مشروبات، بلا سعر",
+      "مشروبات، ماء صغير، 3",
+      "وجبات، بسكويت، 3",
+      "مشروبات, حليب, 3.5 ريال, علبة صغيرة",
+    ].join("\n"), ["بسكويت"]);
+    expect(lines.map((l) => [l.n, l.category, l.name, l.price, l.description, l.problem, l.existing])).toEqual([
+      [1, "مشروبات", "ماء صغير", 200, null, null, false],
+      [2, "مشروبات", "قهوة", 550, "ظرفان مع كوب", null, false],
+      [3, "مستلزمات شخصية", "شاحن جوال", 2500, null, null, false],
+      [5, "مشروبات", "عصير", 125000, null, null, false],
+      [6, "مشروبات", "بلا سعر", null, null, "السعر غير مقروء (بالريال، مثل 2.50)", false],
+      [7, "مشروبات", "ماء صغير", 300, null, null, true],
+      [8, "وجبات", "بسكويت", 300, null, null, true],
+      [9, "مشروبات", "حليب", 350, "علبة صغيرة", null, false],
+    ]);
+  });
+});
+
 describe("ordering on WhatsApp, end to end on the reception computer (W1)", () => {
   const branchOfBridge = async () => {
     const list = await rpc<Array<{ branch_id: string; mode: string }>>("fn_admin_whatsapp_channels", {});

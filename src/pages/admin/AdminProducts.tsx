@@ -4,16 +4,16 @@
  * (or a manager, in their own branches) makes it available in. An order keeps the name and the price it was placed
  * with; changing a product here reaches the next orders only.
  */
-import { useEffect, useState } from "react";
-import { Package, Plus, Pencil, Tags } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Package, Plus, Pencil, Tags, ListPlus } from "lucide-react";
 import { productsApi, toArabicError, type ProductsAdmin, type ProductRow, type ProductCategoryRow } from "../../lib/api";
 import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, EmptyState } from "../../components/ui";
 import { Field, Modal, ActionForm, Submit, Toggle, MoneyInput } from "../../components/forms";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, COUNT } from "../../lib/utils";
+import { parseProductList } from "../../lib/productImport";
 
 const sar = (h: number) => formatCurrency(h / 100);
-/** Arabic counting: لا منتجات، منتج واحد، منتجان، 3–10 منتجات، 11+ منتجًا */
-export const productsCount = (n: number) => (n === 0 ? "لا منتجات" : n === 1 ? "منتج واحد" : n === 2 ? "منتجان" : n <= 10 ? `${n} منتجات` : `${n} منتجًا`);
+
 
 export default function AdminProducts() {
   const [data, setData] = useState<ProductsAdmin | null>(null);
@@ -23,6 +23,7 @@ export default function AdminProducts() {
   const [category, setCategory] = useState<Partial<ProductCategoryRow> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [rowErr, setRowErr] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const reload = () => setTick((t) => t + 1);
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function AdminProducts() {
     <div>
       <SectionTitle title="المنتجات" subtitle="منتجات بلا مخزون يطلبها النزيل المقيم من واتساب أو يطلبها له الاستقبال، ويُتاح كل منتج في الفروع التي تختارها" action={
         <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn-outline text-sm" onClick={() => setImporting(true)}><ListPlus className="h-4 w-4" /> استيراد قائمة</button>
           <button type="button" className="btn-outline text-sm" onClick={() => setCategory({ name: "" })}><Tags className="h-4 w-4" /> فئة جديدة</button>
           <button type="button" className="btn-primary text-sm" disabled={categories.length === 0} title={categories.length === 0 ? "أضف فئة أولًا" : undefined}
             onClick={() => setProduct({ name: "", category_id: categories.find((c) => c.is_active)?.id ?? categories[0]?.id, taxable: true, price_halalas: null as unknown as number })}><Plus className="h-4 w-4" /> منتج جديد</button>
@@ -52,7 +54,7 @@ export default function AdminProducts() {
       </p>
       {rowErr && <p className="mb-3 text-sm text-danger-600" role="alert">{rowErr}</p>}
       {categories.length === 0 ? (
-        <EmptyState icon={<Package className="h-10 w-10" />} title="لا منتجات بعد" description="ابدأ بفئة مثل «مشروبات» أو «مستلزمات شخصية»، ثم أضف منتجاتها بأسعارها، ثم أتحها للفروع." />
+        <EmptyState icon={<Package className="h-10 w-10" />} title="لا منتجات بعد" description="الصق قائمتك بزر «استيراد قائمة» (سطر لكل منتج: الفئة، المنتج، السعر)، أو ابدأ بفئة مثل «مشروبات» ثم أضف منتجاتها، ثم أتحها للفروع." />
       ) : (
         <div className="space-y-6" data-testid="product-catalogue">
           {categories.map((c) => {
@@ -62,7 +64,7 @@ export default function AdminProducts() {
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <h2 className={`text-base font-semibold ${c.is_active ? "text-ink-800" : "text-ink-400 line-through"}`}>{c.name}</h2>
-                    <Badge className="bg-ink-100 text-ink-600">{productsCount(items.length)}</Badge>
+                    <Badge className="bg-ink-100 text-ink-600">{COUNT.product(items.length)}</Badge>
                     {!c.is_active && <Badge className="bg-warning-500/10 text-warning-700">موقوفة — لا تظهر للنزلاء</Badge>}
                   </div>
                   <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => setCategory(c)} aria-label={`تعديل الفئة ${c.name}`}><Pencil className="h-3.5 w-3.5" /> تعديل الفئة</button>
@@ -104,6 +106,9 @@ export default function AdminProducts() {
           })}
         </div>
       )}
+      <Modal open={importing} title="استيراد قائمة منتجات" onClose={() => { setImporting(false); reload(); }} wide>
+        {importing && <ImportForm data={data} onDone={() => { setImporting(false); reload(); }} />}
+      </Modal>
       <Modal open={!!category} title={category?.id ? "تعديل فئة" : "فئة جديدة"} onClose={() => setCategory(null)}>
         {category && (
           <ActionForm onSubmit={async () => {
@@ -145,6 +150,91 @@ export default function AdminProducts() {
           </ActionForm>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/** «استيراد قائمة»: the owner pastes the list once; the categories that do not exist yet are made, then the products,
+ *  then each is made available in the branches ticked. Every step goes through the same functions (and the same log)
+ *  as the forms above; a line that fails says why, the others stay done. */
+function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void }) {
+  const [text, setText] = useState("");
+  const mine = data.branches.filter((b) => b.mine);
+  const [branches, setBranches] = useState<string[]>(mine.map((b) => b.id));
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<Record<number, string | true>>({});
+  const lines = useMemo(() => parseProductList(text, data.products.map((p) => p.name)), [text, data.products]);
+  const todo = lines.filter((l) => !l.problem && !l.existing);
+  const known = new Set(data.categories.map((c) => c.name.trim().toLowerCase()));
+  const newCats = [...new Map(todo.filter((l) => !known.has(l.category.toLowerCase())).map((l) => [l.category.toLowerCase(), l.category] as const)).values()];
+  const done = Object.values(results).filter((r) => r === true).length;
+  const failed = Object.values(results).filter((r) => r !== true).length;
+
+  async function run() {
+    setBusy(true);
+    const cats = new Map(data.categories.map((c) => [c.name.trim().toLowerCase(), c.id] as const));
+    const out: Record<number, string | true> = {};
+    for (const l of todo) {
+      try {
+        let cid = cats.get(l.category.toLowerCase());
+        if (!cid) { cid = (await productsApi.upsertCategory({ name: l.category })).id; cats.set(l.category.toLowerCase(), cid); }
+        const r = await productsApi.upsertProduct({ category_id: cid, name: l.name, price_halalas: l.price!, description: l.description, taxable: true });
+        for (const b of branches) await productsApi.setBranch(r.id, b, true);
+        out[l.n] = true;
+      } catch (e) { out[l.n] = toArabicError(e); }
+      setResults({ ...out });
+    }
+    setBusy(false);
+    if (Object.values(out).every((r) => r === true)) onDone();
+  }
+
+  return (
+    <div>
+      <Field label="القائمة" hint="سطر لكل منتج: الفئة، اسم المنتج، السعر بالريال، ثم الوصف إن وُجد. مثال: مشروبات، ماء صغير، 2">
+        <textarea className="input font-normal" rows={8} value={text} onChange={(e) => { setText(e.target.value); setResults({}); }} aria-label="القائمة"
+          placeholder={"مشروبات، ماء صغير، 2\nمشروبات، قهوة، 5، ظرفان مع كوب\nمستلزمات شخصية، شاحن جوال، 25"} />
+      </Field>
+      {mine.length > 0 && (
+        <fieldset className="mt-3">
+          <legend className="mb-1 text-sm text-ink-700">أتح المنتجات المستوردة في:</legend>
+          <div className="flex flex-wrap gap-3">
+            {mine.map((b) => (
+              <label key={b.id} className="flex min-h-[44px] items-center gap-2 text-sm">
+                <input type="checkbox" checked={branches.includes(b.id)} onChange={(e) => setBranches((x) => (e.target.checked ? [...x, b.id] : x.filter((y) => y !== b.id)))} /> {b.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      {lines.length > 0 && (
+        <div className="mt-3" data-testid="import-preview">
+          <p className="mb-2 text-sm text-ink-700">
+            {todo.length ? `سيُضاف ${COUNT.product(todo.length)}.${newCats.length ? ` وتُنشأ فئة: ${newCats.join("، ")}.` : ""}` : "لا شيء جديد للإضافة."}
+            {lines.some((l) => l.existing) ? " الموجود من قبل يُترك كما هو." : ""}
+          </p>
+          <ul className="max-h-64 divide-y divide-ink-50 overflow-y-auto rounded-xl border border-ink-100 text-sm">
+            {lines.map((l) => {
+              const r = results[l.n];
+              return (
+                <li key={l.n} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2" data-testid="import-line">
+                  <span className="min-w-0"><span className="text-ink-400 tabular-nums" dir="ltr">{l.n}</span> {l.name || "—"} <span className="text-xs text-ink-500">· {l.category || "—"}</span></span>
+                  <span className="text-xs">
+                    {l.problem ? <span className="text-danger-600">{l.problem}</span>
+                      : l.existing ? <span className="text-ink-500">موجود — يُترك</span>
+                      : r === true ? <span className="text-success-700">أُضيف</span>
+                      : r ? <span className="text-danger-600">{r}</span>
+                      : <span dir="ltr" className="tabular-nums text-ink-700">{sar(l.price!)}</span>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      {failed > 0 && <p className="mt-2 text-sm text-danger-600" role="alert">أُضيف {COUNT.product(done)}، وتعذّر {COUNT.product(failed)}؛ سبب كل منها بجانبه. صحّح السطر ثم استورد من جديد (ما أُضيف يُترك).</p>}
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <button type="button" className="btn-primary" disabled={busy || todo.length === 0} onClick={run}>{busy ? "جارٍ الاستيراد…" : todo.length ? `استيراد ${COUNT.product(todo.length)}` : "استيراد"}</button>
+      </div>
     </div>
   );
 }

@@ -231,7 +231,9 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await dialog.getByTestId("task-end-input").fill(start.slice(0, 11) + "00:00");
     await dialog.getByRole("button", { name: "إنشاء" }).click();
     await expect(dialog).toContainText("نهاية المهمة لا تسبق بدايتها");
-    await dialog.getByTestId("task-end-input").fill(start.slice(0, 11) + "23:30");
+    // the next day: later than the start whatever the hour the test runs at (23:30 the same day was before a start after 23:30)
+    const next = new Date(Date.parse(start.slice(0, 10) + "T12:00:00Z") + 86_400_000).toISOString().slice(0, 10);
+    await dialog.getByTestId("task-end-input").fill(next + "T09:30");
     await dialog.getByRole("button", { name: "إنشاء" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByTestId("task-end").first()).toContainText("النهاية");
