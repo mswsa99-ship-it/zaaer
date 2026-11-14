@@ -10,7 +10,8 @@
 --            no «مدفوع» written from outside the server, the guest's «مدفوع» comes from the server's own state.
 -- D05        a facility untouched for a month stays in the administration (decision 53): nothing is removed for
 --            not being used.
--- AX01       a visitor with no account executes only the eighteen functions the guest pages call (0045; 0055 adds the organisation's name; 0058 the children).
+-- AX01       a visitor with no account executes only the twenty-four functions the guest pages call (0045; 0055 adds the organisation's name; 0058 the children;
+--            0070 the check-out options, the departure and the review's page; 0071 the unit's way in and out).
 -- Runs after permissions_tests.sql on the same database (its organisation, branches 010 and 012, staff).
 -- =====================================================================
 \set ON_ERROR_STOP off
@@ -325,7 +326,12 @@ do $$ declare guest text[] := array['fn_guest_phone_verify(p_phone text, p_code 
                         'fn_guest_access_code(p_token text)', 'fn_guest_stay_summary(p_token text)', 'fn_guest_acknowledge(p_token text, p_hash text)',
                         'fn_public_branch(p_branch uuid)', 'fn_branch_media(p_branch uuid, p_kind text)', 'fn_public_whatsapp(p_branch uuid)',
                         'fn_public_organization()', 'fn_public_branch_guide(p_branch uuid)', 'fn_branch_photo(p_id uuid)',
-                        'fn_guest_children(p_token text)', 'fn_guest_set_children(p_token text, p_ages jsonb)'];
+                        'fn_guest_children(p_token text)', 'fn_guest_set_children(p_token text, p_ages jsonb)',
+                        -- 0070 (W3–W5): the check-out options, «غادرت وسلّمت المفتاح», the review's page
+                        'fn_guest_checkout(p_token text)', 'fn_guest_checkout_choose(p_token text, p_choice text, p_hours integer, p_via text)',
+                        'fn_guest_departure(p_token text, p_via text)', 'fn_public_review(p_token text)', 'fn_public_submit_review(p_token text, p jsonb)',
+                        -- 0071 (W7): the unit's way in and out, once approved
+                        'fn_guest_unit_guide(p_token text, p_purpose text)'];
   open_now text[]; extra text[]; missing text[]; loose text[]; s text; begin
   select coalesce(array_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' order by 1), '{}') into open_now from pg_proc p
    where p.pronamespace = 'public'::regnamespace and p.proname !~ '^t_'
@@ -340,10 +346,10 @@ do $$ declare guest text[] := array['fn_guest_phone_verify(p_phone text, p_code 
   set local role anon;
   s := t_fails('select fn_staff_check_in(''{}''::jsonb)', '%permission denied%');
   reset role;
-  perform t_record('AX01 a visitor with no account executes the eighteen functions the guest pages call and nothing else: a staff function is refused before it runs',
+  perform t_record('AX01 a visitor with no account executes the twenty-four functions the guest pages call and nothing else: a staff function is refused before it runs',
     cardinality(extra) = 0 and cardinality(missing) = 0 and cardinality(loose) = 0 and s = 'ok',
     'extra ' || extra::text || ' missing ' || missing::text || ' loose ' || loose::text || ' / ' || s);
-exception when others then perform t_record('AX01 a visitor with no account executes the eighteen functions the guest pages call and nothing else: a staff function is refused before it runs', false, sqlerrm); end $$;
+exception when others then perform t_record('AX01 a visitor with no account executes the twenty-four functions the guest pages call and nothing else: a staff function is refused before it runs', false, sqlerrm); end $$;
 
 -- =====================================================================
 -- RESULTS

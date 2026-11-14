@@ -968,7 +968,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     }
     let reference: string | null = null, account_id: string | null = null;
     let paid: string[] = []; const methodReason = String(p.method_reason ?? "").trim() || null;
-    if (p.kind !== "deposit_apply") { if (!ACTIVE_METHODS.includes(method)) throw new Error("VALIDATION: method_retired"); if (p.kind === "deposit_refund" && method === "ota_deferred") throw new Error("VALIDATION: deposit_method"); reference = checkReference(method, p.reference); account_id = voucherAccount(r.branch_id, method, p.account_id);
+    if (p.kind !== "deposit_apply") { if (!ACTIVE_METHODS.includes(method)) throw new Error("VALIDATION: method_retired"); if (p.kind === "deposit_refund" && !["cash", "bank_transfer"].includes(method)) throw new Error("VALIDATION: deposit_method");   // 0070 (W4): by transfer or in cash from the box reference = checkReference(method, p.reference); account_id = voucherAccount(r.branch_id, method, p.account_id);
       // 0054 (MONEY-06): a stay refund goes back by the method of the payment, or with a written reason
       if (p.kind === "refund") { paid = [...new Set(T("financial_vouchers").filter((x) => x.reservation_id === r.id && x.status === "approved" && x.kind === "receipt" && (!p.original_voucher_id || x.id === p.original_voucher_id)).map((x) => x.method as string))]; if (paid.length && !paid.includes(method) && !methodReason) throw new Error(`REFUND_METHOD_DIFFERS: ${paid.join(",")}`); } }
     else account_id = depSrc?.account_id ?? null;

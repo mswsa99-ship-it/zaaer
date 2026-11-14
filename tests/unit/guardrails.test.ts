@@ -249,3 +249,22 @@ describe("SEC-10 links in the assistant's replies", () => {
     expect(urlAllowed("/booking/lookup", "/booking")).toBe(true);
   });
 });
+
+describe("W7 — the assistant's four levels", () => {
+  it("UG20 every tool the assistant may call sits on one of four levels, levels 2 and 3 need the guest verified, and nothing approves identity, payment or entry", async () => {
+    const g = await import("../../supabase/functions/_shared/guardrails");
+    const tools = [...g.ALLOWED_TOOLS];
+    // each allowed tool has its level, and no level is beyond the fourth
+    expect(Object.keys(g.TOOL_LEVELS).sort()).toEqual(tools.slice().sort());
+    for (const t of tools) expect([1, 2, 3, 4]).toContain(g.TOOL_LEVELS[t]);
+    expect(Object.keys(g.TOOL_LEVEL_LABELS)).toEqual(["1", "2", "3", "4"]);
+    // the verified-only tools are exactly those of levels 2 and 3
+    expect([...g.VERIFIED_ONLY_TOOLS].sort()).toEqual(tools.filter((t) => g.TOOL_LEVELS[t] === 2 || g.TOOL_LEVELS[t] === 3).sort());
+    // level 1 reads nothing of a guest; level 4 is a person
+    expect(tools.filter((t) => g.TOOL_LEVELS[t] === 1).sort()).toEqual(["get_booking_link", "get_public_property_policies", "request_booking_verification", "search_knowledge_base"]);
+    expect(tools.filter((t) => g.TOOL_LEVELS[t] === 4).sort()).toEqual(["open_supervisor_ticket", "request_human_assistance"]);
+    // a tool that would approve something (identity, payment, entry, a code) is not on any level
+    for (const t of tools) expect(t).not.toMatch(/approve|confirm_payment|keybox|code|identity/);
+    expect(isAllowedTool("approve_checkin")).toBe(false);
+  });
+});

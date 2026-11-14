@@ -188,15 +188,41 @@ export const ALLOWED_TOOLS = [
 ] as const;
 export type ToolName = (typeof ALLOWED_TOOLS)[number];
 
-/** Tools that require a verified guest session bound to the conversation. */
-export const VERIFIED_ONLY_TOOLS: ReadonlySet<string> = new Set([
-  "get_verified_booking_summary",
-  "create_registration_session",
-  "get_registration_progress",
-  "create_payment_request",
-  "get_payment_status",
-  "submit_checkin_request",
-]);
+/**
+ * W7 — the assistant's four levels (the appendix): every tool it may call sits on one of them, and nothing above the
+ * fourth exists.
+ *   1. public information — the branch's booking link, its policies, its approved knowledge, how to verify a booking;
+ *   2. the verified guest's own booking, read only — its summary, its registration's progress, its payment's state;
+ *   3. a request on that booking, never a decision — the registration form's link, how to pay, «I have arrived»
+ *      (identity, payment and entry are approved by the staff only);
+ *   4. a person — a ticket for the supervisor, or the conversation handed to one.
+ * Levels 2 and 3 need a guest verified in this conversation (the secure page or the WhatsApp number of the booking).
+ */
+export const TOOL_LEVELS: Readonly<Record<ToolName, 1 | 2 | 3 | 4>> = {
+  get_booking_link: 1,
+  request_booking_verification: 1,
+  get_public_property_policies: 1,
+  search_knowledge_base: 1,
+  get_verified_booking_summary: 2,
+  get_registration_progress: 2,
+  get_payment_status: 2,
+  create_registration_session: 3,
+  create_payment_request: 3,
+  submit_checkin_request: 3,
+  open_supervisor_ticket: 4,
+  request_human_assistance: 4,
+};
+export const TOOL_LEVEL_LABELS: Readonly<Record<1 | 2 | 3 | 4, string>> = {
+  1: "معلومات عامة",
+  2: "حجز النزيل المتحقق منه — قراءة فقط",
+  3: "طلب على الحجز بعد التحقق — دون اعتماد",
+  4: "تحويل إلى موظف",
+};
+
+/** Tools that require a verified guest session bound to the conversation: levels 2 and 3. */
+export const VERIFIED_ONLY_TOOLS: ReadonlySet<string> = new Set(
+  (Object.keys(TOOL_LEVELS) as ToolName[]).filter((t) => TOOL_LEVELS[t] === 2 || TOOL_LEVELS[t] === 3),
+);
 
 export function isAllowedTool(name: string): name is ToolName {
   return (ALLOWED_TOOLS as readonly string[]).includes(name);

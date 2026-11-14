@@ -80,5 +80,11 @@ echo "== running products W1 tests (0068: the catalogue by branch, ordering in t
 psql -d "$DB" -f tests/sql/products_w1_tests.sql
 echo "== running tax W2 tests (0069: off by default, a switch and a rate for each of rent, services and products, what was before stays)"
 psql -d "$DB" -f tests/sql/tax_w2_tests.sql
-echo "== running WhatsApp channel and data purge tests (last: the purge deletes data)"
+echo "== running guest journey tests (0070: W3 the check-out options, W4 the departure and the deposit, W5 the review, W6 the alert rules)"
+psql -d "$DB" -f tests/sql/journey_tests.sql
+echo "== running unit guides W7 tests (0071: a unit's way in and out shown only once approved)"
+psql -d "$DB" -f tests/sql/guides_w7_tests.sql
+echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
+echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
+psql -d "$DB" -f tests/sql/purge_trial_tests.sql
