@@ -24,6 +24,7 @@ const ERROR_AR: Record<string, string> = {
   DUPLICATE_EMAIL: "هذا البريد مستخدم لموظف آخر.",
   // 0057 (Phase 3a): the front desk
   PAST_STAY: "مدة هذا الحجز انتهت قبل اليوم؛ يُدخله المشرف أو المدير مع سبب الإدخال المتأخر.",
+  "FORBIDDEN: product_other_branch": "هذا المنتج (أو منتج في هذه الفئة) يباع في فرع لا تعمل فيه؛ يعدّله المالك.",
   "FORBIDDEN: late entry": "الإدخال المتأخر لحجز انتهت مدته للمشرف أو المدير أو المالك.",
   // 0056 (Phase 2b): the branch's lists and guide
   DUPLICATE_SOURCE_NAME: "يوجد مصدر حجز بالاسم نفسه.",
@@ -254,7 +255,9 @@ export const VALIDATION_AR: Record<string, string> = {
   order_method: "طلب المنتجات يُدفع في المنشأة: نقدًا أو بالشبكة أو بالتحويل.",
   order_voucher: "هذا السند لطلب منتجات: لا يُلغى ولا يُصحَّح وحده؛ ألغِ الطلب نفسه من «طلبات المنتجات».",
   order_task: "هذه مهمة تسليم طلب مدفوع: لا تُلغى وحدها؛ ألغِ الطلب نفسه من «طلبات المنتجات».",
-  order_delivered: "سُلّم الطلب فلا يُلغى. لرد مبلغ للنزيل استخدم «رد مبلغ» في الحجز.",
+  order_delivered: "سُلّم الطلب فلا يُلغى من هنا.",
+  order_cancel_day: "دُفع هذا الطلب في يوم سابق أو سُوّيت نقاط بيع يومه، فلا يُلغى سنده. سلّم الطلب بإتمام مهمته.",
+  order_invoiced: "بنود هذا الطلب على فاتورة صادرة، فلا تُعكس من هنا.",
   days: "الفترة من يوم إلى 90 يومًا.",
   // 0059 (OWNER-08): one limit for the reports' period
   period_too_long: "الفترة أطول من 366 يومًا؛ اختر فترة أقصر.", objection_note: "اكتب ما تعترض عليه أو ما تطلب توضيحه (3 أحرف على الأقل).", outcome: "نتيجة المراجعة غير صحيحة.", period_future: "الفترة كلها بعد اليوم؛ لا حركة فيها بعد.",
@@ -831,7 +834,8 @@ export const productsApi = {
   orders: (branchId: string, status: ProductOrderStatus | null, days: number) => rpc<ProductOrder[]>("fn_staff_product_orders", { p_branch: branchId, p_status: status, p_days: days }),
   menu: (branchId: string) => rpc<ProductMenu>("fn_staff_product_menu", { p_branch: branchId }),
   create: (reservationId: string, items: Array<{ product_id: string; quantity: number }>) => rpc<ProductOrder>("fn_staff_create_product_order", { p_reservation: reservationId, p_items: items }),
-  pay: (p: { order_id: string; method: "cash" | "pos" | "bank_transfer"; reference?: string | null; account_id?: string | null; idempotency_key: string; duplicate_reference_ok?: boolean }) =>
+  pay: (p: { order_id: string; method: "cash" | "pos" | "bank_transfer"; reference?: string | null; account_id?: string | null; idempotency_key: string; duplicate_reference_ok?: boolean;
+    /** the order as the cashier saw it: an item added meanwhile refuses the payment */ expected_version: number }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_number?: string; order: ProductOrder }>("fn_staff_pay_product_order", { p }),
   cancel: (orderId: string, reason: string) => rpc<ProductOrder>("fn_staff_cancel_product_order", { p_order: orderId, p_reason: reason }),
 };

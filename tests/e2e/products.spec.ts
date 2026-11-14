@@ -48,7 +48,7 @@ test.describe("products and orders", () => {
     await expect(dlg.getByTestId("import-preview")).toContainText("سيُضاف منتجان. وتُنشأ فئة: حلويات.");
     await expect(dlg.getByTestId("import-line").filter({ hasText: "ماء صغير" })).toContainText("موجود — يُترك");
     await expect(dlg.getByTestId("import-line").filter({ hasText: "بلا سعر" })).toContainText("السعر غير مقروء");
-    await dlg.getByRole("button", { name: "استيراد منتجان" }).click();
+    await dlg.getByRole("button", { name: "استيراد (2)" }).click();
     await expect(dlg).toBeHidden();
     const cat = page.getByTestId("product-category").filter({ hasText: "حلويات" });
     await expect(cat.getByTestId("product-card")).toHaveCount(2);

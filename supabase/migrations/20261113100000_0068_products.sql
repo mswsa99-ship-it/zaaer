@@ -263,6 +263,10 @@ begin
     select * into c from product_categories where id = (p->>'id')::uuid and organization_id = fn_user_org_id() for update;
     if not found then raise exception 'NOT_FOUND'; end if;
     perform fn_check_version_strict(c.version, (p->>'version')::int);
+    if exists (select 1 from products x join product_branches pb on pb.product_id = x.id
+                where x.category_id = c.id and pb.available and pb.branch_id not in (select fn_user_branch_ids())) then
+      raise exception 'FORBIDDEN: product_other_branch' using errcode = '42501';
+    end if;
     if exists (select 1 from product_categories where organization_id = c.organization_id and lower(name) = lower(v_name) and id <> c.id) then raise exception 'DUPLICATE_NAME'; end if;
     before := to_jsonb(c);
     update product_categories set name = v_name, sort_order = coalesce((p->>'sort_order')::int, sort_order),
@@ -301,6 +305,10 @@ begin
     select * into x from products where id = (p->>'id')::uuid and organization_id = fn_user_org_id() for update;
     if not found then raise exception 'NOT_FOUND'; end if;
     perform fn_check_version_strict(x.version, (p->>'version')::int);
+    -- a product sold in a branch the caller does not work in is changed by the owner (or a manager of that branch too)
+    if exists (select 1 from product_branches pb where pb.product_id = x.id and pb.available and pb.branch_id not in (select fn_user_branch_ids())) then
+      raise exception 'FORBIDDEN: product_other_branch' using errcode = '42501';
+    end if;
     if exists (select 1 from products where organization_id = x.organization_id and lower(name) = lower(v_name) and id <> x.id) then raise exception 'DUPLICATE_NAME'; end if;
     before := to_jsonb(x);
     -- an order already placed keeps the name and the price it was placed with
@@ -479,7 +487,7 @@ begin
   perform 1 from reservations where id = rid for update;
   select * into o from product_orders where reservation_id = rid and number = p_number for update;
   if not found then raise exception 'NOT_FOUND'; end if;
-  if o.status <> 'pending_payment' then raise exception 'VALIDATION: order_status'; end if;
+  if o.status <> 'pending_payment' or o.source <> 'whatsapp' then raise exception 'VALIDATION: order_status'; end if;
   update product_orders set status = 'cancelled', cancelled_at = now(), cancel_reason = 'ألغاه النزيل', version = version + 1, updated_at = now() where id = o.id;
   perform fn_audit_change(o.branch_id, 'product_order.cancelled', 'product_order', o.id, jsonb_build_object('status', o.status), jsonb_build_object('status', 'cancelled', 'by', 'guest'), 'ألغاه النزيل');
   return fn_product_order_json(o.id);
@@ -590,6 +598,8 @@ begin
     end if;
     raise exception 'VALIDATION: order_status';
   end if;
+  -- what is paid is what the cashier was shown: an item added meanwhile (the guest, a colleague) refuses the payment
+  perform fn_check_version_strict(o.version, nullif(p->>'expected_version', '')::int);
   if not exists (select 1 from product_order_lines where order_id = o.id) then raise exception 'VALIDATION: items'; end if;
   if r.status <> 'checked_in' or r.room_id is null then raise exception 'VALIDATION: not_in_stay'; end if;
   -- the lines join the stay's account (with their tax, as any charge)
@@ -632,7 +642,7 @@ grant execute on function fn_staff_pay_product_order(jsonb) to authenticated;
 -- the stay's account, its delivery task is cancelled. A delivered order is not cancelled here.
 create or replace function fn_staff_cancel_product_order(p_order uuid, p_reason text) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare o product_orders%rowtype; r reservations%rowtype; c record; cid uuid; rest bigint; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+declare o product_orders%rowtype; r reservations%rowtype; v financial_vouchers%rowtype; c record; cid uuid; v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
 begin
   perform fn_require_cap('voucher.receipt');
   if v_reason is null or char_length(v_reason) > 300 then raise exception 'VALIDATION: reason'; end if;
@@ -640,26 +650,39 @@ begin
   if not found then raise exception 'NOT_FOUND'; end if;
   perform fn_require_branch(o.branch_id);
   select * into r from reservations where id = o.reservation_id for update;
+  perform 1 from housekeeping_tasks where id = o.task_id for update;      -- the task before the order, as its completion takes them
   select * into o from product_orders where id = o.id for update;
   if o.status = 'delivered' then raise exception 'VALIDATION: order_delivered'; end if;
   if o.status = 'cancelled' then raise exception 'VALIDATION: order_status'; end if;
   if o.status = 'paid' then
     perform fn_require_cap('voucher.cancel');
+    select * into v from financial_vouchers where id = o.voucher_id;
+    -- a receipt of a day that is over (or of a settled card day) is not erased: that day's figures stay as they were
+    if fn_branch_date(v.branch_id, v.occurred_at) < fn_branch_today(v.branch_id) or fn_voucher_settled(v.id) then
+      raise exception 'VALIDATION: order_cancel_day';
+    end if;
+    -- lines already on an invoice are not reversed here
+    if exists (select 1 from reservation_charges where product_order_id = o.id and invoice_id is not null) then
+      raise exception 'VALIDATION: order_invoiced';
+    end if;
     perform set_config('fivehours.order_cancel', o.id::text, true);
     perform fn_cancel_voucher(o.voucher_id, 'إلغاء الطلب ' || o.number || ': ' || v_reason);
-    -- each line is reversed as any reversed line of a stay: an adjustment with its own tax, so the tax goes back too
-    for c in select * from reservation_charges where product_order_id = o.id and kind = 'addon' order by created_at loop
-      cid := fn_add_charge(r.id, 'adjustment', 'إلغاء: ' || c.description, 1, -round(c.quantity * c.unit_price_halalas)::bigint, c.taxable,
-                           'إلغاء الطلب ' || o.number, null, c.service_from, c.service_to);
-      update reservation_charges set product_order_id = o.id where id = cid or base_charge_id = cid;
-    end loop;
-    -- the order nets to zero in the stay's account (a halala of rounding, should the reversal's tax differ, is balanced)
-    select coalesce(sum(total_halalas), 0) into rest from reservation_charges where product_order_id = o.id;
-    if rest <> 0 then
+    -- each of the order's rows gets its exact opposite, of the same kind (the line and its tax): the stay's account,
+    -- its tax and its night-by-night dues are as if the order had not been
+    for c in select * from reservation_charges where product_order_id = o.id and kind = 'addon' and total_halalas > 0 order by created_at, id loop
       insert into reservation_charges(organization_id, branch_id, reservation_id, kind, description, quantity, unit_price_halalas, total_halalas, taxable,
                                       reason, created_by, service_from, service_to, product_order_id)
-      values (r.organization_id, r.branch_id, r.id, 'adjustment', 'إلغاء الطلب ' || o.number || ': فرق التقريب', 1, -rest, -rest, false,
-              'إلغاء الطلب ' || o.number, fn_staff_id(), fn_branch_today(r.branch_id), fn_branch_today(r.branch_id), o.id);
+      values (c.organization_id, c.branch_id, c.reservation_id, 'addon', 'إلغاء: ' || c.description, c.quantity, -c.unit_price_halalas, -c.total_halalas, c.taxable,
+              'إلغاء الطلب ' || o.number, fn_staff_id(), c.service_from, c.service_to, o.id)
+      returning id into cid;
+      insert into reservation_charges(organization_id, branch_id, reservation_id, kind, description, quantity, unit_price_halalas, total_halalas, taxable,
+                                      reason, created_by, service_from, service_to, base_charge_id, product_order_id)
+      select t.organization_id, t.branch_id, t.reservation_id, 'tax', 'إلغاء: ' || t.description, t.quantity, -t.unit_price_halalas, -t.total_halalas, t.taxable,
+             'إلغاء الطلب ' || o.number, fn_staff_id(), t.service_from, t.service_to, cid, o.id
+        from reservation_charges t where t.base_charge_id = c.id and t.kind = 'tax';
+    end loop;
+    if (select coalesce(sum(total_halalas), 0) from reservation_charges where product_order_id = o.id) <> 0 then
+      raise exception 'VALIDATION: order_status';
     end if;
     update housekeeping_tasks set status = 'cancelled', cancelled_at = now(), cancel_reason = 'أُلغي الطلب ' || o.number, version = version + 1, updated_at = now()
      where id = o.task_id and status in ('pending', 'in_progress');
@@ -723,6 +746,27 @@ end $$;
 revoke all on function fn_trg_product_task() from public, anon, authenticated;
 create or replace trigger trg_product_task_guard before update of status on housekeeping_tasks for each row execute function fn_trg_product_task();
 create or replace trigger trg_product_task_done after update of status on housekeeping_tasks for each row execute function fn_trg_product_task();
+
+-- the stay moves or ends: a paid order's delivery follows the guest to the new room; at the departure an order still
+-- waiting for its payment is cancelled, and a paid one not delivered says on its task that the guest has left
+create or replace function fn_trg_product_stay() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.room_id is distinct from old.room_id and new.room_id is not null then
+    update housekeeping_tasks set room_id = new.room_id, updated_at = now()
+     where status in ('pending', 'in_progress') and id in (select task_id from product_orders where reservation_id = new.id and status = 'paid');
+  end if;
+  if new.status is distinct from old.status and new.status::text in ('checked_out', 'closed') and old.status::text = 'checked_in' then
+    update product_orders set status = 'cancelled', cancelled_at = now(), cancel_reason = 'غادر النزيل قبل الدفع', version = version + 1, updated_at = now()
+     where reservation_id = new.id and status = 'pending_payment';
+    update housekeeping_tasks set description = 'غادر النزيل — راجع الاستقبال قبل التسليم. ' || description, updated_at = now()
+     where status in ('pending', 'in_progress') and description not like 'غادر النزيل%'
+       and id in (select task_id from product_orders where reservation_id = new.id and status = 'paid');
+  end if;
+  return new;
+end $$;
+revoke all on function fn_trg_product_stay() from public, anon, authenticated;
+create or replace trigger trg_product_stay after update of room_id, status on reservations for each row execute function fn_trg_product_stay();
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 7. The books: a receipt for a product order is product revenue (43); everything else as in 0065

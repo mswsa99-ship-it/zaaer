@@ -42,6 +42,8 @@ create or replace function tp_items(variadic p text[]) returns jsonb language sq
 -- a stay checked in to a room (the arrival itself is tried elsewhere)
 create or replace function tp_check_in(p_res uuid, p_room uuid) returns void language sql security definer as $$
   update reservations set status = 'checked_in', room_id = p_room, actual_check_in = now() where id = p_res $$;
+create or replace function tp_stay_due(p uuid) returns jsonb language sql security definer as $$ select fn_stay_due_internal(p) $$;
+create or replace function tp_guest_cancel(p_token text, p_number text) returns jsonb language sql security definer as $$ select fn_guest_cancel_product_order(p_token, p_number) $$;
 create or replace function tp_token(p uuid) returns text language sql security definer as $$ insert into registration_sessions(reservation_id) values (p) returning token $$;
 
 -- ---------------------------------------------------------------- two branches, stays, a manager of the first only
@@ -199,10 +201,10 @@ set role authenticated;
 do $$ declare due0 bigint; rent0 bigint; prod0 bigint; p jsonb; dup jsonb; other text; badm text; o product_orders; v financial_vouchers; t housekeeping_tasks; ch bigint; begin
   due0 := tp_due(tp_id('res1')); rent0 := tp_bal(tp_id('b'), 'rent_revenue'); prod0 := tp_bal(tp_id('b'), 'product_revenue');
   -- a platform never collects for an order: paid at the hotel only
-  badm := tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', tp_id('o1'), 'method', 'ota_deferred', 'idempotency_key', 'pr-pay-0')), 'VALIDATION: order_method%');
-  p := fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o1'), 'method', 'cash', 'idempotency_key', 'pr-pay-1'));
-  dup := fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o1'), 'method', 'cash', 'idempotency_key', 'pr-pay-1'));
-  other := tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', tp_id('o1'), 'method', 'cash', 'idempotency_key', 'pr-pay-2')), 'VALIDATION: order_status%');
+  badm := tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', tp_id('o1'), 'expected_version', (select version from product_orders where id = tp_id('o1')), 'method', 'ota_deferred', 'idempotency_key', 'pr-pay-0')), 'VALIDATION: order_method%');
+  p := fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o1'), 'expected_version', (select version from product_orders where id = tp_id('o1')), 'method', 'cash', 'idempotency_key', 'pr-pay-1'));
+  dup := fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o1'), 'expected_version', (select version from product_orders where id = tp_id('o1')), 'method', 'cash', 'idempotency_key', 'pr-pay-1'));
+  other := tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', tp_id('o1'), 'expected_version', (select version from product_orders where id = tp_id('o1')), 'method', 'cash', 'idempotency_key', 'pr-pay-2')), 'VALIDATION: order_status%');
   o := tp_order(tp_id('o1'));
   select * into v from financial_vouchers where id = o.voucher_id;
   select * into t from housekeeping_tasks where id = o.task_id;
@@ -254,7 +256,7 @@ reset role;
 insert into ids select 'o2', id from product_orders where reservation_id = tp_id('res1') and status = 'pending_payment';
 select tp_login('a0000000-0000-0000-0000-000000000002', 'supervisor@test.local');
 set role authenticated;
-select (fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o2'), 'method', 'cash', 'idempotency_key', 'pr-pay-o2'))->>'ok')::boolean;
+select (fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o2'), 'expected_version', (select version from product_orders where id = tp_id('o2')), 'method', 'cash', 'idempotency_key', 'pr-pay-o2'))->>'ok')::boolean;
 select tp_record('PD08a a supervisor does not cancel a paid order (cancelling its voucher is the owner''s or the manager''s)',
   tp_fails(format('select fn_staff_cancel_product_order(%L, %L)', tp_id('o2'), 'النزيل لم يعد يريده'), 'FORBIDDEN%') = 'ok');
 reset role;
@@ -284,7 +286,7 @@ select tp_login('a0000000-0000-0000-0000-000000000008', 'manager@test.local');
 set role authenticated;
 select tp_record('PD09 a manager reads and pays the orders of their branch only: another branch''s are neither listed, read nor paid',
   tp_fails(format('select fn_staff_product_orders(%L)', tp_id('b2')), 'FORBIDDEN%') = 'ok'
-  and tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', tp_id('o4'), 'method', 'cash', 'idempotency_key', 'pr-x')), 'FORBIDDEN%') = 'ok'
+  and tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', tp_id('o4'), 'expected_version', (select version from product_orders where id = tp_id('o4')), 'method', 'cash', 'idempotency_key', 'pr-x')), 'FORBIDDEN%') = 'ok'
   and tp_fails(format('select fn_staff_create_product_order(%L, %L)', tp_id('res3'), tp_items(tp_id('water')::text, '1')), 'FORBIDDEN%') = 'ok'
   and (select count(*) from product_orders where branch_id = tp_id('b2')) = 0
   and (select count(*) from product_orders where branch_id = tp_id('b')) >= 2
@@ -322,7 +324,7 @@ select tp_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare due0 bigint; p jsonb; ch bigint; begin
   due0 := tp_due(tp_id('res4'));
-  p := fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o5'), 'method', 'cash', 'idempotency_key', 'pr-tax'));
+  p := fn_staff_pay_product_order(jsonb_build_object('order_id', tp_id('o5'), 'expected_version', (select version from product_orders where id = tp_id('o5')), 'method', 'cash', 'idempotency_key', 'pr-tax'));
   select coalesce(sum(total_halalas), 0) into ch from reservation_charges where product_order_id = tp_id('o5');
   -- water 2 × 2.50 = 5.00 + 15% = 5.75; the brush is not taxable: 5.00
   perform tp_record('PD11 the order of a branch that adds tax carries the tax of its taxable lines, and the voucher pays exactly what the stay''s account carries',
@@ -373,6 +375,76 @@ select tp_record('PD13 an order carries amounts: a role that does not see money 
 reset role;
 select tp_record('PD13b the orders are there to be read by who sees money', tp_count(format('select count(*) from product_orders where branch_id = %L', tp_id('b'))) >= 2);
 
+-- ---------------------------------------------------------------- PD15–PD19 the independent review's cases
+select tp_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare o jsonb; oid uuid; v0 int; stale text; due0 jsonb; due1 jsonb; paid jsonb; g text; begin
+  -- PD15: what is paid is what the cashier was shown
+  o := fn_staff_create_product_order(tp_id('res1'), tp_items(tp_id('water')::text, '1')); oid := (o->>'id')::uuid; v0 := (o->>'version')::int;
+  g := tp_fails(format('select tp_guest_cancel(%L, %L)', (select v from toks where k = 't1'), o->>'number'), 'VALIDATION: order_status%');
+  perform fn_staff_create_product_order(tp_id('res1'), tp_items(tp_id('coffee')::text, '1'));
+  stale := tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', oid, 'method', 'cash', 'idempotency_key', 'pd15', 'expected_version', v0)), 'VERSION_CONFLICT%');
+  perform tp_record('PD15 an item added after the cashier opened the payment refuses it (the order is not the one shown), and nothing is paid; without the version seen it is refused too',
+    stale = 'ok' and (select status from product_orders where id = oid) = 'pending_payment'
+    and tp_fails(format('select fn_staff_pay_product_order(%L)', jsonb_build_object('order_id', oid, 'method', 'cash', 'idempotency_key', 'pd15b')), 'VERSION_REQUIRED%') = 'ok', stale);
+  perform tp_record('PD15b the guest cancels from WhatsApp only what they ordered there, not the reception''s order', g = 'ok', g);
+  -- PD16: a paid order cancelled leaves the stay's night-by-night dues as they were
+  due0 := tp_stay_due(tp_id('res1'));
+  paid := fn_staff_pay_product_order(jsonb_build_object('order_id', oid, 'method', 'cash', 'idempotency_key', 'pd16', 'expected_version', (select version from product_orders where id = oid)));
+  perform fn_staff_cancel_product_order(oid, 'تجربة المستحقات');
+  due1 := tp_stay_due(tp_id('res1'));
+  perform tp_record('PD16 a paid order cancelled the same day: each of its rows gets its exact opposite of the same kind, so the stay''s night-by-night dues (and what is overdue) are as before the order',
+    due1 = due0 and not exists (select 1 from reservation_charges where product_order_id = oid and kind = 'adjustment')
+    and (select coalesce(sum(total_halalas), 0) from reservation_charges where product_order_id = oid) = 0, left(due0::text, 150) || ' / ' || left(due1::text, 150));
+exception when others then perform tp_record('PD15 the review''s payment and cancellation cases ran', false, sqlerrm);
+end $$;
+reset role;
+
+-- PD17: a receipt of a day that is over is not erased; lines on an invoice are not reversed
+select tp_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare o jsonb; begin
+  o := fn_staff_create_product_order(tp_id('res1'), tp_items(tp_id('water')::text, '1'));
+  o := fn_staff_pay_product_order(jsonb_build_object('order_id', o->>'id', 'method', 'cash', 'idempotency_key', 'pd17', 'expected_version', o->'version'))->'order';
+  insert into ids values ('o17', (o->>'id')::uuid);
+end $$;
+reset role;
+update financial_vouchers set occurred_at = occurred_at - interval '2 days' where id = (select voucher_id from product_orders where id = tp_id('o17'));
+set role authenticated;
+select tp_record('PD17 a paid order whose receipt is of a day that is over is not cancelled (that day''s figures stay): it is delivered instead',
+  tp_fails(format('select fn_staff_cancel_product_order(%L, %L)', tp_id('o17'), 'متأخر'), 'VALIDATION: order_cancel_day%') = 'ok'
+  and (select status from product_orders where id = tp_id('o17')) = 'paid');
+reset role;
+
+-- PD18: the stay moves, then ends
+insert into ids select 'o18', (fn_product_order_add(tp_id('res1'), tp_items(tp_id('water')::text, '1'), 'whatsapp', null)->>'id')::uuid;
+update reservations set room_id = tp_id('room2') where id = tp_id('res1');
+select tp_record('PD18 the guest moves to another room: the delivery of a paid order follows them',
+  (select room_id from housekeeping_tasks where id = (select task_id from product_orders where id = tp_id('o17'))) = tp_id('room2'));
+update reservations set status = 'checked_out' where id = tp_id('res1');
+select tp_record('PD18b the guest leaves: an order still waiting for its payment is cancelled with its reason, and a paid one not delivered says on its task that the guest has left',
+  (select status || ' ' || cancel_reason from product_orders where id = tp_id('o18')) = 'cancelled غادر النزيل قبل الدفع'
+  and (select description from housekeeping_tasks where id = (select task_id from product_orders where id = tp_id('o17'))) like 'غادر النزيل — راجع الاستقبال قبل التسليم. تسليم %'
+  and (select status from product_orders where id = tp_id('o17')) = 'paid');
+
+-- PD19: what another branch sells is not the manager's to change
+select tp_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+select (fn_admin_set_product_branch(tp_id('coffee'), tp_id('b2'), true)->>'ok')::boolean;
+reset role;
+select tp_login('a0000000-0000-0000-0000-000000000008', 'manager@test.local');
+set role authenticated;
+do $$ declare e text; r jsonb; ok boolean; begin
+  e := tp_fails(format('select fn_admin_upsert_product(%L)', jsonb_build_object('id', tp_id('coffee'), 'version', (select version from products where id = tp_id('coffee')),
+         'category_id', tp_id('c1'), 'name', 'قهوة', 'price_halalas', 1)), 'FORBIDDEN: product_other_branch%');
+  r := fn_admin_upsert_product(jsonb_build_object('category_id', tp_id('c2'), 'name', 'تمر المدير', 'price_halalas', 400));
+  r := fn_admin_upsert_product(jsonb_build_object('id', r->>'id', 'version', r->'version', 'category_id', tp_id('c2'), 'name', 'تمر المدير', 'price_halalas', 450));
+  perform tp_record('PD19 a manager does not change the price of a product another branch sells (the owner does); their own product they do',
+    e = 'ok' and (select price_halalas from products where id = tp_id('coffee')) = 800 and (r->>'ok')::boolean, e);
+exception when others then perform tp_record('PD19 a manager does not change the price of a product another branch sells (the owner does); their own product they do', false, sqlerrm);
+end $$;
+reset role;
+
 -- ---------------------------------------------------------------- PD14 an order left by the trial-data purge
 -- the purge (0022) removes stays without knowing the orders (no reference of the database): such an order is not listed
 insert into product_orders(organization_id, branch_id, reservation_id, number, source, created_at)
@@ -393,5 +465,5 @@ declare n int; f int;
 begin
   select count(*), count(*) filter (where not ok) into n, f from test_results;
   if f > 0 then raise exception 'PRODUCTS W1 TESTS FAILED: % of %', f, n; end if;
-  if n < 23 then raise exception 'PRODUCTS W1 TESTS INCOMPLETE: % of 23 checks ran', n; end if;
+  if n < 30 then raise exception 'PRODUCTS W1 TESTS INCOMPLETE: % of 30 checks ran', n; end if;
 end $$;

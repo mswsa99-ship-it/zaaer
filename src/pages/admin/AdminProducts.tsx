@@ -4,7 +4,7 @@
  * (or a manager, in their own branches) makes it available in. An order keeps the name and the price it was placed
  * with; changing a product here reaches the next orders only.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Package, Plus, Pencil, Tags, ListPlus } from "lucide-react";
 import { productsApi, toArabicError, type ProductsAdmin, type ProductRow, type ProductCategoryRow } from "../../lib/api";
 import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, EmptyState } from "../../components/ui";
@@ -79,7 +79,7 @@ export default function AdminProducts() {
                             <p className="text-sm text-ink-700"><span dir="ltr" className="tabular-nums">{sar(p.price_halalas)}</span> <span className="text-xs text-ink-400">· {p.taxable ? "خاضع للضريبة" : "بدون ضريبة"}</span></p>
                             {p.description && <p className="mt-1 text-xs text-ink-500">{p.description}</p>}
                           </div>
-                          <button type="button" onClick={() => setProduct(p)} className="btn-ghost p-1.5" aria-label={`تعديل ${p.name}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
+                          <button type="button" onClick={() => setProduct(p)} className="btn-ghost min-h-[44px] min-w-[44px] justify-center p-0" aria-label={`تعديل ${p.name}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
                         </div>
                         <fieldset className="mt-3 border-t border-ink-50 pt-2">
                           <legend className="sr-only">إتاحة {p.name} في الفروع</legend>
@@ -90,7 +90,7 @@ export default function AdminProducts() {
                               return (
                                 <button key={b.id} type="button" role="switch" aria-checked={on} disabled={!b.mine || busy === `${p.id}:${b.id}`}
                                   title={b.mine ? undefined : "فرع لا تديره"} onClick={() => toggleBranch(p, b.id, !on)}
-                                  className={`min-h-[36px] rounded-full border px-3 text-xs transition ${on ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-500 hover:border-ink-200"} disabled:cursor-not-allowed disabled:opacity-60`}>
+                                  className={`min-h-[44px] rounded-full border px-3 text-xs transition ${on ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-500 hover:border-ink-200"} disabled:cursor-not-allowed disabled:opacity-60`}>
                                   {on ? "✓ " : ""}{b.name}
                                 </button>
                               );
@@ -164,7 +164,9 @@ function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void 
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Record<number, string | true>>({});
   const lines = useMemo(() => parseProductList(text, data.products.map((p) => p.name)), [text, data.products]);
-  const todo = lines.filter((l) => !l.problem && !l.existing);
+  // what an earlier run of this list already made: a retry goes on from there
+  const made = useRef({ cats: new Map<string, string>(), products: new Map<number, string>(), branches: new Set<string>() });
+  const todo = lines.filter((l) => !l.problem && !l.existing && results[l.n] !== true);
   const known = new Set(data.categories.map((c) => c.name.trim().toLowerCase()));
   const newCats = [...new Map(todo.filter((l) => !known.has(l.category.toLowerCase())).map((l) => [l.category.toLowerCase(), l.category] as const)).values()];
   const done = Object.values(results).filter((r) => r === true).length;
@@ -172,14 +174,15 @@ function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void 
 
   async function run() {
     setBusy(true);
-    const cats = new Map(data.categories.map((c) => [c.name.trim().toLowerCase(), c.id] as const));
-    const out: Record<number, string | true> = {};
+    const cats = new Map([...data.categories.map((c) => [c.name.trim().toLowerCase(), c.id] as const), ...made.current.cats]);
+    const out: Record<number, string | true> = { ...results };
     for (const l of todo) {
       try {
         let cid = cats.get(l.category.toLowerCase());
-        if (!cid) { cid = (await productsApi.upsertCategory({ name: l.category })).id; cats.set(l.category.toLowerCase(), cid); }
-        const r = await productsApi.upsertProduct({ category_id: cid, name: l.name, price_halalas: l.price!, description: l.description, taxable: true });
-        for (const b of branches) await productsApi.setBranch(r.id, b, true);
+        if (!cid) { cid = (await productsApi.upsertCategory({ name: l.category })).id; cats.set(l.category.toLowerCase(), cid); made.current.cats.set(l.category.toLowerCase(), cid); }
+        let pid = made.current.products.get(l.n);
+        if (!pid) { pid = (await productsApi.upsertProduct({ category_id: cid, name: l.name, price_halalas: l.price!, description: l.description, taxable: true })).id; made.current.products.set(l.n, pid); }
+        for (const b of branches) if (!made.current.branches.has(`${pid}:${b}`)) { await productsApi.setBranch(pid, b, true); made.current.branches.add(`${pid}:${b}`); }
         out[l.n] = true;
       } catch (e) { out[l.n] = toArabicError(e); }
       setResults({ ...out });
@@ -191,7 +194,7 @@ function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void 
   return (
     <div>
       <Field label="القائمة" hint="سطر لكل منتج: الفئة، اسم المنتج، السعر بالريال، ثم الوصف إن وُجد. مثال: مشروبات، ماء صغير، 2">
-        <textarea className="input font-normal" rows={8} value={text} onChange={(e) => { setText(e.target.value); setResults({}); }} aria-label="القائمة"
+        <textarea className="input font-normal" rows={8} value={text} onChange={(e) => { setText(e.target.value); setResults({}); made.current.products.clear(); }} aria-label="القائمة"
           placeholder={"مشروبات، ماء صغير، 2\nمشروبات، قهوة، 5، ظرفان مع كوب\nمستلزمات شخصية، شاحن جوال، 25"} />
       </Field>
       {mine.length > 0 && (
@@ -209,7 +212,7 @@ function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void 
       {lines.length > 0 && (
         <div className="mt-3" data-testid="import-preview">
           <p className="mb-2 text-sm text-ink-700">
-            {todo.length ? `سيُضاف ${COUNT.product(todo.length)}.${newCats.length ? ` وتُنشأ فئة: ${newCats.join("، ")}.` : ""}` : "لا شيء جديد للإضافة."}
+            {todo.length ? `سيُضاف ${COUNT.product(todo.length)}.${newCats.length ? ` ${newCats.length === 1 ? "وتُنشأ فئة" : "وتُنشأ فئات"}: ${newCats.join("، ")}.` : ""}` : "لا شيء جديد للإضافة."}
             {lines.some((l) => l.existing) ? " الموجود من قبل يُترك كما هو." : ""}
           </p>
           <ul className="max-h-64 divide-y divide-ink-50 overflow-y-auto rounded-xl border border-ink-100 text-sm">
@@ -231,9 +234,9 @@ function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void 
           </ul>
         </div>
       )}
-      {failed > 0 && <p className="mt-2 text-sm text-danger-600" role="alert">أُضيف {COUNT.product(done)}، وتعذّر {COUNT.product(failed)}؛ سبب كل منها بجانبه. صحّح السطر ثم استورد من جديد (ما أُضيف يُترك).</p>}
+      {failed > 0 && <p className="mt-2 text-sm text-danger-600" role="alert">أُضيف {COUNT.product(done)}، وتعذّر {COUNT.product(failed)}؛ سبب كل منها بجانبه. اضغط «استيراد» لإعادة المحاولة لما تعذّر فقط (ما أُضيف يُترك).</p>}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <button type="button" className="btn-primary" disabled={busy || todo.length === 0} onClick={run}>{busy ? "جارٍ الاستيراد…" : todo.length ? `استيراد ${COUNT.product(todo.length)}` : "استيراد"}</button>
+        <button type="button" className="btn-primary" disabled={busy || todo.length === 0} onClick={run}>{busy ? "جارٍ الاستيراد…" : todo.length ? `استيراد (${todo.length})` : "استيراد"}</button>
       </div>
     </div>
   );

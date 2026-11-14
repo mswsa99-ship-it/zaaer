@@ -189,11 +189,17 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     await say(buttonsPayload(m.from, WA_TEXTS.shopNeedsStay, [{ id: BTN.BOOKINGS, title: "حجوزاتي" }, staffBtn]), WA_TEXTS.shopNeedsStay);
     return null;
   };
-  const showProducts = async (c: WaProductCategory, lead = "") => {
+  // a WhatsApp list holds 10 rows: a longer category goes in pages of 9 with «المزيد»
+  const showProducts = async (c: WaProductCategory, lead = "", page = 0) => {
+    const paged = c.products.length > 10;
+    const from = paged ? Math.min(page, Math.ceil(c.products.length / 9) - 1) * 9 : 0;
+    const part = paged ? c.products.slice(from, from + 9) : c.products;
+    const more = paged && from + 9 < c.products.length;
     const text = `${lead}${c.name} — اختر المنتج:`;
-    await say(listPayload(m.from, text, "المنتجات", c.products.slice(0, 10).map((x) => ({
-      id: "PADD:" + x.id, title: x.name, description: [sarText(x.price_halalas), x.description].filter(Boolean).join(" · "),
-    }))), text);
+    await say(listPayload(m.from, text, "المنتجات", [
+      ...part.map((x) => ({ id: "PADD:" + x.id, title: x.name, description: [sarText(x.price_halalas), x.description].filter(Boolean).join(" · ") })),
+      ...(more ? [{ id: `PCAT:${c.id}:${from / 9 + 1}`, title: "المزيد…", description: `بقية ${c.name}` }] : []),
+    ]), text);
   };
   const showCategories = async (data: WaShop, lead = "") => {
     if (!data.categories.length) return say(buttonsPayload(m.from, WA_TEXTS.shopEmpty, [staffBtn]), WA_TEXTS.shopEmpty);
@@ -220,8 +226,9 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     if (!s) return;
     const all = s.data.categories.flatMap((c) => c.products);
     if (id.startsWith("PCAT:")) {
-      const c = s.data.categories.find((x) => x.id === id.slice(5));
-      return c ? showProducts(c) : showCategories(s.data, "هذه الفئة لم تعد متاحة.\n");
+      const [, cid, pg] = id.split(":");
+      const c = s.data.categories.find((x) => x.id === cid);
+      return c ? showProducts(c, "", Math.max(0, Number(pg) || 0)) : showCategories(s.data, "هذه الفئة لم تعد متاحة.\n");
     }
     if (id.startsWith("PADD:")) {
       const x = all.find((y) => y.id === id.slice(5));

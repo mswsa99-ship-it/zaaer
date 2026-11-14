@@ -41,6 +41,7 @@ export default function ProductOrders() {
   const [paying, setPaying] = useState<ProductOrder | null>(null);
   const [cancelling, setCancelling] = useState<ProductOrder | null>(null);
   const [creating, setCreating] = useState(false);
+  const [changed, setChanged] = useState(false);
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
@@ -74,13 +75,14 @@ export default function ProductOrders() {
           <AmountBox label="سُلِّمت في الفترة" value={count("delivered")} />
         </AmountGrid>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-600">
-          <label htmlFor="orders-days">المسلَّمة والملغاة خلال</label>
+          <label htmlFor="orders-days">المسلَّمة والملغاة مما طُلب خلال</label>
           <select id="orders-days" className="input w-auto" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-            {[1, 7, 30, 90].map((d) => <option key={d} value={d}>{d === 1 ? "يوم" : `${d} يومًا`}</option>)}
+            {[1, 7, 30, 90].map((d) => <option key={d} value={d}>{d === 1 ? "يوم واحد" : d <= 10 ? `${d} أيام` : `${d} يومًا`}</option>)}
           </select>
           <span className="text-xs text-ink-400">المفتوحة تظهر دائمًا مهما كان عمرها.</span>
         </div>
       </Card>
+      {changed && <p className="mb-3 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" role="alert" data-testid="order-changed">أُضيف إلى الطلب منتج أثناء الدفع ولم يُسجَّل شيء. راجع الإجمالي الجديد ثم تسلّم الدفع.</p>}
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-ink-50 p-1" role="tablist" aria-label="عرض الطلبات">
         {VIEWS.map(([v, label]) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
@@ -92,11 +94,11 @@ export default function ProductOrders() {
           description="يطلب النزيل المقيم من واتساب بإرسال «المنتجات»، أو يطلب له الاستقبال بزر «طلب لنزيل». المنتجات وإتاحتها لكل فرع من «المنتجات» في الإدارة." />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2" data-testid="product-orders">
-          {shown.map((o) => <OrderCard key={o.id} o={o} canCancelPaid={can("voucher.cancel")} onPay={() => setPaying(o)} onCancel={() => setCancelling(o)} />)}
+          {shown.map((o) => <OrderCard key={o.id} o={o} canCancelPaid={can("voucher.cancel")} onPay={() => { setChanged(false); setPaying(o); }} onCancel={() => setCancelling(o)} />)}
         </div>
       )}
       <Modal open={!!paying} title="تسلّم دفع الطلب" onClose={() => setPaying(null)}>
-        {paying && branchId && <PayForm order={paying} branchId={branchId} onDone={() => { setPaying(null); reload(); }} onCancel={() => setPaying(null)} />}
+        {paying && branchId && <PayForm order={paying} branchId={branchId} onDone={() => { setPaying(null); reload(); }} onChanged={() => { setChanged(true); setPaying(null); reload(); }} onCancel={() => setPaying(null)} />}
       </Modal>
       <Modal open={!!cancelling} title="إلغاء الطلب" onClose={() => setCancelling(null)}>
         {cancelling && <CancelForm order={cancelling} onDone={() => { setCancelling(null); reload(); }} onCancel={() => setCancelling(null)} />}
@@ -142,7 +144,7 @@ function OrderCard({ o, canCancelPaid, onPay, onCancel }: { o: ProductOrder; can
       </div>
       {(o.status === "pending_payment" || (o.status === "paid" && canCancelPaid)) && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {o.status === "pending_payment" && <button type="button" className="btn-primary min-h-[44px] text-sm" onClick={onPay}><Wallet className="h-4 w-4" /> تسلّم الدفع</button>}
+          {o.status === "pending_payment" && <button type="button" className="btn-primary min-h-[44px] text-sm" onClick={onPay} data-testid="order-pay"><Wallet className="h-4 w-4" /> تسلّم الدفع</button>}
           <button type="button" className="btn-ghost min-h-[44px] text-sm text-danger-600" onClick={onCancel}><Ban className="h-4 w-4" /> إلغاء الطلب</button>
         </div>
       )}
@@ -151,7 +153,7 @@ function OrderCard({ o, canCancelPaid, onPay, onCancel }: { o: ProductOrder; can
   );
 }
 
-function PayForm({ order, branchId, onDone, onCancel }: { order: ProductOrder; branchId: string; onDone: () => void; onCancel: () => void }) {
+function PayForm({ order, branchId, onDone, onChanged, onCancel }: { order: ProductOrder; branchId: string; onDone: () => void; onChanged: () => void; onCancel: () => void }) {
   const { active: accounts } = useCashAccounts(branchId);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [accountId, setAccountId] = useState("");
@@ -165,9 +167,11 @@ function PayForm({ order, branchId, onDone, onCancel }: { order: ProductOrder; b
       if (METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
       try {
         await productsApi.pay({ order_id: order.id, method: method as "cash" | "pos" | "bank_transfer", account_id: METHOD_ACCOUNT_KIND[method] ? accountId || null : null,
-          reference: ref.trim() || null, idempotency_key: key, ...(dupWarn ? { duplicate_reference_ok: true } : {}) });
+          reference: ref.trim() || null, idempotency_key: key, expected_version: order.version, ...(dupWarn ? { duplicate_reference_ok: true } : {}) });
       } catch (e) {
         if (!dupWarn && /DUPLICATE_REFERENCE/.test((e as Error).message ?? "")) { setDupWarn(toArabicError(e)); return; }
+        // an item was added while this dialog was open: the cashier sees the new total before taking the money
+        if (/VERSION_CONFLICT/.test((e as Error).message ?? "")) { onChanged(); return; }
         throw e;
       }
       onDone();

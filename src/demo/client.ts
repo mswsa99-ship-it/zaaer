@@ -2449,6 +2449,7 @@ const serviceRpcs: Record<string, (a: any) => any> = {
 // (server only), the guards on an order's voucher and task, and the order delivered when its task is done
 const products = productRpcs({ T, byId, can, requireCap, requireBranch, myBranches, staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, nextNumber,
   checkVersion, atomically, addCharge: (resId, kind, description, qty, unit, taxable, reason, from, to) => addCharge(resId, kind, description, qty, unit, taxable, reason, null, from ?? null, to ?? null),
+  voucherSettled, voucherBeforeToday: (v) => new Date(v.occurred_at).toLocaleDateString("en-CA", { timeZone: byId("branches", v.branch_id)?.timezone || "Asia/Riyadh" }) < branchToday(v.branch_id),
   reservationTax, recompute, createVoucher: (p) => rpcs.fn_create_voucher({ p }), cancelVoucher: (id, reason) => rpcs.fn_cancel_voucher({ p_voucher: id, p_reason: reason }) });
 Object.assign(rpcs, products.staff);
 Object.assign(serviceRpcs, products.service);

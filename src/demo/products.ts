@@ -28,6 +28,9 @@ export interface ProductsCtx {
   recompute: (resId: string) => unknown;
   /** fn_create_voucher (receipt) */
   createVoucher: (p: Row) => Row;
+  /** fn_voucher_settled, and whether the voucher's day (in its branch) is before today */
+  voucherSettled: (v: Row) => boolean;
+  voucherBeforeToday: (v: Row) => boolean;
   /** fn_cancel_voucher (its own capability check) */
   cancelVoucher: (id: string, reason: string) => unknown;
 }
@@ -152,6 +155,7 @@ export function productRpcs(ctx: ProductsCtx) {
       }
       const c = byId("product_categories", p.id); if (!c) throw new Error("NOT_FOUND");
       ctx.checkVersion(c.version, p.version == null ? null : Number(p.version));
+      if (T("product_branches").some((pb) => T("products").some((x) => x.id === pb.product_id && x.category_id === c.id) && pb.available && !myBranches().includes(pb.branch_id))) throw new Error("FORBIDDEN: product_other_branch");
       if (taken(c.id)) throw new Error("DUPLICATE_NAME");
       const before = { ...c };
       Object.assign(c, { name, sort_order: p.sort_order !== undefined ? Number(p.sort_order) : c.sort_order, is_active: p.is_active == null ? c.is_active : !!p.is_active, version: c.version + 1, updated_at: nowISO() });
@@ -178,6 +182,7 @@ export function productRpcs(ctx: ProductsCtx) {
       }
       const x = byId("products", p.id); if (!x) throw new Error("NOT_FOUND");
       ctx.checkVersion(x.version, p.version == null ? null : Number(p.version));
+      if (T("product_branches").some((pb) => pb.product_id === x.id && pb.available && !myBranches().includes(pb.branch_id))) throw new Error("FORBIDDEN: product_other_branch");
       if (taken(x.id)) throw new Error("DUPLICATE_NAME");
       const before = { ...x };
       // an order already placed keeps the name and the price it was placed with
@@ -240,6 +245,8 @@ export function productRpcs(ctx: ProductsCtx) {
         if (o.voucher_id && byId("financial_vouchers", o.voucher_id)?.idempotency_key === key) return { ok: true, duplicate: true, order: orderJson(o) };
         throw new Error("VALIDATION: order_status");
       }
+      // what is paid is what the cashier was shown
+      ctx.checkVersion(o.version, p.expected_version == null || p.expected_version === "" ? null : Number(p.expected_version));
       const lines = T("product_order_lines").filter((l) => l.order_id === o.id);
       if (!lines.length) throw new Error("VALIDATION: items");
       if (r.status !== "checked_in" || !r.room_id) throw new Error("VALIDATION: not_in_stay");
@@ -280,23 +287,20 @@ export function productRpcs(ctx: ProductsCtx) {
       return ctx.atomically(() => {
         if (o.status === "paid") {
           requireCap("voucher.cancel");
+          const v = byId("financial_vouchers", o.voucher_id)!;
+          if (ctx.voucherBeforeToday(v) || ctx.voucherSettled(v)) throw new Error("VALIDATION: order_cancel_day");
+          if (T("reservation_charges").some((x) => x.product_order_id === o.id && x.invoice_id)) throw new Error("VALIDATION: order_invoiced");
           cancelling = o.id;
           try {
             ctx.cancelVoucher(o.voucher_id, `إلغاء الطلب ${o.number}: ${reason}`);
-            // each line reversed as any reversed line of a stay: an adjustment with its own tax, so the tax goes back too
-            for (const c of T("reservation_charges").filter((x) => x.product_order_id === o.id && x.kind === "addon").sort((a, b) => (a.created_at < b.created_at ? -1 : 1))) {
-              const gross = Math.sign(c.quantity * c.unit_price_halalas) * Math.round(Math.abs(c.quantity * c.unit_price_halalas));
-              const cid = ctx.addCharge(o.reservation_id, "adjustment", "إلغاء: " + c.description, 1, -gross, !!c.taxable, "إلغاء الطلب " + o.number, c.service_from, c.service_to);
-              for (const x of T("reservation_charges")) if (x.id === cid || x.base_charge_id === cid) x.product_order_id = o.id;
+            // each of the order's rows gets its exact opposite, of the same kind (the line and its tax)
+            for (const c of T("reservation_charges").filter((x) => x.product_order_id === o.id && x.kind === "addon" && Number(x.total_halalas) > 0).sort((a, b) => (a.created_at < b.created_at ? -1 : 1))) {
+              const neg = (x: Row, base: string | null) => ({ ...x, id: uid(), description: "إلغاء: " + x.description, unit_price_halalas: -x.unit_price_halalas, total_halalas: -x.total_halalas,
+                invoice_id: null, reason: "إلغاء الطلب " + o.number, created_by: staffId(), created_at: nowISO(), base_charge_id: base, product_order_id: o.id });
+              const n = neg(c, null); T("reservation_charges").push(n);
+              for (const t of T("reservation_charges").filter((x) => x.base_charge_id === c.id && x.kind === "tax")) T("reservation_charges").push(neg(t, n.id));
             }
-            // the order nets to zero in the stay's account (a halala of rounding, should the reversal's tax differ, is balanced)
-            const rest = T("reservation_charges").filter((x) => x.product_order_id === o.id).reduce((s, x) => s + Number(x.total_halalas), 0);
-            if (rest !== 0) {
-              const r = byId("reservations", o.reservation_id)!; const day = nowISO().slice(0, 10);
-              T("reservation_charges").push({ id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, kind: "adjustment", description: `إلغاء الطلب ${o.number}: فرق التقريب`, quantity: 1,
-                unit_price_halalas: -rest, total_halalas: -rest, taxable: false, service_definition_id: null, invoice_id: null, reason: "إلغاء الطلب " + o.number, created_by: staffId(), created_at: nowISO(),
-                service_from: day, service_to: day, base_charge_id: null, product_order_id: o.id });
-            }
+            if (T("reservation_charges").filter((x) => x.product_order_id === o.id).reduce((s, x) => s + Number(x.total_halalas), 0) !== 0) throw new Error("VALIDATION: order_status");
             const t = byId("housekeeping_tasks", o.task_id);
             if (t && ["pending", "in_progress"].includes(t.status)) Object.assign(t, { status: "cancelled", cancelled_at: nowISO(), cancel_reason: "أُلغي الطلب " + o.number, version: t.version + 1, updated_at: nowISO() });
           } finally { cancelling = null; }
@@ -324,7 +328,7 @@ export function productRpcs(ctx: ProductsCtx) {
     fn_guest_cancel_product_order: ({ p_token, p_number }) => {
       const rid = tokenReservation(p_token);
       const o = T("product_orders").find((x) => x.reservation_id === rid && x.number === p_number); if (!o) throw new Error("NOT_FOUND");
-      if (o.status !== "pending_payment") throw new Error("VALIDATION: order_status");
+      if (o.status !== "pending_payment" || o.source !== "whatsapp") throw new Error("VALIDATION: order_status");
       Object.assign(o, { status: "cancelled", cancelled_at: nowISO(), cancel_reason: "ألغاه النزيل", version: o.version + 1, updated_at: nowISO() });
       audit(o.branch_id, "product_order.cancelled", "product_order", o.id, { before: { status: "pending_payment" }, after: { status: "cancelled", by: "guest" }, reason: "ألغاه النزيل" });
       emit("product_orders"); return orderJson(o);
@@ -344,6 +348,20 @@ export function productRpcs(ctx: ProductsCtx) {
     taskGuard: (t: Row | undefined) => { const o = t ? T("product_orders").find((x) => x.task_id === t.id) : undefined; if (o && o.status === "paid" && cancelling !== o.id) throw new Error("VALIDATION: order_task"); },
     /** fn_trg_product_task (after): the order is delivered when its task is done */
     sync: () => {
+      // fn_trg_product_stay: the delivery follows the guest to a new room; at the departure a waiting order is cancelled
+      // and a paid one not delivered says on its task that the guest has left
+      for (const o of T("product_orders").filter((x) => x.status === "pending_payment" || x.status === "paid")) {
+        const r = byId("reservations", o.reservation_id); if (!r) continue;
+        const left = ["checked_out", "closed"].includes(r.status);
+        if (o.status === "pending_payment") {
+          if (left) { Object.assign(o, { status: "cancelled", cancelled_at: nowISO(), cancel_reason: "غادر النزيل قبل الدفع", version: o.version + 1, updated_at: nowISO() }); emit("product_orders"); }
+          continue;
+        }
+        const t = byId("housekeeping_tasks", o.task_id);
+        if (!t || !["pending", "in_progress"].includes(t.status)) continue;
+        if (r.room_id && t.room_id !== r.room_id && !left) { t.room_id = r.room_id; emit("housekeeping_tasks"); }
+        if (left && !String(t.description).startsWith("غادر النزيل")) { t.description = "غادر النزيل — راجع الاستقبال قبل التسليم. " + t.description; emit("housekeeping_tasks"); }
+      }
       for (const o of T("product_orders").filter((x) => x.status === "paid" && x.task_id)) {
         const t = byId("housekeeping_tasks", o.task_id);
         if (t?.status !== "completed") continue;

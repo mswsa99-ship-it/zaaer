@@ -300,6 +300,16 @@ describe("ordering products on WhatsApp (W1)", () => {
     expect(w.asked.map((a) => a.message)).toEqual(["عندكم ماء؟"]);
   });
 
+  it("WF23 a category of more than 10 products goes in pages of 9 with «المزيد»: no product is out of reach", async () => {
+    const w = shopWorld([b("IN", "checked_in")]);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: "m" + i, name: "منتج " + (i + 1), description: null, price_halalas: 100 }));
+    w.ports.products = async () => ({ can_order: true, open_order: null, categories: [{ id: "c1", name: "مشروبات", products: many }, { id: "c2", name: "أخرى", products: many.slice(0, 1) }] });
+    await runWaFlow(tap("PCAT:c1", "مشروبات"), w.ports);
+    expect(rowsOf(w.sent[0]).map((r: { id: string }) => r.id)).toEqual([...many.slice(0, 9).map((x) => "PADD:" + x.id), "PCAT:c1:1"]);
+    await runWaFlow(tap("PCAT:c1:1", "المزيد…"), w.ports);
+    expect(rowsOf(w.sent[1]).map((r: { id: string }) => r.id)).toEqual(["PADD:m9", "PADD:m10", "PADD:m11"]);
+  });
+
   it("WF21 the guest cancels the order while it waits; once paid it is not cancelled here; a refused product says so", async () => {
     const w = shopWorld([b("IN", "checked_in")]);
     await runWaFlow(text("المنتجات"), w.ports);

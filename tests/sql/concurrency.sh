@@ -365,7 +365,8 @@ PP=$(q "select (fn_admin_upsert_product(jsonb_build_object('category_id','$PC','
 q "select fn_admin_set_product_branch('$PP','$BR',true)->>'ok'" >/dev/null
 item() { echo "jsonb_build_array(jsonb_build_object('product_id','$PP','quantity',1))"; }
 order() { q "select (fn_staff_create_product_order('$RP', $(item)))->>'id'"; }
-pay() { echo "fn_staff_pay_product_order(jsonb_build_object('order_id','$1','method','cash','idempotency_key','$2'))->>'ok'"; }
+# the version the cashier saw: read before the race
+pay() { echo "fn_staff_pay_product_order(jsonb_build_object('order_id','$1','method','cash','idempotency_key','$2','expected_version',$(qs "select version from product_orders where id = '$1'")))->>'ok'"; }
 ostate() { qs "select o.status || ' ' || o.total_halalas || ' ' || (select count(*) from financial_vouchers v where v.product_order_id = o.id and v.status = 'approved') || ' ' || (select coalesce(sum(amount_halalas), 0) from financial_vouchers v where v.product_order_id = o.id and v.status = 'approved') || ' ' || (select count(*) from housekeeping_tasks t where t.id = o.task_id) from product_orders o where o.id = '$1'"; }
 O1=$(order)
 race "$(pay "$O1" race-pr-a)" "$(pay "$O1" race-pr-b)"
@@ -378,11 +379,11 @@ race "$(pay "$O2" race-pr-c)" "(fn_staff_create_product_order('$RP', $(item)))->
 ST=$(ostate "$O2"); NEW=$(qs "select count(*) || ' ' || coalesce(max(total_halalas), 0) from product_orders where reservation_id = '$RP' and status = 'pending_payment'")
 echo "PD31 A=$RA B=$RB state=$ST new=$NEW"
 [[ "$RA" == "R:true" && "$RB" == "R:true" && "$ST" == "paid 300 1 300 1" && "$NEW" == "1 300" ]] && rc=0 || rc=1; check "PD31 an item added while its order is paid → it waits, then opens a new order; the paid order keeps its lines, its total and its voucher" $rc "A=$RA B=$RB state=$ST new=$NEW"
-# the item first: the payment waits, then pays the order with that item
+# the item first: the payment waits, then is refused — the order is no longer the one the cashier was shown
 O3=$(qs "select id from product_orders where reservation_id = '$RP' and status = 'pending_payment'")
 race "(fn_staff_create_product_order('$RP', $(item)))->>'id' = '$O3'" "$(pay "$O3" race-pr-d)"
 ST=$(ostate "$O3")
 echo "PD32 A=$RA B=$RB state=$ST"
-[[ "$RA" == "R:true" && "$RB" == "R:true" && "$ST" == "paid 600 1 600 1" ]] && rc=0 || rc=1; check "PD32 the payment of an order while an item is added to it → it waits, then pays the order with that item (the voucher is the whole total)" $rc "A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:true" && "$RB" == *"VERSION_CONFLICT"* && "$ST" == "pending_payment 600 0 0 0" ]] && rc=0 || rc=1; check "PD32 the payment of an order while an item is added to it → it waits, then is refused: the cashier is shown the new total first, nothing is paid" $rc "A=$RA B=$RB state=$ST"
 
 exit $fail

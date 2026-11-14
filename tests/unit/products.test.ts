@@ -41,6 +41,8 @@ async function guestToken(): Promise<{ token: string; reservation: string; branc
   return { token, reservation: (data as { id: string }).id, branch: (data as { branch_id: string }).branch_id };
 }
 const item = (id: string, quantity: number) => ({ product_id: id, quantity });
+/** the order's version as a cashier who just opened it sees it */
+const ver = async (id: string) => ((await demo.createDemoServiceClient().from("product_orders").select("version").eq("id", id).single()).data as { version: number }).version;
 
 beforeAll(async () => {
   (globalThis as any).window = globalThis; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -91,12 +93,12 @@ describe("products and orders in the demo (W1)", () => {
     await as("reception@demo.sa");
     const before = await rpc("fn_reservation_detail", { p_reservation: g.reservation }).catch(() => null);
     const due0 = before?.finance?.balance_due ?? null;
-    expect(await fails(rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "ota_deferred", idempotency_key: "k0" } }))).toMatch(/VALIDATION: order_method/);
-    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd21" } });
+    expect(await fails(rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "ota_deferred", idempotency_key: "k0", expected_version: (await ver(o.id)) } }))).toMatch(/VALIDATION: order_method/);
+    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd21", expected_version: (await ver(o.id)) } });
     expect(paid.duplicate).toBe(false);
     expect(paid.order.status).toBe("paid");
-    expect((await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd21" } })).duplicate).toBe(true);
-    expect(await fails(rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "other" } }))).toMatch(/VALIDATION: order_status/);
+    expect((await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd21", expected_version: (await ver(o.id)) } })).duplicate).toBe(true);
+    expect(await fails(rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "other", expected_version: (await ver(o.id)) } }))).toMatch(/VALIDATION: order_status/);
     const db = demo.createDemoServiceClient();
     const { data: v } = await db.from("financial_vouchers").select("*").eq("number", paid.voucher_number).single();
     expect(v).toMatchObject({ kind: "receipt", amount_halalas: paid.order.total_halalas, product_order_id: o.id, status: "approved" });
@@ -118,7 +120,7 @@ describe("products and orders in the demo (W1)", () => {
     const shop = await service("fn_guest_products", { p_token: g.token });
     const pid = shop.categories[0].products[0].id;
     const o = await service("fn_guest_order_products", { p_token: g.token, p_items: [item(pid, 1)] });
-    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd22" } });
+    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd22", expected_version: (await ver(o.id)) } });
     const db = demo.createDemoServiceClient();
     const { data: v } = await db.from("financial_vouchers").select("id").eq("number", paid.voucher_number).single();
     const { data: ord } = await db.from("product_orders").select("task_id").eq("id", o.id).single();
@@ -139,7 +141,7 @@ describe("products and orders in the demo (W1)", () => {
     const pid = shop.categories[0].products[1].id;
     const o = await service("fn_guest_order_products", { p_token: g.token, p_items: [item(pid, 2)] });
     await as("reception@demo.sa");
-    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd23" } });
+    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd23", expected_version: (await ver(o.id)) } });
     expect(await fails(rpc("fn_staff_cancel_product_order", { p_order: o.id, p_reason: "رفضه النزيل" }))).toMatch(/FORBIDDEN/);
     await as("owner@demo.sa");
     expect(await fails(rpc("fn_staff_cancel_product_order", { p_order: o.id, p_reason: " " }))).toMatch(/VALIDATION: reason/);
@@ -165,13 +167,40 @@ describe("products and orders in the demo (W1)", () => {
     const water = shop.categories[0].products.find((p: { name: string }) => p.name === "ماء صغير");
     const o = await service("fn_guest_order_products", { p_token: g.token, p_items: [item(water.id, 2)] });
     expect(o.total_halalas).toBe(460);                                   // 2 × 2.00 + 15%
-    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd27" } });
+    const paid = await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd27", expected_version: (await ver(o.id)) } });
     expect(paid.order.total_halalas).toBe(460);
     await rpc("fn_staff_cancel_product_order", { p_order: o.id, p_reason: "خطأ في الطلب" });
     const { data } = await db.from("reservation_charges").select("kind, total_halalas").eq("product_order_id", o.id);
     const rows = data as Array<{ kind: string; total_halalas: number }>;
     expect(rows.filter((r) => r.kind === "tax").map((r) => r.total_halalas).sort((a, b) => a - b)).toEqual([-60, 60]);
     expect(rows.reduce((x, r) => x + r.total_halalas, 0)).toBe(0);
+  });
+
+  it("PD29 the review's cases: an item added after the cashier opened the payment refuses it; a cancelled paid order leaves the stay's dues as they were; the delivery follows a room move; the departure cancels a waiting order", async () => {
+    const g = await guestToken();
+    const shop = await service("fn_guest_products", { p_token: g.token });
+    const [w1, w2] = shop.categories[0].products;
+    const o = await service("fn_guest_order_products", { p_token: g.token, p_items: [item(w1.id, 1)] });
+    const seen = await ver(o.id);
+    await service("fn_guest_order_products", { p_token: g.token, p_items: [item(w2.id, 1)] });
+    expect(await fails(rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd29", expected_version: seen } }))).toMatch(/VERSION_CONFLICT/);
+    expect(await fails(rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd29" } }))).toMatch(/VERSION_REQUIRED/);
+    const due0 = (await rpc("fn_reservation_detail", { p_reservation: g.reservation })).stay?.due ?? (await rpc("fn_reservation_detail", { p_reservation: g.reservation })).finance;
+    await rpc("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: "pd29c", expected_version: await ver(o.id) } });
+    await rpc("fn_staff_cancel_product_order", { p_order: o.id, p_reason: "تجربة" });
+    const d1 = await rpc("fn_reservation_detail", { p_reservation: g.reservation });
+    expect(d1.stay?.due ?? d1.finance).toEqual(due0);
+    const db = demo.createDemoServiceClient();
+    const { data: rows } = await db.from("reservation_charges").select("kind").eq("product_order_id", o.id);
+    expect((rows as Array<{ kind: string }>).every((r) => r.kind !== "adjustment")).toBe(true);
+    // a reception order is not the guest's to cancel from WhatsApp
+    const s2 = await rpc("fn_staff_create_product_order", { p_reservation: g.reservation, p_items: [item(w1.id, 1)] });
+    expect(await fails(service("fn_guest_cancel_product_order", { p_token: g.token, p_number: s2.number }))).toMatch(/VALIDATION: order_status/);
+    // the departure: the waiting order is cancelled with its reason
+    await db.from("reservations").update({ status: "checked_out" }).eq("id", g.reservation);
+    await rpc("fn_admin_products");
+    const { data: after } = await db.from("product_orders").select("status, cancel_reason").eq("id", s2.id).single();
+    expect(after).toMatchObject({ status: "cancelled", cancel_reason: "غادر النزيل قبل الدفع" });
   });
 
   it("PD24 the reception orders for a guest in the house only, and a role that does not see money reads no order", async () => {
