@@ -102,7 +102,7 @@ describe("products and orders in the demo (W1)", () => {
     expect(v).toMatchObject({ kind: "receipt", amount_halalas: paid.order.total_halalas, product_order_id: o.id, status: "approved" });
     const { data: charges } = await db.from("reservation_charges").select("total_halalas, product_order_id").eq("product_order_id", o.id);
     expect((charges as Array<{ total_halalas: number }>).reduce((s, c) => s + c.total_halalas, 0)).toBe(paid.order.total_halalas);
-    const { data: task } = await db.from("housekeeping_tasks").select("*").eq("reservation_id", g.reservation).eq("task_type_name_snapshot", "تسليم طلب منتجات").single();
+    const { data: task } = await db.from("housekeeping_tasks").select("*").eq("task_type_name_snapshot", "تسليم طلب منتجات").single();
     expect(task).toMatchObject({ status: "pending", priority: "high" });
     expect(String((task as { description: string }).description)).toContain("3 × ماء صغير");
     if (due0 != null) expect((await rpc("fn_reservation_detail", { p_reservation: g.reservation })).finance.balance_due).toBe(due0);

@@ -258,7 +258,7 @@ export function productRpcs(ctx: ProductsCtx) {
         if (!vr || vr.product_order_id !== o.id || vr.status !== "approved") throw new Error("VALIDATION: order_voucher");
         // the delivery task for the guest's room
         const items = lines.map((l) => `${l.quantity} × ${l.name}`).join("، "); const tt = deliveryType(r.branch_id); const at = nowISO();
-        const task = { id: uid(), organization_id: ORG, branch_id: r.branch_id, room_id: r.room_id, facility_id: null, task_type_id: tt.id, task_type_name_snapshot: DELIVERY, reservation_id: r.id, priority: "high", status: "pending",
+        const task = { id: uid(), organization_id: ORG, branch_id: r.branch_id, room_id: r.room_id, facility_id: null, task_type_id: tt.id, task_type_name_snapshot: DELIVERY, reservation_id: null, priority: "high", status: "pending",
           assignee_id: null, scheduled_start: at, scheduled_end: null, started_at: null, completed_at: null, completed_by: null, cancelled_at: null, cancel_reason: null, description: `تسليم ${o.number}: ${items}`,
           result_note: null, images: [], version: 1, created_by: staffId(), created_at: at, updated_at: at };
         T("housekeeping_tasks").push(task);

@@ -608,10 +608,11 @@ begin
   if not exists (select 1 from financial_vouchers where id = (v->>'voucher_id')::uuid and product_order_id = o.id and status = 'approved') then
     raise exception 'VALIDATION: order_voucher';
   end if;
-  -- the delivery task for the guest's room
+  -- the delivery task for the guest's room. It is the order's (product_orders.task_id), not the stay's: the check-out
+  -- looks for an open task of the stay before it creates the departure cleaning, and a delivery must not stand for it
   select string_agg(quantity || ' × ' || name, '، ' order by created_at, name) into items from product_order_lines where order_id = o.id;
-  insert into housekeeping_tasks(organization_id, branch_id, room_id, task_type_id, task_type_name_snapshot, reservation_id, priority, description, created_by)
-  values (r.organization_id, r.branch_id, r.room_id, fn_product_delivery_type(r.branch_id), 'تسليم طلب منتجات', r.id, 'high',
+  insert into housekeeping_tasks(organization_id, branch_id, room_id, task_type_id, task_type_name_snapshot, priority, description, created_by)
+  values (r.organization_id, r.branch_id, r.room_id, fn_product_delivery_type(r.branch_id), 'تسليم طلب منتجات', 'high',
           'تسليم ' || o.number || ': ' || items, fn_staff_id())
   returning id into tid;
   update product_orders set status = 'paid', total_halalas = amt, voucher_id = (v->>'voucher_id')::uuid, task_id = tid,
@@ -713,7 +714,7 @@ begin
     return new;
   end if;
   if new.status = 'completed' and o.status = 'paid' then
-    update product_orders set status = 'delivered', delivered_at = now(), version = version + 1, updated_at = now() where id = o.id;
+    update product_orders set status = 'delivered', delivered_at = now(), version = version + 1, updated_at = now() where id = o.id and status = 'paid';
     perform fn_audit_change(o.branch_id, 'product_order.delivered', 'product_order', o.id, jsonb_build_object('status', 'paid'),
                             jsonb_build_object('status', 'delivered', 'number', o.number, 'task', new.id));
   end if;

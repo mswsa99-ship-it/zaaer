@@ -212,7 +212,7 @@ do $$ declare due0 bigint; rent0 bigint; prod0 bigint; p jsonb; dup jsonb; other
     p->>'duplicate' = 'false' and dup->>'duplicate' = 'true' and other = 'ok' and badm = 'ok'
     and o.status = 'paid' and o.total_halalas = 1550 and v.amount_halalas = 1550 and v.kind = 'receipt' and v.status = 'approved' and v.product_order_id = o.id
     and ch = 1550 and tp_due(tp_id('res1')) = due0
-    and t.status = 'pending' and t.room_id = tp_id('room1') and t.reservation_id = tp_id('res1')
+    and t.status = 'pending' and t.room_id = tp_id('room1') and t.reservation_id is null
     and (select code from task_types where id = t.task_type_id) = 'product_delivery' and t.description like '%3 × ماء%',
     concat_ws(' / ', p::text, badm, o.status, o.total_halalas::text, ch::text, tp_due(tp_id('res1'))::text, due0::text));
   perform tp_record('PD05b what the order brought in is product revenue (43), not rent',
