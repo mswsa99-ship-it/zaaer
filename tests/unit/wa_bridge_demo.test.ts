@@ -38,6 +38,9 @@ beforeEach(async () => {
   await staff.auth.signInWithPassword({ email: "owner@demo.sa", password: "demo" });
   const list = await rpc<Array<{ branch_id: string; mode: string }>>("fn_admin_whatsapp_channels", {});
   BRANCH = list.find((x) => x.mode === "web_bridge" && demo.demoBridgeKey(x.branch_id))!.branch_id;
+  // the journey's own messages (0070: the 10 AM options, the review invitations) depend on the hour: they are tested in
+  // journey.test.ts at a fixed hour, and kept out of these exchanges
+  await rpc("fn_admin_journey_settings_save", { p_branch: BRANCH, p: { version: (await rpc<{ version: number }>("fn_admin_journey_settings", { p_branch: BRANCH })).version, journey_enabled: false } });
 });
 
 const threadOf = async (phone: string) => {

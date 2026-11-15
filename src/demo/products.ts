@@ -5,7 +5,8 @@
  * side) or by the reception — then the payment, the voucher and the delivery task in one step. Same rules, errors and
  * shapes as the SQL (fn_product_order_add, fn_staff_pay_product_order, fn_staff_cancel_product_order and the guards
  * of fn_trg_product_voucher and fn_trg_product_task). The catalogue seeded here is an example: the owner's real items
- * are added from «المنتجات».
+ * are added from «المنتجات». 0072: the example catalogue is trial data (is_sample) until the owner edits an item, and
+ * «مسح كل بيانات التجربة» takes it away.
  */
 import { uid, nowISO, ORG, type Row } from "./data";
 
@@ -50,10 +51,10 @@ export function seedProducts(T: (t: string) => Row[], branches: string[]) {
     ["مستلزمات شخصية", [["فرشاة ومعجون أسنان", 800, null], ["شفرة حلاقة", 600, null], ["شاحن جوال", 2500, "منفذ USB-C"], ["مناديل مبللة", 500, null]]],
   ];
   cats.forEach(([name, items], i) => {
-    const c = { id: uid(), organization_id: ORG, name, sort_order: (i + 1) * 10, is_active: true, version: 1, created_by: null, created_at: at, updated_at: at };
+    const c = { id: uid(), organization_id: ORG, name, sort_order: (i + 1) * 10, is_active: true, is_sample: true, version: 1, created_by: null, created_at: at, updated_at: at };
     T("product_categories").push(c);
     items.forEach(([pname, price, description], j) => {
-      const x = { id: uid(), organization_id: ORG, category_id: c.id, name: pname, description, price_halalas: price, taxable: true, is_active: true, sort_order: (i * 4 + j + 1) * 10, version: 1, created_by: null, created_at: at, updated_at: at };
+      const x = { id: uid(), organization_id: ORG, category_id: c.id, name: pname, description, price_halalas: price, taxable: true, is_active: true, is_sample: true, sort_order: (i * 4 + j + 1) * 10, version: 1, created_by: null, created_at: at, updated_at: at };
       T("products").push(x);
       branches.forEach((b, k) => { if (k === 0 || j < 2) T("product_branches").push({ product_id: x.id, branch_id: b, organization_id: ORG, available: true, updated_by: null, updated_at: at }); });
     });
@@ -122,7 +123,7 @@ export function productRpcs(ctx: ProductsCtx) {
     }
     Object.assign(o, { total_halalas: T("product_order_lines").filter((l) => l.order_id === o.id).reduce((s, l) => s + l.total_halalas, 0), conversation_id: o.conversation_id ?? conversation, version: o.version + 1, updated_at: nowISO() });
     audit(r.branch_id, fresh ? "product_order.created" : "product_order.added", "product_order", o.id, { after: { number: o.number, items, source } });
-    if (fresh) notify(r.branch_id, "طلب منتجات بانتظار الدفع", `${o.number} — غرفة ${byId("rooms", r.room_id)?.room_number ?? ""}`, "/staff/orders");
+    // 0070 (W6): the reception is told by the rule of «طلب منتجات بانتظار الدفع» (journey.ts raises it after the call)
     emit("product_orders"); emit("product_order_lines");
     return orderJson(o);
   });
@@ -160,7 +161,7 @@ export function productRpcs(ctx: ProductsCtx) {
       if (T("product_branches").some((pb) => T("products").some((x) => x.id === pb.product_id && x.category_id === c.id) && pb.available && !myBranches().includes(pb.branch_id))) throw new Error("FORBIDDEN: product_other_branch");
       if (taken(c.id)) throw new Error("DUPLICATE_NAME");
       const before = { ...c };
-      Object.assign(c, { name, sort_order: p.sort_order !== undefined ? Number(p.sort_order) : c.sort_order, is_active: p.is_active == null ? c.is_active : !!p.is_active, version: c.version + 1, updated_at: nowISO() });
+      Object.assign(c, { name, sort_order: p.sort_order !== undefined ? Number(p.sort_order) : c.sort_order, is_active: p.is_active == null ? c.is_active : !!p.is_active, is_sample: false, version: c.version + 1, updated_at: nowISO() });
       emit("product_categories"); audit(null, "product_category.updated", "product_category", c.id, { before, after: c });
       return { ok: true, id: c.id, version: c.version };
     },
@@ -189,7 +190,7 @@ export function productRpcs(ctx: ProductsCtx) {
       const before = { ...x };
       // an order already placed keeps the name and the price it was placed with
       Object.assign(x, { category_id: cat.id, name, description, price_halalas: price, taxable: p.taxable == null ? x.taxable : !!p.taxable, is_active: p.is_active == null ? x.is_active : !!p.is_active,
-        sort_order: p.sort_order !== undefined ? Number(p.sort_order) : x.sort_order, version: x.version + 1, updated_at: nowISO() });
+        sort_order: p.sort_order !== undefined ? Number(p.sort_order) : x.sort_order, is_sample: false, version: x.version + 1, updated_at: nowISO() });
       emit("products"); audit(null, "product.updated", "product", x.id, { before, after: x });
       return { ok: true, id: x.id, version: x.version };
     },
@@ -208,8 +209,8 @@ export function productRpcs(ctx: ProductsCtx) {
     fn_admin_products: () => {
       requireCap("definitions"); const mine = myBranches();
       return {
-        categories: T("product_categories").slice().sort(byOrder).map((c) => ({ id: c.id, name: c.name, sort_order: c.sort_order, is_active: c.is_active, version: c.version, products: T("products").filter((x) => x.category_id === c.id).length })),
-        products: T("products").slice().sort(byOrder).map((x) => ({ id: x.id, category_id: x.category_id, name: x.name, description: x.description ?? null, price_halalas: x.price_halalas, taxable: x.taxable, is_active: x.is_active, sort_order: x.sort_order, version: x.version,
+        categories: T("product_categories").slice().sort(byOrder).map((c) => ({ id: c.id, name: c.name, sort_order: c.sort_order, is_active: c.is_active, version: c.version, is_sample: !!c.is_sample, products: T("products").filter((x) => x.category_id === c.id).length })),
+        products: T("products").slice().sort(byOrder).map((x) => ({ id: x.id, category_id: x.category_id, name: x.name, description: x.description ?? null, price_halalas: x.price_halalas, taxable: x.taxable, is_active: x.is_active, sort_order: x.sort_order, version: x.version, is_sample: !!x.is_sample,
           branches: T("product_branches").filter((pb) => pb.product_id === x.id && pb.available).map((pb) => pb.branch_id).sort() })),
         branches: T("branches").slice().sort((a, b) => String(a.name_ar).localeCompare(String(b.name_ar), "ar")).map((b) => ({ id: b.id, name: b.name_ar, mine: mine.includes(b.id) })),
       };

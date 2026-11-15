@@ -981,6 +981,24 @@ begin
 end $$;
 revoke all on function fn_trg_journey_product_order() from public, anon, authenticated;
 create or replace trigger trg_journey_product_order after insert or update of status on product_orders for each row execute function fn_trg_journey_product_order();
+-- the reception is told of a new order by its rule (who, by which channel, when it climbs): the order's own notice
+-- (0068, 0069) gives way to it, so one order is never announced twice
+do $$
+declare fn oid; def text; n int;
+        old_n constant text := $a$  if fresh then
+    insert into notifications(branch_id, audience, title, body, link)
+    values (r.branch_id, 'supervisor', 'طلب منتجات بانتظار الدفع',
+            o.number || ' — غرفة ' || coalesce((select room_number from rooms where id = r.room_id), '') , '/staff/orders');
+  end if;
+$a$;
+begin
+  select p.oid into fn from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'fn_product_order_add';
+  def := pg_get_functiondef(fn);
+  if position(old_n in def) = 0 then return; end if;
+  n := (length(def) - length(replace(def, old_n, ''))) / length(old_n);
+  if n <> 1 then raise exception '0070: the notice of fn_product_order_add was found % times, not once', n; end if;
+  execute replace(def, old_n, '');
+end $$;
 
 create or replace function fn_trg_journey_handoff() returns trigger
 language plpgsql security definer set search_path = public as $$

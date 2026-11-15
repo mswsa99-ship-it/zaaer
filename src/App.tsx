@@ -35,6 +35,8 @@ import Housekeeping from "./pages/staff/Housekeeping";
 import Codes from "./pages/staff/Codes";
 import Tickets from "./pages/staff/Tickets";
 import Inbox from "./pages/staff/Inbox";
+import StaffJourney from "./pages/staff/StaffJourney";
+import GuestReview from "./pages/guest/GuestReview";
 
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminBranches = lazy(() => import("./pages/admin/AdminBranches"));
@@ -58,6 +60,7 @@ const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const AdminAuditLogs = lazy(() => import("./pages/admin/AdminAuditLogs"));
 const AdminUsage = lazy(() => import("./pages/admin/AdminUsage"));
 const AdminIntegrations = lazy(() => import("./pages/admin/AdminIntegrations"));
+const AdminJourney = lazy(() => import("./pages/admin/AdminJourney"));
 const AdminStructure = lazy(() => import("./pages/admin/AdminStructure"));
 const AdminFacilities = lazy(() => import("./pages/admin/AdminFacilities"));
 const AdminTaskTypes = lazy(() => import("./pages/admin/AdminTaskTypes"));
@@ -103,6 +106,7 @@ export default function App() {
         <Route path="/booking/status/:token" element={<BookingStatus />} />
         <Route path="/booking/payment/:token" element={<BookingStatus />} />
         <Route path="/booking/summary/:token" element={<StaySummaryPage />} />
+        <Route path="/booking/review/:token" element={<GuestReview />} />
         <Route path="/checkin/:token" element={<CheckIn />} />
         <Route path="/kiosk" element={<Kiosk />} />
         {WhatsAppDemo && <Route path="/whatsapp-demo" element={<Suspense fallback={<LoadingScreen />}><WhatsAppDemo /></Suspense>} />}
@@ -139,6 +143,7 @@ export default function App() {
           <Route path="/staff/codes" element={<Codes />} />
           <Route path="/staff/tickets" element={<Tickets />} />
           <Route path="/staff/inbox" element={<Inbox />} />
+          <Route path="/staff/journey" element={<StaffJourney />} />
         </Route>
       </Route>
 
@@ -182,6 +187,7 @@ export default function App() {
           <Route path="/admin/usage" element={<AdminUsage />} />
           <Route path="/admin/review" element={<AdminReview />} />
           <Route path="/admin/integrations" element={<AdminIntegrations />} />
+          <Route path="/admin/journey" element={<AdminJourney />} />
         </Route>
       </Route>
 

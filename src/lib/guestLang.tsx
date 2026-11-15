@@ -129,6 +129,19 @@ const VALIDATION_EN: Record<string, string> = {
   phone: "The phone number is not valid.",
   child_age: "A child's age is a number from 0 to 14.", children: "The children's list is not valid.",
   children_registered: "More guests are registered with a document than remain after the children; ask the reception to remove one.",
+  // 0070 (W3–W5): the day of departure and the review
+  checkout_choice: "Choose: leave on time, one more night, or hours after the check-out time.",
+  checkout_not_today: "The check-out options open on the day of departure, while you are staying in your unit.",
+  extension_pending: "A request is waiting for its payment; pay it or cancel it first.",
+  extension_none: "There is no request waiting for payment to cancel.",
+  night_unavailable: "One more night is not available: the unit is booked tonight or an amount is overdue.",
+  late_hours: "That many hours are not available: a late check-out ends before the next guest, less an hour of cleaning.",
+  not_in_stay: "This is for a guest staying in their unit, after check-in and before the check-out is confirmed.",
+  via: "The request's source is not valid.",
+  review_marks: "Rate the overall stay and each of the six aspects from 1 to 10.",
+  review_comment: "The comment is up to 1000 characters.",
+  review_submitted: "This review was already sent. Thank you.",
+  purpose: "Unknown guide.",
 };
 const ERROR_EN: Record<string, string> = {
   TOKEN_INVALID: "This link is not valid or has expired.",

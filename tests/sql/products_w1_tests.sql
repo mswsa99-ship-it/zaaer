@@ -177,8 +177,9 @@ do $$ declare g jsonb; o jsonb; o2 jsonb; notin text; gone text; bad1 text; bad2
 exception when others then perform tp_record('PD03 a guest in their room orders from WhatsApp: the order waits for payment and the next item joins it; a stay not checked in, a product not offered there, a broken list and an unknown token are refused', false, sqlerrm);
 end $$;
 reset role;
+-- (0070: the notice is the rule's alert «طلب منتجات بانتظار الدفع — رقمه — غرفته»; the order's own notice gave way to it)
 select tp_record('PD03b the orders tell the reception: one notice per new order, and the order is in the log',
-  tp_count(format('select count(*) from notifications where branch_id = %L and title = ''طلب منتجات بانتظار الدفع''', tp_id('b'))) = 1
+  tp_count(format('select count(*) from notifications where branch_id = %L and title like ''طلب منتجات بانتظار الدفع%%''', tp_id('b'))) = 1
   and tp_count(format('select count(*) from audit_events where entity_id = %L and action in (''product_order.created'', ''product_order.added'')', tp_id('o1'))) = 2);
 
 -- ---------------------------------------------------------------- PD04 the guest cancels while it waits

@@ -13,6 +13,9 @@
  *   - identity documents and card numbers are never taken in the chat; only text is read
  *   - W1: a guest in their room orders products («المنتجات»): a category, a product, how many; the order waits for the
  *     payment at reception (the voucher and the delivery task come with it), and is cancelled here while it waits
+ *   - W3–W4 (0070): on the day of departure the server's 10 AM message offers leaving on time, one night more, or hours
+ *     after the free hour; the guest's answer (a number on the reception computer) is the choice — a night or hours are
+ *     held while the guest pays at reception — and «غادرت وسلّمت المفتاح» comes after the departure instructions
  */
 import { BTN, buttonsPayload, ctaUrlPayload, listPayload, shortDate, textPayload, toWhatsAppMessage, type AssistantAction, type WaInbound } from "./whatsapp.ts";
 import { gateInput } from "./guardrails.ts";
@@ -43,6 +46,16 @@ export interface WaShop { can_order: boolean; categories: WaProductCategory[]; o
 /** an order placed or cancelled, or the refusal (the server's message: VALIDATION: …, NOT_FOUND, TOKEN_INVALID) */
 export type WaOrderResult = { order: WaOrder } | { error: string };
 export interface WaAssistantAnswer { reply: string; actions: AssistantAction[] }
+/** W3–W4 (0070): the day of departure as the server offers it (fn_guest_checkout) */
+export interface WaCheckout {
+  open: boolean; check_out: string; room_number: string | null; free_until: string;
+  night: { available: boolean; price_halalas: number | null };
+  hours: { max: number; price_halalas: number | null; until_limit: string | null; next_guest: boolean };
+  hold_minutes: number; choice: string | null; late_checkout_until: string | null; instructions: string | null; departed_at: string | null;
+  guide_checkout?: boolean; deposit_halalas: number; refund_hours: number; balance_due: number;
+  request: { id: string; kind: "night" | "hours"; hours: number | null; late_until: string | null; amount_halalas: number; status: string; hold_until: string } | null;
+}
+export type WaCheckoutChoice = "on_time" | "night" | "hours" | "cancel";
 
 export interface WaFlowPorts {
   /** the website's address for links (status page, guest registration); "" → no links are sent */
@@ -74,6 +87,12 @@ export interface WaFlowPorts {
   orderProducts?(guestToken: string, threadId: string, items: Array<{ product_id: string; quantity: number }>): Promise<WaOrderResult>;
   /** W1: the guest cancels their order while it waits for the payment */
   cancelOrder?(guestToken: string, number: string): Promise<WaOrderResult>;
+  /** W3 (0070): what the guest may choose on the day of departure, by the guest token */
+  checkoutOffer?(guestToken: string): Promise<WaCheckout | null>;
+  /** W3: the guest's choice (on WhatsApp): the new offer, or the refusal (VALIDATION: …) */
+  chooseCheckout?(guestToken: string, choice: WaCheckoutChoice, hours: number | null): Promise<{ offer: WaCheckout } | { error: string }>;
+  /** W4: «غادرت وسلّمت المفتاح» */
+  departed?(guestToken: string): Promise<{ already: boolean } | { error: string }>;
 }
 
 export const WA_TEXTS = {
@@ -92,7 +111,22 @@ export const WA_TEXTS = {
   shopGone: "هذا المنتج لم يعد متاحًا.",
   shopFailed: "تعذر إتمام الطلب الآن. حاول بعد قليل أو اطلب موظف الاستقبال.",
   orderPay: "يتواصل معك الاستقبال لإتمام الدفع (نقدًا أو بالشبكة أو بالتحويل)، ثم يصلك الطلب إلى غرفتك.",
+  // W3–W4: the day of departure
+  checkoutWord: /^(خروج|الخروج|مغادره|المغادره|مغادرة|المغادرة|تمديد|التمديد|خروج متاخر|خروج متأخر|ليله اضافيه|ليلة إضافية|checkout|check out|late checkout|extend)$/i,
+  checkoutNeedsStay: "خيارات الخروج والتمديد للنزيل المقيم في وحدته. اختر إقامتك من «حجوزاتي»، أو اطلب موظف الاستقبال.",
+  checkoutClosed: "خيارات الخروج والتمديد تُتاح يوم المغادرة للنزيل المقيم في وحدته. للمساعدة اطلب موظف الاستقبال.",
+  departNotInStay: "لا توجد إقامة قائمة في وحدتك الآن. إن كنت ما زلت في الوحدة فاطلب موظف الاستقبال.",
+  journeyFailed: "تعذر تنفيذ طلبك الآن. حاول بعد قليل أو اطلب موظف الاستقبال.",
+  departInstructions: "تأكد من أغراضك، وأطفئ الأنوار والمكيف، وأغلق الباب، ثم ضع المفتاح أو البطاقة في مكانه أو سلّمه للاستقبال.",
 };
+/** W3–W4: the ids of the departure's options (the server's 10 AM message uses the first three and BTN.HUMAN) */
+export const CO = { ON_TIME: "CO:ONTIME", NIGHT: "CO:NIGHT", HOURS: "CO:HOURS", HOUR: "CO:H:", CANCEL: "CO:CANCEL", MENU: "CO:MENU", LEFT: "DEP:LEFT" } as const;
+/** Arabic counting of hours: ساعة واحدة، ساعتان، 3–10 ساعات، 11+ ساعة */
+export const hoursAr = (n: number) => (n === 1 ? "ساعة واحدة" : n === 2 ? "ساعتان" : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
+/** "13:00" + n hours (midnight is 24:00, the end of the day of departure) */
+const plusHours = (hm: string, n: number) => { const [h, mi] = hm.split(":").map(Number); const x = h * 60 + mi + n * 60; return x >= 1440 ? "24:00" : `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`; };
+/** the branch's clock for a moment (every branch keeps Riyadh time today) */
+const clockAt = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit" });
 
 const nightsAr = (n: number) => (n === 1 ? "ليلة" : "ليالٍ");
 /** halalas → "12.50 ر.س" */
@@ -260,6 +294,90 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     return showCategories(s.data);
   };
 
+  // ---- W3–W4: the day of departure — the choice, the held request, the departure ----
+  const departBtn = { id: CO.LEFT, title: "غادرت وسلّمت المفتاح" };
+  /** the stay the guest leaves from: the thread's booking (the 10 AM message bound it), else the only in-house one */
+  const leavingStay = async (): Promise<string | null> => {
+    if (t.guest_token) return t.guest_token;
+    const { token, list } = await p.bookings();
+    const inHouse = list.filter((b) => b.status === "checked_in");
+    if (inHouse.length === 1 && (await bind(token, inHouse[0], false, list.length > 1))) return t.guest_token;
+    if (inHouse.length > 1) { await showBookings(); return null; }
+    await say(buttonsPayload(m.from, WA_TEXTS.checkoutNeedsStay, [{ id: BTN.BOOKINGS, title: "حجوزاتي" }, staffBtn]), WA_TEXTS.checkoutNeedsStay);
+    return null;
+  };
+  const statusLink = (tok: string) => (base ? `${base}/booking/status/${tok}` : "");
+  /** what the guest reads before «غادرت وسلّمت المفتاح»: the instructions, then the unit's way out when its photos are approved */
+  const leaveText = (o: WaCheckout, tok: string) => [o.instructions || WA_TEXTS.departInstructions,
+    o.guide_checkout && base ? `صور طريقة المغادرة: ${statusLink(tok)}` : "", "حين تغادر اختر «غادرت وسلّمت المفتاح»."].filter(Boolean).join("\n\n");
+  const heldText = (o: WaCheckout) => {
+    const q = o.request!;
+    const what = q.kind === "night" ? "ليلة إضافية" : `خروجًا متأخرًا ${hoursAr(q.hours ?? 0)} حتى ${q.late_until}`;
+    if (q.status === "paid" || q.status === "confirmed") return q.kind === "night" ? `تم تثبيت ليلتك الإضافية. موعد خروجك الجديد ${o.check_out} بين 12 و1 ظهرًا.` : `تم تثبيت خروجك المتأخر حتى ${q.late_until}.`;
+    if (q.status === "overdue") return `انتهت مهلة دفع طلبك (${what}). تواصل مع الاستقبال لإتمام الدفع أو إلغاء الطلب.`;
+    return `حجزنا لك ${what} بمبلغ ${sarText(q.amount_halalas)} حتى الساعة ${clockAt(q.hold_until)}. ادفع المبلغ لدى الاستقبال (نقدًا أو بالشبكة أو بالتحويل) ليُثبَّت، وإلا أُلغي تلقائيًا.`;
+  };
+  /** the departure's menu as the server offers it now */
+  const checkoutMenu = async (o: WaCheckout | null, tok: string, lead = "") => {
+    if (!o) return say(buttonsPayload(m.from, WA_TEXTS.journeyFailed, [staffBtn]), WA_TEXTS.journeyFailed);
+    if (o.departed_at) { const text = `${lead}أبلغت الاستقبال بمغادرتك الساعة ${clockAt(o.departed_at)}. يفحص الوحدة ثم يؤكد خروجك ويصلك التأكيد هنا.`; return say(textPayload(m.from, text), text); }
+    if (o.request && ["held", "overdue"].includes(o.request.status)) {
+      const text = lead + heldText(o);
+      return say(buttonsPayload(m.from, text, [...(o.request.status === "held" ? [{ id: CO.CANCEL, title: "إلغاء الطلب" }] : []), staffBtn]), text);
+    }
+    if (!o.open) {
+      const text = lead + (o.request && ["paid", "confirmed"].includes(o.request.status) ? heldText(o) : WA_TEXTS.checkoutClosed);
+      return say(buttonsPayload(m.from, text, [staffBtn]), text);
+    }
+    if (o.choice === "on_time" || o.late_checkout_until) {
+      const text = `${lead}${o.late_checkout_until ? `موعد خروجك اليوم حتى ${o.late_checkout_until}.` : `موعد خروجك اليوم قبل ${o.free_until}.`}\n\n${leaveText(o, tok)}`;
+      return say(buttonsPayload(m.from, text, [departBtn, staffBtn]), text.replace(/\/booking\/status\/[A-Za-z0-9]+/g, "/booking/status/…"));
+    }
+    const rows: Array<{ id: string; title: string; description?: string }> = [{ id: CO.ON_TIME, title: "سأخرج في الموعد", description: `بين 12 و1 ظهرًا، بلا رسوم حتى ${o.free_until}` }];
+    if (o.night.available) rows.push({ id: CO.NIGHT, title: "ليلة إضافية", description: sarText(o.night.price_halalas ?? 0) });
+    if (o.hours.max > 0) rows.push({ id: CO.HOURS, title: `ساعات بعد ${o.free_until}`, description: `${sarText(o.hours.price_halalas ?? 0)} للساعة` });
+    rows.push({ id: CO.LEFT, title: "غادرت وسلّمت المفتاح", description: "بعد قراءة تعليمات المغادرة" });
+    const text = `${lead}موعد خروجك اليوم${o.room_number ? ` من غرفة ${o.room_number}` : ""} بين 12 و1 ظهرًا. ماذا تفضّل؟`;
+    return say(listPayload(m.from, text, "الخيارات", rows), text);
+  };
+  const checkoutError = (e: string) => /night_unavailable/.test(e) ? "لا تتاح ليلة إضافية: الوحدة محجوزة الليلة لضيف آخر أو على الحجز مبلغ متأخر."
+    : /late_hours/.test(e) ? "هذا العدد من الساعات غير متاح؛ الخروج المتأخر لا يتجاوز موعد الضيف التالي ناقص ساعة التنظيف."
+    : /extension_pending/.test(e) ? "لديك طلب بانتظار الدفع؛ ادفعه لدى الاستقبال أو ألغِه أولًا."
+    : /extension_none/.test(e) ? "لا يوجد طلب بانتظار الدفع لإلغائه."
+    : /checkout_not_today/.test(e) ? WA_TEXTS.checkoutClosed
+    : /TOKEN_INVALID|not_in_stay/.test(e) ? WA_TEXTS.checkoutNeedsStay : WA_TEXTS.journeyFailed;
+  const checkoutTurn = async (id: string) => {
+    const tok = await leavingStay();
+    if (!tok) return;
+    if (id === CO.LEFT) {
+      // the instructions come before the button: a guest who has not read them yet gets them first
+      const o = await p.checkoutOffer!(tok).catch(() => null);
+      const r = await p.departed!(tok).catch((): { error: string } => ({ error: "unreachable" }));
+      if ("error" in r) { const text = /not_in_stay/.test(r.error) ? WA_TEXTS.departNotInStay : WA_TEXTS.journeyFailed; return say(buttonsPayload(m.from, text, [staffBtn]), text); }
+      const text = (r.already ? "أبلغتنا بمغادرتك من قبل. " : "شكرًا لك. ") + "أبلغنا الاستقبال بمغادرتك؛ يفحص الوحدة ثم يؤكد خروجك ويصلك التأكيد هنا."
+        + (o && o.deposit_halalas > 0 ? `\nيُرد تأمينك (${sarText(o.deposit_halalas)}) خلال ${hoursAr(o.refund_hours)} من تأكيد الخروج: تحويلًا إلى حسابك أو نقدًا من الاستقبال، ويصلك إيصال الرد هنا.` : "");
+      return say(textPayload(m.from, text), text);
+    }
+    if (id === CO.HOURS) {
+      const o = await p.checkoutOffer!(tok).catch(() => null);
+      if (!o || !o.open || o.hours.max <= 0 || o.request?.status === "held") return checkoutMenu(o, tok);
+      const n = Math.min(o.hours.max, 10);
+      const text = `اختر مدة الخروج المتأخر بعد ${o.free_until} (${sarText(o.hours.price_halalas ?? 0)} للساعة، وجزء الساعة ساعة)${o.hours.next_guest ? `؛ الحد ${o.hours.until_limit} لوجود ضيف بعدك` : ""}:`;
+      return say(listPayload(m.from, text, "الساعات", Array.from({ length: n }, (_, i) => ({
+        id: CO.HOUR + (i + 1), title: `${hoursAr(i + 1)} — حتى ${plusHours(o.free_until, i + 1)}`, description: sarText((o.hours.price_halalas ?? 0) * (i + 1)) }))), text);
+    }
+    const choice: WaCheckoutChoice | null = id === CO.ON_TIME ? "on_time" : id === CO.NIGHT ? "night" : id === CO.CANCEL ? "cancel" : id.startsWith(CO.HOUR) ? "hours" : null;
+    if (!choice) return checkoutMenu(await p.checkoutOffer!(tok).catch(() => null), tok);
+    const hours = choice === "hours" ? Number(id.slice(CO.HOUR.length)) : null;
+    if (choice === "hours" && (!Number.isInteger(hours) || (hours ?? 0) < 1)) return checkoutMenu(await p.checkoutOffer!(tok).catch(() => null), tok);
+    const r = await p.chooseCheckout!(tok, choice, hours).catch((): { error: string } => ({ error: "unreachable" }));
+    if ("error" in r) { const text = checkoutError(r.error); return checkoutMenu(await p.checkoutOffer!(tok).catch(() => null), tok, text + "\n\n"); }
+    const o = r.offer;
+    if (choice === "cancel") return checkoutMenu(o, tok, `ألغينا الطلب. موعد خروجك اليوم قبل ${o.free_until}.\n\n`);
+    if (choice === "on_time") { const text = `تم. موعد خروجك اليوم قبل ${o.free_until}.\n\n${leaveText(o, tok)}`; return say(buttonsPayload(m.from, text, [departBtn, staffBtn]), text.replace(/\/booking\/status\/[A-Za-z0-9]+/g, "/booking/status/…")); }
+    return checkoutMenu(o, tok);
+  };
+
   // ---- not text: say what works (documents are never taken in the chat) ----
   if (!["text", "interactive", "button"].includes(m.type)) {
     // the notice once: the next photos of an album (each one a message) are recorded without repeating it
@@ -295,6 +413,14 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
       await p.send(textPayload(m.from, WA_TEXTS.openFailed));
       await saveBot(WA_TEXTS.openFailed);
     }
+    await p.touch(t.id);
+    return;
+  }
+  // the departure's options (the 10 AM message's numbers), its words typed, or the assistant's own suggestion of them
+  const checkoutAsked = /^(CO|DEP):/.test(id) || (!id && WA_TEXTS.checkoutWord.test(typed)) || (id.startsWith("SAY:") && WA_TEXTS.checkoutWord.test(id.slice(4).trim()));
+  if (p.checkoutOffer && p.chooseCheckout && p.departed && checkoutAsked) {
+    await saveGuest(typed || id);
+    await checkoutTurn(/^(CO|DEP):/.test(id) ? id : CO.MENU);
     await p.touch(t.id);
     return;
   }

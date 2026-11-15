@@ -5,7 +5,7 @@
  * whatsapp-webhook (Cloud API) and wa-bridge (the reception computer) differ only in how a message leaves (`send`)
  * and in what is known about the sender (`contact`); the conversation itself is wa_flow.ts.
  */
-import { WA_THREAD_HOURS, type WaBooking, type WaFlowPorts, type WaOrder, type WaShop, type WaThread } from "./wa_flow.ts";
+import { WA_THREAD_HOURS, type WaBooking, type WaCheckout, type WaFlowPorts, type WaOrder, type WaShop, type WaThread } from "./wa_flow.ts";
 
 export interface WaContact {
   /** conversations.wa_contact: the international number, or "lid:<id>" when WhatsApp hides the number */
@@ -89,6 +89,20 @@ export function dbPorts(db: Db, ch: WaBranch, c: WaContact, send: (payload: Reco
     async cancelOrder(guestToken, number) {
       const { data, error } = await db.rpc("fn_guest_cancel_product_order", { p_token: guestToken, p_number: number });
       return error ? { error: String(error.message ?? "error") } : { order: data as WaOrder };
+    },
+
+    // W3–W4 (0070): the day of departure, by the guest token the thread was bound with (the 10 AM message binds it)
+    async checkoutOffer(guestToken) {
+      const { data, error } = await db.rpc("fn_guest_checkout", { p_token: guestToken });
+      return error || !data ? null : (data as WaCheckout);
+    },
+    async chooseCheckout(guestToken, choice, hours) {
+      const { data, error } = await db.rpc("fn_guest_checkout_choose", { p_token: guestToken, p_choice: choice, p_hours: hours, p_via: "whatsapp" });
+      return error ? { error: String(error.message ?? "error") } : { offer: data as WaCheckout };
+    },
+    async departed(guestToken) {
+      const { data, error } = await db.rpc("fn_guest_departure", { p_token: guestToken, p_via: "whatsapp" });
+      return error ? { error: String(error.message ?? "error") } : { already: !!(data as { already?: boolean } | null)?.already };
     },
 
     async ask(thread, message) {

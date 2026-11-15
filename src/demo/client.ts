@@ -18,13 +18,14 @@ import { expensesRpcs } from "./expenses";
 import { glRpcs, lockedEntryAdded } from "./gl";
 import { bankRpcs, seedBank } from "./bank";
 import { productRpcs, seedProducts } from "./products";
+import { journeyRpcs, seedJourney } from "./journey";
 import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v9";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
-function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); return s; }
+function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); seedJourney((t) => (s[t] ??= [])); return s; }
 const SESSION_KEY = "zaaer_demo_session";
 
 // ---------------------------------------------------------------------------
@@ -781,33 +782,7 @@ function createReservationUnit(p: any, groupRef: string | null) { requireCap("re
     return { ok: true, id, internal_ref: ref, quote: q, group_ref: groupRef, guest_profile_id: gp.id, platform_voucher: vch?.number ?? null }; }
 const rpcsMore: Record<string, (a: any) => any> = {
   fn_staff_amend_stay: ({ p_reservation, p_new_check_out, p_pricing_mode, p_reason, p_expected_version }) => { requireCap("stay.extend"); nonEmpty(p_reason, "reason"); if (!["keep_rate", "reprice"].includes(p_pricing_mode)) throw new Error("VALIDATION: pricing_mode"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version);
-    if (!["confirmed", "checked_in", "pending_verification"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); if (p_new_check_out <= r.check_in) throw new Error("VALIDATION: dates"); if (r.status === "checked_in" && p_new_check_out <= branchToday() && p_new_check_out < r.check_out) throw new Error("VALIDATION: checkout_in_past");
-    const delta = Math.round((Date.parse(p_new_check_out) - Date.parse(r.check_out)) / 86400000); if (delta === 0) return { ok: true, unchanged: true };
-    // decision 3: a night unpaid past its deadline stops the extension until it is paid or a reason is recorded
-    if (delta > 0 && r.status === "checked_in" && overdueBlocked(r.id)) throw new Error("PAYMENT_OVERDUE: a night is unpaid past its deadline");
-    // leaving a weekly or monthly stay early is settled by the owner or a manager (decision 15)
-    if (delta < 0 && ["weekly", "monthly"].includes(r.price_basis) && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: shortening a weekly or monthly stay requires manager");
-    const before = { check_out: r.check_out, total_halalas: r.total_halalas }; ensureNights(r.id);
-    const a = T("reservation_allocations").filter((x) => x.reservation_id === r.id && x.status === "active").sort((x, y) => (x.to_date < y.to_date ? 1 : -1))[0];
-    if (a) { if (a.to_date !== r.check_out) throw new Error("ALLOCATION_MISMATCH"); if (p_new_check_out <= a.from_date) throw new Error("VALIDATION: dates"); if (T("reservation_allocations").some((o) => o.id !== a.id && o.room_id === a.room_id && o.status === "active" && overlaps(o.from_date, o.to_date, a.from_date, p_new_check_out))) throw new Error("ALLOCATION_CONFLICT: room is allocated during the added period"); a.to_date = p_new_check_out; emit("reservation_allocations"); }
-    let refund = 0;
-    if (delta > 0) {
-      // keep_rate: the stay's last night's price; reprice: the calendar's (never re-priced as a weekly or monthly stay)
-      const last = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active").sort((x, y) => (x.night < y.night ? 1 : -1))[0];
-      const src = byId("booking_sources", r.source_id);
-      const runs: Run[] = p_pricing_mode === "keep_rate" ? [{ from: r.check_out, to: p_new_check_out, nights: delta, price: last?.price_halalas ?? r.nightly_rate_halalas, basis: "kept" }]
-        : stayRuns(stayPrices(r.room_category_id, r.check_out, p_new_check_out, !!src && src.kind !== "direct", null, false));
-      bookNights(r.id, runs, "تمديد", p_reason);
-    } else {
-      // the refund is exactly the removed nights' prices; the nights keep their rows, marked removed
-      const gone = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active" && x.night >= p_new_check_out && x.night < r.check_out);
-      refund = gone.reduce((s, x) => s + x.price_halalas, 0);
-      for (const x of gone) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: p_reason });
-      emit("reservation_nights");
-      addCharge(r.id, "adjustment", `تقصير الإقامة ${nightsAr(-delta)}`, 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
-    }
-    const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
-    r.check_out = p_new_check_out; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f }; },
+    return amendStayInternal(r, p_new_check_out, p_pricing_mode, p_reason, true); },
   // B4 (0048): the platform's fields corrected before arrival and before «طابقتُ مع المنصة»; the group's units change together
   fn_staff_update_platform: ({ p_reservation, p, p_reason, p_expected_version }) => atomically(() => { requireCap("res.create"); nonEmpty(p_reason, "reason"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version);
     const src = byId("booking_sources", r.source_id); if (!src || src.kind !== "external") throw new Error("VALIDATION: not_platform");
@@ -968,7 +943,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     }
     let reference: string | null = null, account_id: string | null = null;
     let paid: string[] = []; const methodReason = String(p.method_reason ?? "").trim() || null;
-    if (p.kind !== "deposit_apply") { if (!ACTIVE_METHODS.includes(method)) throw new Error("VALIDATION: method_retired"); if (p.kind === "deposit_refund" && !["cash", "bank_transfer"].includes(method)) throw new Error("VALIDATION: deposit_method");   // 0070 (W4): by transfer or in cash from the box reference = checkReference(method, p.reference); account_id = voucherAccount(r.branch_id, method, p.account_id);
+    if (p.kind !== "deposit_apply") { if (!ACTIVE_METHODS.includes(method)) throw new Error("VALIDATION: method_retired"); if (p.kind === "deposit_refund" && !["cash", "bank_transfer"].includes(method)) throw new Error("VALIDATION: deposit_method");   /* 0070 (W4): by transfer or in cash from the box */ reference = checkReference(method, p.reference); account_id = voucherAccount(r.branch_id, method, p.account_id);
       // 0054 (MONEY-06): a stay refund goes back by the method of the payment, or with a written reason
       if (p.kind === "refund") { paid = [...new Set(T("financial_vouchers").filter((x) => x.reservation_id === r.id && x.status === "approved" && x.kind === "receipt" && (!p.original_voucher_id || x.id === p.original_voucher_id)).map((x) => x.method as string))]; if (paid.length && !paid.includes(method) && !methodReason) throw new Error(`REFUND_METHOD_DIFFERS: ${paid.join(",")}`); } }
     else account_id = depSrc?.account_id ?? null;
@@ -2116,7 +2091,7 @@ const phase6Ctx = {
 };
 Object.assign(rpcs, phase6Rpcs(phase6Ctx));
 // review Phase 2b (0056): the branch guide, gallery and videos, booking sources, payment provider settings
-Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, validHttpsUrl }));
+Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, validHttpsUrl, hasRole: (...r) => hasRole(...r) }));
 // the closing of the day (0063: A2 and A3)
 Object.assign(rpcs, accountingRpcs({ T, byId, can, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), addReview, emit, dayOf, today: (b) => branchToday(b), role: () => me()?.role ?? null }));
 // the expenses and the ledger (0064: A4)
@@ -2131,11 +2106,49 @@ Object.assign(rpcs, bankFns);
 Object.assign(rpcs, permissionRpcs({ T, me, staffId, emit, atomically: <V,>(fn: () => V): V => atomically(fn),
   audit: (branch, action, entity, entityId, details) => audit(branch, action, entity, entityId as string, details) }, perm));
 
+/** fn_amend_stay_internal (0070): the extension or shortening of a stay without the caller's checks — the reception's
+ *  «تمديد» checks its caller first; the journey asks it for the guest's night and to give back a night held and not paid
+ *  (staffRules false: neither the weekly stay's rule nor «not before today») */
+function amendStayInternal(r: Row, p_new_check_out: string, p_pricing_mode: string, p_reason: string, staffRules: boolean) {
+    if (!["confirmed", "checked_in", "pending_verification"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); if (p_new_check_out <= r.check_in) throw new Error("VALIDATION: dates"); if (staffRules && r.status === "checked_in" && p_new_check_out <= branchToday() && p_new_check_out < r.check_out) throw new Error("VALIDATION: checkout_in_past");
+    const delta = Math.round((Date.parse(p_new_check_out) - Date.parse(r.check_out)) / 86400000); if (delta === 0) return { ok: true, unchanged: true };
+    // decision 3: a night unpaid past its deadline stops the extension until it is paid or a reason is recorded
+    if (delta > 0 && r.status === "checked_in" && overdueBlocked(r.id)) throw new Error("PAYMENT_OVERDUE: a night is unpaid past its deadline");
+    // leaving a weekly or monthly stay early is settled by the owner or a manager (decision 15)
+    if (staffRules && delta < 0 && ["weekly", "monthly"].includes(r.price_basis) && !hasRole("owner", "manager")) throw new Error("FORBIDDEN: shortening a weekly or monthly stay requires manager");
+    const before = { check_out: r.check_out, total_halalas: r.total_halalas }; ensureNights(r.id);
+    const a = T("reservation_allocations").filter((x) => x.reservation_id === r.id && x.status === "active").sort((x, y) => (x.to_date < y.to_date ? 1 : -1))[0];
+    if (a) { if (a.to_date !== r.check_out) throw new Error("ALLOCATION_MISMATCH"); if (p_new_check_out <= a.from_date) throw new Error("VALIDATION: dates"); if (T("reservation_allocations").some((o) => o.id !== a.id && o.room_id === a.room_id && o.status === "active" && overlaps(o.from_date, o.to_date, a.from_date, p_new_check_out))) throw new Error("ALLOCATION_CONFLICT: room is allocated during the added period"); a.to_date = p_new_check_out; emit("reservation_allocations"); }
+    let refund = 0;
+    if (delta > 0) {
+      // keep_rate: the stay's last night's price; reprice: the calendar's (never re-priced as a weekly or monthly stay)
+      const last = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active").sort((x, y) => (x.night < y.night ? 1 : -1))[0];
+      const src = byId("booking_sources", r.source_id);
+      const runs: Run[] = p_pricing_mode === "keep_rate" ? [{ from: r.check_out, to: p_new_check_out, nights: delta, price: last?.price_halalas ?? r.nightly_rate_halalas, basis: "kept" }]
+        : stayRuns(stayPrices(r.room_category_id, r.check_out, p_new_check_out, !!src && src.kind !== "direct", null, false));
+      bookNights(r.id, runs, "تمديد", p_reason);
+    } else {
+      // the refund is exactly the removed nights' prices; the nights keep their rows, marked removed
+      const gone = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active" && x.night >= p_new_check_out && x.night < r.check_out);
+      refund = gone.reduce((s, x) => s + x.price_halalas, 0);
+      for (const x of gone) Object.assign(x, { status: "removed", removed_at: nowISO(), removed_by: staffId(), removed_reason: p_reason });
+      emit("reservation_nights");
+      addCharge(r.id, "adjustment", `تقصير الإقامة ${nightsAr(-delta)}`, 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
+    }
+    const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
+    r.check_out = p_new_check_out; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f };
+}
+/** fn_room_free_internal (0070): the room's allocations and an overstay, whoever asks (a guest's page asks too) */
+function roomFreeInternal(roomId: string, from: string, to: string, exclude: string | null) {
+  return !T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && overlaps(a.from_date, a.to_date, from, to) && a.reservation_id !== exclude)
+    && !overstayBlocks(roomId, from, to, exclude);
+}
+
 // ---- data purge (demo): same rules as fn_purge_run in 0022 ----
 const purgeRequests = new Map<string, { branch: string | null; from: string; to: string; cats: string[]; staff: string | null; expires: number; used: boolean }>();
 const purgeHistory: Row[] = [];
 let lastSignInAt = Date.now();
-const PURGE_KINDS = ["conversations", "reservations", "finance", "guests", "operations", "logs", "audit"];
+const PURGE_KINDS = ["conversations", "reservations", "finance", "guests", "operations", "logs", "audit", "samples"];
 function purgeValidate(branch: string | null, from: string, to: string, cats: string[]): string[] {
   requireCap("security");
   if (!from || !to || from > to) throw new Error("VALIDATION: period");
@@ -2179,13 +2192,42 @@ function purgeRun(branch: string | null, from: string, to: string, cats: string[
     // the period's terminal settlements, and its platform payouts none of whose payments remain (0031)
     c.pos_settlements = drop("pos_settlements", (s) => inBranch(s.branch_id) && s.business_date >= from && s.business_date <= to);
     c.platform_payouts = drop("platform_payouts", (p) => inBranch(p.branch_id) && p.received_on >= from && p.received_on <= to && !T("financial_vouchers").some((v) => v.payout_id === p.id));
+    // 0073: the period's closings, expenses and bank movements, and the bank's matching that rested on what went
+    const closings = T("day_closings").filter((d) => inBranch(d.branch_id) && d.business_date >= from && d.business_date <= to).map((d) => d.id);
+    drop("day_closing_lines", (x) => closings.includes(x.closing_id)); drop("day_closing_requests", (x) => closings.includes(x.closing_id));
+    c.day_closings = drop("day_closings", (x) => closings.includes(x.id));
+    const expenses = T("expense_vouchers").filter((e) => inBranch(e.branch_id) && inRange(e.occurred_at)).map((e) => e.id);
+    drop("expense_attachments", (x) => expenses.includes(x.expense_id)); c.expense_vouchers = drop("expense_vouchers", (x) => expenses.includes(x.id));
+    const movements = T("bank_movements").filter((m) => (branch ? m.branch_id === branch : true) && inRange(m.occurred_at)).map((m) => m.id);
+    const goneTarget = (i: Row) => (i.target_type === "voucher" && !byId("financial_vouchers", i.target_id)) || (i.target_type === "expense" && !byId("expense_vouchers", i.target_id))
+      || (i.target_type === "platform_payout" && !byId("platform_payouts", i.target_id));
+    const deadMatches = T("bank_matches").filter((mt) => movements.includes(mt.movement_id) || T("bank_match_items").some((i) => i.match_id === mt.id && goneTarget(i))).map((mt) => mt.id);
+    drop("bank_match_items", (i) => deadMatches.includes(i.match_id)); c.bank_matches = drop("bank_matches", (mt) => deadMatches.includes(mt.id));
+    for (const m of T("bank_movements")) if (!movements.includes(m.id) && ["matched", "converted"].includes(m.status) && !T("bank_matches").some((mt) => mt.movement_id === m.id && mt.active)) m.status = "pending";
+    const messages = T("bank_messages").filter((bm) => movements.includes(bm.movement_id) || T("bank_movements").some((m) => movements.includes(m.id) && m.message_id === bm.id) || (!branch && inRange(bm.received_at))).map((bm) => bm.id);
+    c.bank_movements = drop("bank_movements", (m) => movements.includes(m.id)); c.bank_messages = drop("bank_messages", (m) => messages.includes(m.id));
+    c.journal_entries = 0;   // the demo's journal is read from the records themselves: it goes with them
   }
   if (has("reservations")) {
     for (const t of ["reservation_guests", "reservation_charges", "reservation_allocations", "reservation_nights", "registration_sessions", "access_release_requests", "access_delivery_events", "payment_transactions", "checkout_inspections", "stay_payment_exceptions", "review_items"]) drop(t, (x) => res.includes(x.reservation_id));
+    // 0073: what the stay's journey and orders left (kept by the functions, not by references)
+    const orders = T("product_orders").filter((o) => res.includes(o.reservation_id)).map((o) => o.id);
+    drop("product_order_lines", (l) => orders.includes(l.order_id)); c.product_orders = drop("product_orders", (o) => orders.includes(o.id));
+    drop("journey_messages", (x) => res.includes(x.reservation_id)); drop("stay_extension_requests", (x) => res.includes(x.reservation_id));
+    c.guest_reviews = drop("guest_reviews", (x) => res.includes(x.reservation_id)); drop("alert_events", (x) => !!x.reservation_id && res.includes(x.reservation_id));
     c.reservations = drop("reservations", (r) => res.includes(r.id));
   }
-  if (has("guests")) c.guest_profiles = drop("guest_profiles", (g) => !T("reservation_guests").some((x) => x.guest_profile_id === g.id) && (!branch && inRange(g.created_at)));
-  if (has("logs")) { c.notifications = drop("notifications", (n) => inBranch(n.branch_id) && inRange(n.created_at)); if (!branch) c.integration_events = drop("integration_events", (e) => inRange(e.created_at)); }
+  // the guests imported from Zaaer are never erased (0072)
+  if (has("guests")) c.guest_profiles = drop("guest_profiles", (g) => !g.imported_at && !T("reservation_guests").some((x) => x.guest_profile_id === g.id) && (!branch && inRange(g.created_at)));
+  if (has("logs")) { c.notifications = drop("notifications", (n) => inBranch(n.branch_id) && inRange(n.created_at)); c.alerts = drop("alert_events", (a) => inBranch(a.branch_id) && inRange(a.created_at));
+    if (!branch) { c.integration_events = drop("integration_events", (e) => inRange(e.created_at)); drop("journey_ticks", () => true); } }
+  // 0072/0073: the example catalogue, unless an order holds one of its items
+  if (has("samples")) {
+    const held = (id: string) => T("product_order_lines").some((l) => l.product_id === id);
+    const gone = T("products").filter((x) => x.is_sample && !held(x.id)).map((x) => x.id);
+    drop("product_branches", (pb) => gone.includes(pb.product_id)); c.sample_products = drop("products", (x) => gone.includes(x.id));
+    drop("product_categories", (pc) => pc.is_sample && !T("products").some((x) => x.category_id === pc.id));
+  }
   if (has("audit")) c.audit_events = drop("audit_events", (a) => inBranch(a.branch_id) && inRange(a.created_at));
   return c;
 }
@@ -2436,6 +2478,8 @@ function randomHex(bytes: number): string {
   return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 const bridgeOnline = (c: Row | undefined) => !!c?.bridge_last_seen && Date.now() - Date.parse(c.bridge_last_seen) < 90_000;
+/** the journey's clock (set once the journey is built, below) */
+let journeyTick: (branch: string) => unknown = () => undefined;
 /** server-only functions (service role in the real system): only the service client below reaches them */
 const serviceRpcs: Record<string, (a: any) => any> = {
   fn_whatsapp_phone_session: ({ p_phone }) => { const ph = normPhone(p_phone); if (!ph) throw new Error("VALIDATION: phone"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, ph); return token; },
@@ -2446,17 +2490,18 @@ const serviceRpcs: Record<string, (a: any) => any> = {
     if (complete && p_status === "disconnected") Object.assign(c, { status: "error", last_error: String(p_detail || "disconnected").slice(0, 300), last_checked_at: nowISO() });
     emit("branch_whatsapp_channels"); return { enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, human_pause_minutes: c.human_pause_minutes ?? 60 }; },
   fn_wa_bridge_poll: ({ p_branch, p_limit }) => { const now = Date.now(); const out: Row[] = [];
-    const fail = (o: Row, status: string, error: string) => { Object.assign(o, { status, error, finished_at: nowISO() }); const m = byId("conversation_messages", o.message_id); if (m) m.meta = { ...(m.meta ?? {}), delivery: "failed", error }; };
+    try { journeyTick(p_branch); } catch { /* the computer's messages go out whatever the journey's state (0070) */ }
+    const fail = (o: Row, status: string, error: string) => { Object.assign(o, { status, error, finished_at: nowISO(), body: null }); const m = byId("conversation_messages", o.message_id); if (m) m.meta = { ...(m.meta ?? {}), delivery: "failed", error }; };
     for (const o of T("whatsapp_outbox").filter((x) => x.branch_id === p_branch)) { if (o.status === "sending" && now - Date.parse(o.picked_at) > 5 * 60_000) fail(o, "failed", "no_ack"); else if (o.status === "pending" && now - Date.parse(o.created_at) > 12 * 3600_000) fail(o, "expired", "expired"); }
     for (const o of T("whatsapp_outbox").filter((x) => x.branch_id === p_branch && x.status === "pending").sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).slice(0, Math.max(1, Math.min(Number(p_limit) || 5, 20)))) {
       const m = byId("conversation_messages", o.message_id); const cv = m ? byId("conversations", m.conversation_id) : undefined;
-      if (!m || !cv?.wa_chat_id || cv.branch_id !== p_branch) { Object.assign(o, { status: "expired", error: "message_gone", finished_at: nowISO() }); continue; }
-      Object.assign(o, { status: "sending", picked_at: nowISO(), attempts: (o.attempts ?? 0) + 1 }); out.push({ id: o.id, chat_id: cv.wa_chat_id, text: m.content });
+      if (!m || !cv?.wa_chat_id || cv.branch_id !== p_branch) { Object.assign(o, { status: "expired", error: "message_gone", finished_at: nowISO(), body: null }); continue; }
+      Object.assign(o, { status: "sending", picked_at: nowISO(), attempts: (o.attempts ?? 0) + 1 }); out.push({ id: o.id, chat_id: cv.wa_chat_id, text: o.body ?? m.content });
     }
     emit("conversation_messages"); return out; },
   // 0024: a confirmation that arrives after the 5-minute wait (the reply WAS typed) still turns it into "sent"
   fn_wa_bridge_ack: ({ p_branch, p_id, p_ok, p_wa_id, p_error }) => { const o = T("whatsapp_outbox").find((x) => x.id === p_id && x.branch_id === p_branch && (x.status === "sending" || (!!p_ok && x.status === "failed" && x.error === "no_ack"))); if (!o) return false;
-    Object.assign(o, { status: p_ok ? "sent" : "failed", wa_id: p_wa_id ?? null, error: p_ok ? null : String(p_error || "send_failed").slice(0, 200), finished_at: nowISO() });
+    Object.assign(o, { status: p_ok ? "sent" : "failed", wa_id: p_wa_id ?? null, error: p_ok ? null : String(p_error || "send_failed").slice(0, 200), finished_at: nowISO(), body: null });
     const m = byId("conversation_messages", o.message_id);
     if (m) { const { error: _gone, ...rest } = (m.meta ?? {}) as Row; void _gone; m.meta = p_ok ? { ...rest, delivery: "sent" } : { ...(m.meta ?? {}), delivery: "failed", error: o.error }; }
     emit("conversation_messages"); return true; },
@@ -2480,7 +2525,26 @@ const products = productRpcs({ T, byId, can, requireCap, requireBranch, myBranch
   productTax: (resId, amount, taxable) => chargeTax(resId, "products", amount, taxable), recompute, createVoucher: (p) => rpcs.fn_create_voucher({ p }), cancelVoucher: (id, reason) => rpcs.fn_cancel_voucher({ p_voucher: id, p_reason: reason }) });
 Object.assign(rpcs, products.staff);
 Object.assign(serviceRpcs, products.service);
-afterRpc = () => { bankSync({}); products.sync(); };
+// the guest journey after the stay (0070–0072, W3–W7): the check-out options, the departure, the deposit's countdown,
+// the review, the alert rules, the unit's photos, the trial data's overview
+const journey = journeyRpcs({ T, byId, requireCap, requireBranch, hasRole: (...r) => hasRole(...r), staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit,
+  checkVersion, branchToday: (b) => branchToday(b), recompute: (id) => recompute(id),
+  addCharge: (resId, kind, d, q, u, tx, reason, svc, from, to) => addCharge(resId, kind, d, q, u, tx, reason, svc, from, to),
+  chargeTax: (resId, cat, amount, tx) => chargeTax(resId, cat, amount, tx),
+  amendStay: (resId, co, mode, reason, rules) => amendStayInternal(byId("reservations", resId)!, co, mode, reason, rules),
+  roomFree: (room, from, to, ex) => roomFreeInternal(room, from, to, ex), overdueBlocked: (id) => overdueBlocked(id), sarText: (h) => sarText(h),
+  normPhone: (ph) => normPhone(ph), validHttpsUrl,
+  newToken: (resId) => { const token = "DEMO" + randomHex(6).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: resId, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return token; } });
+Object.assign(rpcs, journey.rpcs);
+// what the SQL does by trigger on the stay and on its vouchers: the confirmed check-out tells the guest (and closes the
+// departure's alert); a recorded return of the deposit sends its receipt
+{
+  const checkOut = rpcs.fn_staff_check_out, refund = rpcs.fn_refund;
+  rpcs.fn_staff_check_out = (a: any) => { const r = byId("reservations", a?.p?.reservation_id); const was = r?.status; const out = checkOut(a); if (r && was === "checked_in" && ["checked_out", "closed"].includes(r.status)) journey.onCheckout(r.id); return out; };
+  rpcs.fn_refund = (a: any) => { const out = refund(a); if (a?.p?.kind === "deposit_refund" && out?.voucher_id && !out.duplicate) journey.onDepositRefund(byId("financial_vouchers", out.voucher_id)); return out; };
+}
+journeyTick = (branch) => journey.tick(branch, false);
+afterRpc = () => { bankSync({}); products.sync(); journey.sync(); };
 
 function invoke(name: string, opts: any) {
   const body = opts?.body ?? {};

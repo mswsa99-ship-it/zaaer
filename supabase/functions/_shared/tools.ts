@@ -152,7 +152,8 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
       if (kind === "assistance") {
         await ctx.db.from("conversations").update({ status: "handed_off", handed_off_at: new Date().toISOString(), handoff_reason: String(args.reason ?? "") }).eq("id", ctx.conversationId);
       }
-      await ctx.db.from("notifications").insert({ branch_id: ctx.branchId, audience: "supervisor", title: kind === "assistance" ? "طلب مساعدة بشرية" : "تذكرة من مساعد الاستقبال", body: String(args.reason ?? "").slice(0, 200), link: "/staff/inbox" });
+      // 0070 (W6): the reception is told by the rule of «طلب النزيل موظفًا» (who, by which channel, to whom it climbs) — the
+      // ticket's trigger raises it, so the request is not announced twice
       return { ok: true, handed_off: kind === "assistance" };
     }
     default:

@@ -2,3 +2,6 @@
 # Keys come from scripts/migration-snapshot.sql (rows:<table>, money:..., reservations:..., allocations:...).
 # When a migration listed here reaches production (supabase/production-applied.txt), remove its lines.
 rows:booking_sources: 0038 adds the ten remaining sources of decision 22 (2 → 12); the two existing rows keep their ids and reservations
+rows:product_categories: 0072 adds the example catalogue's 3 categories, marked as trial data (is_sample), to an organisation in use that has no product yet — the owner's instruction of 15 November: the trial data stays until «مسح كل بيانات التجربة»
+rows:products: 0072 adds the example catalogue's 12 items (is_sample) for the same organisation; an item the owner edits becomes theirs
+rows:product_branches: 0072 offers those 12 example items in every active branch of the organisation

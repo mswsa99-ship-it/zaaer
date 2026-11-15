@@ -251,7 +251,7 @@ export const VALIDATION_AR: Record<string, string> = {
   available: "حدّد إتاحة المنتج في الفرع أو إيقافها.",
   items: "اختر منتجًا واحدًا على الأقل (حتى 20 صنفًا، والكمية من 1 إلى 50).",
   order_quantity: "الكمية من المنتج الواحد في الطلب 50 على الأكثر.",
-  not_in_stay: "الطلب للنزيل المقيم في وحدته بعد تسجيل وصوله.",
+  not_in_stay: "هذا متاح للنزيل المقيم في وحدته، بعد تسجيل وصوله وقبل تأكيد خروجه.",
   product_unavailable: "أحد المنتجات لم يعد متاحًا في هذا الفرع؛ حدّث القائمة.",
   order_status: "تغيّرت حالة الطلب (دُفع أو أُلغي)؛ حدّث القائمة.",
   order_method: "طلب المنتجات يُدفع في المنشأة: نقدًا أو بالشبكة أو بالتحويل.",
@@ -324,6 +324,41 @@ export const VALIDATION_AR: Record<string, string> = {
   schedule: "نهاية المهمة لا تسبق بدايتها.", schedule_start: "بداية المهمة مطلوبة.",
   allowed: "اختر مسموحًا أو غير مسموح.", changes: "لا تغييرات للحفظ.",
   branch_id: "اختر الفرع.", status: "الحالة غير صحيحة.", screen: "الشاشة غير معروفة.", full_name: "الاسم مطلوب.", email_and_name: "البريد والاسم مطلوبان.",
+  // 0070–0072: the guest journey after the stay (W3–W7) and the trial data
+  checkout_choice: "اختر: الخروج في الموعد، أو ليلة إضافية، أو ساعات بعد موعد الخروج.",
+  checkout_not_today: "خيارات الخروج تُتاح يوم المغادرة للنزيل المقيم في وحدته، قبل إبلاغه بمغادرته.",
+  extension_pending: "يوجد طلب تمديد بانتظار الدفع؛ يُدفع أو يُلغى أولًا.",
+  extension_none: "لا يوجد طلب تمديد بانتظار الدفع لإلغائه.",
+  night_unavailable: "لا تتاح ليلة إضافية: الوحدة محجوزة الليلة لضيف آخر أو على الحجز مبلغ متأخر.",
+  late_hours: "عدد الساعات غير متاح؛ الخروج المتأخر لا يتجاوز موعد الضيف التالي ناقص ساعة التنظيف.",
+  extension_status: "تغيّرت حالة الطلب (دُفع أو أُلغي)؛ حدّث القائمة.",
+  via: "مصدر الطلب غير صحيح.",
+  review_marks: "قيّم الدرجة العامة وكل جانب من الجوانب الستة من 1 إلى 10.",
+  review_comment: "التعليق حتى 1000 حرف.",
+  review_submitted: "أُرسل هذا التقييم من قبل. شكرًا لك.",
+  review_not_submitted: "لم يُرسل النزيل تقييمه بعد.",
+  review_replied: "رُد على هذا التقييم من قبل.",
+  review_reply: "اكتب الرد (حتى 1000 حرف).",
+  journey_enabled: "حدّد تشغيل رسائل الرحلة أو إيقافها.",
+  journey_time: "الوقت بصيغة ساعة:دقيقة، ونهاية الخروج المجاني بعد وقت رسالة الصباح.",
+  free_checkout_until: "نهاية الخروج المجاني لا تسبق موعد الخروج المعتمد للفرع.",
+  cleaning_buffer: "ساعة التنظيف بالدقائق من 0 إلى 240.",
+  hold_minutes: "مهلة الدفع بالدقائق من 5 إلى 240.",
+  checkout_instructions: "تعليمات المغادرة حتى 1500 حرف.",
+  refund_hours: "مهلة رد التأمين من ساعة إلى 72 ساعة.",
+  review_delay: "دعوة التقييم بعد تأكيد الخروج من 10 دقائق إلى 1440 دقيقة.",
+  review_alert_below: "حد تنبيه التقييم درجة من 1 إلى 10.",
+  journey_staff: "المسؤول والبديل من المالك أو المدير أو المشرف العاملين في الفرع.",
+  alert_rule: "قيمة تشغيل القاعدة غير صحيحة.",
+  alert_recipients: "اختر مستلمًا واحدًا على الأقل.",
+  alert_channel: "اختر القناة: داخل النظام، أو واتساب، أو كلاهما.",
+  alert_delay: "التأخير بالدقائق من 0 إلى 1440.",
+  alert_escalation: "التصعيد بعد دقيقة إلى 1440 دقيقة، إلى البديل أو المالك.",
+  guest_site_url: "عنوان صفحات النزلاء يبدأ بـ https:// (حتى 200 حرف).",
+  purpose: "الغرض: معرض الفرع، أو شرح الدخول، أو شرح الخروج.",
+  guide_photo: "صورة شرح الدخول أو الخروج صورةٌ لوحدة محددة.",
+  approve: "حدّد الاعتماد أو سحبه.",
+  archived: "صورة مؤرشفة لا تُعتمد؛ استعدها أولًا.",
 };
 
 /** Refusals that say which rule refused, more useful than the generic «no permission». */
@@ -338,6 +373,9 @@ const FORBIDDEN_AR: Array<[RegExp, string]> = [
   [/only the owner changes an owner/, "حساب المالك ودور المالك لا يغيّرهما إلا المالك."],
   [/PERMISSION_LOCKED/, "تعديل مصفوفة الصلاحيات للمالك وحده، ولا يُمنح لدور آخر."],
   [/UNKNOWN_PERMISSION/, "عملية غير معروفة في مصفوفة الصلاحيات."],
+  [/FORBIDDEN: journey/, "«رحلة الضيف» للمالك والمدير والمشرف."],
+  [/approval is the owner/, "اعتماد صور شرح الوحدة للمالك أو المدير."],
+  [/FORBIDDEN: requires one of \{owner\}|FORBIDDEN: owner only/, "هذا الإعداد للمالك وحده."],
 ];
 /** a refusal by the permissions matrix (0043): «FORBIDDEN: <code>», «FORBIDDEN: <code> (limited)», money, discounts */
 function matrixRefusal(msg: string): string | null {
@@ -637,7 +675,7 @@ export interface WaChannelRow {
 export interface WaReplyResult { ok: boolean; delivered: boolean; queued?: boolean; bridge_online?: boolean; error?: string }
 export interface WaCheck { ok: boolean; verified_name?: string; display_phone_number?: string; quality_rating?: string; matches_number?: boolean; error?: string }
 export interface PublicWhatsapp { active: boolean; wa_phone: string | null; branch_name: string; branch_phone: string | null }
-export type PurgeCategory = "conversations" | "reservations" | "finance" | "guests" | "operations" | "logs" | "audit";
+export type PurgeCategory = "conversations" | "reservations" | "finance" | "guests" | "operations" | "logs" | "audit" | "samples";
 export interface PurgePreview { request_id: string; token: string; counts: Record<string, number>; categories: PurgeCategory[]; phrase: string; expires_in_minutes: number }
 export interface PurgeHistoryRow { id: string; branch_name: string | null; from: string; to: string; categories: PurgeCategory[]; counts: Record<string, number>; executed_at: string; by: string | null }
 
@@ -817,9 +855,10 @@ export const moneyApi = {
 // (the voucher and the delivery task come with the payment), delivered when the task is done
 // ---------------------------------------------------------------------------
 export type ProductOrderStatus = "pending_payment" | "paid" | "delivered" | "cancelled";
-export interface ProductCategoryRow { id: string; name: string; sort_order: number; is_active: boolean; version: number; products: number }
+export interface ProductCategoryRow { id: string; name: string; sort_order: number; is_active: boolean; version: number; products: number;
+  /** 0072: the example catalogue (trial data) until the owner edits it */ is_sample?: boolean }
 export interface ProductRow { id: string; category_id: string; name: string; description: string | null; price_halalas: number; taxable: boolean; is_active: boolean;
-  sort_order: number; version: number; /** the branches that offer it */ branches: string[] }
+  sort_order: number; version: number; /** the branches that offer it */ branches: string[]; /** 0072: an example item (trial data) until the owner edits it */ is_sample?: boolean }
 export interface ProductsAdmin { categories: ProductCategoryRow[]; products: ProductRow[]; branches: Array<{ id: string; name: string; mine: boolean }> }
 export interface MenuCategory { id: string; name: string; products: Array<{ id: string; name: string; description: string | null; price_halalas: number }> }
 export interface ProductOrderLine { product_id: string; name: string; quantity: number; unit_price_halalas: number; total_halalas: number }
@@ -1114,7 +1153,9 @@ export interface BranchGuide {
   photos: Array<{ id: string; caption: string | null; version: string }>;
   videos: Array<{ id: string; caption: string | null; url: string; block_id: string | null; room_id: string | null }>;
 }
-export interface MediaItem { id: string; kind: "photo" | "video"; caption: string | null; url: string | null; size_bytes: number; sort_order: number; block_id: string | null; room_id: string | null; archived_at: string | null; archive_reason: string | null; version: string }
+export interface MediaItem { id: string; kind: "photo" | "video"; caption: string | null; url: string | null; size_bytes: number; sort_order: number; block_id: string | null; room_id: string | null; archived_at: string | null; archive_reason: string | null; version: string;
+  /** 0071 (W7): the branch's gallery, or a unit's way in or out (shown to a guest only once approved) */
+  purpose?: "gallery" | "checkin" | "checkout"; approved_at?: string | null; approved_by_name?: string | null }
 export type PaymentProvider = "moyasar" | "tap" | "hyperpay" | "paytabs" | "other";
 export interface PaymentSettings { branch_id: string; provider: PaymentProvider | null; provider_label: string | null; merchant_id: string | null; publishable_key: string | null; has_secret: boolean; secret_last4: string | null; pos_terminal_id: string | null; online_enabled: boolean; updated_at: string | null; updated_by: string | null; complete: boolean }
 /** 0056 (SETUP-05, SETUP-14, SETUP-02): the branch's guide, its gallery and videos, booking sources, the payment provider. */
@@ -1306,6 +1347,95 @@ export interface OrganizationSettings {
   price_min_bp_supervisor: number | null; price_max_bp_supervisor: number | null; price_min_bp_manager: number | null; price_max_bp_manager: number | null;
 }
 export interface PriceLimits { role: "owner" | "manager" | "supervisor"; base: number; min_bp: number | null; max_bp: number | null; min: number | null; max: number | null }
+// ---------------------------------------------------------------------------
+// 0070–0072: the guest journey after the stay (W3 the check-out options, W4 the departure and the deposit, W5 the review,
+// W6 the alert rules, W7 the unit's photos) and the trial data
+// ---------------------------------------------------------------------------
+export type ExtensionStatus = "held" | "paid" | "confirmed" | "released" | "overdue";
+export interface ExtensionRequestBrief { id: string; kind: "night" | "hours"; hours: number | null; late_until: string | null; amount_halalas: number; status: ExtensionStatus; hold_until: string }
+/** fn_guest_checkout: what the guest may choose today (the day of departure only, the stay in its room) */
+export interface CheckoutOffer {
+  open: boolean; status: string; check_out: string; room_number: string | null; free_until: string; check_out_time: string;
+  night: { available: boolean; price_halalas: number | null };
+  hours: { max: number; price_halalas: number | null; until_limit: string | null; next_guest: boolean };
+  hold_minutes: number; choice: "on_time" | null; late_checkout_until: string | null; instructions: string | null; departed_at: string | null;
+  /** 0071: the unit's way out has approved photos */
+  guide_checkout?: boolean;
+  deposit_halalas: number; refund_hours: number; balance_due: number;
+  request: ExtensionRequestBrief | null;
+}
+export interface UnitGuide { ready: boolean; purpose: "checkin" | "checkout"; room_number?: string | null; photos?: Array<{ id: string; caption: string | null; version: string }> }
+export type ReviewAspect = "staff" | "cleanliness" | "comfort" | "facilities" | "value" | "location";
+export type ReviewMarks = Record<"overall" | ReviewAspect, number>;
+export interface PublicReview { branch_name: string | null; check_in: string | null; check_out: string | null; submitted: boolean; aspects: Array<{ key: ReviewAspect; label: string }>; reply: string | null }
+export type AlertEvent = "guest_departed" | "deposit_overdue" | "review_low" | "extension_requested" | "extension_unpaid" | "product_order" | "guest_handoff" | "message_failed";
+export type AlertRecipient = "responsible" | "fallback" | "owner" | "manager" | "supervisor";
+export type AlertChannel = "app" | "whatsapp" | "both";
+export interface AlertTold { staff_id: string; name: string; app: boolean; whatsapp: string | null }
+export interface JourneyAlert {
+  id: string; event: AlertEvent; label: string; title: string; body: string | null; link: string | null; created_at: string; notify_at: string;
+  notified_at: string | null; notified_to: AlertTold[] | null; escalated_at: string | null; escalated_to: AlertTold[] | null;
+}
+export interface StaffJourney {
+  settings: { journey_enabled: boolean; checkout_message_time: string; free_until: string; refund_hours: number; review_alert_below: number };
+  channel_ready: boolean;
+  departing: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; choice: "on_time" | null; late_checkout_until: string | null; departed_at: string | null; message: string | null }>;
+  requests: Array<ExtensionRequestBrief & { reservation_id: string; internal_ref: string | null; room_number: string | null; source: "whatsapp" | "page"; created_at: string; version: number }>;
+  awaiting_check: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; departed_at: string; via: "whatsapp" | "page" | null; deposit_halalas: number; balance_due: number }>;
+  deposits: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; deposit_halalas: number; checked_out_at: string; due_at: string; overdue: boolean }>;
+  alerts: JourneyAlert[];
+}
+export interface StaffReview extends Partial<ReviewMarks> {
+  id: string; reservation_id: string; internal_ref: string | null; room_number: string | null; submitted_at: string; comment: string | null; reply: string | null; replied_at: string | null; version: number;
+}
+export interface StaffReviews {
+  aspects: Array<{ key: ReviewAspect; label: string }>; alert_below: number; invited: number;
+  summary: { count: number; below: number } & Record<"overall" | ReviewAspect, number | null>;
+  reviews: StaffReview[];
+}
+export interface JourneySettings {
+  branch_id: string; journey_enabled: boolean; checkout_message_time: string; free_checkout_until: string; late_hour_price_halalas: number; cleaning_buffer_minutes: number;
+  hold_minutes: number; checkout_instructions: string | null; deposit_refund_hours: number; review_delay_minutes: number; review_alert_below: number;
+  responsible_staff_id: string | null; fallback_staff_id: string | null; version: number; channel_ready: boolean; guest_site_url: string | null;
+  staff: Array<{ id: string; name: string; role: string; has_phone: boolean }>;
+}
+export interface AlertRule {
+  event: AlertEvent; label: string; enabled: boolean; recipients: AlertRecipient[]; channel: AlertChannel; delay_minutes: number;
+  escalate_after_minutes: number | null; escalate_to: "fallback" | "owner"; version: number;
+}
+export interface UnitGuideRow { room_id: string; room_number: string; checkin: number; checkin_approved: number; checkout: number; checkout_approved: number }
+export interface TrialOverview {
+  first_day: string | null; reservations: number; in_house_or_upcoming: number; vouchers: number; expenses: number; journal_entries: number; bank_movements: number;
+  product_orders: number; sample_products: number; guests_trial: number; guests_imported: number; paste_applied: boolean;
+}
+export const journeyApi = {
+  // the guest (the stay's pages, by their key)
+  checkout: (token: string) => rpc<CheckoutOffer>("fn_guest_checkout", { p_token: token }),
+  choose: (token: string, choice: "on_time" | "night" | "hours" | "cancel", hours?: number | null) =>
+    rpc<CheckoutOffer>("fn_guest_checkout_choose", { p_token: token, p_choice: choice, p_hours: hours ?? null, p_via: "page" }),
+  departure: (token: string) => rpc<{ ok: boolean; already: boolean; departed_at: string }>("fn_guest_departure", { p_token: token, p_via: "page" }),
+  unitGuide: (token: string, purpose: "checkin" | "checkout") => rpc<UnitGuide>("fn_guest_unit_guide", { p_token: token, p_purpose: purpose }),
+  review: (token: string) => rpc<PublicReview>("fn_public_review", { p_token: token }),
+  submitReview: (token: string, marks: ReviewMarks & { comment?: string }) => rpc<{ ok: boolean }>("fn_public_submit_review", { p_token: token, p: marks }),
+  // the reception: «رحلة الضيف»
+  tick: (branchId: string) => rpc<{ ran: boolean; open_alerts: number }>("fn_staff_journey_tick", { p_branch: branchId }),
+  board: (branchId: string) => rpc<StaffJourney>("fn_staff_journey", { p_branch: branchId }),
+  decide: (id: string, action: "confirm" | "release", reason: string, version: number) =>
+    rpc<{ ok: boolean; status: ExtensionStatus }>("fn_staff_extension_decide", { p_request: id, p_action: action, p_reason: reason, p_expected_version: version }),
+  resolveAlert: (id: string, note: string | null) => rpc<{ ok: boolean; already: boolean }>("fn_staff_alert_resolve", { p_alert: id, p_note: note }),
+  reviews: (branchId: string, days = 30) => rpc<StaffReviews>("fn_staff_reviews", { p_branch: branchId, p_days: days }),
+  reply: (id: string, reply: string, version: number) => rpc<{ ok: boolean }>("fn_staff_review_reply", { p_review: id, p_reply: reply, p_expected_version: version }),
+  // the settings
+  settings: (branchId: string) => rpc<JourneySettings>("fn_admin_journey_settings", { p_branch: branchId }),
+  saveSettings: (branchId: string, p: Record<string, unknown>) => rpc<{ ok: boolean; version: number }>("fn_admin_journey_settings_save", { p_branch: branchId, p }),
+  rules: () => rpc<AlertRule[]>("fn_admin_alert_rules", {}),
+  saveRule: (event: AlertEvent, p: Record<string, unknown>) => rpc<{ ok: boolean; version: number }>("fn_admin_alert_rule_save", { p_event: event, p }),
+  setGuestSite: (url: string | null) => rpc<{ ok: boolean }>("fn_admin_set_guest_site", { p_url: url }),
+  unitGuides: (branchId: string) => rpc<UnitGuideRow[]>("fn_admin_unit_guides", { p_branch: branchId }),
+  approvePhoto: (id: string, approve: boolean) => rpc<{ ok: boolean; unchanged: boolean }>("fn_admin_approve_media_item", { p_id: id, p_approve: approve }),
+  trialOverview: () => rpc<TrialOverview>("fn_admin_trial_overview", {}),
+};
+
 export const organizationApi = {
   info: () => rpc<OrganizationSettings | null>("fn_organization_info", {}),
   update: (p: Record<string, unknown>) => rpc<{ ok: boolean; version: number }>("fn_admin_update_organization", { p }),

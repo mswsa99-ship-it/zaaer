@@ -52,6 +52,11 @@ export default function AdminProducts() {
       <p className="mb-4 rounded-xl border border-ink-100 bg-ink-50 p-3 text-sm text-ink-700" role="note">
         يطلب النزيل بإرسال «المنتجات» في واتساب الفرع، ويدفع لدى الاستقبال؛ عند الدفع يُصدر سند القبض وتُنشأ مهمة التسليم لغرفته. إيراد الطلبات في حساب «إيراد المنتجات».
       </p>
+      {products.some((p) => p.is_sample) && (
+        <p className="mb-4 rounded-xl border border-accent-500/30 bg-accent-500/10 p-3 text-sm text-ink-700" role="note" data-testid="products-sample-note">
+          القائمة الحالية مثال تجريبي ({COUNT.product(products.filter((p) => p.is_sample).length)}) لتجربة الطلب من الغرفة. أدخل قائمتك الفعلية بزر «استيراد قائمة»؛ المنتج الذي تعدّله يصبح منتجك، والأمثلة الباقية تُمسح من «تفريغ البيانات ← مسح كل بيانات التجربة».
+        </p>
+      )}
       {rowErr && <p className="mb-3 text-sm text-danger-600" role="alert">{rowErr}</p>}
       {categories.length === 0 ? (
         <EmptyState icon={<Package className="h-10 w-10" />} title="لا منتجات بعد" description="الصق قائمتك بزر «استيراد قائمة» (سطر لكل منتج: الفئة، المنتج، السعر)، أو ابدأ بفئة مثل «مشروبات» ثم أضف منتجاتها، ثم أتحها للفروع." />
@@ -66,6 +71,7 @@ export default function AdminProducts() {
                     <h2 className={`text-base font-semibold ${c.is_active ? "text-ink-800" : "text-ink-400 line-through"}`}>{c.name}</h2>
                     <Badge className="bg-ink-100 text-ink-600">{COUNT.product(items.length)}</Badge>
                     {!c.is_active && <Badge className="bg-warning-500/10 text-warning-700">موقوفة — لا تظهر للنزلاء</Badge>}
+                    {c.is_sample && <Badge className="bg-accent-500/10 text-accent-700" title="من القائمة المثال: تُمسح مع بيانات التجربة ما لم تعدّلها">تجريبية</Badge>}
                   </div>
                   <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => setCategory(c)} aria-label={`تعديل الفئة ${c.name}`}><Pencil className="h-3.5 w-3.5" /> تعديل الفئة</button>
                 </div>
@@ -75,7 +81,7 @@ export default function AdminProducts() {
                       <Card key={p.id} className={p.is_active ? "" : "opacity-60"} data-testid="product-card">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-ink-800">{p.name}</h3>{!p.is_active && <Badge className="bg-warning-500/10 text-warning-700">موقوف</Badge>}</div>
+                            <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-ink-800">{p.name}</h3>{!p.is_active && <Badge className="bg-warning-500/10 text-warning-700">موقوف</Badge>}{p.is_sample && <Badge className="bg-accent-500/10 text-accent-700" title="من القائمة المثال: يُمسح مع بيانات التجربة ما لم تعدّله" testId="product-sample">تجريبي</Badge>}</div>
                             <p className="text-sm text-ink-700"><span dir="ltr" className="tabular-nums">{sar(p.price_halalas)}</span> <span className="text-xs text-ink-400">· {p.taxable ? "خاضع للضريبة" : "بدون ضريبة"}</span></p>
                             {p.description && <p className="mt-1 text-xs text-ink-500">{p.description}</p>}
                           </div>

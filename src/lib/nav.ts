@@ -15,7 +15,7 @@ import {
   LayoutDashboard, CalendarClock, BookCheck, UserCheck, CreditCard, KeyRound, DoorClosed, Sparkles, Wrench, Inbox,
   Building2, BedDouble, CalendarRange, Users, Wallet, UserCog, ShieldCheck, Link2, Bot, MessageCircle, FileText,
   BarChart3, ScrollText, Plug, Layers, Landmark, ListChecks, ConciergeBell, BookOpen, Trash2, MessagesSquare,
-  Calculator, Vault, HandCoins, ClipboardList, Scale, Mail, BellRing, ClipboardCheck, Activity, Building, ShoppingBag, Package } from "lucide-react";
+  Calculator, Vault, HandCoins, ClipboardList, Scale, Mail, BellRing, ClipboardCheck, Activity, Building, ShoppingBag, Package, Route } from "lucide-react";
 import type { Role } from "./types";
 
 export type StaffRole = Exclude<Role, "guest">;
@@ -70,6 +70,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt", "voucher.refund", "invoice.issue"] },
   // 0068 (W1): the guests' product orders — the payment at reception, then the voucher and the delivery task
   { path: "/staff/orders", label: "طلبات المنتجات", icon: ShoppingBag, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt"] },
+  // 0070 (W3–W6): the guest's journey after the stay — departures, extensions held, the unit's check, the deposits, reviews, alerts
+  { path: "/staff/journey", label: "رحلة الضيف", icon: Route, area: "staff", roles: ["owner", "manager", "supervisor"] },
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   // A2/A3 (0063): the closing of the day — the boxes counted against the system, the review, the edit window
   { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
@@ -127,6 +129,8 @@ export const PAGES: readonly NavPage[] = [
   // decision 71: the owner edits the approved matrix (the server: fn_permissions_matrix, fn_admin_set_permissions)
   { path: "/admin/roles", label: "مصفوفة الصلاحيات", icon: ShieldCheck, area: "admin", group: "الإدارة", roles: ["owner"], scope: "org", cap: ["admin.permissions"] },
   { path: "/admin/booking-sources", label: "منصات الحجز", icon: Link2, area: "admin", group: "الإدارة", roles: ADMIN_ROLES, scope: "org", cap: ["definitions"] },
+  // 0070–0071: the journey's numbers per branch, the responsible and the fallback, the alert rules, the units' photos
+  { path: "/admin/journey", label: "رحلة الضيف", icon: Route, area: "admin", group: "الإدارة", roles: ADMIN_ROLES, cap: ["branch.settings"] },
 
   { path: "/admin/ai-settings", label: "إعدادات الذكاء الاصطناعي", icon: Bot, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
   { path: "/admin/whatsapp", label: "واتساب الفروع", icon: MessageCircle, area: "admin", group: "التكاملات", roles: ["owner"], scope: "org", cap: ["security"] },

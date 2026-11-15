@@ -12,6 +12,7 @@ import { OpsCopilot } from "../components/OpsCopilot";
 import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 import { useOrganizationName } from "../lib/organization";
+import { useJourneyAlerts } from "../lib/journeyAlerts";
 
 export default function StaffLayout() {
   const orgName = useOrganizationName();
@@ -23,6 +24,8 @@ export default function StaffLayout() {
   const adminHome = firstAdminPath(profile?.role, allows);
   // «الرموز»: units whose key-box code must still change after a guest left — red on every page until changed
   const codeAlerts = useKeyboxAlerts();
+  // «رحلة الضيف»: the open alerts of the journey (its clock runs from here every minute)
+  const journeyAlerts = useJourneyAlerts();
   // U3: on a phone, four pages in the bottom bar and the whole menu behind «المزيد»
   const tabs = pickTabs(nav, ["/staff/rooms", "/staff/access-approvals", "/staff/reservations", "/staff/payments"]);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -66,6 +69,7 @@ export default function StaffLayout() {
               <item.icon className="h-4.5 w-4.5" />
               {item.label}
               {item.to === "/staff/codes" && <KeyboxNavCount alerts={codeAlerts} />}
+              {item.to === "/staff/journey" && !!journeyAlerts && <span className="mr-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-500 px-1.5 text-[11px] font-semibold leading-5 text-white" aria-label={`${journeyAlerts} تنبيهات مفتوحة`}>{journeyAlerts}</span>}
             </NavLink>
           ))}
         </nav>
@@ -124,6 +128,7 @@ export default function StaffLayout() {
                   <item.icon className="h-4 w-4" aria-hidden="true" />
                   {item.label}
                   {item.to === "/staff/codes" && <KeyboxNavCount alerts={codeAlerts} />}
+                  {item.to === "/staff/journey" && !!journeyAlerts && <span className="mr-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-500 px-1.5 text-[11px] font-semibold leading-5 text-white" aria-label={`${journeyAlerts} تنبيهات مفتوحة`}>{journeyAlerts}</span>}
                 </NavLink>
               ))}
             </nav>

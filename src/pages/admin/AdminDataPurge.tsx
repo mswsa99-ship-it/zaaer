@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Trash2, ShieldAlert, ArrowRight, KeyRound, CheckCircle2, MessagesSquare, BookCheck, Wallet, Users, Wrench, Bell, ScrollText } from "lucide-react";
-import { purgeApi, toArabicError, type PurgeCategory, type PurgePreview, type PurgeHistoryRow } from "../../lib/api";
+import { Trash2, ShieldAlert, ArrowRight, KeyRound, CheckCircle2, MessagesSquare, BookCheck, Wallet, Users, Wrench, Bell, ScrollText, Package, FlaskConical } from "lucide-react";
+import { purgeApi, journeyApi, toArabicError, type PurgeCategory, type PurgePreview, type PurgeHistoryRow, type TrialOverview } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
@@ -8,8 +8,12 @@ import { SectionTitle, Card, ErrorBanner, Spinner, Badge } from "../../component
 import { todayISO, addDaysISO, formatDateTime, arabicCount } from "../../lib/utils";
 
 /**
- * Data purge by period (owner only). Seven kinds of data to choose from; three confirmations that the server
+ * Data purge by period (owner only). Eight kinds of data to choose from; three confirmations that the server
  * enforces: the exact preview (a rolled-back dry run), the typed phrase, and the password again.
+ * 0072–0073 (the owner's instruction of 15 November): the trial data stays in the system until the owner erases it;
+ * «مسح كل بيانات التجربة» chooses every branch, the whole period since the first record and every kind at once — the
+ * same three steps follow. The guests imported from Zaaer are never erased, and stays in the house or still to come
+ * are never touched.
  */
 const KINDS: Array<{ key: PurgeCategory; title: string; desc: string; icon: typeof Trash2; warn?: string }> = [
   { key: "conversations", title: "المحادثات والذكاء الاصطناعي", desc: "محادثات النزلاء (واتساب والموقع)، طلبات التحويل، محادثات مساعد العمليات، الأسئلة بلا إجابة، سجلات المساعد.", icon: MessagesSquare },
@@ -19,13 +23,18 @@ const KINDS: Array<{ key: PurgeCategory; title: string; desc: string; icon: type
   { key: "operations", title: "المهام والصيانة", desc: "مهام التنظيف المنتهية أو الملغاة، بلاغات الصيانة المغلقة، وسجل الكشف التدريجي للفترة الماضية.", icon: Wrench },
   { key: "logs", title: "الإشعارات وسجلات التكامل", desc: "الإشعارات، أحداث التكامل (واتساب وغيره)، ومحاولات البحث ورموز التحقق.", icon: Bell },
   { key: "audit", title: "سجل الإجراءات", desc: "سجل التدقيق للفترة. يبقى دائمًا سجل عملية التفريغ نفسها.", icon: ScrollText, warn: "بعد حذفه لا يمكن معرفة من فعل ماذا في تلك الفترة." },
+  { key: "samples", title: "البيانات التجريبية الجاهزة", desc: "قائمة المنتجات المثال (3 فئات و12 منتجًا) ما لم تعدّلها أو يطلبها نزيل؛ تُدخل قائمتك من «المنتجات».", icon: Package },
 ];
+const ALL_KINDS = KINDS.map((k) => k.key);
 const COUNT_AR: Record<string, string> = {
   conversations: "محادثات", conversation_messages: "رسائل", handoff_tickets: "طلبات تحويل", staff_assistant_chats: "محادثات مساعد العمليات",
   unanswered_questions: "أسئلة بلا إجابة", reservations: "حجوزات", reservations_skipped_with_money: "حجوزات عليها مبالغ (ستبقى)",
   reservations_kept_active_or_with_money: "حجوزات في الفترة ستبقى (جارية/قادمة أو عليها مبالغ)", vouchers: "سندات", payments: "مدفوعات",
   invoices: "فواتير", pos_settlements: "تسويات الشبكة", platform_payouts: "مطابقات المنصات", guest_profiles: "ملفات نزلاء", housekeeping_tasks: "مهام تنظيف", maintenance_tickets: "بلاغات صيانة", released_slots: "سجلات كشف",
   notifications: "إشعارات", integration_events: "أحداث تكامل", audit_events: "سجلات تدقيق",
+  // 0073: what the system gained since: the closings, the expenses, the journal, the bank, the orders, the journey
+  day_closings: "إقفالات يوم", expense_vouchers: "سندات صرف", journal_entries: "قيود يومية", bank_movements: "حركات بنكية", bank_messages: "رسائل بنكية",
+  bank_matches: "مطابقات بنكية", product_orders: "طلبات منتجات", guest_reviews: "تقييمات نزلاء", alerts: "تنبيهات", sample_products: "منتجات تجريبية",
 };
 const KEPT = new Set(["reservations_skipped_with_money", "reservations_kept_active_or_with_money"]);
 const PHRASE = "احذف نهائيا";
@@ -49,11 +58,18 @@ export default function AdminDataPurge() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<PurgeHistoryRow[]>([]);
+  const [trial, setTrial] = useState<TrialOverview | null>(null);
+  const [allTrial, setAllTrial] = useState(false);
 
-  const loadHistory = () => { purgeApi.history().then(setHistory).catch(() => setHistory([])); };
+  const loadHistory = () => { purgeApi.history().then(setHistory).catch(() => setHistory([])); journeyApi.trialOverview().then(setTrial).catch(() => setTrial(null)); };
   useEffect(loadHistory, []);
+  /** «مسح كل بيانات التجربة»: every branch, from the first record to today, every kind — then the same three steps */
+  const chooseAllTrial = () => {
+    setBranch(""); setFrom(trial?.first_day && trial.first_day < todayISO() ? trial.first_day : addDaysISO(todayISO(), -365)); setTo(todayISO());
+    setCats(trial?.paste_applied ? ALL_KINDS : ALL_KINDS.filter((k) => k !== "samples")); setAllTrial(true);
+  };
 
-  const toggle = (k: PurgeCategory) => setCats((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
+  const toggle = (k: PurgeCategory) => { setAllTrial(false); setCats((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k])); };
   const reset = () => { setStep("choose"); setPreview(null); setUnderstood(false); setPhrase(""); setPassword(""); setError(null); };
 
   async function doPreview() {
@@ -87,6 +103,25 @@ export default function AdminDataPurge() {
     <div className="space-y-4">
       <SectionTitle title="تفريغ البيانات" subtitle="حذف نهائي لبيانات فترة محددة، بثلاث مراحل تأكيد، لمن يملك صلاحية «السجل الأمني ومسح البيانات»." />
       {error && <ErrorBanner message={error} />}
+
+      {step === "choose" && trial && (
+        <Card className="space-y-3" data-testid="trial-purge">
+          <p className="flex items-center gap-2 font-semibold text-ink-800"><FlaskConical className="h-5 w-5 text-brand-600" /> مسح كل بيانات التجربة</p>
+          <p className="text-sm text-ink-600">بيانات التجربة باقية في النظام حتى تمسحها. هذا الخيار يختار كل الفروع، من أول سجل{trial.first_day ? <> (<span dir="ltr">{trial.first_day}</span>)</> : null} حتى اليوم، وكل الأنواع، ثم تمر بالمراحل الثلاث نفسها: المعاينة الدقيقة، والعبارة، وكلمة المرور.</p>
+          <ul className="grid gap-x-4 gap-y-1 text-sm text-ink-700 sm:grid-cols-2">
+            <li>الحجوزات: <b className="tabular-nums">{trial.reservations}</b></li>
+            <li>السندات: <b className="tabular-nums">{trial.vouchers}</b> · المصروفات: <b className="tabular-nums">{trial.expenses}</b></li>
+            <li>القيود: <b className="tabular-nums">{trial.journal_entries}</b> · الحركات البنكية: <b className="tabular-nums">{trial.bank_movements}</b></li>
+            <li>طلبات المنتجات: <b className="tabular-nums">{trial.product_orders}</b> · المنتجات التجريبية: <b className="tabular-nums">{trial.sample_products}</b></li>
+            <li>ملفات نزلاء التجربة: <b className="tabular-nums">{trial.guests_trial}</b></li>
+            <li className="text-success-700">نزلاء زائر المستوردون (لا يُمسحون): <b className="tabular-nums">{trial.guests_imported}</b></li>
+          </ul>
+          {trial.in_house_or_upcoming > 0 && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-800">الإقامات الجارية والقادمة لا تُمسح أبدًا ({trial.in_house_or_upcoming}): أنهِ إقامات التجربة أو ألغِها أولًا، ثم أعد المسح.</p>}
+          {!trial.paste_applied && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-800" data-testid="trial-paste-needed">قبل أول مسح كامل خطوة واحدة في محرر SQL: لصق الملف supabase/paste/owner-paste-0073.sql وتشغيله (يضيف للمسح الإقفالات والمصروفات والقيود والحركات البنكية والطلبات والتقييمات والمنتجات التجريبية).</p>}
+          <button type="button" className="btn-danger" onClick={chooseAllTrial} disabled={!trial.paste_applied} data-testid="choose-all-trial">اختيار كل بيانات التجربة</button>
+          {allTrial && <p className="text-xs text-ink-500" role="status">اختير كل شيء أدناه. راجع ثم اضغط «معاينة ما سيُحذف».</p>}
+        </Card>
+      )}
 
       {step === "choose" && (
         <Card className="space-y-5">

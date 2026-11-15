@@ -2,7 +2,8 @@
 /**
  * Demo parity for migration 0056 (Phase 2b of the 31 October review): the branch's guide (arrival instructions and the
  * bank details guests see), its gallery and entry videos, the booking sources added from the settings, and the branch's
- * payment provider settings. The same rules, argument names and return shapes as the SQL functions.
+ * payment provider settings. The same rules, argument names and return shapes as the SQL functions. 0071 (W7): a photo's
+ * purpose (the gallery, a unit's way in, its way out) and the approval a unit's photos need before a guest sees them.
  */
 import { uid, nowISO, ORG, type Row } from "./data";
 import { latinDigits } from "../lib/validation";
@@ -19,6 +20,8 @@ export interface Phase2Ctx {
   audit: (branch: string | null, action: string, entity: string, entityId: string, details: Row) => void;
   emit: (table: string) => void;
   validHttpsUrl: (u: string) => boolean;
+  /** 0071: a unit's photo is approved by the owner or the manager */
+  hasRole: (...roles: string[]) => boolean;
 }
 
 /** fn_valid_iban: SA, two check digits, 20 more; the ISO 13616 check (mod 97 = 1) */
@@ -37,7 +40,8 @@ const imageMime = (b64: string): string | null => {
 };
 
 export function phase2Rpcs(c: Phase2Ctx): Record<string, (a: any) => any> {
-  const { T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit, emit, validHttpsUrl } = c;
+  const { T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit, emit, validHttpsUrl, hasRole } = c;
+  const purposeOf = (m: Row) => m.purpose ?? "gallery";
   const items = () => (T("branch_media_items") as Row[]);
   const text = (v: unknown) => String(v ?? "").trim() || null;
   return {
@@ -70,10 +74,11 @@ export function phase2Rpcs(c: Phase2Ctx): Record<string, (a: any) => any> {
       };
     },
     fn_branch_photo: ({ p_id }) => { const m = items().find((x) => x.id === p_id && x.kind === "photo"); if (!m) return null; const b = byId("branches", m.branch_id);
-      return (!m.archived_at && b?.is_active !== false) || myBranches().includes(m.branch_id) ? m.data_url ?? null : null; },
+      return (!m.archived_at && b?.is_active !== false && (purposeOf(m) === "gallery" || !!m.approved_at)) || myBranches().includes(m.branch_id) ? m.data_url ?? null : null; },
     fn_admin_media_items: ({ p_branch, p_archived }) => { requireCap("branch.settings"); requireBranch(p_branch);
       return items().filter((m) => m.branch_id === p_branch && (p_archived || !m.archived_at)).sort((x, y) => String(x.kind).localeCompare(String(y.kind)) || x.sort_order - y.sort_order)
-        .map((m) => ({ id: m.id, kind: m.kind, caption: m.caption ?? null, url: m.url ?? null, size_bytes: m.size_bytes ?? 0, sort_order: m.sort_order, block_id: m.block_id ?? null, room_id: m.room_id ?? null, archived_at: m.archived_at ?? null, archive_reason: m.archive_reason ?? null, version: String(m.sha256 ?? m.url ?? "").slice(0, 12) })); },
+        .map((m) => ({ id: m.id, kind: m.kind, caption: m.caption ?? null, url: m.url ?? null, size_bytes: m.size_bytes ?? 0, sort_order: m.sort_order, block_id: m.block_id ?? null, room_id: m.room_id ?? null, archived_at: m.archived_at ?? null, archive_reason: m.archive_reason ?? null,
+          purpose: purposeOf(m), approved_at: m.approved_at ?? null, approved_by_name: staffName(m.approved_by) ?? null, version: String(m.sha256 ?? m.url ?? "").slice(0, 12) })); },
     fn_admin_upsert_media_item: ({ p }) => {
       requireCap("branch.settings"); const q: Row = p ?? {}; let m: Row | undefined; let branch: string; let kind: string;
       if (q.id) { m = items().find((x) => x.id === q.id); if (!m) throw new Error("NOT_FOUND"); branch = m.branch_id; kind = m.kind; }
@@ -84,21 +89,49 @@ export function phase2Rpcs(c: Phase2Ctx): Record<string, (a: any) => any> {
       if (q.room_id && byId("rooms", q.room_id)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: room");
       if ("sort_order" in q && !/^[0-9]{1,4}$/.test(String(q.sort_order ?? ""))) throw new Error("VALIDATION: sort_order");
       const checkUrl = (u: string) => { if (!validHttpsUrl(u) || u.length > 500) throw new Error("VALIDATION: video_url"); return u; };
+      // 0071 (W7): the way in or out of a unit is a photo of that unit
+      const purpose = "purpose" in q ? String(q.purpose || "gallery") : m ? purposeOf(m) : "gallery";
+      if (!["gallery", "checkin", "checkout"].includes(purpose)) throw new Error("VALIDATION: purpose");
+      const room = "room_id" in q ? q.room_id || null : m?.room_id ?? null;
+      if (purpose !== "gallery" && (kind !== "photo" || !room)) throw new Error("VALIDATION: guide_photo");
       if (!m) {
         let data_url: string | null = null, size = 0, sha: string | null = null, url: string | null = null;
         if (kind === "photo") { const raw = String(q.data_base64 ?? "").replace(/^data:[^,]*,/, "").replace(/\s/g, ""); if (!raw) throw new Error("VALIDATION: image"); size = Math.floor((raw.length * 3) / 4);
           if (size > 1048576) throw new Error("VALIDATION: image_too_large"); const mime = imageMime(raw); if (!mime) throw new Error("VALIDATION: image_type"); data_url = `data:${mime};base64,${raw}`; sha = `${raw.length.toString(16)}${raw.slice(-10)}`; }
         else url = checkUrl(String(q.url ?? "").trim());
         const order = q.sort_order != null ? Number(q.sort_order) : Math.max(0, ...items().filter((x) => x.branch_id === branch && x.kind === kind).map((x) => x.sort_order)) + 1;
-        m = { id: uid(), organization_id: ORG, branch_id: branch, kind, block_id: q.block_id || null, room_id: q.room_id || null, caption, url, data_url, size_bytes: size, sha256: sha, sort_order: order, archived_at: null, archived_by: null, archive_reason: null, created_at: nowISO(), created_by: staffId(), updated_at: null };
-        items().push(m); audit(branch, "branch.media_added", "branch_media_item", m.id, { after: { kind, caption, url, size_bytes: size, block_id: m.block_id, room_id: m.room_id } });
+        m = { id: uid(), organization_id: ORG, branch_id: branch, kind, block_id: q.block_id || null, room_id: room, caption, url, data_url, size_bytes: size, sha256: sha, sort_order: order, archived_at: null, archived_by: null, archive_reason: null, created_at: nowISO(), created_by: staffId(), updated_at: null,
+          purpose, approved_at: null, approved_by: null };
+        items().push(m); audit(branch, "branch.media_added", "branch_media_item", m.id, { after: { kind, caption, url, size_bytes: size, block_id: m.block_id, room_id: m.room_id, purpose } });
       } else {
-        const before = { caption: m.caption, sort_order: m.sort_order, url: m.url, block_id: m.block_id, room_id: m.room_id };
+        const before = { caption: m.caption, sort_order: m.sort_order, url: m.url, block_id: m.block_id, room_id: m.room_id, purpose: purposeOf(m), approved: !!m.approved_at };
+        // what a guest is shown changed: it waits for its approval again
+        const reset = purpose === "gallery" || caption !== (m.caption ?? null) || room !== (m.room_id ?? null) || purpose !== purposeOf(m);
         Object.assign(m, { caption, url: kind === "video" && "url" in q ? checkUrl(String(q.url ?? "").trim()) : m.url, sort_order: q.sort_order != null ? Number(q.sort_order) : m.sort_order,
-          block_id: "block_id" in q ? q.block_id || null : m.block_id, room_id: "room_id" in q ? q.room_id || null : m.room_id, updated_at: nowISO() });
-        audit(branch, "branch.media_changed", "branch_media_item", m.id, { before, after: { caption: m.caption, sort_order: m.sort_order, url: m.url, block_id: m.block_id, room_id: m.room_id } });
+          block_id: "block_id" in q ? q.block_id || null : m.block_id, room_id: room, purpose, updated_at: nowISO(), ...(reset ? { approved_at: null, approved_by: null } : {}) });
+        audit(branch, "branch.media_changed", "branch_media_item", m.id, { before, after: { caption: m.caption, sort_order: m.sort_order, url: m.url, block_id: m.block_id, room_id: m.room_id, purpose, approved: !!m.approved_at } });
       }
       emit("branch_media_items"); return { ok: true, id: m.id };
+    },
+    // 0071 (W7): the owner or the manager approves a unit's photo (or takes the approval back): only then a guest sees it
+    fn_admin_approve_media_item: ({ p_id, p_approve }) => {
+      requireCap("branch.settings"); if (!hasRole("owner", "manager")) throw new Error("FORBIDDEN: approval is the owner's or the manager's");
+      const m = items().find((x) => x.id === p_id); if (!m) throw new Error("NOT_FOUND"); requireBranch(m.branch_id);
+      if (purposeOf(m) === "gallery") throw new Error("VALIDATION: guide_photo");
+      if (p_approve == null) throw new Error("VALIDATION: approve");
+      if (p_approve && m.archived_at) throw new Error("VALIDATION: archived");
+      if (!!m.approved_at === !!p_approve) return { ok: true, unchanged: true };
+      Object.assign(m, { approved_at: p_approve ? nowISO() : null, approved_by: p_approve ? staffId() : null }); emit("branch_media_items");
+      audit(m.branch_id, p_approve ? "branch.media_approved" : "branch.media_unapproved", "branch_media_item", m.id, { after: { purpose: m.purpose, room_id: m.room_id, caption: m.caption } });
+      return { ok: true, unchanged: false };
+    },
+    fn_admin_unit_guides: ({ p_branch }) => {
+      requireCap("branch.settings"); requireBranch(p_branch);
+      const live = (room: string, purpose: string) => items().filter((m) => m.room_id === room && purposeOf(m) === purpose && !m.archived_at);
+      return T("rooms").filter((r) => r.branch_id === p_branch).sort((a, b) => String(a.room_number).localeCompare(String(b.room_number))).map((r) => ({
+        room_id: r.id, room_number: r.room_number,
+        checkin: live(r.id, "checkin").length, checkin_approved: live(r.id, "checkin").filter((m) => m.approved_at).length,
+        checkout: live(r.id, "checkout").length, checkout_approved: live(r.id, "checkout").filter((m) => m.approved_at).length }));
     },
     fn_admin_archive_media_item: ({ p_id, p_reason, p_archive = true }) => {
       requireCap("branch.settings"); const m = items().find((x) => x.id === p_id); if (!m) throw new Error("NOT_FOUND"); requireBranch(m.branch_id);

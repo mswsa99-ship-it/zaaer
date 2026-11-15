@@ -28,7 +28,7 @@ export function BranchGuideEditor({ branchId }: { branchId: string }) {
       setG({ arrival_instructions: guide?.arrival_instructions ?? "", bank_name: guide?.bank?.bank_name ?? "", bank_beneficiary: guide?.bank?.beneficiary ?? "", bank_iban: guide?.bank?.iban ?? "" });
       setItems(media);
       const out: Record<string, string | null> = {};
-      for (const m of media.filter((x) => x.kind === "photo")) out[m.id] = await branchGuideApi.photo(m.id);
+      for (const m of media.filter((x) => x.kind === "photo" && (x.purpose ?? "gallery") === "gallery")) out[m.id] = await branchGuideApi.photo(m.id);
       setThumbs(out);
     } catch (e) { setError(toArabicError(e)); }
   }, [branchId]);
@@ -48,9 +48,11 @@ export function BranchGuideEditor({ branchId }: { branchId: string }) {
     }, "أُضيفت الصورة.");
   };
 
-  const shown = items.filter((m) => showArchived ? m.archived_at : !m.archived_at);
+  // 0071: the units' way in and out have their own place («رحلة الضيف» ← شرح الوحدات بالصور)
+  const gallery = items.filter((m) => (m.purpose ?? "gallery") === "gallery");
+  const shown = gallery.filter((m) => showArchived ? m.archived_at : !m.archived_at);
   const photos = shown.filter((m) => m.kind === "photo"); const videos = shown.filter((m) => m.kind === "video");
-  const archivedCount = items.filter((m) => m.archived_at).length;
+  const archivedCount = gallery.filter((m) => m.archived_at).length;
   const set = (k: keyof typeof g) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setG({ ...g, [k]: e.target.value });
 
   return (

@@ -5,6 +5,7 @@ import { ArrowRight, ArrowLeft, CheckCircle2, Clock, KeyRound, CreditCard, UserC
 import { guestApi, type GuestSession, type PublicBranch, type GuestStaySummary } from "../../lib/api";
 import { Card, Spinner, ErrorBanner } from "../../components/ui";
 import { GuestBranchGuide } from "../../components/GuestBranchGuide";
+import { GuestCheckoutPanel, GuestUnitGuide } from "../../components/GuestJourney";
 import { RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus, type PaymentStatus, type GuestVerificationStatus } from "../../lib/types";
 import { formatCurrency, formatHijri, formatClock, todayISO } from "../../lib/utils";
 import { useGuestLang, guestError, reasonEn, STATUS_EN, PAYMENT_EN, VERIFICATION_EN, moneyEn } from "../../lib/guestLang";
@@ -133,6 +134,9 @@ export default function BookingStatus() {
         </div>
       </Card>
 
+      {/* 0070 (W3, W4): the day of departure — the options, then the instructions and «غادرت وسلّمت المفتاح» */}
+      {token && r.status === "checked_in" && <div className="-mt-2 mb-6"><GuestCheckoutPanel token={token} onChanged={load} /></div>}
+
       <h2 className="mb-3 text-base font-semibold text-ink-800">{arrived ? t("إقامتك", "Your stay") : t("قبل وصولك", "Before you arrive")}</h2>
       <ol className="space-y-3" aria-label={t("خطوات الإقامة", "Stay steps")}>
         {steps.map((s, i) => (
@@ -177,6 +181,9 @@ export default function BookingStatus() {
         {branch?.phone && <a href={`tel:${branch.phone.replace(/[^0-9+]/g, "")}`} className="btn-outline" data-testid="call-reception"><Phone className="h-4 w-4" /> {t("اتصل بالاستقبال", "Call the reception")} <span className="font-mono text-xs" dir="ltr">{branch.phone}</span></a>}
         {branch?.map_url && <a href={branch.map_url} target="_blank" rel="noopener noreferrer" className="btn-outline" data-testid="map-link"><MapPin className="h-4 w-4" /> {t("الموقع على الخريطة", "Location on the map")}</a>}
       </div>
+
+      {/* 0071 (W7): the unit's way in, approved photos only (none: the reception explains) */}
+      {token && ["confirmed", "checked_in"].includes(r.status) && r.room_number && <GuestUnitGuide token={token} purpose="checkin" />}
 
       {branchId && <GuestBranchGuide branchId={branchId} showBank={dueHalalas > 0 && !["checked_out", "closed", "cancelled"].includes(r.status)} />}
 
