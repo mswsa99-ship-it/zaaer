@@ -2,8 +2,9 @@
 -- The guest journey after the stay (migration 0070): W3 the check-out options and the extension (CX), W4 the
 -- departure and the deposit's return (DR), W5 the review (RW), W6 the alert rules (AR), and the journey's messages
 -- and clock (JM). Tried from outside the screens, as the guest's pages, the reception computer and the staff call it.
--- The journey's clock is read at a chosen hour of today (fn_journey_tick's p_at), so the checks do not depend on the
--- hour they run at.
+-- The journey's clock is read at a chosen hour of today (fn_journey_tick's p_at, fn_checkout_choose's p_at), and the
+-- branch of the checks keeps a time zone where it is mid-morning now (the guest's own choices read the real clock), so
+-- the checks do not depend on the hour they run at.
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
@@ -97,12 +98,19 @@ do $$ declare r jsonb; b uuid; cat uuid; i int; begin
   insert into ids values ('b', b);
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar', 'غرفة الرحلة', 'base_price_halalas', 10000)); cat := (r->>'id')::uuid;
   insert into ids values ('cat', cat);
-  for i in 1..9 loop
+  for i in 1..15 loop
     r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number', (870 + i)::text)); insert into ids values ('room' || i, (r->>'id')::uuid);
   end loop;
 exception when others then perform tj_record('JM00 the branch, its rooms and its people are set up', false, sqlerrm);
 end $$;
 reset role;
+-- the branch's clock: a time zone where it is now between 10 and 11 in the morning (Etc/GMT±n, whole hours)
+update branches set timezone = (select 'Etc/GMT' || case when off > 0 then '-' || off when off < 0 then '+' || (-off) else '' end
+                                  from (select case when o > 14 then o - 24 else o end as off
+                                          from (select ((10 - extract(hour from now() at time zone 'UTC')::int) % 24 + 24) % 24 as o) a) z)
+ where id = tj_id('b');
+select tj_record('JM00c the branch of the checks is in its morning (between 10 and 11)', fn_journey_local_time(tj_id('b')) between '10:00' and '10:59:59',
+  (select timezone from branches where id = tj_id('b')) || ' ' || fn_journey_local_time(tj_id('b'))::text);
 -- the branch's WhatsApp on the reception computer; its responsible (a supervisor with a phone); the manager's phone
 insert into branch_whatsapp_channels(branch_id, organization_id, mode, enabled, display_phone, bridge_key_hash, bridge_key_last4, bridge_key_created_at)
 values (tj_id('b'), '00000000-0000-0000-0000-000000000001', 'web_bridge', true, '966551000870', encode(extensions.digest('zj_' || repeat('b', 64), 'sha256'), 'hex'), 'bbbb', now());
@@ -203,7 +211,8 @@ do $$ declare t1 jsonb; t2 jsonb; m journey_messages%rowtype; cv conversations%r
   mb := tj_msg(tj_id('resB'), 'checkout_options');
   perform tj_tick(tj_id('b'), tj_at(tj_id('b'), '10:05'));
   perform tj_record('JM02 at 10:00 on the day of departure the guest gets the options once, on the branch''s WhatsApp: in their conversation bound to the stay, with the numbered options the reception computer types and the menu their answer is read against; nothing before 10, nothing twice, nothing to a stay leaving tomorrow',
-    tj_note('before10') = '0' and m.status = 'queued' and tj_msg_count(tj_id('resA'), 'checkout_options') = 1 and tj_msg_count(tj_id('resD'), 'checkout_options') = 0
+    tj_note('before10') = '0' and m.status = 'queued' and m.ref_key = tj_today(tj_id('b'))::text
+    and tj_msg_count(tj_id('resA'), 'checkout_options') = 1 and tj_msg_count(tj_id('resD'), 'checkout_options') = 0
     and cv.wa_contact = '966552100001' and cv.wa_chat_id = '966552100001@c.us' and cv.reservation_id = tj_id('resA') and fn_token_reservation(cv.guest_token) = tj_id('resA')
     and jsonb_array_length(cv.wa_menu->'options') = 4
     and (select string_agg(o->>'id', ',' order by (o->>'n')::int) from jsonb_array_elements(cv.wa_menu->'options') o) = 'CO:ONTIME,CO:NIGHT,CO:HOURS,HUMAN'
@@ -227,7 +236,7 @@ exception when others then perform tj_record('JM03 the reception computer picks 
 end $$;
 select tj_record('JM04a a stay with no phone gets no message: it is recorded why, and the responsible is told to inform the guest',
   (tj_msg(tj_id('resF'), 'checkout_options')).status = 'skipped' and (tj_msg(tj_id('resF'), 'checkout_options')).reason = 'no_phone'
-  and (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:')).id is not null,
+  and (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:' || tj_today(tj_id('b')))).id is not null,
   (tj_msg(tj_id('resF'), 'checkout_options'))::text);
 
 -- ---------------------------------------------------------------- CX03–CX04 the guest chooses
@@ -346,9 +355,10 @@ do $$ declare q stay_extension_requests%rowtype; e1 text; e2 text; r jsonb; begi
   e1 := tj_fails(format('select fn_staff_extension_decide(%L, %L, %L, %s)', q.id, 'confirm', '', q.version), 'VALIDATION: reason%');
   e2 := tj_fails(format('select fn_staff_extension_decide(%L, %L, %L, %s)', q.id, 'confirm', 'يدفع عند الخروج', q.version + 1), 'VERSION_CONFLICT%');
   r := fn_staff_extension_decide(q.id, 'confirm', 'يدفع عند الخروج', q.version);
-  perform tj_record('CX09b the responsible keeps an overdue request without its payment now, with a reason: it stands and its alert closes; no reason, or a stale version, is refused',
+  perform tj_record('CX09b the responsible keeps an overdue request without its payment now, with a reason: it stands, its alert closes, and the guest is told it stands; no reason, or a stale version, is refused',
     e1 = 'ok' and e2 = 'ok' and r->>'status' = 'confirmed' and (tj_alert('extension_unpaid', 'extension:' || q.id)).resolved_at is not null
-    and tj_audits('journey.extension_confirmed', q.id) = 1,
+    and tj_audits('journey.extension_confirmed', q.id) = 1
+    and (select tj_text(message_id) from journey_messages where reservation_id = tj_id('resC') and kind = 'extension_confirmed' and ref_key = q.id::text) = 'تم تثبيت خروجك المتأخر حتى 14:00.',
     e1 || ' / ' || e2 || ' / ' || r::text);
 exception when others then perform tj_record('CX09b the responsible keeps an overdue request without its payment now', false, sqlerrm);
 end $$;
@@ -367,20 +377,83 @@ exception when others then perform tj_record('CX10 the reception''s «تمديد
 end $$;
 reset role;
 
--- ---------------------------------------------------------------- DR01–DR02 «غادرت وسلّمت المفتاح»
-do $$ declare tok text := tj_token(tj_id('resF')); r1 jsonb; r2 jsonb; e text; a alert_events%rowtype; begin
+-- ---------------------------------------------------------------- CX11–CX12 hours chosen late in the day; more hours after hours
+select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ begin
+  perform tj_stay('resJ', '0552100010', 'room10');           -- leaving today: hours chosen in the evening
+  perform tj_stay('resK', '0552100011', 'room11');           -- leaving today: two hours, then one more
+exception when others then perform tj_record('CX11 the stays are made', false, sqlerrm);
+end $$;
+reset role;
+do $$ declare b uuid := tj_id('b'); e1 text; e2 text; o jsonb; q stay_extension_requests%rowtype; total0 bigint; begin
+  total0 := (tj_res(tj_id('resJ'))).total_halalas;
+  o := fn_checkout_offer(tj_id('resJ'), tj_at(b, '18:20'));
+  e1 := tj_fails(format('select fn_checkout_choose(%L, %L, 1, %L, %L::timestamptz)', tj_id('resJ'), 'hours', 'page', tj_at(b, '18:20')), 'VALIDATION: late_hours%');
+  e2 := tj_fails(format('select fn_checkout_choose(%L, %L, 5, %L, %L::timestamptz)', tj_id('resJ'), 'hours', 'page', tj_at(b, '18:20')), 'VALIDATION: late_hours%');
+  perform fn_checkout_choose(tj_id('resJ'), 'hours', 6, 'page', tj_at(b, '18:20'));
+  q := tj_request(tj_id('resJ'));
+  perform tj_record('CX11 at 6:20 PM a guest still in the room is offered no fewer hours than they stayed past 1 PM (a part of an hour is a whole hour): one hour or five are refused; six — until 7 PM — are charged 30.00',
+    (o->'hours'->>'min')::int = 6 and (o->'hours'->>'have')::int = 0 and e1 = 'ok' and e2 = 'ok'
+    and q.hours = 6 and q.late_until = '19:00' and q.amount_halalas = 3000 and (tj_res(tj_id('resJ'))).late_checkout_until = '19:00'
+    and (tj_res(tj_id('resJ'))).total_halalas = total0 + 3000,
+    e1 || ' / ' || e2 || ' / ' || (o->'hours')::text);
+exception when others then perform tj_record('CX11 hours chosen late in the day', false, sqlerrm);
+end $$;
+do $$ declare tok text := tj_token(tj_id('resK')); begin
+  insert into notes values ('totalK0', (tj_res(tj_id('resK'))).total_halalas::text), ('tokK', tok);
   set local role anon;
+  perform fn_guest_checkout_choose(tok, 'hours', 2);
+exception when others then perform tj_record('CX12 two hours are taken', false, sqlerrm);
+end $$;
+select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ begin
+  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resK'), 'kind', 'receipt', 'amount_halalas', (tj_fin(tj_id('resK'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-k'));
+exception when others then perform tj_record('CX12 the two hours are paid', false, sqlerrm);
+end $$;
+reset role;
+do $$ declare tok text := tj_note('tokK'); o1 jsonb; e1 text; e2 text; q stay_extension_requests%rowtype; q0 stay_extension_requests%rowtype; begin
+  perform tj_tick(tj_id('b'), tj_at(tj_id('b'), '10:50'));
+  q0 := tj_request(tj_id('resK'));
+  set local role anon;
+  o1 := fn_guest_checkout(tok);
+  e1 := tj_fails(format('select fn_guest_checkout_choose(%L, %L, 2)', tok, 'hours'), 'VALIDATION: late_hours%');
+  e2 := tj_fails(format('select fn_guest_checkout_choose(%L, %L, 1)', tok, 'hours'), 'VALIDATION: late_hours%');
+  perform fn_guest_checkout_choose(tok, 'hours', 3);
+  reset role;
+  q := tj_request(tj_id('resK'));
+  perform tj_record('CX12 hours bought are not sold again: after two paid hours (until 3 PM) the guest may only go further — two hours again, or one, are refused — and three hours charge the one hour more (5.00, until 4 PM); with late hours taken no night more is offered',
+    q0.status = 'paid' and (o1->'hours'->>'have')::int = 2 and (o1->'hours'->>'min')::int = 3 and not (o1->'night'->>'available')::boolean
+    and e1 = 'ok' and e2 = 'ok' and q.hours = 1 and q.late_until = '16:00' and q.amount_halalas = 500 and q.previous_late_until = '15:00'
+    and (tj_res(tj_id('resK'))).late_checkout_until = '16:00' and (tj_res(tj_id('resK'))).total_halalas = tj_note('totalK0')::bigint + 1500
+    and exists (select 1 from reservation_charges where reservation_id = tj_id('resK') and description = 'خروج متأخر ساعة واحدة حتى 16:00' and total_halalas = 500),
+    e1 || ' / ' || e2 || ' / ' || (o1->'hours')::text || ' / ' || coalesce(q::text, ''));
+exception when others then perform tj_record('CX12 more hours after hours', false, sqlerrm);
+end $$;
+
+-- ---------------------------------------------------------------- DR01–DR02 «غادرت وسلّمت المفتاح»
+do $$ declare tok text := tj_token(tj_id('resF')); tokd text := tj_token(tj_id('resD')); r1 jsonb; r2 jsonb; e text; e0 text; e1 text; i0 jsonb; i1 jsonb; id0 jsonb;
+                a alert_events%rowtype; begin
+  set local role anon;
+  e0 := tj_fails(format('select fn_guest_departure(%L)', tok), 'VALIDATION: instructions_first%');
+  e1 := tj_fails(format('select fn_guest_departure(%L)', tokd), 'VALIDATION: not_departure_day%');
+  id0 := fn_guest_departure_instructions(tokd);
+  i0 := fn_guest_checkout(tok);
+  i1 := fn_guest_departure_instructions(tok);
   r1 := fn_guest_departure(tok);
   r2 := fn_guest_departure(tok);
   e := tj_fails(format('select fn_guest_departure(%L)', tj_token(tj_id('nextB'))), 'VALIDATION: not_in_stay%');
   reset role;
   a := tj_alert('guest_departed', 'departed:' || tj_id('resF'));
-  perform tj_record('DR01 after the instructions the guest says «غادرت وسلّمت المفتاح»: the stay waits for the reception''s check, the responsible is told at once (in the system and on WhatsApp), and saying it again changes nothing; a guest not in the house cannot say it',
-    not (r1->>'already')::boolean and (r2->>'already')::boolean and e = 'ok' and (tj_res(tj_id('resF'))).guest_departed_at is not null
+  perform tj_record('DR01 «غادرت وسلّمت المفتاح» is taken only after the instructions reached the guest, and only on the day of departure: the page asks for the instructions (the moment is kept), then the stay waits for the reception''s check, the responsible is told at once (in the system and on WhatsApp), and saying it again changes nothing; a guest not in the house cannot say it',
+    e0 = 'ok' and e1 = 'ok' and id0->>'instructions_at' is null and i0->>'instructions_at' is null and i1->>'instructions_at' is not null
+    and i1->>'instructions' = 'ضع المفتاح في الصندوق وأغلق الباب.'
+    and not (r1->>'already')::boolean and (r2->>'already')::boolean and e = 'ok' and (tj_res(tj_id('resF'))).guest_departed_at is not null
     and (tj_res(tj_id('resF'))).guest_departed_via = 'page' and (tj_res(tj_id('resF'))).status = 'checked_in'
-    and a.notified_at is not null and a.title like '%بانتظار التحقق%'
-    and exists (select 1 from notifications where branch_id = tj_id('b') and title = a.title),
-    r1::text || ' / ' || r2::text || ' / ' || e);
+    and a.notified_at is not null and a.title like '%بانتظار التحقق%' and a.body not like '%ر.س%'
+    and exists (select 1 from jsonb_array_elements(a.notified_to) x where x->>'staff_id' = '10000000-0000-0000-0000-0000000000e1' and (x->>'app')::boolean and x->>'whatsapp' = 'queued'),
+    e0 || ' / ' || e1 || ' / ' || r1::text || ' / ' || r2::text || ' / ' || e);
 exception when others then perform tj_record('DR01 the guest says «غادرت وسلّمت المفتاح»', false, sqlerrm);
 end $$;
 select tj_login('a0000000-0000-0000-0000-0000000000e1', 'journey@test.local');
@@ -430,8 +503,8 @@ update reservations set actual_check_out = now() - interval '200 minutes' where 
 do $$ declare a alert_events%rowtype; begin
   perform tj_tick(tj_id('b'));
   a := tj_alert('deposit_overdue', 'deposit:' || tj_id('resB'));
-  perform tj_record('DR05 three hours after the confirmed check-out the deposit is still not returned: the responsible is told (in the system and on WhatsApp)',
-    a.notified_at is not null and a.resolved_at is null and a.title like '%50.00 ر.س%'
+  perform tj_record('DR05 three hours after the confirmed check-out the deposit is still not returned: the responsible is told (in the system and on WhatsApp) — without the amount, which only those who see money read on «رحلة الضيف»',
+    a.notified_at is not null and a.resolved_at is null and a.title like 'تأخر رد تأمين غرفة 872%' and a.title not like '%ر.س%' and coalesce(a.body, '') not like '%ر.س%'
     and exists (select 1 from jsonb_array_elements(a.notified_to) x where x->>'staff_id' = '10000000-0000-0000-0000-0000000000e1' and x->>'whatsapp' = 'queued'),
     coalesce(a::text, 'no alert'));
 exception when others then perform tj_record('DR05 three hours after the confirmed check-out the deposit is still not returned', false, sqlerrm);
@@ -439,12 +512,18 @@ end $$;
 do $$ declare a alert_events%rowtype; begin
   perform tj_tick(tj_id('b'), now() + interval '31 minutes');
   a := tj_alert('deposit_overdue', 'deposit:' || tj_id('resB'));
-  perform tj_record('DR06 nobody acts for 30 minutes: the alert climbs to the fallback (the administration), on WhatsApp too',
-    a.escalated_at is not null and exists (select 1 from jsonb_array_elements(a.escalated_to) x where x->>'staff_id' = '10000000-0000-0000-0000-000000000008' and x->>'whatsapp' = 'queued')
-    and exists (select 1 from notifications where branch_id = tj_id('b') and title = 'تصعيد: ' || a.title),
+  perform tj_record('DR06 nobody acts for 30 minutes: the alert climbs to the fallback (the administration) by name — in the system (it is now theirs) and on WhatsApp — not to a whole level',
+    a.escalated_at is not null
+    and exists (select 1 from jsonb_array_elements(a.escalated_to) x where x->>'staff_id' = '10000000-0000-0000-0000-000000000008' and x->>'whatsapp' = 'queued' and (x->>'app')::boolean)
+    and fn_alert_is_mine(a.notified_to, a.escalated_to, '10000000-0000-0000-0000-000000000008')
+    and not exists (select 1 from notifications where branch_id = tj_id('b') and title like '%' || a.title),
     coalesce(a.escalated_to::text, 'not climbed'));
 exception when others then perform tj_record('DR06 nobody acts for 30 minutes: the alert climbs', false, sqlerrm);
 end $$;
+select tj_record('DR06b hours held and not paid in time are given back with a message that tells the departure as it now stands: the two hours paid before stay (until 15:00)',
+  (select tj_text(m.message_id) from journey_messages m where m.reservation_id = tj_id('resK') and m.kind = 'extension_released' order by m.created_at desc limit 1) like '%موعد خروجك اليوم حتى 15:00%'
+  and (tj_res(tj_id('resK'))).late_checkout_until = '15:00',
+  coalesce((select tj_text(m.message_id) from journey_messages m where m.reservation_id = tj_id('resK') and m.kind = 'extension_released' order by m.created_at desc limit 1), 'no message'));
 select tj_login('a0000000-0000-0000-0000-0000000000e1', 'journey@test.local');
 set role authenticated;
 do $$ declare v jsonb; m journey_messages%rowtype; begin
@@ -621,16 +700,16 @@ update branch_journey_settings set responsible_staff_id = '10000000-0000-0000-00
 select tj_login('a0000000-0000-0000-0000-000000000003', 'hk@test.local');
 set role authenticated;
 select tj_record('AR08a housekeeping does not close an alert',
-  tj_fails(format('select fn_staff_alert_resolve(%L, %L)', (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:')).id, 'x'), '%FORBIDDEN%') = 'ok');
+  tj_fails(format('select fn_staff_alert_resolve(%L, %L)', (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:' || tj_today(tj_id('b')))).id, 'x'), '%FORBIDDEN%') = 'ok');
 reset role;
 select tj_login('a0000000-0000-0000-0000-0000000000e1', 'journey@test.local');
 set role authenticated;
-do $$ declare id uuid := (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:')).id; r1 jsonb; r2 jsonb; t jsonb; begin
+do $$ declare id uuid := (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:' || tj_today(tj_id('b')))).id; r1 jsonb; r2 jsonb; t jsonb; begin
   r1 := fn_staff_alert_resolve(id, 'اتصلت بالنزيل');
   r2 := fn_staff_alert_resolve(id, 'مرة أخرى');
   t := fn_staff_journey_tick(tj_id('b'));
   perform tj_record('AR08 the responsible closes an alert they dealt with (logged with the note); closing it again changes nothing; the screen''s look at the clock says how many alerts are open',
-    not (r1->>'already')::boolean and (r2->>'already')::boolean and (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:')).resolved_how = 'staff'
+    not (r1->>'already')::boolean and (r2->>'already')::boolean and (tj_alert('message_failed', 'journey:' || tj_id('resF') || ':checkout_options:' || tj_today(tj_id('b')))).resolved_how = 'staff'
     and tj_audit_reason('alert.resolved', id) = 'اتصلت بالنزيل' and t ? 'open_alerts',
     r1::text || ' / ' || t::text);
 exception when others then perform tj_record('AR08 the responsible closes an alert', false, sqlerrm);
@@ -664,13 +743,186 @@ exception when others then perform tj_record('JM06 a stay is made', false, sqler
 reset role;
 do $$ begin
   perform tj_tick(tj_id('b'), tj_at(tj_id('b'), '10:30'));
-  perform tj_record('JM06 the branch''s WhatsApp is not linked to the reception computer: the message is recorded as not sent, and the responsible is told to inform the guest',
-    (tj_msg(tj_id('resI'), 'checkout_options')).reason = 'channel_unavailable'
-    and (tj_alert('message_failed', 'journey:' || tj_id('resI') || ':checkout_options:')).notified_at is not null,
+  perform fn_journey_send(tj_id('resI'), 'review_reply', 'jm06', 'رسالة ثانية');
+  perform fn_journey_send(tj_id('resJ'), 'review_reply', 'jm06', 'رسالة ثالثة');
+  perform tj_record('JM06 the branch''s WhatsApp is not linked to the reception computer: each message is recorded as not sent, and the responsible is told once that day for the branch — not once a message',
+    (tj_msg(tj_id('resI'), 'checkout_options')).reason = 'channel_unavailable' and (tj_msg(tj_id('resI'), 'review_reply')).reason = 'channel_unavailable'
+    and (tj_msg(tj_id('resJ'), 'review_reply')).reason = 'channel_unavailable'
+    and (tj_alert('message_failed', 'channel:' || tj_id('b') || ':' || tj_today(tj_id('b')))).notified_at is not null
+    and (select count(*) from alert_events where branch_id = tj_id('b') and event = 'message_failed' and (ref_key like 'journey:' || tj_id('resI') || '%' or ref_key like 'journey:' || tj_id('resJ') || '%' or ref_key like 'channel:%')) = 1,
     coalesce((tj_msg(tj_id('resI'), 'checkout_options'))::text, 'none'));
 exception when others then perform tj_record('JM06 the branch''s WhatsApp is not linked', false, sqlerrm);
 end $$;
 update branch_whatsapp_channels set enabled = true where branch_id = tj_id('b');
+
+-- ---------------------------------------------------------------- CX13, DR08–DR09, JM11 the hours after the free hour, at the departure
+select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ begin
+  perform tj_stay('resM', '0552100013', 'room13');           -- leaving today: says they left at 15:20, no hours bought
+  perform tj_stay('resN', '0552100014', 'room14');           -- leaving today: two hours bought, leaves at 15:30
+  perform tj_stay('resO', '0552100015', 'room15');           -- leaving today: a night more by the reception
+exception when others then perform tj_record('CX13 the stays are made', false, sqlerrm);
+end $$;
+reset role;
+do $$ declare b uuid := tj_id('b'); e1 text; o1 jsonb; o2 jsonb; begin
+  o1 := fn_checkout_offer(tj_id('resM'), tj_at(b, '12:50'));
+  o2 := fn_checkout_offer(tj_id('resM'), tj_at(b, '13:20'));
+  e1 := tj_fails(format('select fn_checkout_choose(%L, %L, null, %L, %L::timestamptz)', tj_id('resM'), 'on_time', 'page', tj_at(b, '13:20')), 'VALIDATION: free_hour_over%');
+  perform tj_record('CX13 leaving on time is offered until the free hour ends (12:50 yes, 13:20 no) and refused after it: the hours begun are late hours, and leaving now would add one',
+    (o1->>'on_time_open')::boolean and not (o2->>'on_time_open')::boolean and e1 = 'ok' and (o2->'hours'->>'late_now')::int = 1 and (o1->'hours'->>'late_now')::int = 0,
+    e1 || ' / ' || (o2->'hours')::text);
+exception when others then perform tj_record('CX13 leaving on time only until the free hour ends', false, sqlerrm);
+end $$;
+do $$ declare b uuid := tj_id('b'); r jsonb; a alert_events%rowtype; total0 bigint := (tj_res(tj_id('resM'))).total_halalas; begin
+  perform fn_departure_instructions(tj_id('resM'));
+  r := fn_departure_confirm(tj_id('resM'), 'page', tj_at(b, '15:20'));
+  a := tj_alert('guest_departed', 'departed:' || tj_id('resM'));
+  perform tj_record('DR08 a guest who says they left at 3:20 PM, with no hours bought, has the hours begun after 1 PM charged as they leave — three (until 4 PM), 15.00 — told to them, and the reception is told without the amount',
+    (r->>'late_hours')::int = 3 and (r->>'late_halalas')::bigint = 1500 and (tj_res(tj_id('resM'))).late_checkout_until = '16:00'
+    and (tj_res(tj_id('resM'))).total_halalas = total0 + 1500
+    and exists (select 1 from reservation_charges where reservation_id = tj_id('resM') and description = 'خروج متأخر 3 ساعات حتى 16:00 (عند المغادرة)' and total_halalas = 1500)
+    and a.body like '%أُضيف إلى الحجز خروج متأخر 3 ساعات%' and a.body not like '%ر.س%',
+    r::text || ' / ' || coalesce(a.body, 'no alert'));
+exception when others then perform tj_record('DR08 the hours begun after the free hour are charged at the departure', false, sqlerrm);
+end $$;
+do $$ declare tok text := tj_token(tj_id('resN')); begin
+  insert into notes values ('tokN', tok), ('totalN0', (tj_res(tj_id('resN'))).total_halalas::text);
+  set local role anon;
+  perform fn_guest_checkout_choose(tok, 'hours', 2);
+exception when others then perform tj_record('DR09 two hours are taken', false, sqlerrm);
+end $$;
+select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ begin
+  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resN'), 'kind', 'receipt', 'amount_halalas', (tj_fin(tj_id('resN'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-n'));
+exception when others then perform tj_record('DR09 the two hours are paid', false, sqlerrm);
+end $$;
+reset role;
+do $$ declare b uuid := tj_id('b'); r jsonb; begin
+  perform tj_tick(b, tj_at(b, '10:55'));
+  perform fn_departure_instructions(tj_id('resN'));
+  r := fn_departure_confirm(tj_id('resN'), 'page', tj_at(b, '15:30'));
+  perform tj_record('DR09 a guest who bought two hours (until 3 PM) and leaves at 3:30 PM has only the hour begun after them charged (one, until 4 PM, 5.00); the hours paid are not charged again',
+    (tj_request(tj_id('resN'))).status = 'paid' and (r->>'late_hours')::int = 1 and (r->>'late_halalas')::bigint = 500
+    and (tj_res(tj_id('resN'))).late_checkout_until = '16:00' and (tj_res(tj_id('resN'))).total_halalas = tj_note('totalN0')::bigint + 1000 + 500,
+    r::text);
+exception when others then perform tj_record('DR09 only the hours begun after those bought are charged', false, sqlerrm);
+end $$;
+do $$ declare r reservations%rowtype; begin
+  perform fn_departure_instructions(tj_id('resO'));
+  update reservations set late_checkout_until = '15:00', checkout_choice = 'on_time', checkout_choice_at = now() where id = tj_id('resO');
+  perform fn_amend_stay_internal(tj_id('resO'), (tj_res(tj_id('resO'))).check_out + 1, 'keep_rate', 'ليلة إضافية من الاستقبال', false);
+  r := tj_res(tj_id('resO'));
+  perform tj_record('JM11 a night more makes a new day of departure: its choice, its late hours and its instructions are asked, sold and shown again that day',
+    r.check_out = tj_today(tj_id('b')) + 1 and r.checkout_choice is null and r.late_checkout_until is null and r.departure_instructions_at is null,
+    r.check_out::text || ' ' || coalesce(r.late_checkout_until::text, '-') || ' ' || coalesce(r.departure_instructions_at::text, '-'));
+exception when others then perform tj_record('JM11 a new day of departure starts clean', false, sqlerrm);
+end $$;
+
+-- ---------------------------------------------------------------- AR09 «in the system» is personal
+do $$ begin
+  perform fn_alert_raise(tj_id('b'), 'guest_handoff', 'ar09', 'نزيل يطلب موظفًا — فحص', 'فحص التنبيه الشخصي', '/staff/inbox', null);
+end $$;
+select tj_record('AR09 «in the system» is personal: a WhatsApp-only alert is not in the system of the one WhatsApp reached, it is in the system of the one it could not reach (no phone), and of no one else; an alert named to nobody is everyone''s; no alert writes a notice to a whole level',
+  not fn_alert_is_mine((tj_alert('product_order', 'order:' || tj_id('orderG'))).notified_to, null, '10000000-0000-0000-0000-0000000000e1')
+  and fn_alert_is_mine((tj_alert('product_order', 'order:' || tj_id('orderG'))).notified_to, null, '10000000-0000-0000-0000-0000000000e2')
+  and not fn_alert_is_mine((tj_alert('product_order', 'order:' || tj_id('orderG'))).notified_to, null, '10000000-0000-0000-0000-000000000001')
+  and fn_alert_is_mine('[]'::jsonb, null, '10000000-0000-0000-0000-000000000001')
+  and not exists (select 1 from notifications n where n.branch_id = tj_id('b') and (n.title like 'تصعيد:%' or n.title in (select title from alert_events where branch_id = tj_id('b')))));
+select tj_login('a0000000-0000-0000-0000-0000000000e1', 'journey@test.local');
+set role authenticated;
+do $$ declare t jsonb; j jsonb; mine int; ar09 boolean; begin
+  t := fn_staff_journey_tick(tj_id('b'));
+  j := fn_staff_journey(tj_id('b'));
+  select count(*) into mine from jsonb_array_elements(j->'alerts') x where (x->>'mine')::boolean;
+  select (x->>'mine')::boolean into ar09 from jsonb_array_elements(j->'alerts') x where x->>'title' = 'نزيل يطلب موظفًا — فحص';
+  perform tj_record('AR09b the menu''s badge of the responsible counts the open alerts that are theirs, and «رحلة الضيف» marks them',
+    (t->>'open_alerts')::int = mine and mine >= 1 and ar09, t::text || ' / ' || mine);
+exception when others then perform tj_record('AR09b the badge counts the reader''s own alerts', false, sqlerrm);
+end $$;
+reset role;
+select tj_login('a0000000-0000-0000-0000-0000000000e2', 'journey2@test.local');
+set role authenticated;
+do $$ declare j jsonb; ar09 boolean; begin
+  j := fn_staff_journey(tj_id('b'));
+  select (x->>'mine')::boolean into ar09 from jsonb_array_elements(j->'alerts') x where x->>'title' = 'نزيل يطلب موظفًا — فحص';
+  perform tj_record('AR09c another supervisor of the branch sees the alert on «رحلة الضيف», not as theirs', ar09 is false, coalesce(ar09::text, 'not listed'));
+exception when others then perform tj_record('AR09c another supervisor sees it, not as theirs', false, sqlerrm);
+end $$;
+reset role;
+
+-- ---------------------------------------------------------------- AR10 money only to those who see it; alerts only to those «رحلة الضيف» is for
+create temp table tj_perm_before as select * from role_permissions where organization_id = '00000000-0000-0000-0000-000000000001' and role = 'supervisor';
+insert into role_permissions(organization_id, capability, role, allowed)
+select '00000000-0000-0000-0000-000000000001', c, 'supervisor', false
+  from unnest(array['voucher.receipt', 'voucher.refund', 'deposit.refund', 'deposit.apply', 'voucher.correct', 'voucher.cancel', 'pos.settle', 'platform.payouts',
+                    'invoice.issue', 'invoice.edit', 'reports.finance']) c
+on conflict (organization_id, capability, role) do update set allowed = false;
+select tj_login('a0000000-0000-0000-0000-0000000000e1', 'journey@test.local');
+set role authenticated;
+do $$ declare j jsonb; begin
+  j := fn_staff_journey(tj_id('b'));
+  perform tj_record('AR10 a supervisor the owner took money from reads «رحلة الضيف» without amounts — the requests, the stays waiting for their check, the deposits to return — and the alerts carry none',
+    not (j->>'sees_money')::boolean and jsonb_array_length(j->'requests') > 0 and jsonb_array_length(j->'deposits') > 0
+    and not exists (select 1 from jsonb_array_elements(j->'requests') x where x->>'amount_halalas' is not null)
+    and not exists (select 1 from jsonb_array_elements(j->'deposits') x where x->>'deposit_halalas' is not null)
+    and not exists (select 1 from jsonb_array_elements(j->'awaiting_check') x where x->>'deposit_halalas' is not null or x->>'balance_due' is not null)
+    and not exists (select 1 from alert_events where branch_id = tj_id('b') and event in ('guest_departed', 'deposit_overdue', 'extension_requested', 'extension_unpaid')
+                                                 and (title like '%ر.س%' or coalesce(body, '') like '%ر.س%')),
+    left(j::text, 300));
+exception when others then perform tj_record('AR10 a supervisor without money reads no amounts', false, sqlerrm);
+end $$;
+reset role;
+delete from role_permissions where organization_id = '00000000-0000-0000-0000-000000000001' and role = 'supervisor';
+insert into role_permissions select * from tj_perm_before;
+select tj_login('a0000000-0000-0000-0000-000000000003', 'hk@test.local');
+set role authenticated;
+select tj_record('AR10b housekeeping reads no alert of the branch from the table', (select count(*) from alert_events) = 0);
+reset role;
+select tj_login('a0000000-0000-0000-0000-0000000000e1', 'journey@test.local');
+set role authenticated;
+select tj_record('AR10c the supervisor reads the alerts of their branch', (select count(*) from alert_events where branch_id = tj_id('b')) > 0
+  and (fn_staff_journey(tj_id('b'))->>'sees_money')::boolean);
+reset role;
+
+-- ---------------------------------------------------------------- JM08 a night more makes a new day of departure
+do $$ declare t jsonb; m journey_messages%rowtype; begin
+  t := tj_tick(tj_id('b'), tj_at(tj_id('b'), '10:30') + interval '1 day');
+  m := tj_msg(tj_id('resA'), 'checkout_options');
+  perform tj_record('JM08 the guest who took a night more is offered the options again at 10 on their new day of departure — once for that day',
+    m.ref_key = (tj_today(tj_id('b')) + 1)::text and m.status = 'queued' and tj_msg_count(tj_id('resA'), 'checkout_options') = 2,
+    coalesce(m::text, 'none') || ' / ' || t::text);
+exception when others then perform tj_record('JM08 a night more makes a new day of departure', false, sqlerrm);
+end $$;
+
+-- ---------------------------------------------------------------- JM09 the free hour's window from the settings
+select tj_record('JM09 the free hour''s window is told from the branch''s own times, as the guest reads a clock',
+  fn_ar_window('12:00', '13:00') = 'بين 12 و1 ظهرًا' and fn_ar_window('11:00', '12:30') = 'بين 11 صباحًا و12:30 ظهرًا'
+  and fn_ar_range('12:00', '13:00') = '12–1' and fn_ar_hm('00:00') = '12' and fn_ar_period('24:00') = 'منتصف الليل'
+  and fn_ar_window('14:00', '16:00') = 'بين 2 ظهرًا و4 عصرًا'
+  and fn_extension_confirmed_text('night', null, tj_id('b')) = 'تم تثبيت ليلتك الإضافية. موعد خروجك الجديد غدًا بين 12 و1 ظهرًا.');
+
+-- ---------------------------------------------------------------- JM10 a message that fails never stops what it rides on
+select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ begin perform tj_stay('resL', '0552100012', 'room12');
+exception when others then perform tj_record('JM10 a stay is made', false, sqlerrm); end $$;
+reset role;
+alter table conversation_messages add constraint tj_block_checkout_message check (content not like 'تم تأكيد خروجك%') not valid;
+select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare r jsonb; begin
+  r := fn_staff_check_out(jsonb_build_object('reservation_id', tj_id('resL')));
+  insert into notes values ('checkout_l', r::text);
+exception when others then insert into notes values ('checkout_l', 'ERROR ' || sqlerrm);
+end $$;
+reset role;
+alter table conversation_messages drop constraint tj_block_checkout_message;
+select tj_record('JM10 a message that fails never stops the check-out it rides on: the stay is checked out, nothing of the message is left half-written, and the responsible is told to inform the guest',
+  tj_note('checkout_l') not like 'ERROR%' and (tj_res(tj_id('resL'))).status in ('checked_out', 'closed') and tj_msg_count(tj_id('resL'), 'checkout_confirmed') = 0
+  and (tj_alert('message_failed', 'error:' || tj_id('resL') || ':checkout_confirmed:')).notified_at is not null,
+  tj_note('checkout_l'));
 
 -- ---------------------------------------------------------------- JM07 nothing past the functions
 select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
@@ -683,8 +935,13 @@ select tj_record('JM07 from the screens'' side the journey is written only throu
   and tj_fails('update alert_events set resolved_at = now()', '%permission denied%') = 'ok'
   and tj_fails(format('select fn_journey_tick(%L, true)', tj_id('b')), '%permission denied%') = 'ok'
   and tj_fails(format('select fn_journey_send(%L, %L, %L, %L)', tj_id('resA'), 'review_invite', '', 'x'), '%permission denied%') = 'ok'
-  and tj_fails(format('select fn_checkout_choose(%L, %L, null, %L)', tj_id('resA'), 'on_time', 'page'), '%permission denied%') = 'ok');
+  and tj_fails(format('select fn_checkout_choose(%L, %L, null, %L)', tj_id('resA'), 'on_time', 'page'), '%permission denied%') = 'ok'
+  and tj_fails(format('select fn_departure_instructions(%L)', tj_id('resA')), '%permission denied%') = 'ok'
+  and tj_fails(format('select fn_mark_imported_guests(%L)', '00000000-0000-0000-0000-000000000001'), '%permission denied%') = 'ok');
 reset role;
+
+-- (the branch's clock back to Riyadh's for the files that run after this one)
+update branches set timezone = 'Asia/Riyadh' where id = tj_id('b');
 
 -- ---------------------------------------------------------------- results
 \set ON_ERROR_STOP on
@@ -694,5 +951,5 @@ declare n int; f int;
 begin
   select count(*), count(*) filter (where not ok) into n, f from test_results;
   if f > 0 then raise exception 'JOURNEY TESTS FAILED: % of %', f, n; end if;
-  if n < 43 then raise exception 'JOURNEY TESTS INCOMPLETE: % of 43 checks ran', n; end if;
+  if n < 61 then raise exception 'JOURNEY TESTS INCOMPLETE: % of 61 checks ran', n; end if;
 end $$;

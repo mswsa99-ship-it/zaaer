@@ -6,7 +6,7 @@ import { Outlet, NavLink, Link, useNavigate, useLocation, useNavigationType } fr
 import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
 import { adminNav, firstAdminPath } from "../lib/nav";
-import { LogOut, Hotel, Menu, X } from "lucide-react";
+import { LogOut, Hotel, Menu, X, BellRing } from "lucide-react";
 import { ROLE_LABELS } from "../lib/types";
 import { OpsCopilot } from "../components/OpsCopilot";
 import { KeyboxAlertBanner } from "../components/KeyboxAlert";
@@ -15,6 +15,7 @@ import { useReviewSummary } from "../lib/reviewAlerts";
 import { ReviewNavCount } from "../components/ReviewBanner";
 import { BottomTabs, pickTabs } from "../components/BottomTabs";
 import { useOrganizationName } from "../lib/organization";
+import { useJourneyAlerts } from "../lib/journeyAlerts";
 
 export default function AdminLayout() {
   const orgName = useOrganizationName();
@@ -26,6 +27,7 @@ export default function AdminLayout() {
   const adminHome = firstAdminPath(profile?.role, allows) ?? "/staff/dashboard";
   const codeAlerts = useKeyboxAlerts();   // «الرموز»: red until the codes of the units left by guests are changed
   const review = useReviewSummary();       // the owner's «بحاجة لمراجعة وتدقيق»: its count on the link
+  const journeyAlerts = useJourneyAlerts(); // W5/W6: the open alerts of «رحلة الضيف» that are the reader's own (a low review reaches the owner here at once)
 
   // phones and tablets: the same menu opens as a drawer (it was missing below the desktop width)
   const [menuOpen, setMenuOpen] = useState(false);
@@ -74,6 +76,7 @@ export default function AdminLayout() {
                     <item.icon className="h-4 w-4" />
                     {item.label}
                     {item.to === "/admin/review" && <ReviewNavCount summary={review} />}
+                    {item.to === "/admin/journey" && !!journeyAlerts && <span className="mr-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-500 px-1.5 text-[11px] font-semibold leading-5 text-white" aria-label={`${journeyAlerts} تنبيهات مفتوحة`}>{journeyAlerts}</span>}
                   </NavLink>
                 ))}
               </div>
@@ -123,6 +126,12 @@ export default function AdminLayout() {
         </div>
         {/* IX-03: the code alert scrolls away with the page instead of pinning a tall block on a phone */}
         <KeyboxAlertBanner alerts={codeAlerts} />
+        {!!journeyAlerts && (
+          <Link to="/staff/journey" className="mx-4 mt-3 flex min-h-[44px] items-center gap-2 rounded-xl bg-danger-50 px-3 py-2 text-sm font-medium text-danger-600 hover:underline lg:mx-8" data-testid="admin-journey-alerts">
+            <BellRing className="h-4 w-4 shrink-0" aria-hidden />
+            <span>{journeyAlerts === 1 ? "تنبيه واحد يخصّك" : journeyAlerts === 2 ? "تنبيهان يخصّانك" : journeyAlerts <= 10 ? `${journeyAlerts} تنبيهات تخصّك` : `${journeyAlerts} تنبيهًا يخصّك`} في «رحلة الضيف» — افتحها</span>
+          </Link>
+        )}
         <main id="main" tabIndex={-1} className="flex-1 p-4 pb-36 outline-none lg:p-8 lg:pb-24">{/* bottom room: the floating «مساعد العمليات» button never covers the last control */}
           <Suspense fallback={<LoadingScreen />}><Outlet /></Suspense>
         </main>

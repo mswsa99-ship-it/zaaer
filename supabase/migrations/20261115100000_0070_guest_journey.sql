@@ -5,7 +5,8 @@
 --   · at 10:00 on the day of departure (a setting) the guest is offered: leaving between 12 and 1 (free), one night
 --     more (when the room is free that night), or hours after 1 PM at 5 riyals each, a part of an hour counted whole,
 --     with no limit but the room's next guest and the hour of cleaning before them; a night or hours are held for the
---     guest while they pay (30 minutes, a setting) and given back when not paid in time (before 1 PM);
+--     guest while they pay (30 minutes, a setting) and given back when not paid in time (before 1 PM); after 1 PM leaving
+--     on time is no longer offered, and a guest who says they left after it has the hours begun charged as they leave;
 --   · the guest reads the departure instructions, then says «غادرت وسلّمت المفتاح»: the stay waits for the reception's
 --     check (the inspection, then the check-out); from the confirmed check-out the deposit is returned within 3 hours
 --     (a setting) — by transfer with its number or in cash from the branch's box — and the guest's receipt goes out
@@ -14,7 +15,10 @@
 --     on its own, and six aspects; a mark under 9 (a setting) alerts the owner at once; the reception answers it;
 --   · each event of the journey has its rule: who is told (the branch's responsible — مأمون or مهيدي — its fallback —
 --     the administration — or a role), by which channel (in the system, WhatsApp, or both: WhatsApp in place of SMS),
---     after how long, and to whom it climbs when nobody acts.
+--     after how long, and to whom it climbs when nobody acts. «In the system» is personal: the alert counts in the
+--     menu's badge of the people it names (a person WhatsApp could not reach has it there too), and stands on
+--     «رحلة الضيف» for the owner, the managers and the supervisors of the branch.
+-- A message or an alert never stops what it rides on (a check-out, a deposit's return, an order): a failure is logged.
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 1. The journey's settings, per branch (every number above), and the address of the guests' pages
@@ -66,6 +70,9 @@ alter table reservations add column if not exists checkout_choice text;
 alter table reservations add column if not exists checkout_choice_at timestamptz;
 alter table reservations add column if not exists guest_departed_at timestamptz;
 alter table reservations add column if not exists guest_departed_via text;
+-- W4 «التعليمات قبل الزر»: when the departure's instructions reached the guest (their page showed them, or WhatsApp
+-- sent them); «غادرت وسلّمت المفتاح» is taken only after it
+alter table reservations add column if not exists departure_instructions_at timestamptz;
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'reservations_checkout_choice_valid') then
     alter table reservations add constraint reservations_checkout_choice_valid check (checkout_choice is null or checkout_choice in ('on_time'));
@@ -75,7 +82,7 @@ do $$ begin
   end if;
 end $$;
 -- read by the staff of the stay's branch, as every column of a stay that is not money (0011, 0033, 0035)
-grant select (checkout_choice, checkout_choice_at, guest_departed_at, guest_departed_via) on reservations to authenticated;
+grant select (checkout_choice, checkout_choice_at, guest_departed_at, guest_departed_via, departure_instructions_at) on reservations to authenticated;
 
 -- the branch-local clock
 create or replace function fn_journey_local_time(p_branch uuid) returns time
@@ -89,6 +96,24 @@ create or replace function fn_ar_hours(n integer) returns text language sql immu
 $$;
 revoke all on function fn_ar_hours(integer) from public, anon;
 grant execute on function fn_ar_hours(integer) to authenticated, service_role;
+
+-- a clock time as the guest reads it (10 صباحًا، 12 ظهرًا، 1:30 ظهرًا، 4 عصرًا، 9 مساءً، 12 منتصف الليل), and the free
+-- hour's window from the branch's own settings (its check-out time and the free hour's end): «بين 12 و1 ظهرًا»
+create or replace function fn_ar_hm(t time) returns text language sql immutable set search_path = public as $$
+  select ((extract(hour from t)::int + 11) % 12 + 1)::text || case when extract(minute from t)::int > 0 then ':' || lpad(extract(minute from t)::int::text, 2, '0') else '' end
+$$;
+create or replace function fn_ar_period(t time) returns text language sql immutable set search_path = public as $$
+  select case when t = time '00:00' or t >= time '24:00' then 'منتصف الليل' when t < time '12:00' then 'صباحًا' when t < time '15:00' then 'ظهرًا'
+              when t < time '18:00' then 'عصرًا' else 'مساءً' end
+$$;
+create or replace function fn_ar_window(a time, b time) returns text language sql immutable set search_path = public as $$
+  select case when fn_ar_period(a) = fn_ar_period(b) then 'بين ' || fn_ar_hm(a) || ' و' || fn_ar_hm(b) || ' ' || fn_ar_period(b)
+              else 'بين ' || fn_ar_hm(a) || ' ' || fn_ar_period(a) || ' و' || fn_ar_hm(b) || ' ' || fn_ar_period(b) end
+$$;
+create or replace function fn_ar_range(a time, b time) returns text language sql immutable set search_path = public as $$
+  select fn_ar_hm(a) || '–' || fn_ar_hm(b)
+$$;
+revoke all on function fn_ar_hm(time), fn_ar_period(time), fn_ar_window(time, time), fn_ar_range(time, time) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 2. W6 — the alert rules: for each event who is told, by which channel, after how long, and to whom it climbs
@@ -220,7 +245,9 @@ begin
 end $$;
 revoke all on function fn_staff_whatsapp(uuid, text, text) from public, anon, authenticated;
 
--- tells the people of an alert (or, climbing, those it climbs to) by the rule's channel; records who and how
+-- tells the people of an alert (or, climbing, those it climbs to) by the rule's channel; records who and how. In the
+-- system: the alert stands on «رحلة الضيف» and counts in the menu's badge of each person it names (fn_alert_is_mine);
+-- on WhatsApp: a message to each one's number — and a person WhatsApp could not reach has it in the system instead
 create or replace function fn_alert_notify(p_alert uuid, p_escalation boolean) returns void
 language plpgsql security definer set search_path = public as $$
 declare a alert_events%rowtype; rl alert_rules%rowtype; who jsonb := '[]'::jsonb; p record; wa text; txt text;
@@ -230,14 +257,10 @@ begin
   select * into rl from alert_rules where organization_id = a.organization_id and event = a.event;
   if not found then return; end if;
   txt := case when p_escalation then 'تصعيد — لم يُعالَج بعد: ' else '' end || a.title || coalesce(E'\n' || a.body, '');
-  if rl.channel in ('app', 'both') then
-    insert into notifications(branch_id, audience, title, body, link)
-    values (a.branch_id, case when p_escalation or rl.recipients <@ array['owner'] then 'manager' else 'supervisor' end,
-            case when p_escalation then 'تصعيد: ' else '' end || a.title, a.body, a.link);
-  end if;
   for p in select * from fn_alert_people(a.branch_id, case when p_escalation then array[rl.escalate_to] else rl.recipients end) order by full_name loop
     wa := case when rl.channel in ('whatsapp', 'both') then fn_staff_whatsapp(a.branch_id, p.phone, '🔔 ' || txt) end;
-    who := who || jsonb_build_array(jsonb_build_object('staff_id', p.staff_id, 'name', p.full_name, 'app', rl.channel in ('app', 'both'), 'whatsapp', wa));
+    who := who || jsonb_build_array(jsonb_build_object('staff_id', p.staff_id, 'name', p.full_name,
+                                                       'app', rl.channel in ('app', 'both') or coalesce(wa, '') <> 'queued', 'whatsapp', wa));
   end loop;
   if p_escalation then
     update alert_events set escalated_at = now(), escalated_to = who where id = a.id;
@@ -272,6 +295,16 @@ language sql security definer set search_path = public as $$
   update alert_events set resolved_at = now(), resolved_how = 'auto' where event = p_event and ref_key = p_ref and resolved_at is null
 $$;
 revoke all on function fn_alert_resolve(text, text) from public, anon, authenticated;
+
+-- is an open alert this person's: named to them in the system (when told, or when it climbed), or named to nobody at
+-- all (then it is everyone's on «رحلة الضيف», so it is never lost)
+create or replace function fn_alert_is_mine(p_notified jsonb, p_escalated jsonb, p_staff uuid) returns boolean
+language sql immutable set search_path = public as $$
+  select exists (select 1 from jsonb_array_elements(coalesce(p_notified, '[]'::jsonb) || coalesce(p_escalated, '[]'::jsonb)) x
+                  where x->>'staff_id' = p_staff::text and coalesce((x->>'app')::boolean, false))
+      or (jsonb_array_length(coalesce(p_notified, '[]'::jsonb)) = 0 and jsonb_array_length(coalesce(p_escalated, '[]'::jsonb)) = 0)
+$$;
+revoke all on function fn_alert_is_mine(jsonb, jsonb, uuid) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 3. The journey's messages to the guest: on the branch's WhatsApp, each kind once per stay (and thing)
@@ -347,11 +380,16 @@ begin
   if why is not null then
     insert into journey_messages(organization_id, branch_id, reservation_id, kind, ref_key, status, reason)
     values (r.organization_id, r.branch_id, r.id, p_kind, coalesce(p_ref, ''), 'skipped', why);
-    if why <> 'journey_off' then
+    if why = 'no_phone' then
       perform fn_alert_raise(r.branch_id, 'message_failed', 'journey:' || r.id || ':' || p_kind || ':' || coalesce(p_ref, ''),
         'تعذّر إرسال رسالة للنزيل — ' || coalesce((select 'غرفة ' || room_number from rooms where id = r.room_id), r.internal_ref),
-        case why when 'no_phone' then 'لا يوجد جوال للنزيل في الحجز ' when 'channel_unavailable' then 'واتساب الفرع غير مربوط بكمبيوتر الاستقبال — ' else '' end
-          || r.internal_ref || '. أبلغ النزيل بنفسك.', '/staff/journey', r.id);
+        'لا يوجد جوال للنزيل في الحجز ' || r.internal_ref || '. أبلغ النزيل بنفسك.', '/staff/journey', r.id);
+    elsif why = 'channel_unavailable' then
+      -- once a day for the branch, not once a message: until the number is linked no message reaches any guest
+      perform fn_alert_raise(r.branch_id, 'message_failed', 'channel:' || r.branch_id || ':' || fn_branch_today(r.branch_id),
+        'واتساب الفرع غير مربوط — رسائل رحلة الضيف لا تصل للنزلاء',
+        'اربط واتساب الفرع بكمبيوتر الاستقبال من «واتساب» في الإعدادات. حتى ذلك أبلغ النزلاء بأنفسكم بخيارات الخروج وتأكيده ورد التأمين.',
+        '/staff/journey', null);
     end if;
     return why;
   end if;
@@ -379,6 +417,31 @@ begin
   return 'queued';
 end $$;
 revoke all on function fn_journey_send(uuid, text, text, text, jsonb, text) from public, anon, authenticated;
+
+-- the same, where the message rides on something else (a check-out, a deposit's return, the reception's decision, the
+-- journey's clock): a message that fails never stops it — what it wrote is undone, the failure is logged, and the
+-- responsible is told to inform the guest. Returns the status, or 'error'
+create or replace function fn_journey_send_safe(p_reservation uuid, p_kind text, p_ref text, p_body text, p_options jsonb default null, p_typed text default null)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare v_branch uuid;
+begin
+  return fn_journey_send(p_reservation, p_kind, p_ref, p_body, p_options, p_typed);
+exception when unique_violation then
+  return 'already';                                           -- the same message at the same moment: it went once
+when others then
+  raise warning 'journey message % of % failed: %', p_kind, p_reservation, sqlerrm;
+  begin
+    select branch_id into v_branch from reservations where id = p_reservation;
+    perform fn_alert_raise(v_branch, 'message_failed', 'error:' || p_reservation || ':' || p_kind || ':' || coalesce(p_ref, ''),
+      'تعذّر إرسال رسالة للنزيل — ' || coalesce((select 'غرفة ' || rm.room_number from reservations rs join rooms rm on rm.id = rs.room_id where rs.id = p_reservation), ''),
+      'خطأ في النظام أثناء تجهيز الرسالة. أبلغ النزيل بنفسك.', '/staff/journey', p_reservation);
+  exception when others then
+    raise warning 'journey alert failed: %', sqlerrm;
+  end;
+  return 'error';
+end $$;
+revoke all on function fn_journey_send_safe(uuid, text, text, text, jsonb, text) from public, anon, authenticated;
 
 -- the reception computer's pick of its messages: the journey looks at the clock first (its messages go out in the same
 -- pick), and a message typed with its own text uses it
@@ -511,8 +574,11 @@ begin
     where reservation_id = r.id and status = 'active' and night >= p_new_check_out and night < r.check_out;
     perform fn_add_charge(r.id, 'adjustment', 'تقصير الإقامة ' || fn_ar_nights(abs(delta)), 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
   end if;
+  -- (the guest's choice, the late hours and the departure's instructions belong to the day of departure: a new day asks
+  -- again, sells its own hours and shows its instructions again)
   update reservations set check_out = p_new_check_out,
          nightly_rate_halalas = coalesce((select round(avg(price_halalas))::bigint from reservation_nights where reservation_id = r.id and status = 'active'), nightly_rate_halalas),
+         checkout_choice = null, checkout_choice_at = null, late_checkout_until = null, departure_instructions_at = null,
          version = version + 1, updated_at = now()
   where id = r.id;
   perform fn_recompute_reservation_finance(r.id);
@@ -580,53 +646,67 @@ create index if not exists idx_extension_branch on stay_extension_requests(branc
 
 -- what the guest may choose today: the day of departure only, the stay in its room. The night's price is the stay's
 -- own night (with the tax of the stay's policy); the hours run from the free hour's end to the next guest's arrival
--- less the cleaning hour (no next guest that day: to midnight)
-create or replace function fn_checkout_offer(p_reservation uuid) returns jsonb
+-- less the cleaning hour (no next guest that day: to midnight). Hours are counted from the free hour's end: a choice of
+-- n hours is leaving by free hour + n. The hours already bought that day are not sold again ('have'), and the fewest
+-- hours that can be chosen now cover the hour being lived — a part of an hour is a whole hour ('min').
+-- p_at: the moment the clock is read at (now; a check reads another hour of the same day)
+create or replace function fn_checkout_offer(p_reservation uuid, p_at timestamptz default now()) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
-declare r reservations%rowtype; b branches%rowtype; s branch_journey_settings%rowtype; v_today date; v_open boolean; night_ok boolean := false;
+declare r reservations%rowtype; b branches%rowtype; s branch_journey_settings%rowtype; v_today date; v_now time; v_open boolean; night_ok boolean := false;
         v_night bigint; night_net bigint; night_tax bigint; next_arrival boolean; limit_end time; hours_max int := 0; req stay_extension_requests%rowtype;
-        hour_net bigint; hour_tax bigint;
+        hour_net bigint; hour_tax bigint; v_have int := 0; v_min int := 1; v_late_now int := 0; v_paid_end time;
 begin
   select * into r from reservations where id = p_reservation;
   if not found then raise exception 'RESERVATION_NOT_FOUND'; end if;
   select * into b from branches where id = r.branch_id;
   select * into s from branch_journey_settings where branch_id = r.branch_id;
-  v_today := fn_branch_today(r.branch_id);
+  v_today := (p_at at time zone coalesce(b.timezone, 'Asia/Riyadh'))::date;
+  v_now := (p_at at time zone coalesce(b.timezone, 'Asia/Riyadh'))::time;
   v_open := r.status = 'checked_in' and r.room_id is not null and r.check_out = v_today and r.guest_departed_at is null;
   select * into req from stay_extension_requests where reservation_id = r.id order by created_at desc limit 1;
   if v_open then
     select n.price_halalas into v_night from reservation_nights n where n.reservation_id = r.id and n.status = 'active' order by n.night desc limit 1;
     v_night := coalesce(v_night, r.nightly_rate_halalas, 0);
     select * into night_net, night_tax from fn_reservation_tax(r.id, v_night, true);
-    night_ok := v_night > 0 and fn_room_free_internal(r.room_id, r.check_out, r.check_out + 1, r.id) and not fn_overdue_blocked(r.id);
+    -- (late hours already taken today: the day ends with them, not with a night more)
+    night_ok := v_night > 0 and r.late_checkout_until is null and fn_room_free_internal(r.room_id, r.check_out, r.check_out + 1, r.id) and not fn_overdue_blocked(r.id);
     next_arrival := exists (select 1 from reservation_allocations a where a.room_id = r.room_id and a.status = 'active' and a.from_date = v_today and a.reservation_id <> r.id);
     limit_end := case when next_arrival then b.check_in_time - make_interval(mins => s.cleaning_buffer_minutes) else time '24:00' end;
     if limit_end > s.free_checkout_until then
       hours_max := floor(extract(epoch from (limit_end - s.free_checkout_until)) / 3600)::int;
     end if;
+    if r.late_checkout_until is not null and r.late_checkout_until > s.free_checkout_until then
+      v_have := ceil(extract(epoch from (r.late_checkout_until - s.free_checkout_until)) / 3600)::int;
+    end if;
+    v_min := greatest(v_have + 1, case when v_now > s.free_checkout_until then ceil(extract(epoch from (v_now - s.free_checkout_until)) / 3600)::int else 1 end);
+    -- the hours a departure now would add (fn_departure_confirm): begun after the free hour and after the hours bought
+    v_paid_end := greatest(s.free_checkout_until, coalesce(r.late_checkout_until, s.free_checkout_until));
+    if v_now > v_paid_end then v_late_now := ceil(extract(epoch from (v_now - v_paid_end)) / 3600)::int; end if;
     select * into hour_net, hour_tax from fn_charge_tax(r.id, 'services', s.late_hour_price_halalas, true);
   end if;
   return jsonb_build_object(
     'open', v_open, 'status', r.status, 'check_out', r.check_out, 'room_number', (select room_number from rooms where id = r.room_id),
     'free_until', to_char(s.free_checkout_until, 'HH24:MI'), 'check_out_time', to_char(b.check_out_time, 'HH24:MI'),
     'night', jsonb_build_object('available', night_ok, 'price_halalas', case when v_open then night_net + night_tax end),
-    'hours', jsonb_build_object('max', hours_max, 'price_halalas', case when v_open then hour_net + hour_tax end,
+    'hours', jsonb_build_object('max', hours_max, 'min', v_min, 'have', v_have, 'late_now', v_late_now, 'price_halalas', case when v_open then hour_net + hour_tax end,
                                 'until_limit', case when v_open and hours_max > 0 then fn_late_until(s.free_checkout_until, hours_max) end,
                                 'next_guest', coalesce(next_arrival, false)),
+    'on_time_open', v_open and v_now <= s.free_checkout_until,
     'hold_minutes', s.hold_minutes, 'choice', r.checkout_choice, 'late_checkout_until', to_char(r.late_checkout_until, 'HH24:MI'),
-    'instructions', s.checkout_instructions, 'departed_at', r.guest_departed_at,
+    'instructions', s.checkout_instructions, 'instructions_at', r.departure_instructions_at, 'departed_at', r.guest_departed_at,
     'deposit_halalas', r.deposit_balance_halalas, 'refund_hours', s.deposit_refund_hours, 'balance_due', r.balance_due_halalas,
     'request', case when req.id is null then null else jsonb_build_object('id', req.id, 'kind', req.kind, 'hours', req.hours, 'late_until', to_char(req.late_until, 'HH24:MI'),
                                                                           'amount_halalas', req.amount_halalas, 'status', req.status, 'hold_until', req.hold_until) end);
 end $$;
-revoke all on function fn_checkout_offer(uuid) from public, anon, authenticated;
+revoke all on function fn_checkout_offer(uuid, timestamptz) from public, anon, authenticated;
 
--- the guest's choice: 'on_time' (leaving between 12 and 1), 'night', 'hours' (with how many), or 'cancel' (a night
--- or hours held and not yet paid, given back). One held request at a time.
-create or replace function fn_checkout_choose(p_reservation uuid, p_choice text, p_hours int, p_source text) returns jsonb
+-- the guest's choice: 'on_time' (leaving in the free hour's window), 'night', 'hours' (leaving by the free hour's end +
+-- that many hours: only the hours not bought yet are charged, and never fewer than the hour being lived), or 'cancel'
+-- (a night or hours held and not yet paid, given back). One held request at a time.
+create or replace function fn_checkout_choose(p_reservation uuid, p_choice text, p_hours int, p_source text, p_at timestamptz default now()) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare r reservations%rowtype; s branch_journey_settings%rowtype; o jsonb; q stay_extension_requests%rowtype; total0 bigint; amt bigint; cid uuid;
-        v_until time; v_room text;
+        v_until time; v_room text; v_extra int; v_day date;
 begin
   select * into r from reservations where id = p_reservation for update;
   if not found then raise exception 'RESERVATION_NOT_FOUND'; end if;
@@ -636,16 +716,18 @@ begin
     select * into q from stay_extension_requests where reservation_id = r.id and status = 'held' for update;
     if not found then raise exception 'VALIDATION: extension_none'; end if;
     perform fn_extension_release(q.id, 'ألغاه النزيل', 'released');
-    return fn_checkout_offer(r.id);
+    return fn_checkout_offer(r.id, p_at);
   end if;
   if p_choice is null or p_choice not in ('on_time', 'night', 'hours') then raise exception 'VALIDATION: checkout_choice'; end if;
-  o := fn_checkout_offer(r.id);
+  o := fn_checkout_offer(r.id, p_at);
   if not (o->>'open')::boolean then raise exception 'VALIDATION: checkout_not_today'; end if;
   if exists (select 1 from stay_extension_requests where reservation_id = r.id and status in ('held', 'overdue')) then raise exception 'VALIDATION: extension_pending'; end if;
   if p_choice = 'on_time' then
+    -- (after the free hour leaving on time is past: the hours begun are late hours)
+    if not coalesce((o->>'on_time_open')::boolean, false) then raise exception 'VALIDATION: free_hour_over'; end if;
     update reservations set checkout_choice = 'on_time', checkout_choice_at = now(), updated_at = now() where id = r.id;
     perform fn_audit_change(r.branch_id, 'journey.checkout_on_time', 'reservation', r.id, null, jsonb_build_object('source', p_source));
-    return fn_checkout_offer(r.id);
+    return fn_checkout_offer(r.id, p_at);
   end if;
   total0 := r.total_halalas;
   if p_choice = 'night' then
@@ -656,38 +738,47 @@ begin
     values (r.organization_id, r.branch_id, r.id, 'night', amt - total0, now() + make_interval(mins => s.hold_minutes), p_source, r.check_out)
     returning * into q;
   else
-    if p_hours is null or p_hours < 1 or p_hours > coalesce((o->'hours'->>'max')::int, 0) then raise exception 'VALIDATION: late_hours'; end if;
+    if p_hours is null or p_hours < coalesce((o->'hours'->>'min')::int, 1) or p_hours > coalesce((o->'hours'->>'max')::int, 0) then raise exception 'VALIDATION: late_hours'; end if;
+    v_extra := p_hours - coalesce((o->'hours'->>'have')::int, 0);
     v_until := fn_late_until(s.free_checkout_until, p_hours)::time;
-    cid := fn_add_charge(r.id, 'addon', 'خروج متأخر ' || fn_ar_hours(p_hours) || ' حتى ' || to_char(v_until, 'HH24:MI'), p_hours, s.late_hour_price_halalas, true,
-                         'بطلب النزيل', null, fn_branch_today(r.branch_id), fn_branch_today(r.branch_id));
+    v_day := r.check_out;
+    cid := fn_add_charge(r.id, 'addon', 'خروج متأخر ' || fn_ar_hours(v_extra) || ' حتى ' || to_char(v_until, 'HH24:MI'), v_extra, s.late_hour_price_halalas, true,
+                         'بطلب النزيل', null, v_day, v_day);
     update reservations set late_checkout_until = v_until, updated_at = now() where id = r.id;
     perform fn_recompute_reservation_finance(r.id);
     select total_halalas into amt from reservations where id = r.id;
     insert into stay_extension_requests(organization_id, branch_id, reservation_id, kind, hours, late_until, amount_halalas, hold_until, source, previous_late_until, charge_id)
-    values (r.organization_id, r.branch_id, r.id, 'hours', p_hours, v_until, amt - total0, now() + make_interval(mins => s.hold_minutes), p_source, r.late_checkout_until, cid)
+    values (r.organization_id, r.branch_id, r.id, 'hours', v_extra, v_until, amt - total0, now() + make_interval(mins => s.hold_minutes), p_source, r.late_checkout_until, cid)
     returning * into q;
   end if;
   perform fn_audit_change(r.branch_id, 'journey.extension_held', 'extension_request', q.id, null,
-    jsonb_build_object('kind', q.kind, 'hours', q.hours, 'amount_halalas', q.amount_halalas, 'hold_until', q.hold_until, 'source', p_source));
+    jsonb_build_object('kind', q.kind, 'hours', q.hours, 'late_until', to_char(q.late_until, 'HH24:MI'), 'amount_halalas', q.amount_halalas,
+                       'hold_until', q.hold_until, 'source', p_source));
   -- nothing to pay (a credit on the stay): it stands at once
   if (select balance_due_halalas from reservations where id = r.id) <= 0 then
     update stay_extension_requests set status = 'paid', decided_at = now() where id = q.id;
   else
+    -- (no amount in the alert: it reaches people who do not see money; «رحلة الضيف» shows it to those who do)
     perform fn_alert_raise(r.branch_id, 'extension_requested', 'extension:' || q.id,
-      case q.kind when 'night' then 'طلب ليلة إضافية' else 'طلب خروج متأخر ' || fn_ar_hours(q.hours) end || ' — غرفة ' || v_room,
-      'المبلغ ' || fn_sar_text(q.amount_halalas) || '، محجوز حتى ' || to_char(q.hold_until at time zone coalesce((select timezone from branches where id = r.branch_id), 'Asia/Riyadh'), 'HH24:MI')
+      case q.kind when 'night' then 'طلب ليلة إضافية' else 'طلب خروج متأخر ' || fn_ar_hours(q.hours) || ' حتى ' || to_char(q.late_until, 'HH24:MI') end || ' — غرفة ' || v_room,
+      'محجوز حتى ' || to_char(q.hold_until at time zone coalesce((select timezone from branches where id = r.branch_id), 'Asia/Riyadh'), 'HH24:MI')
         || '. يُثبَّت عند سداد رصيد الحجز.', '/staff/journey', r.id);
   end if;
-  return fn_checkout_offer(r.id);
+  return fn_checkout_offer(r.id, p_at);
 end $$;
-revoke all on function fn_checkout_choose(uuid, text, int, text) from public, anon, authenticated;
+revoke all on function fn_checkout_choose(uuid, text, int, text, timestamptz) from public, anon, authenticated;
 
 -- a held night or hours given back (not paid in time, cancelled by the guest, or by the reception): the night returns
 -- to the room, the late hours' line gets its exact opposite (the line and its tax), the stay is as before
 create or replace function fn_extension_release(p_request uuid, p_reason text, p_status text) returns void
 language plpgsql security definer set search_path = public as $$
-declare q stay_extension_requests%rowtype; c record; nid uuid;
+declare q stay_extension_requests%rowtype; c record; nid uuid; v_res uuid;
 begin
+  -- the stay first, then the request: the order in which the guest's choice, the reception's decision and the
+  -- journey's clock take them (two of them at the same moment wait for each other, never lock each other out)
+  select reservation_id into v_res from stay_extension_requests where id = p_request;
+  if not found then return; end if;
+  perform 1 from reservations where id = v_res for update;
   select * into q from stay_extension_requests where id = p_request for update;
   if not found or q.status not in ('held', 'overdue') then return; end if;
   if q.kind = 'night' then
@@ -721,24 +812,64 @@ revoke all on function fn_extension_release(uuid, text, text) from public, anon,
 -- ---------------------------------------------------------------------------------------------------------------
 -- 5. W4 — the departure and the deposit's return
 -- ---------------------------------------------------------------------------------------------------------------
--- «غادرت وسلّمت المفتاح»: the stay waits for the reception's check (once)
-create or replace function fn_departure_confirm(p_reservation uuid, p_via text) returns jsonb
+-- W4 «التعليمات قبل الزر»: the departure's instructions reach the guest — their page shows them, WhatsApp sends them —
+-- and the moment is kept (on the day of departure, the stay in the house); returns the day's offer with them
+create or replace function fn_departure_instructions(p_reservation uuid) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare r reservations%rowtype; v_room text;
+declare r reservations%rowtype;
+begin
+  select * into r from reservations where id = p_reservation for update;
+  if not found then raise exception 'RESERVATION_NOT_FOUND'; end if;
+  if r.status = 'checked_in' and r.room_id is not null and r.check_out <= fn_branch_today(r.branch_id) and r.guest_departed_at is null
+     and r.departure_instructions_at is null then
+    update reservations set departure_instructions_at = now() where id = r.id;
+  end if;
+  return fn_checkout_offer(r.id);
+end $$;
+revoke all on function fn_departure_instructions(uuid) from public, anon, authenticated;
+
+-- «غادرت وسلّمت المفتاح»: the stay waits for the reception's check (once) — on the day of departure, and only after
+-- the instructions reached the guest. W3: the hours begun after the free hour and after the hours bought (a part of an
+-- hour a whole hour) are the stay's late check-out at the branch's price, charged as the guest leaves and told to them;
+-- the reception collects them with the stay's balance. p_at: the moment of leaving (now; a check reads another hour)
+create or replace function fn_departure_confirm(p_reservation uuid, p_via text, p_at timestamptz default now()) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r reservations%rowtype; s branch_journey_settings%rowtype; v_room text; v_tz text; v_day date; v_now time; v_from time; v_late int := 0;
+        v_until time; cid uuid; v_amount bigint := 0;
 begin
   select * into r from reservations where id = p_reservation for update;
   if not found then raise exception 'RESERVATION_NOT_FOUND'; end if;
   if r.status <> 'checked_in' then raise exception 'VALIDATION: not_in_stay'; end if;
   if r.guest_departed_at is not null then return jsonb_build_object('ok', true, 'already', true, 'departed_at', r.guest_departed_at); end if;
+  v_tz := coalesce((select timezone from branches where id = r.branch_id), 'Asia/Riyadh');
+  v_day := (p_at at time zone v_tz)::date; v_now := (p_at at time zone v_tz)::time;
+  if r.check_out > v_day then raise exception 'VALIDATION: not_departure_day'; end if;
+  if r.departure_instructions_at is null then raise exception 'VALIDATION: instructions_first'; end if;
+  select * into s from branch_journey_settings where branch_id = r.branch_id;
+  if r.check_out = v_day then
+    v_from := greatest(s.free_checkout_until, coalesce(r.late_checkout_until, s.free_checkout_until));
+    if v_now > v_from then
+      v_late := ceil(extract(epoch from (v_now - v_from)) / 3600)::int;
+      v_until := fn_late_until(v_from, v_late)::time;
+      cid := fn_add_charge(r.id, 'addon', 'خروج متأخر ' || fn_ar_hours(v_late) || ' حتى ' || to_char(v_until, 'HH24:MI') || ' (عند المغادرة)', v_late,
+                           s.late_hour_price_halalas, true, 'غادر بعد موعد الخروج المجاني', null, r.check_out, r.check_out);
+      update reservations set late_checkout_until = v_until where id = r.id;
+      perform fn_recompute_reservation_finance(r.id);
+      select coalesce(sum(total_halalas), 0) into v_amount from reservation_charges where id = cid or base_charge_id = cid;
+    end if;
+  end if;
   update reservations set guest_departed_at = now(), guest_departed_via = p_via, updated_at = now() where id = r.id;
   v_room := coalesce((select room_number from rooms where id = r.room_id), r.internal_ref);
-  perform fn_audit_change(r.branch_id, 'journey.guest_departed', 'reservation', r.id, null, jsonb_build_object('via', p_via));
+  perform fn_audit_change(r.branch_id, 'journey.guest_departed', 'reservation', r.id, null,
+                          jsonb_build_object('via', p_via) || case when v_late > 0 then jsonb_build_object('late_hours', v_late, 'late_halalas', v_amount) else '{}'::jsonb end);
+  -- (no amount in the alert: it reaches people who do not see money)
   perform fn_alert_raise(r.branch_id, 'guest_departed', 'departed:' || r.id, 'غادر نزيل غرفة ' || v_room || ' — بانتظار التحقق',
-    'افحص الوحدة ثم أكمل المغادرة' || case when r.deposit_balance_halalas > 0 then '، ثم رد التأمين ' || fn_sar_text(r.deposit_balance_halalas) else '' end || '.',
+    'افحص الوحدة ثم أكمل المغادرة' || case when r.deposit_balance_halalas > 0 then '، ثم رد التأمين' else '' end || '.'
+      || case when v_late > 0 then ' غادر بعد موعده: أُضيف إلى الحجز خروج متأخر ' || fn_ar_hours(v_late) || ' يُحصَّل مع رصيده.' else '' end,
     '/staff/journey', r.id);
-  return jsonb_build_object('ok', true, 'already', false, 'departed_at', now());
+  return jsonb_build_object('ok', true, 'already', false, 'departed_at', now(), 'late_hours', v_late, 'late_halalas', v_amount);
 end $$;
-revoke all on function fn_departure_confirm(uuid, text) from public, anon, authenticated;
+revoke all on function fn_departure_confirm(uuid, text, timestamptz) from public, anon, authenticated;
 
 -- the deposit is returned by transfer (with its number) or in cash from the branch's box (decision of 27 October)
 do $$
@@ -768,7 +899,7 @@ begin
     perform fn_alert_resolve('guest_departed', 'departed:' || new.id);
     select * into s from branch_journey_settings where branch_id = new.branch_id;
     v_room := coalesce((select room_number from rooms where id = new.room_id), '');
-    perform fn_journey_send(new.id, 'checkout_confirmed', '',
+    perform fn_journey_send_safe(new.id, 'checkout_confirmed', '',
       'تم تأكيد خروجك من غرفة ' || v_room || '. شكرًا لإقامتك معنا.'
       || case when new.deposit_balance_halalas > 0 then E'\n' || 'يُرد تأمينك (' || fn_sar_text(new.deposit_balance_halalas) || ') خلال '
                    || fn_ar_hours(s.deposit_refund_hours) || ': تحويلًا إلى حسابك أو نقدًا من الاستقبال، ويصلك إيصال الرد هنا.' else '' end);
@@ -783,7 +914,7 @@ create or replace function fn_trg_journey_deposit_refund() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if new.kind = 'deposit_refund' and new.status = 'approved' and new.reservation_id is not null then
-    perform fn_journey_send(new.reservation_id, 'deposit_refunded', new.id::text,
+    perform fn_journey_send_safe(new.reservation_id, 'deposit_refunded', new.id::text,
       'رُد إليك تأمينك ' || fn_sar_text(new.amount_halalas)
       || case when new.method::text = 'bank_transfer' then ' بالتحويل' || coalesce(' (رقم العملية ' || nullif(new.reference, '') || ')', '') else ' نقدًا' end
       || '. رقم السند ' || new.number || '. شكرًا لك.');
@@ -843,7 +974,7 @@ begin
   insert into guest_reviews(organization_id, branch_id, reservation_id, token_hash) values (r.organization_id, r.branch_id, r.id, encode(digest(tok, 'sha256'), 'hex'))
   returning id into v_id;
   v_site := rtrim((select guest_site_url from organizations where id = r.organization_id), '/');
-  st := fn_journey_send(r.id, 'review_invite', '',
+  st := fn_journey_send_safe(r.id, 'review_invite', '',
     'شكرًا لإقامتك معنا. يسعدنا تقييمك في دقيقة: درجة عامة من 10 وستة جوانب.' || E'\n' || coalesce(v_site, '') || '/booking/review/…', null,
     'شكرًا لإقامتك معنا. يسعدنا تقييمك في دقيقة: درجة عامة من 10 وستة جوانب.' || E'\n' || coalesce(v_site, '') || '/booking/review/' || tok);
   update guest_reviews set invite_status = st where id = v_id;
@@ -857,11 +988,21 @@ revoke all on function fn_review_invite(uuid) from public, anon, authenticated;
 -- ---------------------------------------------------------------------------------------------------------------
 create table if not exists journey_ticks (branch_id uuid primary key, last_at timestamptz not null);
 
+-- the guest's message when a night or late hours stand (paid, or kept by the reception without the payment now)
+create or replace function fn_extension_confirmed_text(p_kind text, p_late_until time, p_branch uuid) returns text
+language sql stable security definer set search_path = public as $$
+  select case p_kind
+    when 'night' then 'تم تثبيت ليلتك الإضافية. موعد خروجك الجديد غدًا '
+                      || fn_ar_window((select check_out_time from branches where id = p_branch), (select free_checkout_until from branch_journey_settings where branch_id = p_branch)) || '.'
+    else 'تم تثبيت خروجك المتأخر حتى ' || to_char(p_late_until, 'HH24:MI') || '.' end
+$$;
+revoke all on function fn_extension_confirmed_text(text, time, uuid) from public, anon, authenticated;
+
 -- p_at: the moment the clock is read at (now, unless a check asks for another hour of the same day)
 create or replace function fn_journey_tick(p_branch uuid, p_force boolean, p_at timestamptz default now()) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare s branch_journey_settings%rowtype; v_today date; v_now time; q record; r record; n_options int := 0; n_reviews int := 0; n_paid int := 0;
-        n_released int := 0; n_esc int := 0; o jsonb; opts jsonb; v_room text; v_tz text; a record;
+        n_released int := 0; n_esc int := 0; o jsonb; opts jsonb; v_tz text; v_cot time; a record; x stay_extension_requests%rowtype; rs reservations%rowtype;
 begin
   if not pg_try_advisory_xact_lock(hashtext('journey:' || p_branch)) then return jsonb_build_object('ran', false); end if;
   if not p_force and exists (select 1 from journey_ticks where branch_id = p_branch and last_at > now() - interval '50 seconds') then
@@ -871,72 +1012,78 @@ begin
   select * into s from branch_journey_settings where branch_id = p_branch;
   if not found then return jsonb_build_object('ran', false); end if;
   v_tz := coalesce((select timezone from branches where id = p_branch), 'Asia/Riyadh');
+  v_cot := coalesce((select check_out_time from branches where id = p_branch), time '12:00');
   v_today := (p_at at time zone v_tz)::date; v_now := (p_at at time zone v_tz)::time;
 
-  -- (1) the night or hours held: paid → it stands; time over → given back (before the free hour ends), or overdue
-  for q in select x.*, rs.balance_due_halalas as due, rs.status as res_status, rs.room_id from stay_extension_requests x join reservations rs on rs.id = x.reservation_id
-            where x.branch_id = p_branch and x.status in ('held', 'overdue') order by x.created_at loop
-    if q.due <= 0 then
-      update stay_extension_requests set status = 'paid', decided_at = now(), version = version + 1 where id = q.id;
-      perform fn_alert_resolve('extension_requested', 'extension:' || q.id);
-      perform fn_alert_resolve('extension_unpaid', 'extension:' || q.id);
-      perform fn_journey_send(q.reservation_id, 'extension_confirmed', q.id::text,
-        case q.kind when 'night' then 'تم تثبيت ليلتك الإضافية. موعد خروجك الجديد غدًا بين 12 و1 ظهرًا.'
-                    else 'تم تثبيت خروجك المتأخر حتى ' || to_char(q.late_until, 'HH24:MI') || '.' end);
+  -- (1) the night or hours held: paid → it stands; time over → given back (before the free hour ends), or overdue.
+  --     Each one as the guest's choice and the reception's decision take it: the stay first, then the request
+  for q in select e.id, e.reservation_id from stay_extension_requests e where e.branch_id = p_branch and e.status in ('held', 'overdue') order by e.created_at loop
+    select * into rs from reservations where id = q.reservation_id for update;
+    select * into x from stay_extension_requests where id = q.id for update;
+    if not found or x.status not in ('held', 'overdue') then continue; end if;
+    if rs.balance_due_halalas <= 0 then
+      update stay_extension_requests set status = 'paid', decided_at = now(), version = version + 1 where id = x.id;
+      perform fn_alert_resolve('extension_requested', 'extension:' || x.id);
+      perform fn_alert_resolve('extension_unpaid', 'extension:' || x.id);
+      perform fn_journey_send_safe(x.reservation_id, 'extension_confirmed', x.id::text, fn_extension_confirmed_text(x.kind, x.late_until, p_branch));
       n_paid := n_paid + 1;
-    elsif q.status = 'held' and q.hold_until < p_at then
-      if q.res_status = 'checked_in' and v_now < s.free_checkout_until then
-        perform fn_extension_release(q.id, 'انتهت مهلة الدفع', 'released');
-        perform fn_journey_send(q.reservation_id, 'extension_released', q.id::text,
-          'انتهت مهلة الدفع فأُلغي طلب ' || case q.kind when 'night' then 'الليلة الإضافية' else 'الخروج المتأخر' end
-          || '. موعد خروجك اليوم قبل ' || to_char(s.free_checkout_until, 'HH24:MI') || '. للمساعدة اطلب موظف الاستقبال.');
+    elsif x.status = 'held' and x.hold_until < p_at then
+      if rs.status = 'checked_in' and v_now < s.free_checkout_until then
+        perform fn_extension_release(x.id, 'انتهت مهلة الدفع', 'released');
+        perform fn_journey_send_safe(x.reservation_id, 'extension_released', x.id::text,
+          'انتهت مهلة الدفع فأُلغي طلب ' || case x.kind when 'night' then 'الليلة الإضافية' else 'الخروج المتأخر' end
+          || '. موعد خروجك اليوم ' || coalesce((select 'حتى ' || to_char(late_checkout_until, 'HH24:MI') from reservations where id = x.reservation_id and late_checkout_until is not null),
+                                               'قبل ' || to_char(s.free_checkout_until, 'HH24:MI'))
+          || '. للمساعدة اطلب موظف الاستقبال.');
         n_released := n_released + 1;
       else
-        update stay_extension_requests set status = 'overdue', version = version + 1 where id = q.id;
-        perform fn_alert_raise(p_branch, 'extension_unpaid', 'extension:' || q.id,
-          case q.kind when 'night' then 'ليلة إضافية لم تُدفع' else 'خروج متأخر لم يُدفع' end || ' — غرفة ' || coalesce((select room_number from rooms where id = q.room_id), ''),
-          'انتهت مهلة الدفع بعد ' || to_char(s.free_checkout_until, 'HH24:MI') || '؛ حصّل المبلغ ' || fn_sar_text(q.amount_halalas) || ' أو ألغِ الطلب.', '/staff/journey', q.reservation_id);
+        update stay_extension_requests set status = 'overdue', version = version + 1 where id = x.id;
+        perform fn_alert_raise(p_branch, 'extension_unpaid', 'extension:' || x.id,
+          case x.kind when 'night' then 'ليلة إضافية لم تُدفع' else 'خروج متأخر لم يُدفع' end || ' — غرفة ' || coalesce((select room_number from rooms where id = rs.room_id), ''),
+          'انتهت مهلة الدفع بعد ' || to_char(s.free_checkout_until, 'HH24:MI') || '؛ حصّل المبلغ أو ألغِ الطلب.', '/staff/journey', x.reservation_id);
       end if;
     end if;
   end loop;
 
-  -- (2) the morning of departure: the options, once, from the message's hour until the free hour ends
+  -- (2) the morning of departure: the options, once for that day (a night more makes a new day of departure, asked
+  --     again), from the message's hour until the free hour ends — not to a stay whose day is already settled (leaving
+  --     on time, late hours taken) or that waits for a payment
   if v_now >= s.checkout_message_time and v_now < s.free_checkout_until then
-    for r in select rs.id, rs.room_id from reservations rs
-              where rs.branch_id = p_branch and rs.status = 'checked_in' and rs.room_id is not null and rs.check_out = v_today
-                and rs.guest_departed_at is null and rs.checkout_choice is null
-                and not exists (select 1 from stay_extension_requests x where x.reservation_id = rs.id)
-                and not exists (select 1 from journey_messages m where m.reservation_id = rs.id and m.kind = 'checkout_options') loop
-      o := fn_checkout_offer(r.id);
-      opts := jsonb_build_array(jsonb_build_object('id', 'CO:ONTIME', 'title', 'سأخرج في الموعد (12–1)'));
+    for r in select rv.id, rv.room_id from reservations rv
+              where rv.branch_id = p_branch and rv.status = 'checked_in' and rv.room_id is not null and rv.check_out = v_today
+                and rv.guest_departed_at is null and rv.checkout_choice is null and rv.late_checkout_until is null
+                and not exists (select 1 from stay_extension_requests e where e.reservation_id = rv.id and e.status in ('held', 'overdue'))
+                and not exists (select 1 from journey_messages m where m.reservation_id = rv.id and m.kind = 'checkout_options' and m.ref_key = v_today::text) loop
+      o := fn_checkout_offer(r.id, p_at);
+      opts := jsonb_build_array(jsonb_build_object('id', 'CO:ONTIME', 'title', 'سأخرج في الموعد (' || fn_ar_range(v_cot, s.free_checkout_until) || ')'));
       if (o->'night'->>'available')::boolean then
         opts := opts || jsonb_build_array(jsonb_build_object('id', 'CO:NIGHT', 'title', 'ليلة إضافية — ' || fn_sar_text((o->'night'->>'price_halalas')::bigint)));
       end if;
-      if (o->'hours'->>'max')::int > 0 then
+      if (o->'hours'->>'max')::int >= greatest((o->'hours'->>'min')::int, 1) then
         opts := opts || jsonb_build_array(jsonb_build_object('id', 'CO:HOURS', 'title', 'ساعات بعد ' || (o->>'free_until') || ' — ' || fn_sar_text((o->'hours'->>'price_halalas')::bigint) || ' للساعة'));
       end if;
       opts := opts || jsonb_build_array(jsonb_build_object('id', 'HUMAN', 'title', 'التحدث مع موظف'));
-      perform fn_journey_send(r.id, 'checkout_options', '',
-        'صباح الخير. موعد خروجك اليوم من غرفة ' || coalesce(o->>'room_number', '') || ' بين 12 و1 ظهرًا. ماذا تفضّل؟', opts);
+      perform fn_journey_send_safe(r.id, 'checkout_options', v_today::text,
+        'صباح الخير. موعد خروجك اليوم من غرفة ' || coalesce(o->>'room_number', '') || ' ' || fn_ar_window(v_cot, s.free_checkout_until) || '. ماذا تفضّل؟', opts);
       n_options := n_options + 1;
     end loop;
   end if;
 
   -- (3) one invitation to review, the delay after the confirmed check-out (within two days of it)
-  for r in select rs.id from reservations rs
-            where rs.branch_id = p_branch and rs.status in ('checked_out', 'closed') and rs.actual_check_out is not null
-              and rs.actual_check_out <= p_at - make_interval(mins => s.review_delay_minutes) and rs.actual_check_out > p_at - interval '2 days'
-              and not exists (select 1 from guest_reviews g where g.reservation_id = rs.id) loop
+  for r in select rv.id from reservations rv
+            where rv.branch_id = p_branch and rv.status in ('checked_out', 'closed') and rv.actual_check_out is not null
+              and rv.actual_check_out <= p_at - make_interval(mins => s.review_delay_minutes) and rv.actual_check_out > p_at - interval '2 days'
+              and not exists (select 1 from guest_reviews g where g.reservation_id = rv.id) loop
     perform fn_review_invite(r.id);
     n_reviews := n_reviews + 1;
   end loop;
 
   -- (4) the deposit's return past its hours (from the confirmed check-out); closed once nothing is left to return
-  for r in select rs.id, rs.room_id, rs.deposit_balance_halalas, rs.actual_check_out from reservations rs
-            where rs.branch_id = p_branch and rs.status in ('checked_out', 'closed') and rs.deposit_balance_halalas > 0 and rs.actual_check_out is not null
-              and rs.actual_check_out <= p_at - make_interval(hours => s.deposit_refund_hours) and rs.actual_check_out > p_at - interval '7 days' loop
+  for r in select rv.id, rv.room_id, rv.deposit_balance_halalas, rv.actual_check_out from reservations rv
+            where rv.branch_id = p_branch and rv.status in ('checked_out', 'closed') and rv.deposit_balance_halalas > 0 and rv.actual_check_out is not null
+              and rv.actual_check_out <= p_at - make_interval(hours => s.deposit_refund_hours) and rv.actual_check_out > p_at - interval '7 days' loop
     perform fn_alert_raise(p_branch, 'deposit_overdue', 'deposit:' || r.id,
-      'تأخر رد تأمين غرفة ' || coalesce((select room_number from rooms where id = r.room_id), '') || ' (' || fn_sar_text(r.deposit_balance_halalas) || ')',
+      'تأخر رد تأمين غرفة ' || coalesce((select room_number from rooms where id = r.room_id), ''),
       'مضت ' || fn_ar_hours(s.deposit_refund_hours) || ' على تأكيد الخروج. رد التأمين تحويلًا برقم العملية أو نقدًا من صندوق الفرع.', '/staff/journey', r.id);
   end loop;
   for a in select e.id, e.ref_key from alert_events e where e.branch_id = p_branch and e.event = 'deposit_overdue' and e.resolved_at is null loop
@@ -947,7 +1094,7 @@ begin
   -- a departure the reception already handled another way (the stay is no longer in the house)
   update alert_events e set resolved_at = now(), resolved_how = 'auto'
    where e.branch_id = p_branch and e.event = 'guest_departed' and e.resolved_at is null
-     and not exists (select 1 from reservations rs where rs.id = e.reservation_id and rs.status = 'checked_in');
+     and not exists (select 1 from reservations rv where rv.id = e.reservation_id and rv.status = 'checked_in');
 
   -- (5) the alerts whose delay is over, then those nobody acted on: they climb
   for a in select e.id from alert_events e where e.branch_id = p_branch and e.resolved_at is null and e.notified_at is null and e.notify_at <= p_at loop
@@ -967,16 +1114,21 @@ revoke all on function fn_journey_tick(uuid, boolean, timestamptz) from public, 
 -- 8. The events of W1 and of the conversation, by their rules: a product order waiting for its payment, a guest
 --    asking for a member of staff
 -- ---------------------------------------------------------------------------------------------------------------
+-- (an alert that fails never stops the order: it is logged)
 create or replace function fn_trg_journey_product_order() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if tg_op = 'INSERT' then
-    perform fn_alert_raise(new.branch_id, 'product_order', 'order:' || new.id, 'طلب منتجات بانتظار الدفع — ' || new.number
-      || coalesce(' — غرفة ' || (select rm.room_number from reservations rs join rooms rm on rm.id = rs.room_id where rs.id = new.reservation_id), ''),
-      'تسلّم الدفع ليُصدر السند وتُنشأ مهمة التسليم.', '/staff/orders', new.reservation_id);
-  elsif new.status is distinct from old.status and new.status <> 'pending_payment' then
-    perform fn_alert_resolve('product_order', 'order:' || new.id);
-  end if;
+  begin
+    if tg_op = 'INSERT' then
+      perform fn_alert_raise(new.branch_id, 'product_order', 'order:' || new.id, 'طلب منتجات بانتظار الدفع — ' || new.number
+        || coalesce(' — غرفة ' || (select rm.room_number from reservations rs join rooms rm on rm.id = rs.room_id where rs.id = new.reservation_id), ''),
+        'تسلّم الدفع ليُصدر السند وتُنشأ مهمة التسليم.', '/staff/orders', new.reservation_id);
+    elsif new.status is distinct from old.status and new.status <> 'pending_payment' then
+      perform fn_alert_resolve('product_order', 'order:' || new.id);
+    end if;
+  exception when others then
+    raise warning 'product order alert failed: %', sqlerrm;
+  end;
   return new;
 end $$;
 revoke all on function fn_trg_journey_product_order() from public, anon, authenticated;
@@ -1004,12 +1156,16 @@ create or replace function fn_trg_journey_handoff() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if new.branch_id is null then return new; end if;
-  if tg_op = 'INSERT' then
-    perform fn_alert_raise(new.branch_id, 'guest_handoff', 'handoff:' || new.id,
-      'نزيل يطلب موظفًا' || coalesce(' — ' || nullif(new.source_name, ''), ''), left(coalesce(new.details->>'reason', new.details->>'message', new.kind), 300), '/staff/inbox', new.reservation_id);
-  elsif new.status is distinct from old.status and new.status <> 'open' then
-    perform fn_alert_resolve('guest_handoff', 'handoff:' || new.id);
-  end if;
+  begin
+    if tg_op = 'INSERT' then
+      perform fn_alert_raise(new.branch_id, 'guest_handoff', 'handoff:' || new.id,
+        'نزيل يطلب موظفًا' || coalesce(' — ' || nullif(new.source_name, ''), ''), left(coalesce(new.details->>'reason', new.details->>'message', new.kind), 300), '/staff/inbox', new.reservation_id);
+    elsif new.status is distinct from old.status and new.status <> 'open' then
+      perform fn_alert_resolve('guest_handoff', 'handoff:' || new.id);
+    end if;
+  exception when others then
+    raise warning 'handoff alert failed: %', sqlerrm;
+  end;
   return new;
 end $$;
 revoke all on function fn_trg_journey_handoff() from public, anon, authenticated;
@@ -1033,8 +1189,12 @@ do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'alert_rules' and policyname = 'alert_rules_read') then
     create policy "alert_rules_read" on alert_rules for select to authenticated using (organization_id = fn_user_org_id());
   end if;
+  -- (the alerts are the owner's, the managers' and the supervisors' of the branch — those «رحلة الضيف» is for)
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'alert_events' and policyname = 'alert_events_read') then
-    create policy "alert_events_read" on alert_events for select to authenticated using (branch_id in (select fn_user_branch_ids()));
+    create policy "alert_events_read" on alert_events for select to authenticated
+      using (branch_id in (select fn_user_branch_ids()) and fn_has_role('owner', 'manager', 'supervisor'));
+  else
+    alter policy "alert_events_read" on alert_events using (branch_id in (select fn_user_branch_ids()) and fn_has_role('owner', 'manager', 'supervisor'));
   end if;
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'journey_messages' and policyname = 'journey_messages_read') then
     create policy "journey_messages_read" on journey_messages for select to authenticated using (branch_id in (select fn_user_branch_ids()));
@@ -1080,6 +1240,15 @@ begin
 end $$;
 revoke all on function fn_guest_departure(text, text) from public;
 grant execute on function fn_guest_departure(text, text) to anon, authenticated, service_role;
+
+-- the instructions before the button: the page asks for them before it shows the button, WhatsApp before it sends them
+create or replace function fn_guest_departure_instructions(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  return fn_departure_instructions(fn_token_reservation(p_token));
+end $$;
+revoke all on function fn_guest_departure_instructions(text) from public;
+grant execute on function fn_guest_departure_instructions(text) to anon, authenticated, service_role;
 
 -- a review's page: open for 14 days after its invitation; answered once
 create or replace function fn_public_review(p_token text) returns jsonb
@@ -1133,42 +1302,50 @@ begin
   perform fn_require_branch(p_branch);
   if not fn_has_role('owner', 'manager', 'supervisor') then raise exception 'FORBIDDEN: journey' using errcode = '42501'; end if;
   t := fn_journey_tick(p_branch, false);
-  return t || jsonb_build_object('open_alerts', (select count(*) from alert_events where branch_id = p_branch and resolved_at is null and notified_at is not null));
+  -- the menu's badge: the open alerts that are this person's (named to them in the system, or to nobody)
+  return t || jsonb_build_object('open_alerts', (select count(*) from alert_events e where e.branch_id = p_branch and e.resolved_at is null and e.notified_at is not null
+                                                    and fn_alert_is_mine(e.notified_to, e.escalated_to, fn_staff_id())));
 end $$;
 revoke all on function fn_staff_journey_tick(uuid) from public, anon;
 grant execute on function fn_staff_journey_tick(uuid) to authenticated;
 
+-- (amounts only to those who see money — the permissions' matrix; each alert says whether it is the reader's own)
 create or replace function fn_staff_journey(p_branch uuid) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
-declare s branch_journey_settings%rowtype; v_today date;
+declare s branch_journey_settings%rowtype; v_today date; v_money boolean; v_me uuid;
 begin
   perform fn_require_branch(p_branch);
   if not fn_has_role('owner', 'manager', 'supervisor') then raise exception 'FORBIDDEN: journey' using errcode = '42501'; end if;
   select * into s from branch_journey_settings where branch_id = p_branch;
   v_today := fn_branch_today(p_branch);
+  v_money := fn_sees_money();
+  v_me := fn_staff_id();
   return jsonb_build_object(
     'settings', jsonb_build_object('journey_enabled', s.journey_enabled, 'checkout_message_time', to_char(s.checkout_message_time, 'HH24:MI'),
                                    'free_until', to_char(s.free_checkout_until, 'HH24:MI'), 'refund_hours', s.deposit_refund_hours, 'review_alert_below', s.review_alert_below),
+    'sees_money', v_money,
     'channel_ready', exists (select 1 from branch_whatsapp_channels where branch_id = p_branch and mode = 'web_bridge' and enabled and bridge_key_hash is not null),
     'departing', coalesce((select jsonb_agg(jsonb_build_object('reservation_id', rs.id, 'internal_ref', rs.internal_ref, 'room_number', rm.room_number,
                                      'choice', rs.checkout_choice, 'late_checkout_until', to_char(rs.late_checkout_until, 'HH24:MI'), 'departed_at', rs.guest_departed_at,
-                                     'message', (select m.status || coalesce(':' || m.reason, '') from journey_messages m where m.reservation_id = rs.id and m.kind = 'checkout_options'))
+                                     'message', (select m.status || coalesce(':' || m.reason, '') from journey_messages m
+                                                  where m.reservation_id = rs.id and m.kind = 'checkout_options' order by m.created_at desc limit 1))
                                    order by rm.room_number)
                           from reservations rs join rooms rm on rm.id = rs.room_id
                          where rs.branch_id = p_branch and rs.status = 'checked_in' and rs.check_out <= v_today), '[]'::jsonb),
     'requests', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'reservation_id', x.reservation_id, 'internal_ref', rs.internal_ref, 'room_number', rm.room_number,
-                                     'kind', x.kind, 'hours', x.hours, 'late_until', to_char(x.late_until, 'HH24:MI'), 'amount_halalas', x.amount_halalas,
+                                     'kind', x.kind, 'hours', x.hours, 'late_until', to_char(x.late_until, 'HH24:MI'), 'amount_halalas', case when v_money then x.amount_halalas end,
                                      'status', x.status, 'hold_until', x.hold_until, 'source', x.source, 'created_at', x.created_at, 'version', x.version)
                                    order by x.created_at desc)
                           from stay_extension_requests x join reservations rs on rs.id = x.reservation_id left join rooms rm on rm.id = rs.room_id
                          where x.branch_id = p_branch and (x.status in ('held', 'overdue') or x.created_at > now() - interval '2 days')), '[]'::jsonb),
     'awaiting_check', coalesce((select jsonb_agg(jsonb_build_object('reservation_id', rs.id, 'internal_ref', rs.internal_ref, 'room_number', rm.room_number,
-                                     'departed_at', rs.guest_departed_at, 'via', rs.guest_departed_via, 'deposit_halalas', rs.deposit_balance_halalas,
-                                     'balance_due', rs.balance_due_halalas) order by rs.guest_departed_at)
+                                     'departed_at', rs.guest_departed_at, 'via', rs.guest_departed_via, 'has_deposit', rs.deposit_balance_halalas > 0,
+                                     'deposit_halalas', case when v_money then rs.deposit_balance_halalas end,
+                                     'balance_due', case when v_money then rs.balance_due_halalas end) order by rs.guest_departed_at)
                           from reservations rs left join rooms rm on rm.id = rs.room_id
                          where rs.branch_id = p_branch and rs.status = 'checked_in' and rs.guest_departed_at is not null), '[]'::jsonb),
     'deposits', coalesce((select jsonb_agg(jsonb_build_object('reservation_id', rs.id, 'internal_ref', rs.internal_ref, 'room_number', rm.room_number,
-                                     'deposit_halalas', rs.deposit_balance_halalas, 'checked_out_at', rs.actual_check_out,
+                                     'deposit_halalas', case when v_money then rs.deposit_balance_halalas end, 'checked_out_at', rs.actual_check_out,
                                      'due_at', rs.actual_check_out + make_interval(hours => s.deposit_refund_hours),
                                      'overdue', rs.actual_check_out + make_interval(hours => s.deposit_refund_hours) < now()) order by rs.actual_check_out)
                           from reservations rs left join rooms rm on rm.id = rs.room_id
@@ -1176,7 +1353,8 @@ begin
                            and rs.actual_check_out > now() - interval '30 days'), '[]'::jsonb),
     'alerts', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'event', e.event, 'label', fn_alert_event_label(e.event), 'title', e.title, 'body', e.body,
                                      'link', e.link, 'created_at', e.created_at, 'notify_at', e.notify_at, 'notified_at', e.notified_at, 'notified_to', e.notified_to,
-                                     'escalated_at', e.escalated_at, 'escalated_to', e.escalated_to) order by e.created_at desc)
+                                     'escalated_at', e.escalated_at, 'escalated_to', e.escalated_to,
+                                     'mine', e.notified_at is not null and fn_alert_is_mine(e.notified_to, e.escalated_to, v_me)) order by e.created_at desc)
                           from alert_events e where e.branch_id = p_branch and e.resolved_at is null), '[]'::jsonb));
 end $$;
 revoke all on function fn_staff_journey(uuid) from public, anon;
@@ -1203,6 +1381,8 @@ begin
     perform fn_alert_resolve('extension_unpaid', 'extension:' || q.id);
     perform fn_audit_change(q.branch_id, 'journey.extension_confirmed', 'extension_request', q.id, jsonb_build_object('status', q.status),
                             jsonb_build_object('status', 'confirmed', 'kind', q.kind, 'amount_halalas', q.amount_halalas), v_reason);
+    -- the guest is told it stands, as when it is paid
+    perform fn_journey_send_safe(q.reservation_id, 'extension_confirmed', q.id::text, fn_extension_confirmed_text(q.kind, q.late_until, q.branch_id));
   else
     perform fn_extension_release(q.id, v_reason, 'released');
   end if;
@@ -1270,7 +1450,7 @@ begin
   update guest_reviews set reply = v_reply, replied_by = fn_staff_id(), replied_at = now(), version = version + 1 where id = g.id;
   perform fn_alert_resolve('review_low', 'review:' || g.id);
   perform fn_audit_change(g.branch_id, 'review.replied', 'guest_review', g.id, null, jsonb_build_object('overall', g.overall, 'reply', v_reply));
-  perform fn_journey_send(g.reservation_id, 'review_reply', g.id::text, 'شكرًا لتقييمك. رد الإدارة:' || E'\n' || v_reply);
+  perform fn_journey_send_safe(g.reservation_id, 'review_reply', g.id::text, 'شكرًا لتقييمك. رد الإدارة:' || E'\n' || v_reply);
   return jsonb_build_object('ok', true);
 end $$;
 revoke all on function fn_staff_review_reply(uuid, text, int) from public, anon;
@@ -1518,6 +1698,7 @@ declare fn oid; def text; n int;
 begin
   select p.oid into fn from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'fn_audit_entity_label';
   def := pg_get_functiondef(fn);
+  if position('journey_settings' in def) > 0 then return; end if;
   n := (length(def) - length(replace(def, old_e, ''))) / length(old_e);
   if n <> 1 then raise exception '0070: the closing line of fn_audit_entity_label was found % times, not once', n; end if;
   execute replace(def, old_e, new_e);

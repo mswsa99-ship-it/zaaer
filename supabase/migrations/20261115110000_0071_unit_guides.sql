@@ -173,8 +173,8 @@ grant execute on function fn_guest_unit_guide(text, text) to anon, authenticated
 -- the check-out options say whether the unit's way out is ready to be shown (W3's page and messages)
 do $$
 declare fn oid; def text; n int;
-        old_e constant text := $a$    'instructions', s.checkout_instructions, 'departed_at', r.guest_departed_at,$a$;
-        new_e constant text := $b$    'instructions', s.checkout_instructions, 'departed_at', r.guest_departed_at,
+        old_e constant text := $a$    'instructions', s.checkout_instructions, 'instructions_at', r.departure_instructions_at, 'departed_at', r.guest_departed_at,$a$;
+        new_e constant text := $b$    'instructions', s.checkout_instructions, 'instructions_at', r.departure_instructions_at, 'departed_at', r.guest_departed_at,
     'guide_checkout', r.room_id is not null and jsonb_array_length(fn_unit_guide(r.room_id, 'checkout')) > 0,$b$;
 begin
   select p.oid into fn from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'fn_checkout_offer';

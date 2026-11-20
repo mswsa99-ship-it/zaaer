@@ -3,7 +3,9 @@
  * after the stay — today's departures and what each guest chose (W3), the nights and late hours held while the guest
  * pays, the guests who said «غادرت وسلّمت المفتاح» and wait for the unit's check (W4), the deposits counting down from
  * the confirmed check-out, the reviews and their answers (W5), and the open alerts with who was told and when they climb
- * (W6). The journey's clock runs when this page looks (and when the reception computer asks for its messages).
+ * (W6) — each alert marked «لك» when its rule names the reader (the menu's badge counts those). Amounts show only to
+ * those the permissions give money. The journey's clock runs when this page looks (and when the reception computer asks
+ * for its messages).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -47,6 +49,7 @@ export default function StaffJourney() {
   const [deciding, setDeciding] = useState<{ id: string; version: number; action: "confirm" | "release"; title: string } | null>(null);
   const [replying, setReplying] = useState<StaffReview | null>(null);
   const [resolving, setResolving] = useState<JourneyAlert | null>(null);
+  const [onlyMine, setOnlyMine] = useState(false);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   const canReviews = can("conversation.take");
 
@@ -69,6 +72,8 @@ export default function StaffJourney() {
   const b = board;
   const openRequests = useMemo(() => (b?.requests ?? []).filter((x) => x.status === "held" || x.status === "overdue"), [b]);
   const overdueDeposits = (b?.deposits ?? []).filter((d) => d.overdue).length;
+  const mineCount = (b?.alerts ?? []).filter((a) => a.mine).length;
+  const shownAlerts = (b?.alerts ?? []).filter((a) => !onlyMine || a.mine);
   const TABS: Array<[Tab, string, number | null]> = [
     ["departing", "المغادرون اليوم", b?.departing.length ?? null],
     ["requests", "طلبات التمديد", openRequests.length || null],
@@ -141,7 +146,7 @@ export default function StaffJourney() {
                     </div>
                     <Badge className={tone}>{label}</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-ink-700">المبلغ <span className="font-semibold tabular-nums">{sar(x.amount_halalas)}</span>{x.status === "held" ? <> · محجوز حتى <span className="tabular-nums">{clock(x.hold_until)}</span></> : null}</p>
+                  <p className="mt-2 text-sm text-ink-700">{x.amount_halalas != null ? <>المبلغ <span className="font-semibold tabular-nums">{sar(x.amount_halalas)}</span></> : "يُسدَّد لدى الاستقبال"}{x.status === "held" ? <> · محجوز حتى <span className="tabular-nums">{clock(x.hold_until)}</span></> : null}</p>
                   {open && can("stay.extend") && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link to={`/staff/reservations/${x.reservation_id}`} className="btn-primary text-sm"><Wallet className="h-4 w-4" /> تسلّم الدفع</Link>
@@ -164,7 +169,7 @@ export default function StaffJourney() {
                   </div>
                   <Badge className="bg-warning-500/10 text-warning-700">افحص ثم أكمل المغادرة</Badge>
                 </div>
-                <p className="mt-2 text-sm text-ink-700">{a.deposit_halalas > 0 ? <>التأمين <span className="font-semibold tabular-nums">{sar(a.deposit_halalas)}</span></> : "لا تأمين"}{a.balance_due > 0 ? <> · <span className="text-danger-600">مستحق {sar(a.balance_due)}</span></> : null}</p>
+                <p className="mt-2 text-sm text-ink-700">{a.has_deposit ? (a.deposit_halalas != null ? <>التأمين <span className="font-semibold tabular-nums">{sar(a.deposit_halalas)}</span></> : "عليه تأمين يُرد بعد الفحص") : "لا تأمين"}{a.balance_due != null && a.balance_due > 0 ? <> · <span className="text-danger-600">مستحق {sar(a.balance_due)}</span></> : null}</p>
                 <Link to={`/staff/reservations/${a.reservation_id}`} className="btn-primary mt-3 text-sm"><ExternalLink className="h-4 w-4" /> فحص المغادرة وإكمالها</Link>
               </Card>))}</div>)}
 
@@ -174,7 +179,7 @@ export default function StaffJourney() {
               <Card key={d.reservation_id} data-testid="journey-deposit">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-ink-800">غرفة {d.room_number ?? "—"} — <span className="tabular-nums">{sar(d.deposit_halalas)}</span></h3>
+                    <h3 className="font-semibold text-ink-800">غرفة {d.room_number ?? "—"}{d.deposit_halalas != null ? <> — <span className="tabular-nums">{sar(d.deposit_halalas)}</span></> : null}</h3>
                     <p className="text-xs text-ink-500"><span className="font-mono" dir="ltr">{d.internal_ref}</span> · خرج {formatDateTime(d.checked_out_at)}</p>
                   </div>
                   <Badge className={left.late ? "bg-danger-500/10 text-danger-600" : "bg-brand-50 text-brand-700"} testId="deposit-countdown">{left.text}</Badge>
@@ -186,11 +191,17 @@ export default function StaffJourney() {
 
           {tab === "alerts" && (b.alerts.length === 0
             ? <EmptyState icon={<BellRing className="h-10 w-10" />} title="لا تنبيهات مفتوحة" description="لكل حدث في رحلة الضيف قاعدة: من يُبلَّغ، وبأي قناة، وبعد كم دقيقة، وإلى من يُصعَّد إن لم يُعالَج. القواعد من «رحلة الضيف» في الإدارة." />
-            : <div className="space-y-3" data-testid="journey-alerts">{b.alerts.map((a) => (
+            : <div className="space-y-3" data-testid="journey-alerts">
+              <div className="flex flex-wrap items-center gap-2" role="group" aria-label="عرض التنبيهات">
+                <button type="button" aria-pressed={!onlyMine} onClick={() => setOnlyMine(false)} className={`min-h-[44px] rounded-xl px-3 text-sm font-semibold ${!onlyMine ? "bg-brand-50 text-brand-700" : "text-ink-500 hover:text-ink-700"}`}>كل تنبيهات الفرع ({b.alerts.length})</button>
+                <button type="button" aria-pressed={onlyMine} onClick={() => setOnlyMine(true)} className={`min-h-[44px] rounded-xl px-3 text-sm font-semibold ${onlyMine ? "bg-brand-50 text-brand-700" : "text-ink-500 hover:text-ink-700"}`} data-testid="alerts-mine">لي ({mineCount})</button>
+              </div>
+              {shownAlerts.length === 0 && <p className="rounded-xl bg-ink-50 px-3 py-2 text-sm text-ink-600" role="status">لا تنبيهات مفتوحة تسمّيك قواعدها.</p>}
+              {shownAlerts.map((a) => (
               <Card key={a.id} data-testid="journey-alert">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-ink-500">{a.label}</p>
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-500">{a.label}{a.mine && <span className="rounded-full bg-brand-50 px-1.5 text-[11px] text-brand-700" data-testid="alert-mine">لك</span>}</p>
                     <h3 className="font-semibold text-ink-800" dir="auto">{a.title}</h3>
                     {a.body && <p className="mt-1 text-sm text-ink-600" dir="auto">{a.body}</p>}
                   </div>

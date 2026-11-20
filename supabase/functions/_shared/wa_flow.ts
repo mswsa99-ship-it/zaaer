@@ -48,10 +48,16 @@ export type WaOrderResult = { order: WaOrder } | { error: string };
 export interface WaAssistantAnswer { reply: string; actions: AssistantAction[] }
 /** W3–W4 (0070): the day of departure as the server offers it (fn_guest_checkout) */
 export interface WaCheckout {
-  open: boolean; check_out: string; room_number: string | null; free_until: string;
+  open: boolean; check_out: string; room_number: string | null; free_until: string; check_out_time?: string;
   night: { available: boolean; price_halalas: number | null };
-  hours: { max: number; price_halalas: number | null; until_limit: string | null; next_guest: boolean };
+  /** n hours = leaving by the free hour's end + n, from min (bought already + 1; never fewer than the hour being lived) to max;
+   *  late_now: the hours a departure now would add (begun after the free hour and after those bought) */
+  hours: { max: number; min?: number; have?: number; late_now?: number; price_halalas: number | null; until_limit: string | null; next_guest: boolean };
+  /** W3: leaving on time is offered until the free hour ends */
+  on_time_open?: boolean;
   hold_minutes: number; choice: string | null; late_checkout_until: string | null; instructions: string | null; departed_at: string | null;
+  /** W4: when the instructions reached the guest — «غادرت وسلّمت المفتاح» is taken only after it */
+  instructions_at?: string | null;
   guide_checkout?: boolean; deposit_halalas: number; refund_hours: number; balance_due: number;
   request: { id: string; kind: "night" | "hours"; hours: number | null; late_until: string | null; amount_halalas: number; status: string; hold_until: string } | null;
 }
@@ -91,8 +97,11 @@ export interface WaFlowPorts {
   checkoutOffer?(guestToken: string): Promise<WaCheckout | null>;
   /** W3: the guest's choice (on WhatsApp): the new offer, or the refusal (VALIDATION: …) */
   chooseCheckout?(guestToken: string, choice: WaCheckoutChoice, hours: number | null): Promise<{ offer: WaCheckout } | { error: string }>;
-  /** W4: «غادرت وسلّمت المفتاح» */
-  departed?(guestToken: string): Promise<{ already: boolean } | { error: string }>;
+  /** W4: «غادرت وسلّمت المفتاح» (refused before the instructions reached the guest: VALIDATION: instructions_first);
+   *  late_hours / late_halalas: the hours begun after the free hour, charged as the guest leaves (W3) */
+  departed?(guestToken: string): Promise<{ already: boolean; late_hours?: number; late_halalas?: number } | { error: string }>;
+  /** W4: the instructions as they are sent — the server keeps the moment, the button needs it; the day's offer, or null */
+  instructions?(guestToken: string): Promise<WaCheckout | null>;
 }
 
 export const WA_TEXTS = {
@@ -118,13 +127,25 @@ export const WA_TEXTS = {
   departNotInStay: "لا توجد إقامة قائمة في وحدتك الآن. إن كنت ما زلت في الوحدة فاطلب موظف الاستقبال.",
   journeyFailed: "تعذر تنفيذ طلبك الآن. حاول بعد قليل أو اطلب موظف الاستقبال.",
   departInstructions: "تأكد من أغراضك، وأطفئ الأنوار والمكيف، وأغلق الباب، ثم ضع المفتاح أو البطاقة في مكانه أو سلّمه للاستقبال.",
+  departNotToday: "إبلاغ المغادرة يُتاح يوم مغادرتك. إن كنت ستغادر قبل موعدك فاطلب موظف الاستقبال.",
 };
 /** W3–W4: the ids of the departure's options (the server's 10 AM message uses the first three and BTN.HUMAN) */
-export const CO = { ON_TIME: "CO:ONTIME", NIGHT: "CO:NIGHT", HOURS: "CO:HOURS", HOUR: "CO:H:", CANCEL: "CO:CANCEL", MENU: "CO:MENU", LEFT: "DEP:LEFT" } as const;
+export const CO = { ON_TIME: "CO:ONTIME", NIGHT: "CO:NIGHT", HOURS: "CO:HOURS", HOUR: "CO:H:", CANCEL: "CO:CANCEL", MENU: "CO:MENU", LEAVE: "CO:LEAVE", LEFT: "DEP:LEFT" } as const;
 /** Arabic counting of hours: ساعة واحدة، ساعتان، 3–10 ساعات، 11+ ساعة */
 export const hoursAr = (n: number) => (n === 1 ? "ساعة واحدة" : n === 2 ? "ساعتان" : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
 /** "13:00" + n hours (midnight is 24:00, the end of the day of departure) */
 const plusHours = (hm: string, n: number) => { const [h, mi] = hm.split(":").map(Number); const x = h * 60 + mi + n * 60; return x >= 1440 ? "24:00" : `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`; };
+/** the free hour's window from the branch's own times, as the guest reads a clock (0070's fn_ar_window, fn_ar_range) */
+const toMin = (t: string | null | undefined) => { const x = /^(\d{1,2}):(\d{2})/.exec(String(t ?? "")); return x ? Number(x[1]) * 60 + Number(x[2]) : 0; };
+const clock12 = (min: number) => { const h = Math.floor(min / 60), mi = min % 60; return String(((h + 11) % 12) + 1) + (mi > 0 ? ":" + String(mi).padStart(2, "0") : ""); };
+const arPeriod = (min: number) => (min === 0 || min >= 1440 ? "منتصف الليل" : min < 720 ? "صباحًا" : min < 900 ? "ظهرًا" : min < 1080 ? "عصرًا" : "مساءً");
+export const arWindow = (from: string | null | undefined, to: string) => { const a = toMin(from ?? "12:00"), b = toMin(to);
+  return arPeriod(a) === arPeriod(b) ? `بين ${clock12(a)} و${clock12(b)} ${arPeriod(b)}` : `بين ${clock12(a)} ${arPeriod(a)} و${clock12(b)} ${arPeriod(b)}`; };
+/** the hours a list offers: from the fewest to the most; past ten rows, the first nine and the most (a list holds ten) */
+export const hourChoices = (min: number, max: number) => {
+  const all = max >= min ? Array.from({ length: max - min + 1 }, (_, i) => min + i) : [];
+  return all.length > 10 ? [...all.slice(0, 9), all[all.length - 1]] : all;
+};
 /** the branch's clock for a moment (every branch keeps Riyadh time today) */
 const clockAt = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit" });
 
@@ -309,11 +330,19 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
   const statusLink = (tok: string) => (base ? `${base}/booking/status/${tok}` : "");
   /** what the guest reads before «غادرت وسلّمت المفتاح»: the instructions, then the unit's way out when its photos are approved */
   const leaveText = (o: WaCheckout, tok: string) => [o.instructions || WA_TEXTS.departInstructions,
-    o.guide_checkout && base ? `صور طريقة المغادرة: ${statusLink(tok)}` : "", "حين تغادر اختر «غادرت وسلّمت المفتاح»."].filter(Boolean).join("\n\n");
+    o.guide_checkout && base ? `صور طريقة المغادرة: ${statusLink(tok)}` : "",
+    (o.hours?.late_now ?? 0) > 0 ? `إن غادرت الآن يُضاف إلى حسابك خروج متأخر ${hoursAr(o.hours.late_now ?? 0)} (${sarText((o.hours.price_halalas ?? 0) * (o.hours.late_now ?? 0))}).` : "",
+    "حين تغادر اختر «غادرت وسلّمت المفتاح»."].filter(Boolean).join("\n\n");
+  /** W4 «التعليمات قبل الزر»: the instructions go out (the server keeps the moment), with the button under them */
+  const sendLeave = async (tok: string, lead: string, fallback: WaCheckout) => {
+    const o = (await p.instructions?.(tok).catch(() => null)) ?? fallback;
+    const text = `${lead}${leaveText(o, tok)}`;
+    return say(buttonsPayload(m.from, text, [departBtn, staffBtn]), text.replace(/\/booking\/status\/[A-Za-z0-9]+/g, "/booking/status/…"));
+  };
   const heldText = (o: WaCheckout) => {
     const q = o.request!;
     const what = q.kind === "night" ? "ليلة إضافية" : `خروجًا متأخرًا ${hoursAr(q.hours ?? 0)} حتى ${q.late_until}`;
-    if (q.status === "paid" || q.status === "confirmed") return q.kind === "night" ? `تم تثبيت ليلتك الإضافية. موعد خروجك الجديد ${o.check_out} بين 12 و1 ظهرًا.` : `تم تثبيت خروجك المتأخر حتى ${q.late_until}.`;
+    if (q.status === "paid" || q.status === "confirmed") return q.kind === "night" ? `تم تثبيت ليلتك الإضافية. موعد خروجك الجديد ${o.check_out} ${arWindow(o.check_out_time, o.free_until)}.` : `تم تثبيت خروجك المتأخر حتى ${q.late_until}.`;
     if (q.status === "overdue") return `انتهت مهلة دفع طلبك (${what}). تواصل مع الاستقبال لإتمام الدفع أو إلغاء الطلب.`;
     return `حجزنا لك ${what} بمبلغ ${sarText(q.amount_halalas)} حتى الساعة ${clockAt(q.hold_until)}. ادفع المبلغ لدى الاستقبال (نقدًا أو بالشبكة أو بالتحويل) ليُثبَّت، وإلا أُلغي تلقائيًا.`;
   };
@@ -330,41 +359,60 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
       return say(buttonsPayload(m.from, text, [staffBtn]), text);
     }
     if (o.choice === "on_time" || o.late_checkout_until) {
-      const text = `${lead}${o.late_checkout_until ? `موعد خروجك اليوم حتى ${o.late_checkout_until}.` : `موعد خروجك اليوم قبل ${o.free_until}.`}\n\n${leaveText(o, tok)}`;
-      return say(buttonsPayload(m.from, text, [departBtn, staffBtn]), text.replace(/\/booking\/status\/[A-Za-z0-9]+/g, "/booking/status/…"));
+      return sendLeave(tok, `${lead}${o.late_checkout_until ? `موعد خروجك اليوم حتى ${o.late_checkout_until}.` : `موعد خروجك اليوم قبل ${o.free_until}.`}\n\n`, o);
     }
-    const rows: Array<{ id: string; title: string; description?: string }> = [{ id: CO.ON_TIME, title: "سأخرج في الموعد", description: `بين 12 و1 ظهرًا، بلا رسوم حتى ${o.free_until}` }];
+    // (no «غادرت وسلّمت المفتاح» here: it comes under the instructions, once they are sent). After the free hour leaving on
+    // time is past: «سأغادر الآن» sends the instructions, with what leaving now adds
+    const onTime = o.on_time_open !== false;
+    const rows: Array<{ id: string; title: string; description?: string }> = onTime
+      ? [{ id: CO.ON_TIME, title: "سأخرج في الموعد", description: `${arWindow(o.check_out_time, o.free_until)}، بلا رسوم حتى ${o.free_until}` }]
+      : [{ id: CO.LEAVE, title: "سأغادر الآن", description: (o.hours.late_now ?? 0) > 0 ? `يُضاف خروج متأخر ${hoursAr(o.hours.late_now ?? 0)}` : "تعليمات المغادرة" }];
     if (o.night.available) rows.push({ id: CO.NIGHT, title: "ليلة إضافية", description: sarText(o.night.price_halalas ?? 0) });
-    if (o.hours.max > 0) rows.push({ id: CO.HOURS, title: `ساعات بعد ${o.free_until}`, description: `${sarText(o.hours.price_halalas ?? 0)} للساعة` });
-    rows.push({ id: CO.LEFT, title: "غادرت وسلّمت المفتاح", description: "بعد قراءة تعليمات المغادرة" });
-    const text = `${lead}موعد خروجك اليوم${o.room_number ? ` من غرفة ${o.room_number}` : ""} بين 12 و1 ظهرًا. ماذا تفضّل؟`;
+    if (hourChoices(o.hours.min ?? 1, o.hours.max).length > 0) rows.push({ id: CO.HOURS, title: `ساعات بعد ${o.free_until}`, description: `${sarText(o.hours.price_halalas ?? 0)} للساعة` });
+    const text = onTime
+      ? `${lead}موعد خروجك اليوم${o.room_number ? ` من غرفة ${o.room_number}` : ""} ${arWindow(o.check_out_time, o.free_until)}. ماذا تفضّل؟`
+      : `${lead}انتهى وقت الخروج المجاني (حتى ${o.free_until}): كل ساعة تبدأ بعده خروج متأخر بـ ${sarText(o.hours.price_halalas ?? 0)}. اختر الساعات، أو «سأغادر الآن» فتُضاف الساعات التي بدأت.`;
     return say(listPayload(m.from, text, "الخيارات", rows), text);
   };
   const checkoutError = (e: string) => /night_unavailable/.test(e) ? "لا تتاح ليلة إضافية: الوحدة محجوزة الليلة لضيف آخر أو على الحجز مبلغ متأخر."
-    : /late_hours/.test(e) ? "هذا العدد من الساعات غير متاح؛ الخروج المتأخر لا يتجاوز موعد الضيف التالي ناقص ساعة التنظيف."
+    : /late_hours/.test(e) ? "هذا العدد من الساعات غير متاح: لا يقل عن الساعات التي مضت بعد موعد الخروج المجاني (جزء الساعة ساعة) ولا عمّا اشتريته قبله، ولا يتجاوز موعد الضيف التالي ناقص ساعة التنظيف."
     : /extension_pending/.test(e) ? "لديك طلب بانتظار الدفع؛ ادفعه لدى الاستقبال أو ألغِه أولًا."
     : /extension_none/.test(e) ? "لا يوجد طلب بانتظار الدفع لإلغائه."
+    : /free_hour_over/.test(e) ? "انتهى وقت الخروج المجاني، وكل ساعة تبدأ بعده خروج متأخر."
     : /checkout_not_today/.test(e) ? WA_TEXTS.checkoutClosed
     : /TOKEN_INVALID|not_in_stay/.test(e) ? WA_TEXTS.checkoutNeedsStay : WA_TEXTS.journeyFailed;
   const checkoutTurn = async (id: string) => {
     const tok = await leavingStay();
     if (!tok) return;
     if (id === CO.LEFT) {
-      // the instructions come before the button: a guest who has not read them yet gets them first
       const o = await p.checkoutOffer!(tok).catch(() => null);
       const r = await p.departed!(tok).catch((): { error: string } => ({ error: "unreachable" }));
-      if ("error" in r) { const text = /not_in_stay/.test(r.error) ? WA_TEXTS.departNotInStay : WA_TEXTS.journeyFailed; return say(buttonsPayload(m.from, text, [staffBtn]), text); }
+      // the instructions come before the button: the server takes the departure only after they reached the guest
+      if ("error" in r && /instructions_first/.test(r.error) && o) return sendLeave(tok, "اقرأ تعليمات المغادرة أولًا:\n\n", o);
+      if ("error" in r) {
+        const text = /not_in_stay/.test(r.error) ? WA_TEXTS.departNotInStay : /not_departure_day/.test(r.error) ? WA_TEXTS.departNotToday : WA_TEXTS.journeyFailed;
+        return say(buttonsPayload(m.from, text, [staffBtn]), text);
+      }
       const text = (r.already ? "أبلغتنا بمغادرتك من قبل. " : "شكرًا لك. ") + "أبلغنا الاستقبال بمغادرتك؛ يفحص الوحدة ثم يؤكد خروجك ويصلك التأكيد هنا."
+        + ((r.late_hours ?? 0) > 0 ? `\nغادرت بعد موعد الخروج المجاني، فأُضيف إلى حسابك خروج متأخر ${hoursAr(r.late_hours ?? 0)} (${sarText(r.late_halalas ?? 0)}) يُسدَّد لدى الاستقبال أو من التأمين.` : "")
         + (o && o.deposit_halalas > 0 ? `\nيُرد تأمينك (${sarText(o.deposit_halalas)}) خلال ${hoursAr(o.refund_hours)} من تأكيد الخروج: تحويلًا إلى حسابك أو نقدًا من الاستقبال، ويصلك إيصال الرد هنا.` : "");
       return say(textPayload(m.from, text), text);
     }
+    if (id === CO.LEAVE) {
+      // «سأغادر الآن» (after the free hour): the instructions with the button, and what leaving now adds
+      const o = await p.checkoutOffer!(tok).catch(() => null);
+      if (!o || !o.open) return checkoutMenu(o, tok);
+      return sendLeave(tok, "", o);
+    }
     if (id === CO.HOURS) {
       const o = await p.checkoutOffer!(tok).catch(() => null);
-      if (!o || !o.open || o.hours.max <= 0 || o.request?.status === "held") return checkoutMenu(o, tok);
-      const n = Math.min(o.hours.max, 10);
-      const text = `اختر مدة الخروج المتأخر بعد ${o.free_until} (${sarText(o.hours.price_halalas ?? 0)} للساعة، وجزء الساعة ساعة)${o.hours.next_guest ? `؛ الحد ${o.hours.until_limit} لوجود ضيف بعدك` : ""}:`;
-      return say(listPayload(m.from, text, "الساعات", Array.from({ length: n }, (_, i) => ({
-        id: CO.HOUR + (i + 1), title: `${hoursAr(i + 1)} — حتى ${plusHours(o.free_until, i + 1)}`, description: sarText((o.hours.price_halalas ?? 0) * (i + 1)) }))), text);
+      const choices = o ? hourChoices(o.hours.min ?? 1, o.hours.max) : [];
+      if (!o || !o.open || choices.length === 0 || o.request?.status === "held") return checkoutMenu(o, tok);
+      const have = o.hours.have ?? 0;
+      const text = `اختر موعد خروجك المتأخر بعد ${o.free_until} (${sarText(o.hours.price_halalas ?? 0)} للساعة، وجزء الساعة ساعة)${o.hours.next_guest ? `؛ الحد ${o.hours.until_limit} لوجود ضيف بعدك` : ""}:`;
+      // CO:H:n — leaving by the free hour's end + n (the same n in every list, old or new); only the hours not bought are charged
+      return say(listPayload(m.from, text, "الساعات", choices.map((n) => ({
+        id: CO.HOUR + n, title: `${hoursAr(n - have)} — حتى ${plusHours(o.free_until, n)}`, description: sarText((o.hours.price_halalas ?? 0) * (n - have)) }))), text);
     }
     const choice: WaCheckoutChoice | null = id === CO.ON_TIME ? "on_time" : id === CO.NIGHT ? "night" : id === CO.CANCEL ? "cancel" : id.startsWith(CO.HOUR) ? "hours" : null;
     if (!choice) return checkoutMenu(await p.checkoutOffer!(tok).catch(() => null), tok);
@@ -373,8 +421,9 @@ export async function runWaFlow(m: WaInbound, p: WaFlowPorts): Promise<void> {
     const r = await p.chooseCheckout!(tok, choice, hours).catch((): { error: string } => ({ error: "unreachable" }));
     if ("error" in r) { const text = checkoutError(r.error); return checkoutMenu(await p.checkoutOffer!(tok).catch(() => null), tok, text + "\n\n"); }
     const o = r.offer;
-    if (choice === "cancel") return checkoutMenu(o, tok, `ألغينا الطلب. موعد خروجك اليوم قبل ${o.free_until}.\n\n`);
-    if (choice === "on_time") { const text = `تم. موعد خروجك اليوم قبل ${o.free_until}.\n\n${leaveText(o, tok)}`; return say(buttonsPayload(m.from, text, [departBtn, staffBtn]), text.replace(/\/booking\/status\/[A-Za-z0-9]+/g, "/booking/status/…")); }
+    // (the menu says the departure as it now stands — an earlier paid late hour stays)
+    if (choice === "cancel") return checkoutMenu(o, tok, "ألغينا الطلب.\n\n");
+    if (choice === "on_time") return sendLeave(tok, `تم. موعد خروجك اليوم قبل ${o.free_until}.\n\n`, o);
     return checkoutMenu(o, tok);
   };
 

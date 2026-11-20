@@ -115,6 +115,47 @@ do $$ declare msg uuid; mv uuid; mt uuid; b uuid := td_id('b'); begin
 exception when others then insert into test_results values ('TD00b the trial''s bank, journey and closing are set up', false, sqlerrm);
 end $$;
 
+-- ---------------------------------------------------------------- TD09 the guests imported from Zaaer: by their note, or by the import's hour
+insert into guest_profiles(organization_id, full_name, phone, notes, created_at)
+values ('00000000-0000-0000-0000-000000000001', 'ضيف مستورد بملاحظته', '0559000011', 'مستورد من زائر — ملف 1201', now() - interval '20 days'),
+       ('00000000-0000-0000-0000-000000000001', 'ضيف مستورد عُدّلت ملاحظته', '0559000012', 'يفضّل الطابق الأرضي', timestamptz '2026-10-30 22:03:00+00'),
+       ('00000000-0000-0000-0000-000000000001', 'ضيف تجربة بلا إقامة', '0559000013', 'زبون تجريبي', now() - interval '2 days');
+insert into notes values ('marked', fn_mark_imported_guests('00000000-0000-0000-0000-000000000001')::text);
+select td_record('TD09 the guests imported from Zaaer are marked by their note (Zaaer) or by the hour of the import (30 October, 22:00–22:08 UTC) — a note edited since does not expose one; a trial guest is not marked',
+  (select imported_at is not null from guest_profiles where full_name = 'ضيف مستورد بملاحظته')
+  and (select imported_at is not null from guest_profiles where full_name = 'ضيف مستورد عُدّلت ملاحظته')
+  and (select imported_at is null from guest_profiles where full_name = 'ضيف تجربة بلا إقامة')
+  and td_note('marked')::int >= 2, td_note('marked'));
+
+-- ---------------------------------------------------------------- TD10 none marked while profiles from the import's days exist: nothing is taken
+insert into guest_profiles(organization_id, full_name, phone, created_at)
+values ('00000000-0000-0000-0000-0000000000d1', 'ضيف قديم بلا علامة', '0559000014', timestamptz '2026-10-20 10:00:00+03');
+do $$ begin
+  perform fn_purge_run('00000000-0000-0000-0000-0000000000d1', null, date '2026-10-01', fn_branch_today('00000000-0000-0000-0000-0000000000d2'), array['guests', 'samples']);
+  insert into notes values ('guard', 'accepted');
+exception when others then insert into notes values ('guard', sqlerrm);
+end $$;
+select td_record('TD10 «مسح كل بيانات التجربة» takes nothing when no guest of the organisation is marked as imported while profiles from the import''s days exist (the marking failed): the guests and the example catalogue stay',
+  td_note('guard') like 'VALIDATION: import_unmarked%' and exists (select 1 from guest_profiles where full_name = 'ضيف قديم بلا علامة')
+  and (select count(*) from products where organization_id = '00000000-0000-0000-0000-0000000000d1' and is_sample) = 12, td_note('guard'));
+
+-- ---------------------------------------------------------------- TD11 a bank message that arrived after midnight, of a movement dated the day before
+do $$ declare msg uuid; mv uuid; b uuid := td_id('b'); d date := td_today(td_id('b')) - 6; begin
+  insert into bank_messages(organization_id, raw_body, content_hash, status, received_at)
+  values ('00000000-0000-0000-0000-000000000001', 'حوالة واردة بعد منتصف الليل', md5('td-bank-split'), 'parsed', (d + time '00:05') at time zone 'Asia/Riyadh') returning id into msg;
+  insert into bank_movements(organization_id, branch_id, cash_account_id, message_id, kind, direction, amount_halalas, occurred_at, dedupe_key, status)
+  values ('00000000-0000-0000-0000-000000000001', b, td_acc(b, 'bank_account'), msg, 'deposit', 'in', 7000, ((d - 1) + time '23:50') at time zone 'Asia/Riyadh', 'td-bank-split', 'pending')
+  returning id into mv;
+  update bank_messages set movement_id = mv where id = msg;
+  insert into ids values ('split_msg', msg), ('split_mv', mv);
+  perform fn_purge_run('00000000-0000-0000-0000-000000000001', null, d, d, array['finance']);
+  insert into notes values ('split', 'ok');
+exception when others then insert into notes values ('split', sqlerrm);
+end $$;
+select td_record('TD11 the erasing of one day keeps a bank message that arrived in it when its movement is dated the day before (a transfer at 23:50, its message after midnight): it runs to its end and takes neither',
+  td_note('split') = 'ok' and exists (select 1 from bank_messages where id = td_id('split_msg')) and exists (select 1 from bank_movements where id = td_id('split_mv')),
+  td_note('split'));
+
 -- ---------------------------------------------------------------- TD03 what «مسح كل بيانات التجربة» will take
 -- a guest imported from Zaaer, with no stay
 insert into guest_profiles(organization_id, full_name, phone, notes, imported_at)
@@ -188,6 +229,9 @@ select td_record('TD07 the trial''s bank messages, closings and expenses are gon
   and (select count(*) from products where organization_id = '00000000-0000-0000-0000-000000000001' and is_sample) = 0
   and (select count(*) from product_categories where organization_id = '00000000-0000-0000-0000-000000000001' and name = 'فئة تجريبية') = 1,
   (select count(*)::text from bank_messages where organization_id = '00000000-0000-0000-0000-000000000001'));
+select td_record('TD12 after the erasing the guests imported from Zaaer are there (marked by their note, or by the import''s hour), and the trial guest with no stay is gone',
+  exists (select 1 from guest_profiles where full_name = 'ضيف مستورد بملاحظته') and exists (select 1 from guest_profiles where full_name = 'ضيف مستورد عُدّلت ملاحظته')
+  and not exists (select 1 from guest_profiles where full_name = 'ضيف تجربة بلا إقامة'));
 select td_record('TD08 the other organisation''s data is untouched (its example catalogue stays)',
   (select count(*) from products where organization_id = '00000000-0000-0000-0000-0000000000d1' and is_sample) = 12);
 
@@ -199,5 +243,5 @@ declare n int; f int;
 begin
   select count(*), count(*) filter (where not ok) into n, f from test_results;
   if f > 0 then raise exception 'TRIAL DATA TESTS FAILED: % of %', f, n; end if;
-  if n < 8 then raise exception 'TRIAL DATA TESTS INCOMPLETE: % of 8 checks ran', n; end if;
+  if n < 12 then raise exception 'TRIAL DATA TESTS INCOMPLETE: % of 12 checks ran', n; end if;
 end $$;

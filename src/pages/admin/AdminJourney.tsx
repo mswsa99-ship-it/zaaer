@@ -130,6 +130,7 @@ export default function AdminJourney() {
       <Card data-testid="journey-rules">
         <h2 className="mb-1 flex items-center gap-2 text-base font-semibold text-ink-800"><BellRing className="h-4 w-4 text-brand-600" /> قواعد التنبيه</h2>
         <p className="mb-3 text-xs text-ink-500">لكل حدث: من يُبلَّغ، وبأي قناة (واتساب بدل الرسائل النصية)، وبعد كم دقيقة، وإلى من يُصعَّد إن لم يُعالَج. {owner ? "" : "تعديلها للمالك وحده."}</p>
+        <p className="mb-3 text-xs text-ink-500" data-testid="journey-channel-help">«داخل النظام» شخصي: يُحسب التنبيه في شارة «رحلة الضيف» لمن تسمّيهم القاعدة بأسمائهم (المسؤول أو البديل أو الأدوار المختارة)، ويظهر في الصفحة بعلامة «لك»، ويراه فيها المالك والمديرون ومشرفو الفرع. ومن لم يصله واتساب (بلا جوال أو واتساب الفرع غير مربوط) يجده في النظام. لا تحمل التنبيهات مبالغ؛ المبالغ في «رحلة الضيف» لمن يرى المال.</p>
         <div className="space-y-2">{rules.map((r) => <RuleRow key={r.event} rule={r} editable={owner} busy={busy} onSave={(p) => run("rule:" + r.event, () => journeyApi.saveRule(r.event, { version: r.version, ...p }), `حُفظت قاعدة «${r.label}».`)} />)}</div>
       </Card>
 

@@ -83,7 +83,7 @@ test.describe("the guest journey after the stay", () => {
     await expect(page.getByRole("link", { name: /رحلة الضيف/ }).first()).toContainText(/\d/);
   });
 
-  test("RW40 one invitation after the confirmed check-out: the overall mark first, six aspects; under 9 the owner is alerted; the reception's answer is shown to the guest", async ({ page, go, loginAs }) => {
+  test("RW40 one invitation after the confirmed check-out: the overall mark first, six aspects; under 9 the owner is alerted — in the administration too, marked «لك»; the reception's answer is shown to the guest", async ({ page, go, loginAs }) => {
     await page.clock.install({ time: at("13:30") });   // two and a half hours after this morning's check-outs
     await loginAs("owner");
     await go("/staff/journey");                           // the journey's clock: the invitations go out
@@ -105,9 +105,14 @@ test.describe("the guest journey after the stay", () => {
     await form.getByTestId("review-submit").click();
     await expect(form.getByTestId("review-thanks")).toBeVisible();
 
+    // the owner works in the administration: the low review is theirs at once there too (W5)
+    await go("/admin/journey");
+    await expect(page.getByTestId("admin-journey-alerts")).toContainText("يخص");
     await go("/staff/journey");
     await page.getByTestId("journey-tab-alerts").click();
-    await expect(page.getByTestId("journey-alert").filter({ hasText: "التكييف كان ضعيفًا" })).toContainText("تقييم 7 من 10");
+    const low = page.getByTestId("journey-alert").filter({ hasText: "التكييف كان ضعيفًا" });
+    await expect(low).toContainText("تقييم 7 من 10");
+    await expect(low.getByTestId("alert-mine")).toBeVisible();   // named to the owner by its rule: «لك»
     await page.getByTestId("journey-tab-reviews").click();
     const review = page.getByTestId("journey-review").filter({ hasText: "التكييف كان ضعيفًا" });
     await review.getByTestId("review-reply-open").click();

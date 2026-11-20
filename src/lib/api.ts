@@ -330,7 +330,11 @@ export const VALIDATION_AR: Record<string, string> = {
   extension_pending: "يوجد طلب تمديد بانتظار الدفع؛ يُدفع أو يُلغى أولًا.",
   extension_none: "لا يوجد طلب تمديد بانتظار الدفع لإلغائه.",
   night_unavailable: "لا تتاح ليلة إضافية: الوحدة محجوزة الليلة لضيف آخر أو على الحجز مبلغ متأخر.",
-  late_hours: "عدد الساعات غير متاح؛ الخروج المتأخر لا يتجاوز موعد الضيف التالي ناقص ساعة التنظيف.",
+  late_hours: "عدد الساعات غير متاح: لا يقل عن الساعات التي مضت بعد موعد الخروج المجاني (جزء الساعة ساعة) ولا عمّا اشتُري قبله، ولا يتجاوز موعد الضيف التالي ناقص ساعة التنظيف.",
+  instructions_first: "اقرأ تعليمات المغادرة أولًا، ثم اختر «غادرت وسلّمت المفتاح».",
+  free_hour_over: "انتهى وقت الخروج المجاني: كل ساعة تبدأ بعده خروج متأخر. اختر الساعات، أو غادر وأبلغنا فتُحسب الساعات التي بدأت.",
+  not_departure_day: "إبلاغ المغادرة يُتاح يوم المغادرة. إن كنت ستغادر قبل موعدك فتواصل مع الاستقبال.",
+  import_unmarked: "لم يُحذف شيء: لم يُعثر على نزلاء معلَّمين بأنهم مستوردون من زائر رغم وجود ملفات من أيام الاستيراد. تواصل مع الدعم الفني قبل المسح.",
   extension_status: "تغيّرت حالة الطلب (دُفع أو أُلغي)؛ حدّث القائمة.",
   via: "مصدر الطلب غير صحيح.",
   review_marks: "قيّم الدرجة العامة وكل جانب من الجوانب الستة من 1 إلى 10.",
@@ -1357,8 +1361,14 @@ export interface ExtensionRequestBrief { id: string; kind: "night" | "hours"; ho
 export interface CheckoutOffer {
   open: boolean; status: string; check_out: string; room_number: string | null; free_until: string; check_out_time: string;
   night: { available: boolean; price_halalas: number | null };
-  hours: { max: number; price_halalas: number | null; until_limit: string | null; next_guest: boolean };
+  /** n hours = leaving by the free hour's end + n: from min (the hours bought already + 1, and never fewer than the hour
+   *  being lived) to max (the next guest less the cleaning hour, or midnight); have = the hours already bought that day */
+  hours: { max: number; min: number; have: number; /** the hours a departure now would add */ late_now: number; price_halalas: number | null; until_limit: string | null; next_guest: boolean };
   hold_minutes: number; choice: "on_time" | null; late_checkout_until: string | null; instructions: string | null; departed_at: string | null;
+  /** W4: when the instructions reached the guest — «غادرت وسلّمت المفتاح» is taken only after it */
+  instructions_at: string | null;
+  /** W3: leaving on time is offered until the free hour ends; after it the hours begun are late hours */
+  on_time_open: boolean;
   /** 0071: the unit's way out has approved photos */
   guide_checkout?: boolean;
   deposit_halalas: number; refund_hours: number; balance_due: number;
@@ -1375,14 +1385,18 @@ export interface AlertTold { staff_id: string; name: string; app: boolean; whats
 export interface JourneyAlert {
   id: string; event: AlertEvent; label: string; title: string; body: string | null; link: string | null; created_at: string; notify_at: string;
   notified_at: string | null; notified_to: AlertTold[] | null; escalated_at: string | null; escalated_to: AlertTold[] | null;
+  /** the reader's own: named to them in the system (or to nobody) */
+  mine: boolean;
 }
 export interface StaffJourney {
   settings: { journey_enabled: boolean; checkout_message_time: string; free_until: string; refund_hours: number; review_alert_below: number };
+  /** the amounts below are null for a reader the permissions give no money */
+  sees_money: boolean;
   channel_ready: boolean;
   departing: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; choice: "on_time" | null; late_checkout_until: string | null; departed_at: string | null; message: string | null }>;
-  requests: Array<ExtensionRequestBrief & { reservation_id: string; internal_ref: string | null; room_number: string | null; source: "whatsapp" | "page"; created_at: string; version: number }>;
-  awaiting_check: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; departed_at: string; via: "whatsapp" | "page" | null; deposit_halalas: number; balance_due: number }>;
-  deposits: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; deposit_halalas: number; checked_out_at: string; due_at: string; overdue: boolean }>;
+  requests: Array<Omit<ExtensionRequestBrief, "amount_halalas"> & { amount_halalas: number | null; reservation_id: string; internal_ref: string | null; room_number: string | null; source: "whatsapp" | "page"; created_at: string; version: number }>;
+  awaiting_check: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; departed_at: string; via: "whatsapp" | "page" | null; has_deposit: boolean; deposit_halalas: number | null; balance_due: number | null }>;
+  deposits: Array<{ reservation_id: string; internal_ref: string; room_number: string | null; deposit_halalas: number | null; checked_out_at: string; due_at: string; overdue: boolean }>;
   alerts: JourneyAlert[];
 }
 export interface StaffReview extends Partial<ReviewMarks> {
@@ -1413,7 +1427,10 @@ export const journeyApi = {
   checkout: (token: string) => rpc<CheckoutOffer>("fn_guest_checkout", { p_token: token }),
   choose: (token: string, choice: "on_time" | "night" | "hours" | "cancel", hours?: number | null) =>
     rpc<CheckoutOffer>("fn_guest_checkout_choose", { p_token: token, p_choice: choice, p_hours: hours ?? null, p_via: "page" }),
-  departure: (token: string) => rpc<{ ok: boolean; already: boolean; departed_at: string }>("fn_guest_departure", { p_token: token, p_via: "page" }),
+  /** late_hours / late_halalas: the hours begun after the free hour (and after those bought), charged as the guest leaves */
+  departure: (token: string) => rpc<{ ok: boolean; already: boolean; departed_at: string; late_hours?: number; late_halalas?: number }>("fn_guest_departure", { p_token: token, p_via: "page" }),
+  /** W4: the departure's instructions as the page shows them (the moment is kept: the button needs it) */
+  instructions: (token: string) => rpc<CheckoutOffer>("fn_guest_departure_instructions", { p_token: token }),
   unitGuide: (token: string, purpose: "checkin" | "checkout") => rpc<UnitGuide>("fn_guest_unit_guide", { p_token: token, p_purpose: purpose }),
   review: (token: string) => rpc<PublicReview>("fn_public_review", { p_token: token }),
   submitReview: (token: string, marks: ReviewMarks & { comment?: string }) => rpc<{ ok: boolean }>("fn_public_submit_review", { p_token: token, p: marks }),

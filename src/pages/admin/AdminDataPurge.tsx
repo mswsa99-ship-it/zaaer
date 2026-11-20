@@ -116,8 +116,8 @@ export default function AdminDataPurge() {
             <li>ملفات نزلاء التجربة: <b className="tabular-nums">{trial.guests_trial}</b></li>
             <li className="text-success-700">نزلاء زائر المستوردون (لا يُمسحون): <b className="tabular-nums">{trial.guests_imported}</b></li>
           </ul>
-          {trial.in_house_or_upcoming > 0 && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-800">الإقامات الجارية والقادمة لا تُمسح أبدًا ({trial.in_house_or_upcoming}): أنهِ إقامات التجربة أو ألغِها أولًا، ثم أعد المسح.</p>}
-          {!trial.paste_applied && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-xs text-warning-800" data-testid="trial-paste-needed">قبل أول مسح كامل خطوة واحدة في محرر SQL: لصق الملف supabase/paste/owner-paste-0073.sql وتشغيله (يضيف للمسح الإقفالات والمصروفات والقيود والحركات البنكية والطلبات والتقييمات والمنتجات التجريبية).</p>}
+          {trial.in_house_or_upcoming > 0 && <p className="rounded-xl bg-warning-50 px-3 py-2 text-xs text-warning-700">الإقامات الجارية والقادمة لا تُمسح أبدًا ({trial.in_house_or_upcoming}): أنهِ إقامات التجربة أو ألغِها أولًا، ثم أعد المسح.</p>}
+          {!trial.paste_applied && <p className="rounded-xl bg-warning-50 px-3 py-2 text-xs text-warning-700" data-testid="trial-paste-needed">قبل أول مسح كامل خطوة واحدة في محرر SQL: لصق الملف supabase/paste/owner-paste-0073.sql وتشغيله (يضيف للمسح الإقفالات والمصروفات والقيود والحركات البنكية والطلبات والتقييمات والمنتجات التجريبية).</p>}
           <button type="button" className="btn-danger" onClick={chooseAllTrial} disabled={!trial.paste_applied} data-testid="choose-all-trial">اختيار كل بيانات التجربة</button>
           {allTrial && <p className="text-xs text-ink-500" role="status">اختير كل شيء أدناه. راجع ثم اضغط «معاينة ما سيُحذف».</p>}
         </Card>

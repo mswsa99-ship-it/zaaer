@@ -80,7 +80,23 @@ grant execute on function fn_admin_products() to authenticated;
 -- 2. The guests imported from Zaaer are the hotel's own
 -- ---------------------------------------------------------------------------------------------------------------
 alter table guest_profiles add column if not exists imported_at timestamptz;
-update guest_profiles set imported_at = created_at where imported_at is null and (notes like '%زائر%' or notes ilike '%zaaer%');
+-- The import of 30–31 October (STAGING.md, 2026-10-31): 2,452 profiles written in four batches between 22:00 and 22:08
+-- UTC on 30 October, each with a note naming Zaaer. Either sign marks a profile as imported — its note («زائر», or
+-- Zaaer), or its creation inside the import's window — so a note edited since never exposes it. Kept as a function: the
+-- trial-data purge (0073) marks again before it takes any guest, and the checks try it on profiles of each kind.
+create or replace function fn_mark_imported_guests(p_org uuid) returns integer
+language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  update guest_profiles set imported_at = created_at
+   where imported_at is null and (p_org is null or organization_id = p_org)
+     and (notes like '%زائر%' or notes ilike '%zaaer%'
+          or (created_at >= timestamptz '2026-10-30 21:55:00+00' and created_at < timestamptz '2026-10-30 22:15:00+00'));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function fn_mark_imported_guests(uuid) from public, anon, authenticated;
+select fn_mark_imported_guests(null);
 
 -- ---------------------------------------------------------------------------------------------------------------
 -- 3. What «مسح كل بيانات التجربة» would take, counted without taking anything (the page shows it before the owner

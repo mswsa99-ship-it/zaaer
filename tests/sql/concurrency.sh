@@ -7,7 +7,8 @@
 # number on two bookings at once, one platform cancellation number twice, a guest ban against the guest's arrival), and
 # of the bank matching of 0067 (MT30–MT33: one movement against two vouchers, one voucher against two movements, a match
 # against the cancellation of its voucher in both orders), and of the product orders of 0068 (PD30–PD32: one order paid
-# twice at once, an item added while the order is paid, the payment while an item is added).
+# twice at once, an item added while the order is paid, the payment while an item is added), and of the guest journey of
+# 0070 (JM30: the journey's clock against the guest's cancellation of a held request).
 # Session A starts a transaction and holds it open for 3s before committing; session B fires 1s later and must
 # block on the row/exclusion lock, then observe A's committed result. Running the two calls sequentially would
 # NOT prove anything — this script is the evidence.
@@ -385,5 +386,32 @@ race "(fn_staff_create_product_order('$RP', $(item)))->>'id' = '$O3'" "$(pay "$O
 ST=$(ostate "$O3")
 echo "PD32 A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"VERSION_CONFLICT"* && "$ST" == "pending_payment 600 0 0 0" ]] && rc=0 || rc=1; check "PD32 the payment of an order while an item is added to it → it waits, then is refused: the cashier is shown the new total first, nothing is paid" $rc "A=$RA B=$RB state=$ST"
+
+# ---------- JM30 (0070, W3): the journey's clock against the guest's own cancellation of a held request ----------
+# The clock reads the held requests, then takes each one as the guest's choice and the reception's decision do — the
+# stay first, then the request — and decides on what it finds then: the guest's cancellation first, the clock waits,
+# then leaves the request as the guest left it (no «انتهت مهلة الدفع» message, no overdue alert for money not owed).
+psql -d "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+insert into rooms(id, branch_id, organization_id, category_id, room_number, is_active, status)
+values ('00000000-0000-0000-0000-000000000196','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000030','X-RACE-JR', true, 'available')
+on conflict (id) do nothing;
+SQL
+RJ=$(in_house 00000000-0000-0000-0000-000000000196)
+qs "update reservation_allocations set from_date = from_date - 2, to_date = to_date - 2 where reservation_id = '$RJ';
+    update reservation_nights set night = night - 2 where reservation_id = '$RJ';
+    update reservation_charges set service_from = service_from - 2, service_to = service_to - 2 where reservation_id = '$RJ';
+    update reservations set check_in = check_in - 2, check_out = check_out - 2 where id = '$RJ';" >/dev/null
+qs "select fn_checkout_choose('$RJ', 'hours', (fn_checkout_offer('$RJ')->'hours'->>'max')::int, 'page')->'request'->>'status';" >/dev/null
+qs "update stay_extension_requests set hold_until = now() - interval '1 minute' where reservation_id = '$RJ' and status = 'held';
+    update journey_ticks set last_at = now() - interval '1 hour' where branch_id = '$BR';" >/dev/null
+TJ=$(qs "with t as (insert into registration_sessions(reservation_id) values ('$RJ') returning token) select token from t;")
+QJ=$(qs "select id from stay_extension_requests where reservation_id = '$RJ' order by created_at desc limit 1")
+race "fn_guest_checkout_choose('$TJ', 'cancel')->'request'->>'status'" "fn_staff_journey_tick('$BR')->>'ran'"
+ST=$(qs "select status || ' ' || (select count(*) from journey_messages m where m.reservation_id = '$RJ' and m.kind = 'extension_released')
+          || ' ' || (select count(*) from alert_events a where a.ref_key = 'extension:' || x.id and a.event = 'extension_unpaid')
+          || ' ' || (select count(*) from reservation_charges c where c.reservation_id = '$RJ' and c.description like 'إلغاء: خروج متأخر%')
+          from stay_extension_requests x where id = '$QJ'")
+echo "JM30 A=$RA B=$RB state=$ST"
+[[ "$RA" == "R:released" && "$RB" == "R:true" && "$ST" == "released 0 0 1" ]] && rc=0 || rc=1; check "JM30 the guest cancels a held request while the journey's clock passes its time → the clock waits for the stay, then finds it cancelled: given back once, no «انتهت مهلة الدفع» message, no overdue alert" $rc "A=$RA B=$RB state=$ST"
 
 exit $fail

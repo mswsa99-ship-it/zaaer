@@ -40,6 +40,8 @@ export interface JourneyCtx {
   /** a stay's page key (registration_sessions) */
   newToken: (resId: string) => string;
   validHttpsUrl: (u: string) => boolean;
+  /** fn_sees_money: the permissions' matrix gives the caller a money operation */
+  seesMoney: () => boolean;
 }
 
 export const ALERT_EVENTS = ["guest_departed", "deposit_overdue", "review_low", "extension_requested", "extension_unpaid", "product_order", "guest_handoff", "message_failed"] as const;
@@ -74,6 +76,16 @@ const hm = (min: number) => (min >= 1440 ? "24:00" : `${String(Math.floor(min / 
 export const arHours = (n: number) => (n === 1 ? "ساعة واحدة" : n === 2 ? "ساعتان" : n >= 3 && n <= 10 ? `${n} ساعات` : `${n} ساعة`);
 /** fn_late_until: the hour late hours end at (midnight is 24:00, the end of the day of departure) */
 const lateUntil = (fromMin: number, hours: number) => (fromMin + hours * 60 >= 1440 ? "24:00" : hm(fromMin + hours * 60));
+/** fn_ar_hm / fn_ar_period / fn_ar_window / fn_ar_range: a clock time as the guest reads it, and the free hour's window */
+export const arHm = (min: number) => { const h = Math.floor(min / 60), m = min % 60; return String(((h + 11) % 12) + 1) + (m > 0 ? ":" + String(m).padStart(2, "0") : ""); };
+export const arPeriod = (min: number) => (min === 0 || min >= 1440 ? "منتصف الليل" : min < 720 ? "صباحًا" : min < 900 ? "ظهرًا" : min < 1080 ? "عصرًا" : "مساءً");
+export const arWindow = (a: number, b: number) => (arPeriod(a) === arPeriod(b) ? `بين ${arHm(a)} و${arHm(b)} ${arPeriod(b)}` : `بين ${arHm(a)} ${arPeriod(a)} و${arHm(b)} ${arPeriod(b)}`);
+export const arRange = (a: number, b: number) => `${arHm(a)}–${arHm(b)}`;
+/** fn_alert_is_mine: named to this person in the system (when told, or when it climbed), or named to nobody at all */
+export const alertIsMine = (notified: unknown, escalated: unknown, staff: string | null) => {
+  const n = Array.isArray(notified) ? notified : [], e = Array.isArray(escalated) ? escalated : [];
+  return [...n, ...e].some((x: any) => !!staff && x?.staff_id === staff && !!x?.app) || (n.length === 0 && e.length === 0);
+};
 /** fn_journey_keycap */
 const keycap = (n: number) => (n >= 0 && n <= 9 ? `${n}\u{FE0F}\u{20E3}` : n === 10 ? "\u{1F51F}" : `${n}.`);
 /** the date and the minute of a moment on a branch's clock */
@@ -190,12 +202,11 @@ export function journeyRpcs(ctx: JourneyCtx) {
     if (!rl) return;
     const txt = (escalation ? "تصعيد — لم يُعالَج بعد: " : "") + a.title + (a.body ? "\n" + a.body : "");
     const app = ["app", "both"].includes(rl.channel), wa = ["whatsapp", "both"].includes(rl.channel);
-    if (app) {
-      T("notifications").unshift({ id: uid(), branch_id: a.branch_id, audience: escalation || (rl.recipients as string[]).every((r) => r === "owner") ? "manager" : "supervisor",
-        title: (escalation ? "تصعيد: " : "") + a.title, body: a.body, link: a.link, created_at: nowISO(), read_at: null });
-      emit("notifications");
-    }
-    const who = alertPeople(a.branch_id, escalation ? [rl.escalate_to] : rl.recipients).map((p) => ({ staff_id: p.id, name: p.full_name, app, whatsapp: wa ? staffWhatsapp(a.branch_id, p.phone, "🔔 " + txt) : null }));
+    // in the system: the alert counts in the badge of each person it names (and of one WhatsApp could not reach)
+    const who = alertPeople(a.branch_id, escalation ? [rl.escalate_to] : rl.recipients).map((p) => {
+      const sent = wa ? staffWhatsapp(a.branch_id, p.phone, "🔔 " + txt) : null;
+      return { staff_id: p.id, name: p.full_name, app: app || sent !== "queued", whatsapp: sent };
+    });
     if (escalation) Object.assign(a, { escalated_at: nowISO(), escalated_to: who }); else Object.assign(a, { notified_at: nowISO(), notified_to: who });
     emit("alert_events");
   };
@@ -250,9 +261,13 @@ export function journeyRpcs(ctx: JourneyCtx) {
     if (why) {
       T("journey_messages").push({ id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, kind, ref_key: key, status: "skipped", reason: why, conversation_id: null, message_id: null, created_at: nowISO() });
       emit("journey_messages");
-      if (why !== "journey_off") {
+      if (why === "no_phone") {
         alertRaise(r.branch_id, "message_failed", `journey:${r.id}:${kind}:${key}`, "تعذّر إرسال رسالة للنزيل — " + (roomNo(r.room_id) ? "غرفة " + roomNo(r.room_id) : r.internal_ref),
-          (why === "no_phone" ? "لا يوجد جوال للنزيل في الحجز " : "واتساب الفرع غير مربوط بكمبيوتر الاستقبال — ") + r.internal_ref + ". أبلغ النزيل بنفسك.", "/staff/journey", r.id);
+          "لا يوجد جوال للنزيل في الحجز " + r.internal_ref + ". أبلغ النزيل بنفسك.", "/staff/journey", r.id);
+      } else if (why === "channel_unavailable") {
+        // once a day for the branch, not once a message
+        alertRaise(r.branch_id, "message_failed", `channel:${r.branch_id}:${ctx.branchToday(r.branch_id)}`, "واتساب الفرع غير مربوط — رسائل رحلة الضيف لا تصل للنزلاء",
+          "اربط واتساب الفرع بكمبيوتر الاستقبال من «واتساب» في الإعدادات. حتى ذلك أبلغ النزلاء بأنفسكم بخيارات الخروج وتأكيده ورد التأمين.", "/staff/journey", null);
       }
       return why;
     }
@@ -274,6 +289,20 @@ export function journeyRpcs(ctx: JourneyCtx) {
     emit("conversations"); emit("conversation_messages"); emit("whatsapp_outbox"); emit("journey_messages");
     return "queued";
   };
+  /** fn_journey_send_safe: a message riding on something else never stops it; the failure is told */
+  const journeySendSafe = (resId: string, kind: string, ref: string | null, body: string, options: Array<{ id: string; title: string }> | null = null, typed: string | null = null): string => {
+    try { return journeySend(resId, kind, ref, body, options, typed); }
+    catch {
+      const r = byId("reservations", resId);
+      if (r) alertRaise(r.branch_id, "message_failed", `error:${r.id}:${kind}:${ref ?? ""}`, "تعذّر إرسال رسالة للنزيل — " + (roomNo(r.room_id) ? "غرفة " + roomNo(r.room_id) : ""),
+        "خطأ في النظام أثناء تجهيز الرسالة. أبلغ النزيل بنفسك.", "/staff/journey", r.id);
+      return "error";
+    }
+  };
+  /** fn_extension_confirmed_text */
+  const confirmedText = (kind: string, lateUntilHm: string | null, branch: string) => kind === "night"
+    ? "تم تثبيت ليلتك الإضافية. موعد خروجك الجديد غدًا " + arWindow(toMin(byId("branches", branch)?.check_out_time ?? "12:00"), toMin(settings(branch).free_checkout_until)) + "."
+    : "تم تثبيت خروجك المتأخر حتى " + (lateUntilHm ?? "") + ".";
 
   // ---------------------------------------------------------------------------------------------------------------
   // W3 — the check-out options and the extension
@@ -284,32 +313,39 @@ export function journeyRpcs(ctx: JourneyCtx) {
     .filter((m) => m.room_id === roomId && (m.purpose ?? "gallery") === purpose && m.kind === "photo" && !m.archived_at && m.approved_at)
     .sort((a, b) => a.sort_order - b.sort_order || String(a.created_at).localeCompare(String(b.created_at)))
     .map((m) => ({ id: m.id, caption: m.caption ?? null, version: String(m.sha256 ?? "").slice(0, 12) }));
-  /** fn_checkout_offer */
-  const checkoutOffer = (resId: string) => {
+  /** fn_checkout_offer: n hours = leaving by the free hour's end + n; hours bought that day are not sold again ('have'), and
+   *  the fewest hours that can be chosen now cover the hour being lived ('min'). at: the moment the clock is read at */
+  const checkoutOffer = (resId: string, at: number = Date.now()) => {
     const r = byId("reservations", resId);
     if (!r) throw new Error("RESERVATION_NOT_FOUND");
-    const b = byId("branches", r.branch_id)!; const s = settings(r.branch_id); const today = ctx.branchToday(r.branch_id);
+    const b = byId("branches", r.branch_id)!; const s = settings(r.branch_id); const { date: today, min: nowMin } = local(at, tzOf(r.branch_id));
     const open = r.status === "checked_in" && !!r.room_id && r.check_out === today && !r.guest_departed_at;
     const req = lastRequest(r.id);
-    let nightOk = false, nightPrice: number | null = null, hoursMax = 0, hourPrice: number | null = null, nextArrival = false;
+    let nightOk = false, nightPrice: number | null = null, hoursMax = 0, hourPrice: number | null = null, nextArrival = false, have = 0, min = 1, lateNow = 0;
     const free = toMin(s.free_checkout_until);
     if (open) {
       const last = T("reservation_nights").filter((n) => n.reservation_id === r.id && n.status === "active").sort((x, y) => (x.night < y.night ? 1 : -1))[0];
       const night = Number(last?.price_halalas ?? r.nightly_rate_halalas ?? 0);
       const t = ctx.chargeTax(r.id, "rent", night, true); nightPrice = t.net + t.tax;
-      nightOk = night > 0 && ctx.roomFree(r.room_id, r.check_out, addDays(r.check_out, 1), r.id) && !ctx.overdueBlocked(r.id);
+      nightOk = night > 0 && !r.late_checkout_until && ctx.roomFree(r.room_id, r.check_out, addDays(r.check_out, 1), r.id) && !ctx.overdueBlocked(r.id);
       nextArrival = T("reservation_allocations").some((a) => a.room_id === r.room_id && a.status === "active" && a.from_date === today && a.reservation_id !== r.id);
       const limit = nextArrival ? toMin(b.check_in_time) - Number(s.cleaning_buffer_minutes) : 1440;
       if (limit > free) hoursMax = Math.floor((limit - free) / 60);
+      const lateMin = r.late_checkout_until ? toMin(r.late_checkout_until) : 0;
+      if (r.late_checkout_until && lateMin > free) have = Math.ceil((lateMin - free) / 60);
+      min = Math.max(have + 1, nowMin > free ? Math.ceil((nowMin - free) / 60) : 1);
+      const paidEnd = Math.max(free, r.late_checkout_until ? lateMin : free);
+      if (nowMin > paidEnd) lateNow = Math.ceil((nowMin - paidEnd) / 60);
       const h = ctx.chargeTax(r.id, "services", Number(s.late_hour_price_halalas), true); hourPrice = h.net + h.tax;
     }
     return {
       open, status: r.status, check_out: r.check_out, room_number: roomNo(r.room_id),
       free_until: hm(free), check_out_time: hm(toMin(b.check_out_time)),
       night: { available: nightOk, price_halalas: open ? nightPrice : null },
-      hours: { max: hoursMax, price_halalas: open ? hourPrice : null, until_limit: open && hoursMax > 0 ? lateUntil(free, hoursMax) : null, next_guest: nextArrival },
+      hours: { max: hoursMax, min, have, late_now: lateNow, price_halalas: open ? hourPrice : null, until_limit: open && hoursMax > 0 ? lateUntil(free, hoursMax) : null, next_guest: nextArrival },
+      on_time_open: open && nowMin <= free,
       hold_minutes: s.hold_minutes, choice: r.checkout_choice ?? null, late_checkout_until: r.late_checkout_until ? hm(toMin(r.late_checkout_until)) : null,
-      instructions: s.checkout_instructions ?? null, departed_at: r.guest_departed_at ?? null,
+      instructions: s.checkout_instructions ?? null, instructions_at: r.departure_instructions_at ?? null, departed_at: r.guest_departed_at ?? null,
       guide_checkout: !!r.room_id && unitGuide(r.room_id, "checkout").length > 0,
       deposit_halalas: r.deposit_balance_halalas ?? 0, refund_hours: s.deposit_refund_hours, balance_due: r.balance_due_halalas ?? 0,
       request: req ? { id: req.id, kind: req.kind, hours: req.hours ?? null, late_until: req.late_until ?? null, amount_halalas: req.amount_halalas, status: req.status, hold_until: req.hold_until } : null,
@@ -340,8 +376,9 @@ export function journeyRpcs(ctx: JourneyCtx) {
     alertResolve("extension_requested", "extension:" + q.id); alertResolve("extension_unpaid", "extension:" + q.id);
     audit(q.branch_id, "journey.extension_released", "extension_request", q.id, { before: { status: was }, after: { status, kind: q.kind, amount_halalas: q.amount_halalas }, reason });
   };
-  /** fn_checkout_choose: 'on_time', 'night', 'hours' (with how many), or 'cancel' */
-  const checkoutChoose = (resId: string, choice: unknown, hours: unknown, source: string) => {
+  /** fn_checkout_choose: 'on_time', 'night', 'hours' (leaving by the free hour's end + that many; only the hours not bought
+   *  yet are charged, never fewer than the hour being lived), or 'cancel' */
+  const checkoutChoose = (resId: string, choice: unknown, hours: unknown, source: string, at: number = Date.now()) => {
     const r = byId("reservations", resId);
     if (!r) throw new Error("RESERVATION_NOT_FOUND");
     const s = settings(r.branch_id); const room = roomNo(r.room_id) ?? "";
@@ -349,16 +386,18 @@ export function journeyRpcs(ctx: JourneyCtx) {
       const q = T("stay_extension_requests").find((x) => x.reservation_id === r.id && x.status === "held");
       if (!q) throw new Error("VALIDATION: extension_none");
       extensionRelease(q.id, "ألغاه النزيل", "released");
-      return checkoutOffer(r.id);
+      return checkoutOffer(r.id, at);
     }
     if (!["on_time", "night", "hours"].includes(String(choice))) throw new Error("VALIDATION: checkout_choice");
-    const o = checkoutOffer(r.id);
+    const o = checkoutOffer(r.id, at);
     if (!o.open) throw new Error("VALIDATION: checkout_not_today");
     if (T("stay_extension_requests").some((x) => x.reservation_id === r.id && ["held", "overdue"].includes(x.status))) throw new Error("VALIDATION: extension_pending");
     if (choice === "on_time") {
+      // (after the free hour leaving on time is past: the hours begun are late hours)
+      if (!o.on_time_open) throw new Error("VALIDATION: free_hour_over");
       Object.assign(r, { checkout_choice: "on_time", checkout_choice_at: nowISO(), updated_at: nowISO() }); emit("reservations");
       audit(r.branch_id, "journey.checkout_on_time", "reservation", r.id, { after: { source } });
-      return checkoutOffer(r.id);
+      return checkoutOffer(r.id, at);
     }
     const total0 = Number(r.total_halalas ?? 0);
     const holdUntil = new Date(Date.now() + Number(s.hold_minutes) * 60_000).toISOString();
@@ -371,55 +410,84 @@ export function journeyRpcs(ctx: JourneyCtx) {
         hold_until: holdUntil, source, previous_check_out: prev, previous_late_until: null, charge_id: null, created_at: nowISO(), decided_at: null, decided_by: null, decision_reason: null, version: 1 };
     } else {
       const n = Number(hours);
-      if (hours == null || !Number.isInteger(n) || n < 1 || n > Number(o.hours.max)) throw new Error("VALIDATION: late_hours");
-      const until = lateUntil(toMin(s.free_checkout_until), n); const today = ctx.branchToday(r.branch_id);
-      const cid = ctx.addCharge(r.id, "addon", `خروج متأخر ${arHours(n)} حتى ${until}`, n, Number(s.late_hour_price_halalas), true, "بطلب النزيل", null, today, today);
-      const prevLate = r.late_checkout_until ?? null;
+      if (hours == null || !Number.isInteger(n) || n < Number(o.hours.min) || n > Number(o.hours.max)) throw new Error("VALIDATION: late_hours");
+      const extra = n - Number(o.hours.have);
+      const until = lateUntil(toMin(s.free_checkout_until), n); const day = r.check_out;
+      const cid = ctx.addCharge(r.id, "addon", `خروج متأخر ${arHours(extra)} حتى ${until}`, extra, Number(s.late_hour_price_halalas), true, "بطلب النزيل", null, day, day);
+      const prevLate = r.late_checkout_until ? hm(toMin(r.late_checkout_until)) : null;
       r.late_checkout_until = until; r.updated_at = nowISO();
       ctx.recompute(r.id);
-      q = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, kind: "hours", hours: n, late_until: until, amount_halalas: Number(r.total_halalas) - total0, status: "held",
+      q = { id: uid(), organization_id: ORG, branch_id: r.branch_id, reservation_id: r.id, kind: "hours", hours: extra, late_until: until, amount_halalas: Number(r.total_halalas) - total0, status: "held",
         hold_until: holdUntil, source, previous_check_out: null, previous_late_until: prevLate, charge_id: cid, created_at: nowISO(), decided_at: null, decided_by: null, decision_reason: null, version: 1 };
     }
     T("stay_extension_requests").push(q); emit("stay_extension_requests");
-    audit(r.branch_id, "journey.extension_held", "extension_request", q.id, { after: { kind: q.kind, hours: q.hours, amount_halalas: q.amount_halalas, hold_until: q.hold_until, source } });
+    audit(r.branch_id, "journey.extension_held", "extension_request", q.id, { after: { kind: q.kind, hours: q.hours, late_until: q.late_until, amount_halalas: q.amount_halalas, hold_until: q.hold_until, source } });
     if (Number(r.balance_due_halalas ?? 0) <= 0) Object.assign(q, { status: "paid", decided_at: nowISO() });
     else {
+      // (no amount in the alert: it reaches people who do not see money)
       const tz = tzOf(r.branch_id);
-      alertRaise(r.branch_id, "extension_requested", "extension:" + q.id, (q.kind === "night" ? "طلب ليلة إضافية" : "طلب خروج متأخر " + arHours(q.hours)) + " — غرفة " + room,
-        "المبلغ " + sar(q.amount_halalas) + "، محجوز حتى " + hm(local(Date.parse(q.hold_until), tz).min) + ". يُثبَّت عند سداد رصيد الحجز.", "/staff/journey", r.id);
+      alertRaise(r.branch_id, "extension_requested", "extension:" + q.id, (q.kind === "night" ? "طلب ليلة إضافية" : "طلب خروج متأخر " + arHours(q.hours) + " حتى " + q.late_until) + " — غرفة " + room,
+        "محجوز حتى " + hm(local(Date.parse(q.hold_until), tz).min) + ". يُثبَّت عند سداد رصيد الحجز.", "/staff/journey", r.id);
     }
-    return checkoutOffer(r.id);
+    return checkoutOffer(r.id, at);
   };
 
   // ---------------------------------------------------------------------------------------------------------------
   // W4 — the departure and the deposit's return
   // ---------------------------------------------------------------------------------------------------------------
-  /** fn_departure_confirm */
-  const departureConfirm = (resId: string, via: string) => {
+  /** fn_departure_instructions: the instructions reach the guest (the page, WhatsApp); the moment is kept */
+  const departureInstructions = (resId: string) => {
+    const r = byId("reservations", resId);
+    if (!r) throw new Error("RESERVATION_NOT_FOUND");
+    if (r.status === "checked_in" && r.room_id && r.check_out <= ctx.branchToday(r.branch_id) && !r.guest_departed_at && !r.departure_instructions_at) {
+      r.departure_instructions_at = nowISO(); emit("reservations");
+    }
+    return checkoutOffer(r.id);
+  };
+  /** fn_departure_confirm: on the day of departure, after the instructions; the hours begun after the free hour (and
+   *  after those bought) are charged as the guest leaves (W3) */
+  const departureConfirm = (resId: string, via: string, atMs: number = Date.now()) => {
     const r = byId("reservations", resId);
     if (!r) throw new Error("RESERVATION_NOT_FOUND");
     if (r.status !== "checked_in") throw new Error("VALIDATION: not_in_stay");
     if (r.guest_departed_at) return { ok: true, already: true, departed_at: r.guest_departed_at };
+    const { date: day, min: nowMin } = local(atMs, tzOf(r.branch_id));
+    if (r.check_out > day) throw new Error("VALIDATION: not_departure_day");
+    if (!r.departure_instructions_at) throw new Error("VALIDATION: instructions_first");
+    const s = settings(r.branch_id);
+    let late = 0, lateAmount = 0;
+    if (r.check_out === day) {
+      const from = Math.max(toMin(s.free_checkout_until), r.late_checkout_until ? toMin(r.late_checkout_until) : 0);
+      if (nowMin > from) {
+        late = Math.ceil((nowMin - from) / 60);
+        const until = lateUntil(from, late);
+        const cid = ctx.addCharge(r.id, "addon", `خروج متأخر ${arHours(late)} حتى ${until} (عند المغادرة)`, late, Number(s.late_hour_price_halalas), true, "غادر بعد موعد الخروج المجاني", null, r.check_out, r.check_out);
+        r.late_checkout_until = until;
+        ctx.recompute(r.id);
+        lateAmount = T("reservation_charges").filter((c) => c.id === cid || c.base_charge_id === cid).reduce((x, c) => x + Number(c.total_halalas), 0);
+      }
+    }
     const at = nowISO();
     Object.assign(r, { guest_departed_at: at, guest_departed_via: via, updated_at: at }); emit("reservations");
-    audit(r.branch_id, "journey.guest_departed", "reservation", r.id, { after: { via } });
+    audit(r.branch_id, "journey.guest_departed", "reservation", r.id, { after: { via, ...(late > 0 ? { late_hours: late, late_halalas: lateAmount } : {}) } });
     const deposit = Number(r.deposit_balance_halalas ?? 0);
     alertRaise(r.branch_id, "guest_departed", "departed:" + r.id, "غادر نزيل غرفة " + (roomNo(r.room_id) ?? r.internal_ref) + " — بانتظار التحقق",
-      "افحص الوحدة ثم أكمل المغادرة" + (deposit > 0 ? "، ثم رد التأمين " + sar(deposit) : "") + ".", "/staff/journey", r.id);
-    return { ok: true, already: false, departed_at: at };
+      "افحص الوحدة ثم أكمل المغادرة" + (deposit > 0 ? "، ثم رد التأمين" : "") + "." + (late > 0 ? " غادر بعد موعده: أُضيف إلى الحجز خروج متأخر " + arHours(late) + " يُحصَّل مع رصيده." : ""),
+      "/staff/journey", r.id);
+    return { ok: true, already: false, departed_at: at, late_hours: late, late_halalas: lateAmount };
   };
   /** fn_trg_journey_checkout: the confirmed check-out closes the departure's alert and tells the guest */
   const onCheckout = (resId: string) => {
     const r = byId("reservations", resId); if (!r) return;
     alertResolve("guest_departed", "departed:" + r.id);
     const s = settings(r.branch_id); const deposit = Number(r.deposit_balance_halalas ?? 0);
-    journeySend(r.id, "checkout_confirmed", "", "تم تأكيد خروجك من غرفة " + (roomNo(r.room_id) ?? "") + ". شكرًا لإقامتك معنا."
+    journeySendSafe(r.id, "checkout_confirmed", "", "تم تأكيد خروجك من غرفة " + (roomNo(r.room_id) ?? "") + ". شكرًا لإقامتك معنا."
       + (deposit > 0 ? "\nيُرد تأمينك (" + sar(deposit) + ") خلال " + arHours(s.deposit_refund_hours) + ": تحويلًا إلى حسابك أو نقدًا من الاستقبال، ويصلك إيصال الرد هنا." : ""));
   };
   /** fn_trg_journey_deposit_refund: the receipt of the return goes out only once the return is recorded */
   const onDepositRefund = (v: Row | undefined) => {
     if (!v || v.kind !== "deposit_refund" || v.status !== "approved" || !v.reservation_id) return;
-    journeySend(v.reservation_id, "deposit_refunded", v.id, "رُد إليك تأمينك " + sar(v.amount_halalas)
+    journeySendSafe(v.reservation_id, "deposit_refunded", v.id, "رُد إليك تأمينك " + sar(v.amount_halalas)
       + (v.method === "bank_transfer" ? " بالتحويل" + (String(v.reference ?? "").trim() ? " (رقم العملية " + v.reference + ")" : "") : " نقدًا") + ". رقم السند " + v.number + ". شكرًا لك.");
   };
 
@@ -436,7 +504,7 @@ export function journeyRpcs(ctx: JourneyCtx) {
     T("guest_reviews").push(g);
     const site = demoSite().replace(/\/$/, "");
     const text = "شكرًا لإقامتك معنا. يسعدنا تقييمك في دقيقة: درجة عامة من 10 وستة جوانب.\n";
-    g.invite_status = journeySend(r.id, "review_invite", "", text + site + "/booking/review/…", null, text + site + "/booking/review/" + tok);
+    g.invite_status = journeySendSafe(r.id, "review_invite", "", text + site + "/booking/review/…", null, text + site + "/booking/review/" + tok);
     emit("guest_reviews");
     return g.invite_status;
   };
@@ -464,33 +532,37 @@ export function journeyRpcs(ctx: JourneyCtx) {
       if (Number(r.balance_due_halalas ?? 0) <= 0) {
         Object.assign(q, { status: "paid", decided_at: nowISO(), version: q.version + 1 });
         alertResolve("extension_requested", "extension:" + q.id); alertResolve("extension_unpaid", "extension:" + q.id);
-        journeySend(q.reservation_id, "extension_confirmed", q.id, q.kind === "night" ? "تم تثبيت ليلتك الإضافية. موعد خروجك الجديد غدًا بين 12 و1 ظهرًا." : "تم تثبيت خروجك المتأخر حتى " + q.late_until + ".");
+        journeySendSafe(q.reservation_id, "extension_confirmed", q.id, confirmedText(q.kind, q.late_until, branch));
         nPaid++;
       } else if (q.status === "held" && Date.parse(q.hold_until) < at) {
         if (r.status === "checked_in" && now < free) {
           extensionRelease(q.id, "انتهت مهلة الدفع", "released");
-          journeySend(q.reservation_id, "extension_released", q.id, "انتهت مهلة الدفع فأُلغي طلب " + (q.kind === "night" ? "الليلة الإضافية" : "الخروج المتأخر")
-            + ". موعد خروجك اليوم قبل " + hm(free) + ". للمساعدة اطلب موظف الاستقبال.");
+          const lateNow = byId("reservations", q.reservation_id)?.late_checkout_until;
+          journeySendSafe(q.reservation_id, "extension_released", q.id, "انتهت مهلة الدفع فأُلغي طلب " + (q.kind === "night" ? "الليلة الإضافية" : "الخروج المتأخر")
+            + ". موعد خروجك اليوم " + (lateNow ? "حتى " + hm(toMin(lateNow)) : "قبل " + hm(free)) + ". للمساعدة اطلب موظف الاستقبال.");
           nReleased++;
         } else {
           Object.assign(q, { status: "overdue", version: q.version + 1 });
           alertRaise(branch, "extension_unpaid", "extension:" + q.id, (q.kind === "night" ? "ليلة إضافية لم تُدفع" : "خروج متأخر لم يُدفع") + " — غرفة " + (roomNo(r.room_id) ?? ""),
-            "انتهت مهلة الدفع بعد " + hm(free) + "؛ حصّل المبلغ " + sar(q.amount_halalas) + " أو ألغِ الطلب.", "/staff/journey", q.reservation_id);
+            "انتهت مهلة الدفع بعد " + hm(free) + "؛ حصّل المبلغ أو ألغِ الطلب.", "/staff/journey", q.reservation_id);
         }
       }
     }
     emit("stay_extension_requests");
 
-    // (2) the morning of departure: the options, once, from the message's hour until the free hour ends
+    // (2) the morning of departure: the options, once for that day (a night more makes a new day, asked again), from the
+    //     message's hour until the free hour ends — not to a stay whose day is settled or that waits for a payment
     if (now >= toMin(s.checkout_message_time) && now < free) {
-      for (const r of T("reservations").filter((x) => x.branch_id === branch && x.status === "checked_in" && x.room_id && x.check_out === today && !x.guest_departed_at && !x.checkout_choice
-          && !T("stay_extension_requests").some((q) => q.reservation_id === x.id) && !T("journey_messages").some((m) => m.reservation_id === x.id && m.kind === "checkout_options"))) {
-        const o = checkoutOffer(r.id);
-        const opts = [{ id: "CO:ONTIME", title: "سأخرج في الموعد (12–1)" }];
+      const cot = toMin(byId("branches", branch)?.check_out_time ?? "12:00");
+      for (const r of T("reservations").filter((x) => x.branch_id === branch && x.status === "checked_in" && x.room_id && x.check_out === today && !x.guest_departed_at && !x.checkout_choice && !x.late_checkout_until
+          && !T("stay_extension_requests").some((q) => q.reservation_id === x.id && ["held", "overdue"].includes(q.status))
+          && !T("journey_messages").some((m) => m.reservation_id === x.id && m.kind === "checkout_options" && m.ref_key === today))) {
+        const o = checkoutOffer(r.id, at);
+        const opts = [{ id: "CO:ONTIME", title: "سأخرج في الموعد (" + arRange(cot, free) + ")" }];
         if (o.night.available) opts.push({ id: "CO:NIGHT", title: "ليلة إضافية — " + sar(o.night.price_halalas ?? 0) });
-        if (o.hours.max > 0) opts.push({ id: "CO:HOURS", title: "ساعات بعد " + o.free_until + " — " + sar(o.hours.price_halalas ?? 0) + " للساعة" });
+        if (o.hours.max >= Math.max(o.hours.min, 1)) opts.push({ id: "CO:HOURS", title: "ساعات بعد " + o.free_until + " — " + sar(o.hours.price_halalas ?? 0) + " للساعة" });
         opts.push({ id: "HUMAN", title: "التحدث مع موظف" });
-        journeySend(r.id, "checkout_options", "", "صباح الخير. موعد خروجك اليوم من غرفة " + (o.room_number ?? "") + " بين 12 و1 ظهرًا. ماذا تفضّل؟", opts);
+        journeySendSafe(r.id, "checkout_options", today, "صباح الخير. موعد خروجك اليوم من غرفة " + (o.room_number ?? "") + " " + arWindow(cot, free) + ". ماذا تفضّل؟", opts);
         nOptions++;
       }
     }
@@ -505,7 +577,7 @@ export function journeyRpcs(ctx: JourneyCtx) {
     // (4) the deposit's return past its hours; closed once nothing is left to return
     for (const r of T("reservations").filter((x) => x.branch_id === branch && ["checked_out", "closed"].includes(x.status) && Number(x.deposit_balance_halalas ?? 0) > 0 && x.actual_check_out
         && Date.parse(x.actual_check_out) <= at - Number(s.deposit_refund_hours) * 3600_000 && Date.parse(x.actual_check_out) > at - 7 * 86400_000)) {
-      alertRaise(branch, "deposit_overdue", "deposit:" + r.id, "تأخر رد تأمين غرفة " + (roomNo(r.room_id) ?? "") + " (" + sar(r.deposit_balance_halalas) + ")",
+      alertRaise(branch, "deposit_overdue", "deposit:" + r.id, "تأخر رد تأمين غرفة " + (roomNo(r.room_id) ?? ""),
         "مضت " + arHours(s.deposit_refund_hours) + " على تأكيد الخروج. رد التأمين تحويلًا برقم العملية أو نقدًا من صندوق الفرع.", "/staff/journey", r.id);
     }
     for (const a of T("alert_events").filter((e) => e.branch_id === branch && !e.resolved_at)) {
@@ -541,6 +613,7 @@ export function journeyRpcs(ctx: JourneyCtx) {
     fn_guest_checkout: ({ p_token }) => checkoutOffer(tokenReservation(p_token)),
     fn_guest_checkout_choose: ({ p_token, p_choice, p_hours = null, p_via = "page" }) => { const v = via(p_via); return checkoutChoose(tokenReservation(p_token), p_choice, p_hours, v); },
     fn_guest_departure: ({ p_token, p_via = "page" }) => { const v = via(p_via); return departureConfirm(tokenReservation(p_token), v); },
+    fn_guest_departure_instructions: ({ p_token }) => departureInstructions(tokenReservation(p_token)),
     fn_public_review: ({ p_token }) => {
       const g = reviewByToken(p_token); const r = byId("reservations", g.reservation_id);
       return { branch_name: byId("branches", g.branch_id)?.name_ar ?? null, check_in: r?.check_in ?? null, check_out: r?.check_out ?? null, submitted: !!g.submitted_at, aspects: REVIEW_ASPECTS, reply: g.reply ?? null };
@@ -573,36 +646,38 @@ export function journeyRpcs(ctx: JourneyCtx) {
     // ---- the reception: «رحلة الضيف»
     fn_staff_journey_tick: ({ p_branch }) => {
       journeyStaff(p_branch);
-      const t = tick(p_branch, false);
-      return { ...t, open_alerts: T("alert_events").filter((e) => e.branch_id === p_branch && !e.resolved_at && e.notified_at).length };
+      const t = tick(p_branch, false); const me = staffId();
+      return { ...t, open_alerts: T("alert_events").filter((e) => e.branch_id === p_branch && !e.resolved_at && e.notified_at && alertIsMine(e.notified_to, e.escalated_to, me)).length };
     },
     fn_staff_journey: ({ p_branch }) => {
       journeyStaff(p_branch);
       const s = settings(p_branch); const today = ctx.branchToday(p_branch); const refundMs = Number(s.deposit_refund_hours) * 3600_000;
-      const rooms = (r: Row) => roomNo(r.room_id);
+      const rooms = (r: Row) => roomNo(r.room_id); const money = ctx.seesMoney(); const me = staffId();
       return {
         settings: { journey_enabled: s.journey_enabled, checkout_message_time: hm(toMin(s.checkout_message_time)), free_until: hm(toMin(s.free_checkout_until)), refund_hours: s.deposit_refund_hours, review_alert_below: s.review_alert_below },
+        sees_money: money,
         channel_ready: channelReady(p_branch),
         departing: T("reservations").filter((r) => r.branch_id === p_branch && r.status === "checked_in" && r.room_id && r.check_out <= today)
           .sort((a, b) => String(rooms(a)).localeCompare(String(rooms(b)))).map((r) => {
-            const m = T("journey_messages").find((x) => x.reservation_id === r.id && x.kind === "checkout_options");
+            const m = T("journey_messages").filter((x) => x.reservation_id === r.id && x.kind === "checkout_options").sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
             return { reservation_id: r.id, internal_ref: r.internal_ref, room_number: rooms(r), choice: r.checkout_choice ?? null, late_checkout_until: r.late_checkout_until ? hm(toMin(r.late_checkout_until)) : null,
               departed_at: r.guest_departed_at ?? null, message: m ? m.status + (m.reason ? ":" + m.reason : "") : null };
           }),
         requests: T("stay_extension_requests").filter((x) => x.branch_id === p_branch && (["held", "overdue"].includes(x.status) || Date.parse(x.created_at) > Date.now() - 2 * 86400_000))
           .sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).map((x) => { const r = byId("reservations", x.reservation_id);
             return { id: x.id, reservation_id: x.reservation_id, internal_ref: r?.internal_ref ?? null, room_number: roomNo(r?.room_id), kind: x.kind, hours: x.hours ?? null, late_until: x.late_until ?? null,
-              amount_halalas: x.amount_halalas, status: x.status, hold_until: x.hold_until, source: x.source, created_at: x.created_at, version: x.version }; }),
+              amount_halalas: money ? x.amount_halalas : null, status: x.status, hold_until: x.hold_until, source: x.source, created_at: x.created_at, version: x.version }; }),
         awaiting_check: T("reservations").filter((r) => r.branch_id === p_branch && r.status === "checked_in" && r.guest_departed_at)
           .sort((a, b) => (a.guest_departed_at < b.guest_departed_at ? -1 : 1)).map((r) => ({ reservation_id: r.id, internal_ref: r.internal_ref, room_number: rooms(r),
-            departed_at: r.guest_departed_at, via: r.guest_departed_via ?? null, deposit_halalas: r.deposit_balance_halalas ?? 0, balance_due: r.balance_due_halalas ?? 0 })),
+            departed_at: r.guest_departed_at, via: r.guest_departed_via ?? null, has_deposit: Number(r.deposit_balance_halalas ?? 0) > 0,
+            deposit_halalas: money ? r.deposit_balance_halalas ?? 0 : null, balance_due: money ? r.balance_due_halalas ?? 0 : null })),
         deposits: T("reservations").filter((r) => r.branch_id === p_branch && ["checked_out", "closed"].includes(r.status) && Number(r.deposit_balance_halalas ?? 0) > 0 && r.actual_check_out
             && Date.parse(r.actual_check_out) > Date.now() - 30 * 86400_000)
-          .sort((a, b) => (a.actual_check_out < b.actual_check_out ? -1 : 1)).map((r) => ({ reservation_id: r.id, internal_ref: r.internal_ref, room_number: rooms(r), deposit_halalas: r.deposit_balance_halalas,
+          .sort((a, b) => (a.actual_check_out < b.actual_check_out ? -1 : 1)).map((r) => ({ reservation_id: r.id, internal_ref: r.internal_ref, room_number: rooms(r), deposit_halalas: money ? r.deposit_balance_halalas : null,
             checked_out_at: r.actual_check_out, due_at: new Date(Date.parse(r.actual_check_out) + refundMs).toISOString(), overdue: Date.parse(r.actual_check_out) + refundMs < Date.now() })),
         alerts: T("alert_events").filter((e) => e.branch_id === p_branch && !e.resolved_at).sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).map((e) => ({
           id: e.id, event: e.event, label: ALERT_LABELS[e.event], title: e.title, body: e.body, link: e.link, created_at: e.created_at, notify_at: e.notify_at, notified_at: e.notified_at,
-          notified_to: e.notified_to, escalated_at: e.escalated_at, escalated_to: e.escalated_to })),
+          notified_to: e.notified_to, escalated_at: e.escalated_at, escalated_to: e.escalated_to, mine: !!e.notified_at && alertIsMine(e.notified_to, e.escalated_to, me) })),
       };
     },
     fn_staff_extension_decide: ({ p_request, p_action, p_reason, p_expected_version }) => {
@@ -620,6 +695,8 @@ export function journeyRpcs(ctx: JourneyCtx) {
         Object.assign(q, { status: "confirmed", decided_at: nowISO(), decided_by: staffId(), decision_reason: reason, version: q.version + 1 }); emit("stay_extension_requests");
         alertResolve("extension_requested", "extension:" + q.id); alertResolve("extension_unpaid", "extension:" + q.id);
         audit(q.branch_id, "journey.extension_confirmed", "extension_request", q.id, { before: { status: was }, after: { status: "confirmed", kind: q.kind, amount_halalas: q.amount_halalas }, reason });
+        // the guest is told it stands, as when it is paid
+        journeySendSafe(q.reservation_id, "extension_confirmed", q.id, confirmedText(q.kind, q.late_until, q.branch_id));
       } else extensionRelease(q.id, reason, "released");
       return { ok: true, status: q.status };
     },
@@ -662,7 +739,7 @@ export function journeyRpcs(ctx: JourneyCtx) {
       Object.assign(g, { reply, replied_by: staffId(), replied_at: nowISO(), version: g.version + 1 }); emit("guest_reviews");
       alertResolve("review_low", "review:" + g.id);
       audit(g.branch_id, "review.replied", "guest_review", g.id, { after: { overall: g.overall, reply } });
-      journeySend(g.reservation_id, "review_reply", g.id, "شكرًا لتقييمك. رد الإدارة:\n" + reply);
+      journeySendSafe(g.reservation_id, "review_reply", g.id, "شكرًا لتقييمك. رد الإدارة:\n" + reply);
       return { ok: true };
     },
 
@@ -773,6 +850,10 @@ export function journeyRpcs(ctx: JourneyCtx) {
   return {
     rpcs,
     tick,
+    /** fn_checkout_choose with the clock read at another hour (the checks) */
+    checkoutChooseAt: checkoutChoose,
+    checkoutOfferAt: checkoutOffer,
+    departureConfirmAt: departureConfirm,
     onCheckout,
     onDepositRefund,
     /** after every call, what the SQL does by trigger: a product order waiting for its payment, a guest asking for staff */

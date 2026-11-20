@@ -327,6 +327,14 @@ export function seed(): Store {
   }
   const rated = profiles.find((p) => p.phone === "0501110004"); if (rated) Object.assign(rated, { rating: 2, rating_note: "تأخرت في المغادرة مرتين وتركت الوحدة غير مرتبة", rated_by: STAFF.supervisor.id, rated_at: ts(-1) });
   const good = profiles.find((p) => p.phone === "0501110001"); if (good) Object.assign(good, { rating: 5, rating_note: "ضيف دائم ومنتظم", rated_by: STAFF.manager.id, rated_at: ts(-10) });
+  // the hotel's guests imported from Zaaer (30–31 October, as in production): profiles with no stay here, marked as
+  // imported — «مسح كل بيانات التجربة» never takes them (0072)
+  for (let i = 1; i <= 6; i++) {
+    const at = `2026-10-30T22:0${i}:00.000Z`;
+    profiles.push({ id: uid(), organization_id: ORG, full_name: `نزيل مستورد من زائر ${i}`, phone: `05011199${String(i).padStart(2, "0")}`, nationality: "SA", email: null,
+      notes: "مستورد من زائر", identity_fingerprint: null, identity_type: null, identity_last4: null, rating: null, rating_note: null, rated_by: null, rated_at: null,
+      created_at: at, updated_at: at, imported_at: at });
+  }
   put("guest_profiles", profiles);
   const banned = profiles.find((p) => p.phone === "0501110017");
   put("guest_bans", banned ? [{ id: uid(), organization_id: ORG, guest_profile_id: banned.id, name_snapshot: banned.full_name, phones: ["966501110017"], fingerprints: [banned.identity_fingerprint].filter(Boolean), reason: "لم يحضر مرتين دون إشعار وأساء للموظفين", created_by: STAFF.manager.id, created_at: ts(-1), lifted_at: null, lifted_by: null, lift_reason: null }] : []);

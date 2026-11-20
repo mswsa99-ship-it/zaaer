@@ -6,6 +6,13 @@
 -- every branch, the whole period and every kind at once.
 -- This migration holds the SQL words the assistant's tools refuse: it is the owner's paste (supabase/paste), like 0022.
 
+-- (it reads the guests imported from Zaaer by 0072's marking: pasted before 0072, it stops and changes nothing)
+do $$ begin
+  if to_regprocedure('public.fn_mark_imported_guests(uuid)') is null then
+    raise exception 'لصقة 0073 تحتاج الترحيل 0072 مطبقًا أولًا (تعليم نزلاء زائر المستوردين). لم يتغير شيء.';
+  end if;
+end $$;
+
 create or replace function fn_purge_categories() returns text[]
 language sql immutable set search_path = public, extensions as $$
   select array['conversations', 'reservations', 'finance', 'guests', 'operations', 'logs', 'audit', 'samples']
@@ -196,12 +203,16 @@ begin
     delete from expense_attachments where expense_id in (select id from _purge_expenses);
     delete from expense_vouchers where id in (select id from _purge_expenses);
     get diagnostics n = row_count; c := c || jsonb_build_object('expense_vouchers', n);
-    -- the bank's movements, and their messages (with every message of the period when all branches are chosen)
+    -- the bank's movements, and their messages: a message goes with the movements it made or repeated — and, when all
+    -- branches are chosen, a message of the period that made no movement — but never the message a kept movement was
+    -- read from (a movement is dated by its text, so it may fall outside the period its message arrived in)
     insert into _purge_messages select bm.id from bank_messages bm
-     where bm.organization_id = p_org and (bm.movement_id in (select id from _purge_movements) or bm.id in (select message_id from bank_movements where id in (select id from _purge_movements))
-                                           or (v_all and bm.received_at >= v_start and bm.received_at < v_end))
+     where bm.organization_id = p_org
+       and (bm.movement_id in (select id from _purge_movements)
+            or bm.id in (select message_id from bank_movements where id in (select id from _purge_movements))
+            or (v_all and bm.received_at >= v_start and bm.received_at < v_end and bm.movement_id is null))
+       and not exists (select 1 from bank_movements k where k.message_id = bm.id and k.id not in (select id from _purge_movements))
     on conflict do nothing;
-    update bank_movements set message_id = null where id not in (select id from _purge_movements) and message_id in (select id from _purge_messages);
     update bank_messages set movement_id = null where id not in (select id from _purge_messages) and movement_id in (select id from _purge_movements);
     delete from bank_movements where id in (select id from _purge_movements);
     get diagnostics n = row_count; c := c || jsonb_build_object('bank_movements', n);
@@ -237,6 +248,13 @@ begin
 
   -- ---------------- guests (never the guests imported from Zaaer) ----------------
   if has_guest then
+    -- marked again first (0072: by their note or by the import's hour); and if none is marked while profiles from the
+    -- import's days exist, nothing is taken: the marking failed, and the hotel's guests would go with the trial's
+    perform fn_mark_imported_guests(p_org);
+    if not exists (select 1 from guest_profiles where organization_id = p_org and imported_at is not null)
+       and exists (select 1 from guest_profiles where organization_id = p_org and created_at < timestamptz '2026-11-01 00:00:00+03') then
+      raise exception 'VALIDATION: import_unmarked';
+    end if;
     delete from guest_profiles gp
     where gp.organization_id = p_org and gp.imported_at is null
       and not exists (select 1 from reservation_guests g where g.guest_profile_id = gp.id)

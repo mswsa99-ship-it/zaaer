@@ -2136,7 +2136,8 @@ function amendStayInternal(r: Row, p_new_check_out: string, p_pricing_mode: stri
       addCharge(r.id, "adjustment", `تقصير الإقامة ${nightsAr(-delta)}`, 1, -refund, true, p_reason, null, p_new_check_out, r.check_out);
     }
     const act = T("reservation_nights").filter((x) => x.reservation_id === r.id && x.status === "active");
-    r.check_out = p_new_check_out; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f };
+    // (the guest's choice, the late hours and the instructions belong to the day of departure: a new day asks again — 0070)
+    r.check_out = p_new_check_out; r.checkout_choice = null; r.checkout_choice_at = null; r.late_checkout_until = null; r.departure_instructions_at = null; if (act.length) r.nightly_rate_halalas = roundHalfUp(act.reduce((s, x) => s + x.price_halalas, 0) / act.length); r.version++; const f = recompute(r.id)!; audit(r.branch_id, "reservation.departure_changed", "reservation", r.id, { before, after: { check_out: p_new_check_out, total_halalas: r.total_halalas, delta_nights: delta }, reason: p_reason }); return { ok: true, delta_nights: delta, finance: f };
 }
 /** fn_room_free_internal (0070): the room's allocations and an overstay, whoever asks (a guest's page asks too) */
 function roomFreeInternal(roomId: string, from: string, to: string, exclude: string | null) {
@@ -2157,12 +2158,29 @@ function purgeValidate(branch: string | null, from: string, to: string, cats: st
   const c = [...new Set(cats ?? [])].sort(); if (!c.length) throw new Error("VALIDATION: choose_category"); if (c.some((x) => !PURGE_KINDS.includes(x))) throw new Error("VALIDATION: unknown_category");
   return c;
 }
+/** fn_mark_imported_guests (0072): the guests imported from Zaaer, by their note or by the import's hour (30 October, 22:00–22:08 UTC) */
+function markImportedGuests(): number {
+  let n = 0;
+  const lo = Date.parse("2026-10-30T21:55:00Z"), hi = Date.parse("2026-10-30T22:15:00Z");
+  for (const g of T("guest_profiles")) {
+    if (g.imported_at) continue;
+    const at = g.created_at ? Date.parse(g.created_at) : NaN;
+    if (/زائر/.test(String(g.notes ?? "")) || /zaaer/i.test(String(g.notes ?? "")) || (at >= lo && at < hi)) { g.imported_at = g.created_at ?? nowISO(); n++; }
+  }
+  return n;
+}
 function purgeRun(branch: string | null, from: string, to: string, cats: string[]): Record<string, number> {
   const inBranch = (b: string | null | undefined) => (branch ? b === branch : true);
   const day = (iso: unknown) => String(iso ?? "").slice(0, 10);
   const inRange = (iso: unknown) => day(iso) >= from && day(iso) <= to;
   const has = (k: string) => cats.includes(k);
   const c: Record<string, number> = {};
+  // (the server checks this inside its one transaction: here before anything is taken) the guests imported from Zaaer are
+  // marked again — by their note, or by the import's hour; none marked while profiles from the import's days exist → nothing goes
+  if (has("guests")) {
+    markImportedGuests();
+    if (!T("guest_profiles").some((g) => g.imported_at) && T("guest_profiles").some((g) => g.created_at && Date.parse(g.created_at) < Date.parse("2026-11-01T00:00:00+03:00"))) throw new Error("VALIDATION: import_unmarked");
+  }
   const drop = (table: string, pred: (r: Row) => boolean) => { const before = T(table).length; S[table] = T(table).filter((r) => !pred(r)); return before - T(table).length; };
   const finished = (r: Row) => ["checked_out", "closed", "cancelled", "rejected", "no_show"].includes(r.status) || (["draft", "pending_verification", "confirmed"].includes(r.status) && r.check_out < branchToday());
   let res = T("reservations").filter((r) => inBranch(r.branch_id) && r.check_in >= from && r.check_in <= to && finished(r)).map((r) => r.id);
@@ -2204,10 +2222,16 @@ function purgeRun(branch: string | null, from: string, to: string, cats: string[
     const deadMatches = T("bank_matches").filter((mt) => movements.includes(mt.movement_id) || T("bank_match_items").some((i) => i.match_id === mt.id && goneTarget(i))).map((mt) => mt.id);
     drop("bank_match_items", (i) => deadMatches.includes(i.match_id)); c.bank_matches = drop("bank_matches", (mt) => deadMatches.includes(mt.id));
     for (const m of T("bank_movements")) if (!movements.includes(m.id) && ["matched", "converted"].includes(m.status) && !T("bank_matches").some((mt) => mt.movement_id === m.id && mt.active)) m.status = "pending";
-    const messages = T("bank_messages").filter((bm) => movements.includes(bm.movement_id) || T("bank_movements").some((m) => movements.includes(m.id) && m.message_id === bm.id) || (!branch && inRange(bm.received_at))).map((bm) => bm.id);
+    // a message goes with the movements it made or repeated (and, over every branch, a message of the period that made none),
+    // never the message a kept movement was read from: a movement is dated by its text, so it may fall outside its message's period
+    const keptSource = (id: string) => T("bank_movements").some((m) => !movements.includes(m.id) && m.message_id === id);
+    const messages = T("bank_messages").filter((bm) => !keptSource(bm.id) && (movements.includes(bm.movement_id) || T("bank_movements").some((m) => movements.includes(m.id) && m.message_id === bm.id)
+      || (!branch && inRange(bm.received_at) && !bm.movement_id))).map((bm) => bm.id);
+    for (const bm of T("bank_messages")) if (!messages.includes(bm.id) && movements.includes(bm.movement_id)) bm.movement_id = null;
     c.bank_movements = drop("bank_movements", (m) => movements.includes(m.id)); c.bank_messages = drop("bank_messages", (m) => messages.includes(m.id));
     c.journal_entries = 0;   // the demo's journal is read from the records themselves: it goes with them
   }
+  const stayProfiles = has("reservations") ? T("reservation_guests").filter((x) => res.includes(x.reservation_id) && x.guest_profile_id).map((x) => x.guest_profile_id) : [];
   if (has("reservations")) {
     for (const t of ["reservation_guests", "reservation_charges", "reservation_allocations", "reservation_nights", "registration_sessions", "access_release_requests", "access_delivery_events", "payment_transactions", "checkout_inspections", "stay_payment_exceptions", "review_items"]) drop(t, (x) => res.includes(x.reservation_id));
     // 0073: what the stay's journey and orders left (kept by the functions, not by references)
@@ -2217,8 +2241,10 @@ function purgeRun(branch: string | null, from: string, to: string, cats: string[
     c.guest_reviews = drop("guest_reviews", (x) => res.includes(x.reservation_id)); drop("alert_events", (x) => !!x.reservation_id && res.includes(x.reservation_id));
     c.reservations = drop("reservations", (r) => res.includes(r.id));
   }
-  // the guests imported from Zaaer are never erased (0072)
-  if (has("guests")) c.guest_profiles = drop("guest_profiles", (g) => !g.imported_at && !T("reservation_guests").some((x) => x.guest_profile_id === g.id) && (!branch && inRange(g.created_at)));
+  // the guests imported from Zaaer are never erased (0072; marked again at the start)
+  if (has("guests")) {
+    c.guest_profiles = drop("guest_profiles", (g) => !g.imported_at && !T("reservation_guests").some((x) => x.guest_profile_id === g.id) && ((!branch && inRange(g.created_at)) || stayProfiles.includes(g.id)));
+  }
   if (has("logs")) { c.notifications = drop("notifications", (n) => inBranch(n.branch_id) && inRange(n.created_at)); c.alerts = drop("alert_events", (a) => inBranch(a.branch_id) && inRange(a.created_at));
     if (!branch) { c.integration_events = drop("integration_events", (e) => inRange(e.created_at)); drop("journey_ticks", () => true); } }
   // 0072/0073: the example catalogue, unless an order holds one of its items
@@ -2533,7 +2559,7 @@ const journey = journeyRpcs({ T, byId, requireCap, requireBranch, hasRole: (...r
   chargeTax: (resId, cat, amount, tx) => chargeTax(resId, cat, amount, tx),
   amendStay: (resId, co, mode, reason, rules) => amendStayInternal(byId("reservations", resId)!, co, mode, reason, rules),
   roomFree: (room, from, to, ex) => roomFreeInternal(room, from, to, ex), overdueBlocked: (id) => overdueBlocked(id), sarText: (h) => sarText(h),
-  normPhone: (ph) => normPhone(ph), validHttpsUrl,
+  normPhone: (ph) => normPhone(ph), validHttpsUrl, seesMoney: () => seesMoney(),
   newToken: (resId) => { const token = "DEMO" + randomHex(6).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: resId, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return token; } });
 Object.assign(rpcs, journey.rpcs);
 // what the SQL does by trigger on the stay and on its vouchers: the confirmed check-out tells the guest (and closes the

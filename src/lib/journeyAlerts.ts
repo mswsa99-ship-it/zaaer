@@ -2,7 +2,9 @@
  * The journey's clock from the staff's screens (0070, W6): for the owner, the manager and the supervisor of the active
  * branch, every minute (while the page is visible) the server looks at the journey — the morning's options, the held
  * requests, the review invitations, the deposits past their hours, the alerts whose delay is over or that climb — and
- * says how many alerts are open; «رحلة الضيف» in the menu shows that number until they are dealt with.
+ * says how many alerts are open that are the reader's own (named to them by the alert's rule, or to nobody); «رحلة
+ * الضيف» in the staff menu shows that number until they are dealt with, and the administration's pages show it too (the
+ * owner works there: a low review reaches them at once — W5).
  */
 import { useEffect, useState } from "react";
 import { useAuth } from "./auth";

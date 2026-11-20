@@ -102,7 +102,13 @@ export function dbPorts(db: Db, ch: WaBranch, c: WaContact, send: (payload: Reco
     },
     async departed(guestToken) {
       const { data, error } = await db.rpc("fn_guest_departure", { p_token: guestToken, p_via: "whatsapp" });
-      return error ? { error: String(error.message ?? "error") } : { already: !!(data as { already?: boolean } | null)?.already };
+      const d = data as { already?: boolean; late_hours?: number; late_halalas?: number } | null;
+      return error ? { error: String(error.message ?? "error") } : { already: !!d?.already, late_hours: Number(d?.late_hours ?? 0), late_halalas: Number(d?.late_halalas ?? 0) };
+    },
+    // W4 «التعليمات قبل الزر»: the instructions as they are sent (the server keeps the moment; the button needs it)
+    async instructions(guestToken) {
+      const { data, error } = await db.rpc("fn_guest_departure_instructions", { p_token: guestToken });
+      return error || !data ? null : (data as WaCheckout);
     },
 
     async ask(thread, message) {
