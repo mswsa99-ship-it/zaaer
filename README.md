@@ -148,9 +148,11 @@ supabase secrets set GEMINI_API_KEY=AIza... APP_BASE_URL=https://your-domain
 ## الاختبارات
 
 ```bash
-npm test                                        # Vitest: 66 اختبارًا (حواجز الاستقبال 54 + مساعد العمليات 12)
-PGHOST=... PGUSER=postgres tests/sql/run.sh     # 51 اختبار أمن + 89 اختبار قبول للنواة على PostgreSQL 16
-PGHOST=... PGUSER=postgres tests/sql/concurrency.sh   # X01/X02: سباق حجز وسباق استرداد بجلستين حقيقيتين
+npm test                                        # Vitest: 484 اختبارًا في 36 ملفًا (الحواجز، مسار واتساب، المال، الضريبة، رحلة الضيف…)
+PGHOST=... PGUSER=postgres tests/sql/run.sh     # 955 فحصًا على PostgreSQL 16 (الأمن، القبول، المال، المحاسبة، المنتجات، رحلة الضيف، مسح التجربة)
+PGHOST=... PGUSER=postgres tests/sql/concurrency.sh   # 28 سباقًا بجلستين حقيقيتين (حجز، استرداد، دفع، رحلة الضيف…)
+PGHOST=... PGUSER=postgres scripts/migration-check.sh # الترحيلات المعلّقة على تاريخ اصطناعي: لا شيء يضيع، وتمرين استعادة
+npm run build:demo && npx playwright test       # 185 اختبار متصفح على نسخة العرض (حاسوب وهاتف)
 npm run typecheck && npm run build
 ```
 
@@ -162,8 +164,9 @@ npm run typecheck && npm run build
 |---|---|
 | Supabase (DB/Auth/Realtime) | يعمل |
 | Gemini (الذكاء الاصطناعي) | يعمل عند ضبط `GEMINI_API_KEY`؛ وإلا مسار إرشادي |
-| WhatsApp Business Platform | Awaiting Credentials — الواجهة الخلفية غير مبنية بعد (انظر التقرير) |
-| مزود دفع / POS Terminal API | Awaiting Provider — السداد يُعتمد يدويًا بمرجع عملية ومفتاح عدم تكرار |
+| WhatsApp | مبني بطريقتين: كمبيوتر الاستقبال (`wa-bridge` وبرنامج الجسر) وCloud API (`whatsapp-webhook`)؛ يُربط رقم كل فرع من «واتساب الفروع» في الإدارة — لم يُربط رقم في الإنتاج بعد |
+| مزود دفع / POS Terminal API | ينتظر اسم المزوّد (W8)؛ «مزودو الدفع» في الإدارة يحفظ بياناته، وحتى الربط يُعتمد السداد يدويًا برقم العملية ومفتاح عدم تكرار |
+| بريد البنك | `bank-mail` يقرأ رسائل البنك من بريد التطبيق، وتطبيق أندرويد يمرّر رسائل الهاتف (A6–A9)؛ يُضبط من «بريد البنك»، وجدولة السحب الدوري تنتظر التفعيل |
 | التسجيل الحكومي (شموس/الرصد) | غير متكامل؛ خانة تأكيد بمرجع يدوي فقط |
 | الفوترة الإلكترونية | غير متكامل |
 
