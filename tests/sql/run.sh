@@ -105,6 +105,8 @@ echo "== running function scope tests (0078: every function a visitor or a staff
 run_tests tests/sql/function_scope_tests.sql
 echo "== running guest hotel tests (0080: address and phone sessions isolate hotels)"
 run_tests tests/sql/guest_hotel_tests.sql
+echo "== running backend hotel tests (0081: monitor, bank jobs and budgets)"
+run_tests tests/sql/backend_hotel_tests.sql
 echo "== running hotel settings tests (0079: independent defaults for each hotel)"
 run_tests tests/sql/hotel_settings_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"

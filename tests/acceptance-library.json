@@ -730,7 +730,8 @@
     "AU": "الحسابات وكلمات المرور (0074، قرار المالك 23 نوفمبر 2026): كلمة مرور 6 أحرف على الأقل بحروف إنجليزية وأرقام، ونسيت كلمة المرور بالجواب نفسه لأي بريد، وصفحة تعيين كلمة المرور، و«حسابي»، ورابط الزميل ودعوة المالك، وكل دخول وخروج وتغيير لكلمة المرور في سجل «أمني» للمالك وحده — الخادم AU01–AU12 (tests/sql/accounts_tests.sql)، والقاعدة ونسخة العرض AU20–AU27 (tests/unit/accounts.test.ts)، والشاشات AU30–AU36 (tests/e2e/user_accounts.spec.ts)",
     "UL": "رقم ترخيص الوحدة (0075، طلب المالك 23 نوفمبر 2026، البند 1.8): يقرؤه المالك والمدير والمشرف في فروعهم فقط، ولا يصل للنزيل ولا للمالية ولا لخدمة الغرف ولا لفرع أو منشأة أخرى، ويعدّله منهم من يملك «الوحدات والأنواع» في المصفوفة، وتسجيله بآخر أربعة أحرف — الخادم UL01–UL13 (tests/sql/unit_license_tests.sql)، والقاعدة ونسخة العرض UL20–UL27 (tests/unit/unit_license.test.ts)، والشاشات UL30–UL36 (tests/e2e/unit_license.spec.ts)",
     "HS": "إعدادات كل فندق (0079، البند 2.5): الفندق الجديد يأخذ إعدادات مستقلة من افتراضيات الكود، ولا تُنسخ أسرار أو اختيارات فندق آخر، وإعادة التهيئة تحفظ الاختيارات، ولا يستطيع الموظف تهيئة فندق عشوائي.",
-    "GT": "Guest hotel address and capabilities (0080, plan2.6): two-hotel public reads, phone proof, OTP branch and cross-site token rejection."
+    "GT": "Guest hotel address and capabilities (0080, plan2.6): two-hotel public reads, phone proof, OTP branch and cross-site token rejection.",
+    "BT": "Backend hotel isolation: jobs, assistant context and branch switching (plan2.7)"
   },
   "renamed": [
     {

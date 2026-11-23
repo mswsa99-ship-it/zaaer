@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
   const db = createClient(url, service, { auth: { persistSession: false } });
   const cronKey = req.headers.get("x-cron-key");
   let allowed = false;
+  let organizationId: string | null = null;
   if (cronKey) {
     const r = await db.rpc("fn_bank_cron_ok", { p_key: cronKey });
     allowed = r.data === true;
@@ -46,11 +47,21 @@ Deno.serve(async (req) => {
       const user = createClient(url, projectKey("publishable"), { global: { headers: { authorization: auth } }, auth: { persistSession: false } });
       const r = await user.rpc("fn_bank_poll_allowed");
       allowed = r.data === true;
+      if (allowed) { const o = await user.rpc("fn_user_org_id"); organizationId = o.data; allowed = !!organizationId; }
     }
   }
   if (!allowed) return json({ error: "forbidden" }, 403);
   try {
-    return json(await pollMailbox(db, tls));
+    if (organizationId) return json(await pollMailbox(db, tls, 25, organizationId));
+    // A cron call visits every configured hotel's mailbox, never the last edited mailbox.
+    const { data: hotels, error } = await db.from("bank_mail_settings").select("organization_id").eq("enabled", true).order("organization_id");
+    if (error) throw new Error("mailbox_inventory_failed");
+    const results = [];
+    for (const hotel of hotels ?? []) {
+      try { results.push({ organization_id: hotel.organization_id, ...await pollMailbox(db, tls, 25, hotel.organization_id) }); }
+      catch { results.push({ organization_id: hotel.organization_id, configured: true, fetched: 0, error: "poll_failed" }); }
+    }
+    return json({ configured: results.length > 0, fetched: results.reduce((n, r) => n + r.fetched, 0), hotels: results });
   } catch (e) {
     console.error("bank-mail", String(e).slice(0, 200));
     return json({ error: "server_error" }, 500);

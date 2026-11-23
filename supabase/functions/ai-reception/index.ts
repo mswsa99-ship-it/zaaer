@@ -16,6 +16,7 @@ import { projectKey } from "../_shared/keys.ts";
 import { gateInput, gateOutput, scriptedReply, isEnglishMessage, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
+import { mayResumeConversation, aiBudgetAvailable } from "../_shared/reception_scope.ts";
 import { localDay } from "../_shared/dates.ts";
 
 const CORS = {
@@ -25,7 +26,6 @@ const CORS = {
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
 
-const DEFAULT_ORG = "00000000-0000-0000-0000-000000000001";
 const MAX_TOOL_ROUNDS = 3;
 const HISTORY_TURNS = 12;
 const MAX_OFFSCOPE_STRIKES = 3;
@@ -34,7 +34,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method" }, 405);
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
+  const url = Deno.env.get("SUPABASE_URL")!, secret = projectKey("secret");
+  const auth = req.headers.get("authorization") ?? "";
+  const trustedService = req.headers.get("apikey") === secret || auth === `Bearer ${secret}`;
+  const scopeHeaders = { "x-hotel-slug": req.headers.get("x-hotel-slug") ?? "", "x-guest-token": req.headers.get("x-guest-token") ?? "" };
+  const db = createClient(url, secret, { global: { headers: scopeHeaders }, auth: { persistSession: false } });
+  const user = createClient(url, projectKey("publishable"), { global: { headers: { Authorization: auth, ...scopeHeaders } }, auth: { persistSession: false } });
   const appBaseUrl = (Deno.env.get("APP_BASE_URL") ?? "").replace(/\/$/, "");
 
   let body: Record<string, unknown>;
@@ -51,35 +56,46 @@ Deno.serve(async (req) => {
   const english = isEnglishMessage(message);
 
   // ---- organization / branch / settings -----------------------------------
-  const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", DEFAULT_ORG).maybeSingle();
-  if (!org) return json({ error: "org_not_found" }, 500);
   let branchId = typeof body.branch_id === "string" ? body.branch_id : null;
-  if (!branchId) {
-    const { data: b } = await db.from("branches").select("id").eq("organization_id", org.id).eq("is_active", true).order("created_at").limit(1).maybeSingle();
-    branchId = b?.id ?? null;
+  let organizationId: string | null = null;
+  const { data: staffId } = trustedService ? { data: null } : await user.rpc("fn_staff_id");
+  if (trustedService) {
+    if (!branchId) return json({ error: "branch_required" }, 400);
+    const { data: b } = await db.from("branches").select("organization_id").eq("id", branchId).eq("is_active", true).is("archived_at", null).maybeSingle();
+    organizationId = b?.organization_id ?? null;
+  } else if (staffId && !scopeHeaders["x-hotel-slug"]) {
+    const { data: staff } = await user.from("staff_profiles").select("organization_id").eq("id", staffId).maybeSingle();
+    const { data: b } = await user.from("branches").select("id").eq("id", branchId).maybeSingle();
+    organizationId = b ? staff?.organization_id ?? null : null;
+  } else {
+    const { data } = await db.rpc("fn_guest_org_id"); organizationId = data;
   }
-  const { data: branch } = await db.from("branches").select("id, name_ar, timezone").eq("id", branchId).eq("organization_id", org.id).maybeSingle();
+  if (!organizationId) return json({ error: "hotel_required" }, 400);
+  const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", organizationId).maybeSingle();
+  if (!org) return json({ error: "org_not_found" }, 400);
+  if (!branchId) {
+    const { data: list } = await db.from("branches").select("id").eq("organization_id", org.id).eq("is_active", true).is("archived_at", null).limit(2);
+    if (list?.length === 1) branchId = list[0].id;
+  }
+  const { data: branch } = await db.from("branches").select("id, name_ar, timezone").eq("id", branchId).eq("organization_id", org.id).eq("is_active", true).is("archived_at", null).maybeSingle();
   if (!branch) return json({ error: "branch_not_found" }, 400);
+  if (channel === "whatsapp" && !trustedService) return json({ error: "forbidden_channel" }, 403);
 
   const { data: settings } = await db.from("ai_settings").select("*").eq("organization_id", org.id).maybeSingle();
   const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
 
   // ---- conversation -------------------------------------------------------
-  if (conversationId) {
-    const { data: c } = await db.from("conversations").select("id, status, guest_token, branch_id").eq("id", conversationId).maybeSingle();
-    if (!c) conversationId = null;
-    else {
-      if (!guestToken && c.guest_token) guestToken = c.guest_token;
-      if (c.branch_id) branchId = c.branch_id;
-    }
-  }
-  // Validate the guest token server-side before trusting it
+  // A token supplied by the caller must name a current booking in this exact hotel and branch.
   if (guestToken) {
-    const { error } = await db.rpc("fn_guest_session", { p_token: guestToken });
-    if (error) guestToken = null;
+    const { data: link } = await db.from("registration_sessions").select("reservation_id, organization_id, branch_id").eq("token", guestToken).gt("expires_at", new Date().toISOString()).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
+    if (!link) return json({ error: "invalid_guest_scope" }, 403);
+  }
+  if (conversationId) {
+    const { data: c } = await db.from("conversations").select("id, organization_id, status, guest_token, branch_id, client_fingerprint, channel").eq("id", conversationId).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
+    if (!c || !mayResumeConversation(c, { organizationId: org.id, branchId: branch.id, guestToken }, { trustedService, staff: !!staffId, fingerprint, channel })) return json({ error: "invalid_conversation_scope" }, 403);
   }
   if (!conversationId) {
-    const { data: c } = await db.from("conversations").insert({ channel, status: "active", branch_id: branchId, guest_token: guestToken, client_fingerprint: fingerprint }).select("id").single();
+    const { data: c } = await db.from("conversations").insert({ organization_id: org.id, channel, status: "active", branch_id: branch.id, guest_token: guestToken, client_fingerprint: fingerprint }).select("id").single();
     conversationId = c!.id;
   } else if (guestToken) {
     await db.from("conversations").update({ guest_token: guestToken, last_message_at: new Date().toISOString() }).eq("id", conversationId);
@@ -197,7 +213,7 @@ Deno.serve(async (req) => {
 
   // ---- daily budgets ---------------------------------------------------------
   const { data: usage } = await db.from("ai_usage_daily").select("*").eq("organization_id", org.id).eq("day", dayKey).maybeSingle();
-  if ((usage?.requests ?? 0) >= s.daily_request_limit || ((usage?.tokens_in ?? 0) + (usage?.tokens_out ?? 0)) >= s.daily_token_budget) {
+  if (!aiBudgetAvailable(s, usage)) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "daily_budget_exhausted" });
     return respondScripted("fallback", { ai_status: "budget_exhausted" });
   }

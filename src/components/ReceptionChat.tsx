@@ -22,8 +22,8 @@ const WELCOME = (name: string): Message => ({
   content: `أهلًا وسهلًا في ${name}. كيف أخدمك؟`,
   actions: [{ label: "احجز الآن", value: "أرغب بحجز جديد" }, { label: "حجوزاتي", route: "/booking/lookup" }, { label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" }],
 });
-const CONV_KEY = "reception_conversation_id";
-const CONV_AT_KEY = "reception_conversation_at";
+const CONV_KEY_PREFIX = "reception_conversation_id";
+const CONV_AT_KEY_PREFIX = "reception_conversation_at";
 const CONV_MAX_AGE_MS = 6 * 60 * 60 * 1000;   // a conversation older than 6h starts fresh: the guest's situation has usually changed
 // four shortcuts only — everything else is one question away in the chat
 const QUICK = [
@@ -38,6 +38,8 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   const [params] = useSearchParams();
   const { branchId, branch } = useBranch();
   const propertyName = useOrganizationName();
+  const CONV_KEY = `${CONV_KEY_PREFIX}:${branchId ?? "none"}`;
+  const CONV_AT_KEY = `${CONV_AT_KEY_PREFIX}:${branchId ?? "none"}`;
   const [messages, setMessages] = useState<Message[]>([WELCOME(propertyName)]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -56,6 +58,9 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   const kiosk = params.get("kiosk") === "1";
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages, thinking]);
+
+  const previousBranch = useRef(branchId);
+  useEffect(() => { if (previousBranch.current !== branchId) { previousBranch.current = branchId; resetConversation(); } }, [branchId]);
 
   // Supervisor replies after a hand-off arrive live
   useEffect(() => {

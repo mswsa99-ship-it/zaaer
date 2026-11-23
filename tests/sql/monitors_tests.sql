@@ -61,7 +61,7 @@ create or replace function t_stuck_event() returns void language sql security de
   values ('00000000-0000-0000-0000-000000000001', 'ota', 'mn-stuck-1', 'reservation.cancelled', 'received', now() - interval '2 hours')
 $$;
 create or replace function t_failed_lookups(p_n int) returns void language sql security definer as $$
-  insert into guest_lookup_attempts(external_ref, client_fingerprint, ok) select 'MN-' || g, 'fp-mn', false from generate_series(1, p_n) g
+  insert into guest_lookup_attempts(organization_id,external_ref, client_fingerprint, ok) select '00000000-0000-0000-0000-000000000001'::uuid,'MN-' || g, 'fp-mn', false from generate_series(1, p_n) g
 $$;
 create or replace function t_two_cleanings(p uuid, p_room uuid) returns void language sql security definer as $$
   insert into housekeeping_tasks(organization_id, branch_id, room_id, task_type_id, task_type_name_snapshot, reservation_id, priority, description)
