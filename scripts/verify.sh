@@ -72,6 +72,8 @@ pg_reachable() { psql -Atc "select 1" postgres >/dev/null 2>&1; }
 run_gate typecheck  P0 SKIP_TYPECHECK npx tsc -b --noEmit
 run_gate unit       P0 SKIP_UNIT      npx vitest run --reporter=default --reporter=json --outputFile.json="$VERIFY_OUT/unit.json"
 run_gate edge       P0 SKIP_EDGE      npx tsc -p tests/edge/tsconfig.json
+run_gate lint       P0 SKIP_LINT      npm run lint
+run_gate raw-html   P0 SKIP_RAW_HTML  npm run check:raw-html
 
 if [[ "${QUICK:-}" != "1" ]]; then
   if pg_reachable || [[ -n "${CI:-}" ]]; then

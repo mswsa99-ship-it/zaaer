@@ -187,3 +187,8 @@ npm run verify
 - برنامج كمبيوتر الاستقبال مع واتساب ويب الحقيقي: منطقه مختبر بواتساب وهمي، وتشغيله الفعلي (المتصفح يُفتح، الإعداد يُقرأ، النبض يصل، إعادة التشغيل عند الفشل) جُرّب على لينكس دون الوصول إلى web.whatsapp.com؛ أول ربط حقيقي يكون على كمبيوتر الاستقبال بمسح رمز QR.
 - أداء الحمل العالي؛ اختبارات السباق تثبت الصحة لا الإنتاجية.
 - نموذج اللغة الحقيقي (Gemini): المسار الذكي يُختبر عبر حواجزه وأدواته وبالمسار الحتمي؛ الردود الحرة للنموذج ليست حتمية بطبيعتها.
+
+## Correction style gates (5.6 and5.10)
+
+`npm run lint` is a P0 gate in verify, zero errors required. Current warnings remain visible.
+`npm run check:raw-html` is a P0 review gate for unreviewed raw-HTML sinks. It is not a sanitizer.
