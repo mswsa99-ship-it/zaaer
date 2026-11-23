@@ -10,6 +10,10 @@ import { currentGuestScope } from "./lib/guestScope";
 import { AppErrorBoundary, OfflineBanner } from "./components/AppErrorBoundary";
 import "./index.css";
 import { startLabelLinker } from "./lib/a11y";
+import { installFrameGuard } from "./lib/frameGuard";
+
+// 5.4 (ق6): نرفض العمل داخل إطار قبل أي رسم — الاستضافة الثابتة لا ترسل رؤوس منع التأطير.
+installFrameGuard(window, import.meta.env.BASE_URL);
 
 const queryClient = new QueryClient({
   defaultOptions: {
