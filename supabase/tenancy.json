@@ -1,0 +1,434 @@
+{
+ "rule": "Plan item 2.1 (owner's decisions of 23 Nov 2026: many hotels, many branches in each; one account belongs to one hotel). Every table in public is classified once: platform (the hotels' registry, read by the platform operator), hotel (one hotel's rows: organization_id) or branch (one branch's rows: organization_id and branch_id). «via» names the parent a row's hotel and branch come from today; «adds» lists the columns item 2.2 adds so the scope is in the row itself. tests/unit/tenancy.test.ts refuses a table created in a migration that is not here.",
+ "tables": {
+  "access_delivery_events": {
+   "scope": "branch",
+   "via": "reservations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "access_release_requests": {
+   "scope": "branch",
+   "via": "reservations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "accounting_periods": {
+   "scope": "hotel"
+  },
+  "ai_action_proposals": {
+   "scope": "branch"
+  },
+  "ai_guardrail_events": {
+   "scope": "branch",
+   "via": "conversations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "ai_ops_conversations": {
+   "scope": "branch"
+  },
+  "ai_ops_messages": {
+   "scope": "branch",
+   "via": "ai_ops_conversations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "ai_settings": {
+   "scope": "hotel"
+  },
+  "ai_tool_executions": {
+   "scope": "branch",
+   "via": "conversations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "ai_usage_daily": {
+   "scope": "hotel"
+  },
+  "alert_events": {
+   "scope": "branch"
+  },
+  "alert_rules": {
+   "scope": "hotel"
+  },
+  "audit_events": {
+   "scope": "branch"
+  },
+  "bank_mail_settings": {
+   "scope": "hotel"
+  },
+  "bank_match_items": {
+   "scope": "hotel"
+  },
+  "bank_matches": {
+   "scope": "hotel"
+  },
+  "bank_messages": {
+   "scope": "hotel"
+  },
+  "bank_movements": {
+   "scope": "branch"
+  },
+  "bank_parse_rules": {
+   "scope": "hotel"
+  },
+  "blocks": {
+   "scope": "branch"
+  },
+  "booking_sources": {
+   "scope": "hotel"
+  },
+  "branch_journey_settings": {
+   "scope": "branch"
+  },
+  "branch_media": {
+   "scope": "branch",
+   "via": "branches",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "branch_media_items": {
+   "scope": "branch"
+  },
+  "branch_memberships": {
+   "scope": "branch",
+   "via": "branches",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "branch_payment_settings": {
+   "scope": "branch"
+  },
+  "branch_whatsapp_channels": {
+   "scope": "branch"
+  },
+  "branches": {
+   "scope": "hotel"
+  },
+  "cash_accounts": {
+   "scope": "branch"
+  },
+  "checkout_inspections": {
+   "scope": "branch"
+  },
+  "client_errors": {
+   "scope": "hotel"
+  },
+  "code_rotation_events": {
+   "scope": "branch",
+   "via": "keyboxes",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "conversation_messages": {
+   "scope": "branch",
+   "via": "conversations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "conversations": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "data_purge_requests": {
+   "scope": "branch"
+  },
+  "day_closing_lines": {
+   "scope": "branch",
+   "via": "day_closings",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "day_closing_requests": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "day_closings": {
+   "scope": "branch"
+  },
+  "document_sequences": {
+   "scope": "hotel"
+  },
+  "expense_attachments": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "expense_categories": {
+   "scope": "hotel"
+  },
+  "expense_vouchers": {
+   "scope": "branch"
+  },
+  "facilities": {
+   "scope": "branch"
+  },
+  "financial_vouchers": {
+   "scope": "branch"
+  },
+  "floors": {
+   "scope": "branch"
+  },
+  "gl_accounts": {
+   "scope": "branch"
+  },
+  "guest_bans": {
+   "scope": "hotel"
+  },
+  "guest_lookup_attempts": {
+   "scope": "branch",
+   "note": "the guest's attempts to find a booking by its number — keyed by phone and device; scoped to the hotel whose site was opened (2.6)",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "guest_phone_challenges": {
+   "scope": "branch",
+   "note": "the WhatsApp code sent to a guest's phone — sent from the branch's own channel and scoped to that hotel (2.6, S3)",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "guest_phone_sessions": {
+   "scope": "branch",
+   "note": "a guest's verified phone session — valid on the hotel whose site issued it only (2.6)",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "guest_profiles": {
+   "scope": "hotel"
+  },
+  "guest_reviews": {
+   "scope": "branch"
+  },
+  "housekeeping_tasks": {
+   "scope": "branch"
+  },
+  "human_handoff_tickets": {
+   "scope": "branch"
+  },
+  "integration_events": {
+   "scope": "hotel"
+  },
+  "inventory_periods": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "invoices": {
+   "scope": "branch"
+  },
+  "journal_entries": {
+   "scope": "branch"
+  },
+  "journal_lines": {
+   "scope": "branch",
+   "via": "journal_entries",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "journey_messages": {
+   "scope": "branch"
+  },
+  "journey_ticks": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "keyboxes": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "knowledge_entries": {
+   "scope": "branch"
+  },
+  "maintenance_tickets": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "monitor_runs": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "notifications": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "organizations": {
+   "scope": "platform",
+   "note": "the hotels themselves: the platform operator's registry (2.8)"
+  },
+  "payment_transactions": {
+   "scope": "branch",
+   "via": "reservations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "platform_payouts": {
+   "scope": "branch"
+  },
+  "pos_settlements": {
+   "scope": "branch"
+  },
+  "product_branches": {
+   "scope": "branch"
+  },
+  "product_categories": {
+   "scope": "hotel"
+  },
+  "product_order_lines": {
+   "scope": "hotel"
+  },
+  "product_orders": {
+   "scope": "branch"
+  },
+  "products": {
+   "scope": "hotel"
+  },
+  "property_policies": {
+   "scope": "branch"
+  },
+  "rate_calendar": {
+   "scope": "branch"
+  },
+  "registration_sessions": {
+   "scope": "branch",
+   "via": "reservations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "release_rules": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "released_slots": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "reservation_allocations": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "reservation_charges": {
+   "scope": "branch"
+  },
+  "reservation_guests": {
+   "scope": "branch",
+   "via": "reservations",
+   "adds": [
+    "organization_id",
+    "branch_id"
+   ]
+  },
+  "reservation_nights": {
+   "scope": "branch"
+  },
+  "reservations": {
+   "scope": "branch"
+  },
+  "review_items": {
+   "scope": "branch"
+  },
+  "role_permissions": {
+   "scope": "hotel"
+  },
+  "room_categories": {
+   "scope": "branch"
+  },
+  "room_licenses": {
+   "scope": "branch"
+  },
+  "rooms": {
+   "scope": "branch"
+  },
+  "service_definitions": {
+   "scope": "branch"
+  },
+  "staff_profiles": {
+   "scope": "hotel"
+  },
+  "staff_saved_views": {
+   "scope": "hotel"
+  },
+  "stay_acknowledgements": {
+   "scope": "branch"
+  },
+  "stay_extension_requests": {
+   "scope": "branch"
+  },
+  "stay_payment_exceptions": {
+   "scope": "branch"
+  },
+  "system_settings": {
+   "scope": "hotel"
+  },
+  "task_types": {
+   "scope": "branch"
+  },
+  "unanswered_questions": {
+   "scope": "branch"
+  },
+  "whatsapp_inbound_messages": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  },
+  "whatsapp_outbox": {
+   "scope": "branch",
+   "adds": [
+    "organization_id"
+   ]
+  }
+ }
+}
