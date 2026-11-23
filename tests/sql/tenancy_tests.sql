@@ -126,5 +126,57 @@ do $$ declare o1 uuid; o2 uuid; begin
 exception when others then perform tn_record('TN18 a log row takes its hotel', false, sqlerrm);
 end $$;
 
+-- ---------------------------------------------------------------- TN20–TN23 the row rules: the hotel first (0077, plan item 2.3)
+do $$ declare missing text; shared text; begin
+  select string_agg(tablename || '.' || policyname, ', ') into missing from pg_policies
+   where schemaname = 'public' and roles = array['authenticated']::name[] and tablename not in ('organizations', 'staff_profiles')
+     and not (coalesce(qual, 'false') = 'false' and coalesce(with_check, 'false') = 'false')
+     and not (coalesce(qual, '') like '((organization_id = ( SELECT fn_user_org_id() AS fn_user_org_id)) AND %'
+              or (qual is null and with_check like '((organization_id = ( SELECT fn_user_org_id() AS fn_user_org_id)) AND %'));
+  select string_agg(tablename || '.' || policyname, ', ') into shared from pg_policies
+   where schemaname = 'public' and roles @> array['anon', 'authenticated']::name[];
+  perform tn_record('TN20 every rule a signed-in staff member goes through asks the hotel first, and no rule serves visitors and staff alike',
+    missing is null and shared is null, coalesce(missing, '') || ' | ' || coalesce(shared, ''));
+end $$;
+create or replace function tn_login(p uuid) returns void language plpgsql as $$ begin
+  perform set_config('request.jwt.claim.sub', p::text, false);
+  perform set_config('request.jwt.claims', json_build_object('sub', p, 'role', 'authenticated')::text, false); end $$;
+create temp table tn_seen(who text, t text, n bigint);
+grant all on tn_seen to public;
+-- every table with the column, read through the rules as each person; a table they may not read at all counts 0
+do $$ declare r record; n bigint; who record; begin
+  for who in select * from (values ('owner of the other hotel', 'a0000000-0000-0000-0000-000000000005'::uuid, 'organization_id', '00000000-0000-0000-0000-000000000001'::uuid),
+                                   ('owner of this hotel', 'a0000000-0000-0000-0000-000000000001'::uuid, 'organization_id', '00000000-0000-0000-0000-000000000002'::uuid),
+                                   ('supervisor of branch B', 'a0000000-0000-0000-0000-000000000006'::uuid, 'branch_id', '00000000-0000-0000-0000-000000000010'::uuid)) v(name, uid, col, other) loop
+    perform tn_login(who.uid);
+    for r in select c.relname as t from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+               and exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = who.col and not a.attisdropped) loop
+      execute 'set local role authenticated';
+      begin execute format('select count(*) from public.%I where %I = $1', r.t, who.col) into n using who.other;
+      exception when insufficient_privilege then n := 0; end;
+      execute 'reset role';
+      insert into tn_seen values (who.name, r.t, n);
+    end loop;
+  end loop;
+  perform tn_login(null);
+end $$;
+do $$ declare leak text; own bigint; begin
+  select string_agg(t || ':' || n, ' ') into leak from tn_seen where who = 'owner of the other hotel' and n > 0;
+  perform tn_record('TN21 the other hotel''s owner reads not one row of this hotel, in any table', leak is null, leak);
+  select string_agg(t || ':' || n, ' ') into leak from tn_seen where who = 'owner of this hotel' and n > 0;
+  perform tn_record('TN22 this hotel''s owner reads not one row of the other hotel, in any table', leak is null, leak);
+end $$;
+do $$ declare leak text; begin
+  -- seen across branches by design: who works in which branch (the staff screens), and which products each branch sells
+  select string_agg(t || ':' || n, ' ') into leak from tn_seen
+   where who = 'supervisor of branch B' and n > 0 and t not in ('branch_memberships', 'product_branches');
+  perform tn_record('TN23 a supervisor of branch B reads no row of branch A in any branch table but the hotel''s staff and product lists', leak is null, leak);
+end $$;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name, case when ok then null else detail end as detail from test_results order by name;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from test_results;
+\set ON_ERROR_STOP on
+do $$ begin
+  if exists (select 1 from test_results where ok is not true) then raise exception 'TENANCY TESTS FAILED'; end if;
+  if (select count(*) from test_results) < 13 then raise exception 'TENANCY TESTS INCOMPLETE: % of 13 checks ran', (select count(*) from test_results); end if;
+end $$;
