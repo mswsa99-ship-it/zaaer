@@ -12,6 +12,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const PORT = Number(process.env.E2E_PORT || 4174);
 const executablePath = process.env.PW_CHROMIUM;
+const chromiumLaunch = executablePath ? { executablePath } : {};
+// Exercise screen interactions on both engines, without tripling every desktop-only suite.
+const crossBrowserScreens = /(browser-coverage|smoke|guest-reception|housekeeping|staff-reservation|invoices)\.spec\.ts/;
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -33,7 +36,6 @@ export default defineConfig({
     locale: "ar-SA",
     timezoneId: "Asia/Riyadh",
     viewport: { width: 1366, height: 900 },
-    launchOptions: executablePath ? { executablePath } : {},
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "off",
@@ -45,8 +47,11 @@ export default defineConfig({
     timeout: 60_000,
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } } },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 }, launchOptions: chromiumLaunch } },
     // Housekeeping and the guest reception are used on phones: run those specs at phone width too.
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(housekeeping|guest-reception|smoke)\.spec\.ts/ },
+    { name: "mobile", use: { ...devices["Pixel 7"], launchOptions: chromiumLaunch }, testMatch: /(housekeeping|guest-reception|smoke)\.spec\.ts/ },
+    // Playwright WebKit is Safari-engine coverage, not a physical iPhone/Safari run.
+    { name: "firefox", use: { ...devices["Desktop Firefox"] }, testMatch: crossBrowserScreens },
+    { name: "webkit", use: { ...devices["Desktop Safari"] }, testMatch: crossBrowserScreens },
   ],
 });
