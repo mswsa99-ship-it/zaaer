@@ -2,7 +2,7 @@
   "name": "zaaer-whatsapp-bridge",
   "version": "1.0.0",
   "private": true,
-  "description": "Branch WhatsApp on the reception computer (WhatsApp Web) for the Zaaer reception system",
+  "description": "Branch WhatsApp on the reception computer (WhatsApp Web) for the RoomAI reception system",
   "type": "module",
   "main": "src/index.mjs",
   "engines": {

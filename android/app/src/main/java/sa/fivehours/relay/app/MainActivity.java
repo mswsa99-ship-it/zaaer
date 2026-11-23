@@ -60,7 +60,7 @@ public final class MainActivity extends Activity {
         boolean notes = notificationAccess();
         boolean ready = c != null && store.key() != null && store.password() != null;
 
-        title("ناقل رسائل البنك — فايف اورز");
+        title("ناقل رسائل البنك | RoomAI");
         text("ينقل رسالة البنك التي تحمل رقم أحد حسابات الفروع كما هي إلى بريد النظام، ولا يرسل غير ذلك.", 14, 0xFF5B6472);
 
         section("الحالة");
