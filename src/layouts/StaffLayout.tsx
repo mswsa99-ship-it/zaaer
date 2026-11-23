@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 import { ROLE_LABELS } from "../lib/types";
 import { cn } from "../lib/utils";
 import { staffNav, firstAdminPath } from "../lib/nav";
-import { LogOut, Hotel, X } from "lucide-react";
+import { LogOut, Hotel, X, UserCog } from "lucide-react";
 import { BottomTabs, pickTabs } from "../components/BottomTabs";
 import { OpsCopilot } from "../components/OpsCopilot";
 import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
@@ -80,10 +80,12 @@ export default function StaffLayout() {
             </Link>
           )}
           <div className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
-            <div className="leading-tight">
-              <p className="text-sm font-medium text-ink-700">{profile?.full_name}</p>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-sm font-medium text-ink-700">{profile?.full_name}</p>
               <p className="text-[11px] text-ink-400">{profile ? ROLE_LABELS[profile.role] : ""}</p>
             </div>
+            {/* 0074: «حسابي» — the password, the e-mailed link and the devices (its own short name, not the person's) */}
+            <Link to="/staff/account" className="mr-auto ml-2 shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-white" title="كلمة المرور والأجهزة" data-testid="my-account-link">حسابي</Link>
             <button onClick={handleSignOut} className="text-ink-400 hover:text-danger-500" title="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>
@@ -100,7 +102,8 @@ export default function StaffLayout() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white"><Hotel className="h-4 w-4" aria-hidden="true" /></div>
             <span className="text-sm font-semibold text-ink-800">{orgName}</span>
             {adminHome && <Link to={adminHome} className="mr-auto flex min-h-[44px] items-center rounded-lg px-3 text-xs font-medium text-ink-600 hover:bg-ink-100">الإدارة ↗</Link>}
-            <button onClick={handleSignOut} className={cn("flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100", !adminHome && "mr-auto")} aria-label="تسجيل الخروج">
+            <Link to="/staff/account" className={cn("flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100", !adminHome && "mr-auto")} aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
+            <button onClick={handleSignOut} className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>
           </header>

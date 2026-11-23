@@ -22,6 +22,9 @@ create table if not exists auth.sessions (id uuid primary key, user_id uuid not 
   factor_id uuid, aal text, not_after timestamptz, refreshed_at timestamp, user_agent text, ip inet, tag text);
 create table if not exists auth.refresh_tokens (id bigserial primary key, token varchar(255), user_id varchar(255), revoked boolean, created_at timestamptz default now(),
   updated_at timestamptz default now(), parent varchar(255), session_id uuid);
+-- the columns of Supabase's auth.users that 0074 reads (an account exists, its e-mail confirmed, its last sign-in)
+create table if not exists auth.users (id uuid primary key, email text, email_confirmed_at timestamptz, last_sign_in_at timestamptz,
+  created_at timestamptz default now());
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;

@@ -29,6 +29,23 @@ interface AuthContextValue {
   /** needsConfirmation: the account exists but the email must be confirmed (link sent) before the first sign-in */
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation?: boolean }>;
   signOut: () => Promise<void>;
+  /** 0074: e-mails a link to «تعيين كلمة المرور» (the forgotten password, a change of password, a colleague's reset) */
+  requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  /** 0074: the signed-in person's new password (from the link's page or «حسابي»); the other devices are signed out */
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
+  /** 0074: ends every session of the person, this one included */
+  signOutEverywhere: () => Promise<void>;
+}
+
+/** Where the e-mailed links lead: this app's «تعيين كلمة المرور» page, under its sub-path (it must be in Supabase's redirect list). */
+export function resetPasswordUrl(): string | undefined {
+  try { return new URL("staff/reset-password", new URL(import.meta.env.BASE_URL, window.location.href)).toString(); } catch { return undefined; }
+}
+
+/** 0074: a security event of the signed-in person, in the owner's «security» log; never blocks what the person does. */
+export function logAuthEvent(action: string, target: string | null = null): Promise<void> {
+  const call = Promise.resolve(supabase.rpc("fn_auth_event", { p_action: action, p_target: target })).then(() => undefined, () => undefined);
+  return Promise.race([call, new Promise<void>((r) => setTimeout(r, 2500))]);
 }
 
 /** Why the last session ended on this device, for the login page (decision 34): «revoked» = ended by the owner or a manager, or the account was deactivated. */
@@ -158,7 +175,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) void logAuthEvent("security.signed_in");
     return { error: error ? authErrorAr(error.message) : null };
+  }
+
+  async function requestPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: resetPasswordUrl() });
+    return { error: error ? authErrorAr(error.message) : null };
+  }
+
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: authErrorAr(error.message) };
+    await logAuthEvent("security.password_changed");
+    await supabase.auth.signOut({ scope: "others" });
+    return { error: null };
+  }
+
+  async function signOutEverywhere() {
+    await logAuthEvent("security.signed_out_everywhere");
+    await supabase.auth.signOut({ scope: "global" });
+    setProfile(null);
+    setPermissions(defaultPermissions(null));
   }
 
   async function signUp(email: string, password: string, fullName: string) {
@@ -179,13 +217,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    await logAuthEvent("security.signed_out");
     await supabase.auth.signOut();
     setProfile(null);
     setPermissions(defaultPermissions(null));
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
       {children}
     </AuthContext.Provider>
   );
@@ -196,7 +235,11 @@ export function authErrorAr(msg: string): string {
   if (/invalid login credentials/i.test(msg)) return "البريد أو كلمة المرور غير صحيحة.";
   if (/email not confirmed/i.test(msg)) return "لم يُؤكَّد البريد بعد. افتح رسالة التأكيد المرسلة إلى بريدك ثم أعد تسجيل الدخول.";
   if (/already registered|already been registered/i.test(msg)) return "هذا البريد مسجّل من قبل. سجّل الدخول به.";
-  if (/password should be at least|weak password/i.test(msg)) return "كلمة المرور قصيرة أو ضعيفة: 8 أحرف على الأقل.";
+  if (/password should be at least|weak password|password should contain/i.test(msg)) return "كلمة المرور ضعيفة: 6 أحرف على الأقل، فيها حروف إنجليزية وأرقام.";
+  if (/should be different from the old password|same_password/i.test(msg)) return "اختر كلمة مرور غير كلمتك الحالية.";
+  if (/reauthentication|reauthenticate/i.test(msg)) return "لتغيير كلمة المرور من هنا يلزم دخول حديث. استعمل «إرسال رابط التغيير إلى بريدي».";
+  if (/not authorized|email_address_not_authorized/i.test(msg)) return "تعذّر إرسال البريد: خدمة البريد في النظام لم تُضبط بعد. أبلغ المالك.";
+  if (/auth session missing|session.*expired|invalid.*(token|flow)/i.test(msg)) return "انتهت صلاحية الرابط. اطلب رابطًا جديدًا.";
   if (/rate limit|too many/i.test(msg)) return "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.";
   if (/invalid email|unable to validate email/i.test(msg)) return "صيغة البريد غير صحيحة.";
   if (/fetch|network/i.test(msg)) return "تعذّر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.";

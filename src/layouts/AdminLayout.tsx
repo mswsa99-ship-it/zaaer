@@ -88,10 +88,12 @@ export default function AdminLayout() {
             → العودة إلى مركز العمليات
           </Link>
           <div className="mt-1 flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
-            <div className="leading-tight">
-              <p className="text-sm font-medium text-ink-700">{profile?.full_name}</p>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-sm font-medium text-ink-700">{profile?.full_name}</p>
               <p className="text-[11px] text-ink-400">{profile ? ROLE_LABELS[profile.role] : ""}</p>
             </div>
+            {/* 0074: «حسابي» — the password, the e-mailed link and the devices (its own short name, not the person's) */}
+            <Link to="/staff/account" className="mr-auto ml-2 shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-white" title="كلمة المرور والأجهزة" data-testid="my-account-link">حسابي</Link>
             <button onClick={handleSignOut} className="text-ink-400 hover:text-danger-500" title="تسجيل الخروج" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>

@@ -34,6 +34,8 @@ import StaffRooms from "./pages/staff/StaffRooms";
 import Housekeeping from "./pages/staff/Housekeeping";
 import Codes from "./pages/staff/Codes";
 import Tickets from "./pages/staff/Tickets";
+import ResetPassword from "./pages/staff/ResetPassword";
+import Account from "./pages/staff/Account";
 import Inbox from "./pages/staff/Inbox";
 import StaffJourney from "./pages/staff/StaffJourney";
 import GuestReview from "./pages/guest/GuestReview";
@@ -116,11 +118,14 @@ export default function App() {
 
       {/* Staff login (public) */}
       <Route path="/staff/login" element={<StaffLogin />} />
+      {/* 0074: every e-mailed link (forgotten password, change, invitation) opens here; public — the link brings the session */}
+      <Route path="/staff/reset-password" element={<ResetPassword />} />
 
       {/* Staff — session required (ProtectedStaff); role + authorised branch per page (RequireRole, table in lib/nav.ts) */}
       <Route element={<ProtectedStaff><StaffLayout /></ProtectedStaff>}>
         <Route element={<RequireRole />}>
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          <Route path="/staff/account" element={<Account />} />
           <Route path="/staff/arrivals" element={<Arrivals />} />
           <Route path="/staff/reservations" element={<StaffReservations />} />
           <Route path="/staff/reservations/new" element={<StaffReservationNew />} />

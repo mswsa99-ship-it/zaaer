@@ -62,6 +62,8 @@ export const PAGES: readonly NavPage[] = [
   // B11 (note 12, decision 5): the units board comes first — the front desk's first page
   { path: "/staff/rooms", label: "لوحة الوحدات", icon: DoorClosed, area: "staff", roles: ALL_STAFF },
   { path: "/staff/dashboard", label: "لوحة العمليات", icon: LayoutDashboard, area: "staff", roles: ALL_STAFF },
+  // 0074: the person's own account (password, devices); reached from their name in the menu, not listed
+  { path: "/staff/account", label: "حسابي", icon: UserCog, area: "staff", roles: ALL_STAFF, scope: "org", hidden: true },
   { path: "/staff/arrivals", label: "وصول اليوم", icon: CalendarClock, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
   { path: "/staff/reservations", label: "الحجوزات", icon: BookCheck, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
   { path: "/staff/reservations/new", label: "حجز جديد", icon: BookCheck, area: "staff", roles: ["owner", "manager", "supervisor"], hidden: true, cap: ["res.create"] },

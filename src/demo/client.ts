@@ -2090,6 +2090,35 @@ const phase6Ctx = {
   banMatches: (resId: string): Row[] => rpcs.fn_reservation_ban_matches({ p_reservation: resId }),
 };
 Object.assign(rpcs, phase6Rpcs(phase6Ctx));
+// 0074 — accounts: the person's security events (owner's «security» log), who has an account (owner, manager), the invitation's target (owner)
+const AUTH_ACTIONS = ["security.signed_in", "security.signed_out", "security.signed_out_everywhere", "security.password_changed", "security.password_link_sent", "security.invite_sent"];
+Object.assign(rpcs, {
+  fn_auth_event: ({ p_action, p_target }: { p_action: string; p_target?: string | null }) => {
+    if (!session) throw new Error("FORBIDDEN: not signed in");
+    if (!AUTH_ACTIONS.includes(p_action)) throw new Error("VALIDATION: action");
+    const m = me(); if (!m) return { ok: false, skipped: "no_profile" };
+    let target: Row | undefined;
+    if (p_target && p_target !== m.id) {
+      if (!["security.password_link_sent", "security.invite_sent"].includes(p_action)) throw new Error("VALIDATION: target");
+      target = byId("staff_profiles", p_target); if (!target) throw new Error("NOT_FOUND");
+      if (!(m.role === "owner" || (m.role === "manager" && !["owner", "manager"].includes(target.role)))) throw new Error("FORBIDDEN: staff");
+    }
+    const hour = Date.now() - 3600_000;
+    if (T("audit_events").filter((a) => a.actor_id === m.id && String(a.action).startsWith("security.") && Date.parse(a.created_at) > hour).length >= 60) return { ok: false, skipped: "throttled" };
+    audit(null, p_action, "staff_profile", p_target ?? m.id, target ? { target_name: target.full_name } : {});
+    return { ok: true };
+  },
+  fn_admin_staff_auth_status: () => {
+    if (!hasRole("owner", "manager")) throw new Error("FORBIDDEN");
+    return T("staff_profiles").map((x) => ({ staff_id: x.id, has_account: !!x.auth_user_id, email_confirmed: !!x.auth_user_id,
+      last_sign_in_at: x.id === staffId() ? new Date(lastSignInAt).toISOString() : null }));
+  },
+  fn_admin_staff_invite_target: ({ p_staff }: { p_staff: string }) => {
+    requireRole("owner");
+    const x = byId("staff_profiles", p_staff); if (!x) throw new Error("NOT_FOUND");
+    return { staff_id: x.id, email: x.email, full_name: x.full_name, is_active: x.is_active !== false, linked: !!x.auth_user_id };
+  },
+});
 // review Phase 2b (0056): the branch guide, gallery and videos, booking sources, payment provider settings
 Object.assign(rpcs, phase2Rpcs({ T, byId, myBranches, requireCap, requireBranch, staffId, staffName, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit, validHttpsUrl, hasRole: (...r) => hasRole(...r) }));
 // the closing of the day (0063: A2 and A3)
@@ -2587,6 +2616,14 @@ function invoke(name: string, opts: any) {
     msg.meta = { channel: "whatsapp", delivery: "failed", error: "demo" };
     return { data: { ok: true, delivered: false, error: "channel_unavailable" }, error: null };
   }
+  if (name === "staff-invite") {
+    let t: Row;
+    try { t = rpcs.fn_admin_staff_invite_target({ p_staff: body.staff_id }); } catch (e) { return { data: { ok: false, error: /FORBIDDEN/.test(String((e as Error).message)) ? "forbidden" : "not_found" }, error: null }; }
+    if (!t.is_active) return { data: { ok: false, error: "inactive" }, error: null };
+    if (t.linked) return { data: { ok: false, error: "already_linked" }, error: null };
+    rpcs.fn_auth_event({ p_action: "security.invite_sent", p_target: body.staff_id });
+    return { data: { ok: true }, error: null };
+  }
   if (name === "bank-mail") { if (!can("bank.manage")) return { data: null, error: { message: "forbidden" } }; return { data: { configured: false, fetched: 0, results: [], demo: true }, error: null }; }
   if (name === "ai-health") return { data: { configured: false, ok: false, model: null, error: "وضع العرض التجريبي — لا مزود متصل" }, error: null };
   if (name === "ai-ops") { if (body.mode === "briefing") { const ctx = rpcs.fn_ai_ops_context({ p_branch: body.branch_id, p_date: body.date ?? null }); if (!ctx) return { data: null, error: { message: "forbidden" } }; const b = buildBriefing(ctx); return { data: { ...b, insights: null, mode: "deterministic", ai_status: "demo", generated_at: ctx.generated_at, date: ctx.summary?.date }, error: null }; } const r = opsChat(body); return r.error ? { data: null, error: r.error } : { data: r.data, error: null }; }
@@ -2612,7 +2649,15 @@ export function createDemoClient() {
       signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
       /** a token put back in hand (supabase.auth.setSession): the same session as before, refused if it was ended since */
       setSession: async (s: Session) => { if (!s?.user?.id) return { data: { session: null }, error: { message: "invalid session" } }; setSession({ user: { id: s.user.id, email: s.user.email }, access_token: s.access_token ?? "demo", signed_in_at: s.signed_in_at }); return { data: { session }, error: null }; },
-      signOut: async () => { setSession(null); return { error: null }; },
+      signOut: async (opts?: { scope?: "global" | "local" | "others" }) => { if (opts?.scope !== "others") setSession(null); return { error: null }; },
+      /** 0074: the link to «تعيين كلمة المرور» (the demo sends nothing; the real service answers the same for any address) */
+      resetPasswordForEmail: async (_email: string, _opts?: unknown) => ({ data: {}, error: null }),
+      /** 0074: the signed-in person's new password (the demo keeps none: any password signs in) */
+      updateUser: async ({ password }: { password?: string }) => {
+        if (!session) return { data: { user: null }, error: { message: "Auth session missing!" } };
+        if (password !== undefined && (password.length < 6 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))) return { data: { user: null }, error: { message: "Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, 0123456789" } };
+        return { data: { user: session.user }, error: null };
+      },
     },
     channel: (_name: string) => { const mine: Listener[] = []; const ch = { on: (_e: string, f: { table: string }, cb: () => void) => { const l = { table: f.table, cb }; mine.push(l); listeners.add(l); return ch; }, subscribe: () => ch, unsubscribe: () => { for (const l of mine) listeners.delete(l); }, _mine: mine }; return ch; },
     removeChannel: async (ch: { _mine?: Listener[] }) => { for (const l of ch?._mine ?? []) listeners.delete(l); return "ok"; },

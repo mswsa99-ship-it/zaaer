@@ -1280,6 +1280,28 @@ export const staffAdminApi = {
   forceLogout: (staffId: string, reason: string) => rpc<{ ok: boolean; sessions_ended: number }>("fn_admin_force_logout", { p_staff: staffId, p_reason: reason }),
 };
 
+/** 0074 — accounts: who has an account and when they last signed in (owner, manager), and the e-mailed invitation (owner). */
+export interface StaffAuthStatus { staff_id: string; has_account: boolean; email_confirmed: boolean; last_sign_in_at: string | null }
+export type InviteResult = { ok: boolean; error?: string };
+export const INVITE_ERROR_AR: Record<string, string> = {
+  forbidden: "الدعوة بالبريد للمالك وحده.",
+  not_found: "الموظف غير موجود.",
+  inactive: "الموظف موقوف؛ فعّله أولًا.",
+  already_linked: "لهذا الموظف حساب. أرسل له «رابط كلمة المرور» بدل الدعوة.",
+  already_registered: "يوجد حساب بهذا البريد لم يُربط بعد: يدخل به صاحبه فيُربط تلقائيًا، أو أرسل له «رابط كلمة المرور».",
+  smtp_not_configured: "تعذّر الإرسال: خدمة البريد في Supabase ترسل لأعضاء فريق المشروع فقط حتى يُضبط بريد إرسال خاص (SMTP). يستطيع الموظف إنشاء حسابه من «حساب جديد» بالبريد نفسه.",
+  rate_limited: "أُرسلت رسائل كثيرة خلال الساعة. حاول بعد قليل.",
+  failed: "تعذّر إرسال الدعوة. حاول مرة أخرى.",
+};
+export const accountsApi = {
+  staffAuthStatus: () => rpc<StaffAuthStatus[]>("fn_admin_staff_auth_status", {}),
+  invite: async (staffId: string): Promise<InviteResult> => {
+    const { data, error } = await supabase.functions.invoke<InviteResult>("staff-invite", { body: { staff_id: staffId } });
+    if (error || !data) return { ok: false, error: "failed" };
+    return data;
+  },
+};
+
 export interface CapabilityUsageRow { code: string; label: string; area: string; core: boolean; coverage: "full" | "partial" | "none"; last_success_at: string | null; week_count: number; window_count: number; by: { human: number; assistant: number; automation: number; guest: number }; rejected: number; status: "used" | "idle" | "undetermined" | "unmeasured" }
 export interface CapabilityUsage { weeks: number; window_start: string; generated_at: string; log_since: string | null; log_covers_window: boolean; rows: CapabilityUsageRow[]; other_actions: Array<{ action: string; label: string; window_count: number; last_at: string }>; note: string }
 /** «استعمال القدرات» (decision 55): the owner's report from the audit log itself. */

@@ -20,6 +20,7 @@ const m40 = read("supabase/migrations/20261028010000_0040_lists_reports_staff.sq
 const m41 = read("supabase/migrations/20261028020000_0041_phase6_paste.sql");
 const m44 = read("supabase/migrations/20261029030000_0044_permissions_paste.sql");
 const m48 = read("supabase/migrations/20261030020000_0048_switch_reprice.sql");
+const m74 = read("supabase/migrations/20261123100000_0074_accounts.sql");
 
 /** The body of one function, from its `create or replace` to its closing `$$;`. */
 function fnBody(sql: string, fn: string): string {
@@ -58,12 +59,14 @@ function catalog(sql: string): Array<{ code: string; coverage: string; core: boo
   }
   return rows;
 }
-/** The dictionary in force after 0044: the core function's arms and the removal family's. */
-const current = () => ({ ...caseArms(m48, "fn_audit_action_label"), ...caseArms(m44, "fn_audit_removal_label") });
+/** The dictionary in force: 0048's core function, 0044's removal family and 0074's account events. */
+const current = () => ({ ...caseArms(m48, "fn_audit_action_label"), ...caseArms(m44, "fn_audit_removal_label"), ...caseArms(m74, "fn_audit_account_label") });
 
 const removalFamily = (k: string) => /\.deleted$/.test(k);
-/** codes the dictionary gained after 0044 (0048: the platform correction) */
-const AFTER_44 = ["reservation.platform_updated"];
+/** the account events (0074) */
+const ACCOUNT_74 = ["security.signed_in", "security.signed_out", "security.signed_out_everywhere", "security.password_changed", "security.password_link_sent", "security.invite_sent"];
+/** codes the dictionary gained after 0044 (0048: the platform correction; 0074: the account events) */
+const AFTER_44 = ["reservation.platform_updated", ...ACCOUNT_74];
 /** codes the dictionary gained after 0041 (0042–0044, and 0048's) */
 const LATER_ACTIONS = ["permissions.updated", "permissions.reset", "organization.updated", ...AFTER_44];
 const LATER_ENTITIES = ["role_permissions"];
@@ -145,6 +148,14 @@ describe("audit labels — one dictionary in three places", () => {
       expect(tsActions[code], code).toBeTruthy();
     }
     for (const entity of ["ai_action_proposal", "review_items", "conversation", "unanswered_question", "service", "voucher", "reservation_guest", "role_permissions"]) expect(tsEntities[entity], entity).toBeTruthy();
+  });
+
+  it("AB09 0074's account events read in Arabic: their own small function, asked by fn_audit_action_label after the accounting family, once", () => {
+    expect(Object.keys(caseArms(m74, "fn_audit_account_label")).sort()).toEqual([...ACCOUNT_74].sort());
+    for (const k of ACCOUNT_74) expect(caseArms(m48, "fn_audit_action_label")[k], k).toBeUndefined();
+    expect(m74).toContain("fn_audit_accounting_label(p_action),\n    fn_audit_account_label(p_action),");
+    expect(m74).toContain("if position('fn_audit_account_label(p_action)' in def) > 0 then return; end if;");
+    expect(m74).not.toMatch(/delet|drop|truncat/i);
   });
 
   it("AB08 after 0044 the dictionary and the catalogue carry no refused word: a later code is added by an ordinary migration", () => {

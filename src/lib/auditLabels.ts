@@ -142,6 +142,13 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "staff.signed_out": "تسجيل خروج إجباري",
   demo_owner_bootstrap: "إنشاء مالك نسخة العرض",
   data_purge_executed: "تنفيذ تفريغ بيانات",
+  // the account events (0074): sign-in, sign-out, the password and its e-mailed link
+  "security.signed_in": "تسجيل دخول",
+  "security.signed_out": "تسجيل خروج",
+  "security.signed_out_everywhere": "تسجيل الخروج من كل الأجهزة",
+  "security.password_changed": "تغيير كلمة المرور",
+  "security.password_link_sent": "إرسال رابط تعيين كلمة المرور",
+  "security.invite_sent": "إرسال دعوة دخول بالبريد",
   // assistant, knowledge and channels
   "ai_proposal.executed": "تنفيذ اقتراح مساعد العمليات",
   ai_settings_updated: "تعديل إعدادات الذكاء الاصطناعي",

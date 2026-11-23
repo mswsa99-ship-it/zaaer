@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Hotel, LogIn, UserPlus } from "lucide-react";
+import { Hotel, LogIn, UserPlus, Mail } from "lucide-react";
 import { useAuth, takeSignOutReason } from "../../lib/auth";
+import { passwordProblem, PASSWORD_HINT } from "../../lib/password";
 import { isDemo } from "../../lib/supabase";
 import { homeFor } from "../../lib/nav";
 import { ErrorBanner, Spinner } from "../../components/ui";
@@ -9,9 +10,9 @@ import { useOrganizationName } from "../../lib/organization";
 
 export default function StaffLogin() {
   const orgName = useOrganizationName();
-  const { signIn, signUp, session, profile, loading: authLoading } = useAuth();
+  const { signIn, signUp, requestPasswordReset, session, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -34,7 +35,14 @@ export default function StaffLogin() {
     if (mode === "login") {
       const { error } = await signIn(email, password);
       if (error) setError(error);
+    } else if (mode === "forgot") {
+      // 0074: the same answer whether the address has an account or not (nobody learns who works here)
+      const { error } = await requestPasswordReset(email);
+      if (error) setError(error);
+      else setNotice("إن كان هذا البريد مسجّلًا فستصله رسالة فيها رابط لتعيين كلمة مرور جديدة. افتح الرابط وأدخل كلمتك الجديدة (تحقق من الرسائل غير المرغوب فيها).");
     } else {
+      const weak = passwordProblem(password);
+      if (weak) { setError(weak); setLoading(false); return; }
       if (fullName.trim().length < 3) {
         setError("الرجاء إدخال الاسم الكامل.");
         setLoading(false);
@@ -75,7 +83,7 @@ export default function StaffLogin() {
         )}
         <div className="card p-6">
           <div className="mb-5 flex gap-2 rounded-xl bg-ink-50 p-1">
-            <button onClick={() => setMode("login")} className={`flex-1 rounded-lg py-2 text-sm font-medium ${mode === "login" ? "bg-white text-brand-700 shadow-sm" : "text-ink-500"}`}>
+            <button onClick={() => setMode("login")} className={`flex-1 rounded-lg py-2 text-sm font-medium ${mode !== "signup" ? "bg-white text-brand-700 shadow-sm" : "text-ink-500"}`}>
               تسجيل الدخول
             </button>
             <button onClick={() => setMode("signup")} className={`flex-1 rounded-lg py-2 text-sm font-medium ${mode === "signup" ? "bg-white text-brand-700 shadow-sm" : "text-ink-500"}`}>
@@ -91,21 +99,36 @@ export default function StaffLogin() {
               </div>
             )}
             <div>
-              <label className="label">البريد الإلكتروني</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" dir="ltr" required />
+              <label className="label" htmlFor="staff-email">البريد الإلكتروني</label>
+              <input id="staff-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" dir="ltr" required autoComplete="email" />
             </div>
-            <div>
-              <label className="label">كلمة المرور</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" dir="ltr" required minLength={6} />
-            </div>
+            {mode !== "forgot" && (
+              <div>
+                <label className="label" htmlFor="staff-password">كلمة المرور</label>
+                <input id="staff-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" dir="ltr" required minLength={6}
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+                {mode === "signup" && <p className="mt-1 text-xs text-ink-400">{PASSWORD_HINT}</p>}
+                {mode === "login" && (
+                  <button type="button" onClick={() => { setMode("forgot"); setError(null); setNotice(null); }} className="mt-1.5 text-xs font-medium text-brand-700 hover:underline" data-testid="forgot-password">
+                    نسيت كلمة المرور؟
+                  </button>
+                )}
+              </div>
+            )}
+            {mode === "forgot" && <p className="text-xs text-ink-500">اكتب بريدك المسجّل، وسنرسل إليه رابطًا تعيّن منه كلمة مرور جديدة.</p>}
 
-            {notice && <div role="status" className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
+            {notice && <div role="status" className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" data-testid="login-notice">{notice}</div>}
             {revoked && <div role="status" data-testid="revoked-notice" className="rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-700">أُنهيت جلستك من الإدارة أو أُوقف الحساب. إن كان حسابك فعّالًا فسجّل الدخول من جديد.</div>}
             {error && <ErrorBanner message={error} />}
 
             <button type="submit" className="btn-primary w-full" disabled={loading}>
-              {loading ? <Spinner /> : mode === "login" ? <><LogIn className="h-4 w-4" /> دخول</> : <><UserPlus className="h-4 w-4" /> إنشاء حساب</>}
+              {loading ? <Spinner /> : mode === "login" ? <><LogIn className="h-4 w-4" /> دخول</> : mode === "forgot" ? <><Mail className="h-4 w-4" /> إرسال رابط التعيين</> : <><UserPlus className="h-4 w-4" /> إنشاء حساب</>}
             </button>
+            {mode === "forgot" && (
+              <button type="button" onClick={() => { setMode("login"); setNotice(null); setError(null); }} className="w-full text-center text-xs text-ink-500 hover:text-ink-700">
+                رجوع إلى تسجيل الدخول
+              </button>
+            )}
           </form>
 
           {mode === "signup" && (

@@ -7,20 +7,20 @@
  * ends at once and the account stays active; the manager signs out neither an owner nor a manager.
  */
 import { useEffect, useState, useCallback } from "react";
-import { staffAdminApi, toArabicError, VALIDATION_AR, type StaffListRow } from "../../lib/api";
+import { staffAdminApi, accountsApi, INVITE_ERROR_AR, toArabicError, VALIDATION_AR, type StaffListRow, type StaffAuthStatus } from "../../lib/api";
 import { normalizePhone, validEmail } from "../../lib/validation";
-import { useAuth } from "../../lib/auth";
+import { useAuth, logAuthEvent } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, Spinner, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput } from "../../components/forms";
-import { UserCog, UserPlus, Pencil, LogOut, Power } from "lucide-react";
+import { UserCog, UserPlus, Pencil, LogOut, Power, KeyRound, Mail } from "lucide-react";
 import { ROLE_LABELS } from "../../lib/types";
 import { formatDateTime, COUNT } from "../../lib/utils";
 
 const INVITE_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"] as const;
 
 export default function AdminStaff() {
-  const { profile, can, canFull } = useAuth();
+  const { profile, can, canFull, requestPasswordReset } = useAuth();
   const isOwner = profile?.role === "owner";
   // the permissions matrix decides (decision 71): «دعوة موظف وتعديله…» and «خروج إجباري»; no one but the owner touches an owner (decision 44)
   const canManage = can("staff.manage");
@@ -46,8 +46,12 @@ export default function AdminStaff() {
   const [activate, setActivate] = useState<null | { s: StaffListRow; reason: string }>(null);
   const [signOut, setSignOut] = useState<null | { s: StaffListRow; reason: string }>(null);
 
+  // 0074: who has an account and when they last signed in; the e-mailed links and invitations
+  const [authStatus, setAuthStatus] = useState<Record<string, StaffAuthStatus>>({});
+  const [sending, setSending] = useState<string | null>(null);
   const load = useCallback(async () => {
     try { setStaff(await staffAdminApi.list()); setError(null); } catch (e) { setError(toArabicError(e)); }
+    try { const st = await accountsApi.staffAuthStatus(); setAuthStatus(Object.fromEntries(st.map((x) => [x.staff_id, x]))); } catch { /* the list works without it */ }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -61,8 +65,13 @@ export default function AdminStaff() {
     if (phone.trim() && !normalizePhone(phone)) { setError(VALIDATION_AR.phone); return; }
     setInviting(true);
     try {
-      await staffAdminApi.invite({ email: email.trim(), full_name: fullName.trim(), role, branch_ids: branchIds, phone: phone.trim() || null });
+      const r = await staffAdminApi.invite({ email: email.trim(), full_name: fullName.trim(), role, branch_ids: branchIds, phone: phone.trim() || null });
       setInvited(email.trim());
+      // 0074: the invitation e-mail follows at once (the owner); the person sets their own password from its link
+      if (isOwner && r?.staff_id) {
+        const sent = await accountsApi.invite(r.staff_id);
+        setNotice(sent.ok ? `أُرسلت الدعوة إلى ${email.trim()}: يفتح الرابط ويختار كلمة مروره بنفسه.` : `أُضيف الموظف. ${INVITE_ERROR_AR[sent.error ?? "failed"] ?? INVITE_ERROR_AR.failed}`);
+      }
       setEmail(""); setFullName(""); setBranchIds([]); setPhone("");
       await load();
     } catch (e) { setError(toArabicError(e)); }
@@ -70,6 +79,22 @@ export default function AdminStaff() {
   }
 
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name_ar ?? "فرع آخر";
+  // 0074: a reset link to a colleague's own e-mail (the owner for anyone, a manager for those below managers); an invitation (the owner) for one with no account yet
+  const canSendLink = (s: StaffListRow) => s.linked && s.is_active && !s.is_me && (isOwner || (profile?.role === "manager" && !["owner", "manager"].includes(s.role)));
+  const canInviteByMail = (s: StaffListRow) => isOwner && !s.linked && s.is_active;
+  async function sendLink(s: StaffListRow) {
+    setSending(s.id); setError(null); setNotice(null);
+    const { error } = await requestPasswordReset(s.email);
+    if (error) setError(error);
+    else { await logAuthEvent("security.password_link_sent", s.id); setNotice(`أُرسل رابط تعيين كلمة المرور إلى ${s.email}.`); }
+    setSending(null);
+  }
+  async function sendInvite(s: StaffListRow) {
+    setSending(s.id); setError(null); setNotice(null);
+    const r = await accountsApi.invite(s.id);
+    if (r.ok) setNotice(`أُرسلت الدعوة إلى ${s.email}.`); else setError(INVITE_ERROR_AR[r.error ?? "failed"] ?? INVITE_ERROR_AR.failed);
+    setSending(null);
+  }
   const canSignOut = (s: StaffListRow) => !s.is_me && s.is_active && can("staff.force_logout") && (canFull("staff.force_logout") || !["owner", "manager"].includes(s.role));
 
   if (loading) return <LoadingScreen />;
@@ -120,7 +145,8 @@ export default function AdminStaff() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2" data-testid="staff-list">
           {staff.map((s) => (
-            <Card key={s.id} className={`flex items-start justify-between gap-3 ${s.is_active ? "" : "opacity-70"}`} data-testid="staff-card" data-email={s.email}>
+            <Card key={s.id} className={`flex flex-col gap-2 ${s.is_active ? "" : "opacity-70"}`} data-testid="staff-card" data-email={s.email}>
+              <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink-800">{s.full_name}{s.is_me && <span className="mr-1 text-xs font-normal text-ink-400">(أنا)</span>}</p>
                 <p className="truncate text-xs text-ink-400" dir="ltr">{s.email}</p>
@@ -130,16 +156,27 @@ export default function AdminStaff() {
                   {s.role === "owner" ? <Badge className="bg-ink-100 text-ink-600">كل الفروع</Badge> : s.branch_ids.length === 0 ? <Badge className="bg-danger-500/10 text-danger-600">بلا فرع</Badge> : s.branch_ids.map((b) => <Badge key={b} className="bg-ink-100 text-ink-600">{branchName(b)}</Badge>)}
                 </div>
                 {s.sessions_ended_at && <p className="mt-1 text-[11px] text-ink-400">أُنهيت جلساته {formatDateTime(s.sessions_ended_at)}</p>}
+                {authStatus[s.id] && (
+                  <p className="mt-1 text-[11px] text-ink-400" data-testid="staff-last-sign-in">
+                    {!authStatus[s.id].has_account ? "لم يُنشئ حسابه بعد" : authStatus[s.id].last_sign_in_at ? `آخر دخول ${formatDateTime(authStatus[s.id].last_sign_in_at!)}` : "لم يسجّل الدخول بعد"}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <Badge className="bg-brand-50 text-brand-700">{ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role}</Badge>
                 <Badge className={s.is_active ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-400"}>{s.is_active ? "نشط" : "موقوف"}</Badge>
-                <div className="mt-1 flex flex-wrap justify-end gap-1">
+              </div>
+              </div>
+              {/* the actions on their own row, wrapping: a phone keeps the card inside the screen (MW01) */}
+              {((canManage && touches(s)) || canSendLink(s) || canInviteByMail(s) || canSignOut(s)) && (
+                <div className="flex flex-wrap gap-1 border-t border-ink-100 pt-2">
                   {canManage && touches(s) && <button onClick={() => setEdit({ s, email: s.email, full_name: s.full_name, phone: s.phone ?? "", role: s.role, branch_ids: s.branch_ids, reason: "" })} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-edit"><Pencil className="h-3 w-3" /> تعديل</button>}
                   {canManage && touches(s) && !s.is_me && <button onClick={() => setActivate({ s, reason: "" })} className={`btn-ghost px-2 py-1 text-xs ${s.is_active ? "text-danger-600" : "text-success-600"}`} data-testid="staff-toggle-active"><Power className="h-3 w-3" /> {s.is_active ? "إيقاف" : "تفعيل"}</button>}
+                  {canSendLink(s) && <button onClick={() => sendLink(s)} disabled={sending === s.id} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-reset-link"><KeyRound className="h-3 w-3" /> رابط كلمة المرور</button>}
+                  {canInviteByMail(s) && <button onClick={() => sendInvite(s)} disabled={sending === s.id} className="btn-ghost px-2 py-1 text-xs" data-testid="staff-invite-email"><Mail className="h-3 w-3" /> دعوة بالبريد</button>}
                   {canSignOut(s) && <button onClick={() => setSignOut({ s, reason: "" })} className="btn-ghost px-2 py-1 text-xs text-warning-700" data-testid="staff-force-logout"><LogOut className="h-3 w-3" /> تسجيل خروج إجباري</button>}
                 </div>
-              </div>
+              )}
             </Card>
           ))}
         </div>
