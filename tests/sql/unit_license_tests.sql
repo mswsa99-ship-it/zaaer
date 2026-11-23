@@ -191,3 +191,8 @@ update room_licenses set license_number = null where room_id = '00000000-0000-00
 select ul_login(null);
 select case when ok then 'PASS' else 'FAIL' end as result, name, case when ok then null else detail end as detail from test_results order by name;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from test_results;
+\set ON_ERROR_STOP on
+do $$ begin
+  if exists (select 1 from test_results where ok is not true) then raise exception 'UNIT LICENCE TESTS FAILED'; end if;
+  if (select count(*) from test_results) < 14 then raise exception 'UNIT LICENCE TESTS INCOMPLETE: % of 14 checks ran', (select count(*) from test_results); end if;
+end $$;
