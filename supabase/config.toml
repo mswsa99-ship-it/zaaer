@@ -39,3 +39,8 @@ verify_jwt = false
 # invite and to which address (fn_admin_staff_invite_target), and the invitation is Supabase Auth's own e-mail
 [functions.staff-invite]
 verify_jwt = true
+
+# The bank's messages (0066): called by the schedule with its own key (fn_bank_cron_ok) and by the owner's screen with
+# a session; no platform JWT check — the function checks both itself (deployed so since 8 Nov)
+[functions.bank-mail]
+verify_jwt = false
