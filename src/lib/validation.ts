@@ -118,3 +118,16 @@ export function weakKeyboxCode(c: string): boolean {
   for (let i = 1; i < c.length; i++) { const a = Number(c[i - 1]), b = Number(c[i]); if (b !== (a + 1) % 10) up = false; if (b !== (a + 9) % 10) dn = false; }
   return up || dn;
 }
+
+/**
+ * 0075 (plan item 1.8): a unit's licence number as the server keeps it (mirrors fn_admin_set_room_license) — Latin
+ * letters in capitals, digits, «-» and «/», 1 to 40 characters, starting with a letter or a digit; Arabic-Indic digits
+ * read as Latin. Null when empty (the number is cleared); throws «VALIDATION: room_license» otherwise.
+ */
+export function normalizeUnitLicense(s: string | null | undefined): string | null {
+  const v = latinDigits(s ?? "").trim();
+  if (!v) return null;
+  // the characters are checked as typed (ASCII letters only), then kept in capitals — as the server does
+  if (v.length > 40 || !/^[A-Za-z0-9][A-Za-z0-9/-]*$/.test(v)) throw new Error("VALIDATION: room_license");
+  return v.toUpperCase();
+}

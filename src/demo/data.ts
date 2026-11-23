@@ -138,6 +138,11 @@ export function seed(): Store {
   rooms.push({ id: fixed(199), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-1", floor: 1, status: "ready", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   rooms.push({ id: fixed(198), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-2", floor: 1, status: "available", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   put("rooms", rooms);
+  // 0075: the licence number of two units (fictional), read by the owner, the manager and the supervisor only
+  put("room_licenses", [
+    { room_id: R["101"], organization_id: ORG, branch_id: BRANCH_A, license_number: "DEMO-LIC-0101", updated_by: null, updated_at: ts(-30) },
+    { room_id: R["102"], organization_id: ORG, branch_id: BRANCH_A, license_number: "DEMO-LIC-0102", updated_by: null, updated_at: ts(-30) },
+  ]);
   // the price calendar (decision 33): Thursday and Friday nights dearer for two types over the next 60 days, and the
   // platforms' own price of the studio (priced by channel) over the next 30
   const rates: Row[] = [];

@@ -288,6 +288,7 @@ export const VALIDATION_AR: Record<string, string> = {
   service_price: "سعر الخدمة مطلوب وأكبر من صفر، إلا إذا كانت مجانية.",
   price_limits: "حدود السعر نسبة من السعر الأساسي: الأدنى بين 1% و100%، والأعلى بين 100% و1000%.",
   license_number: "رقم الترخيص أحرف إنجليزية وأرقام فقط (حتى 40).",
+  room_license: "رقم ترخيص الوحدة: حروف إنجليزية وأرقام و«-» و«/» فقط، يبدأ بحرف أو رقم، حتى 40.",
   inventory: "أدخل عددًا صحيحًا (0 أو أكثر).", inventory_blocked: "الوحدات المحجوبة لا تزيد عن الإجمالي.", inventory_public: "المعروض للعامة لا يزيد عن الإجمالي ناقص المحجوب.",
   release_rule: "أدخل أعدادًا صحيحة.", release_increment: "الزيادة 1 على الأقل ولا تتجاوز وحدات النوع.", release_trigger: "اختر شرط الكشف.",
   email: "البريد الإلكتروني غير صحيح (مثال: name@example.com).", branch_required: "اختر فرعًا واحدًا على الأقل لهذا الدور.",
@@ -942,6 +943,9 @@ export const ratesApi = {
   capacityImpact: (categoryId: string, maxCapacity: number) => rpc<Array<{ id: string; internal_ref: string; check_in: string; check_out: string; guests: number; status: string }>>("fn_category_capacity_impact", { p_category: categoryId, p_max_capacity: maxCapacity }),
 };
 
+/** 0075: a unit's licence number, as fn_room_licenses returns it */
+export interface RoomLicense { room_id: string; license_number: string; updated_at: string }
+
 export const opsApi = {
   // definitions
   upsertBranch: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_branch", { p }),
@@ -949,6 +953,10 @@ export const opsApi = {
   upsertFloor: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_floor", { p }),
   upsertRoomCategory: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_room_category", { p }),
   upsertRoom: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_room", { p }),
+  /** 0075 (plan item 1.8): each unit's licence number in the branch — the owner, the manager and the supervisor only */
+  roomLicenses: (branchId: string) => rpc<RoomLicense[]>("fn_room_licenses", { p_branch: branchId }),
+  /** 0075: set, change or clear (empty) a unit's licence number — those three roles, with «definitions» */
+  setRoomLicense: (roomId: string, number: string | null) => rpc<{ ok: boolean; license_number: string | null; unchanged?: boolean }>("fn_admin_set_room_license", { p_room: roomId, p_number: number }),
   upsertFacility: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_facility", { p }),
   upsertTaskType: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_task_type", { p }),
   upsertService: (p: Record<string, unknown>) => rpc<UpsertResult>("fn_admin_upsert_service", { p }),

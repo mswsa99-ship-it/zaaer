@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { DoorClosed, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
-import { opsApi } from "../../lib/api";
-import { latinDigits } from "../../lib/validation";
+import { opsApi, VALIDATION_AR } from "../../lib/api";
+import { latinDigits, normalizeUnitLicense, fieldError } from "../../lib/validation";
+import { useUnitLicenses } from "../../lib/unitLicense";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
@@ -16,7 +17,9 @@ const NO_DATA: { rooms: RoomRow[]; cats: Opt[]; blocks: Opt[]; floors: Opt[] } =
 
 export default function AdminRooms() {
   const [filter, setFilter] = useState({ status: "all", block: "all", category: "all", archived: false, q: "" });
-  const [draft, setDraft] = useState<Partial<RoomRow> | null>(null);
+  // license: the unit's licence number as typed (0075; the owner, the manager and the supervisor only)
+  const [draft, setDraft] = useState<(Partial<RoomRow> & { license?: string }) | null>(null);
+  const lic = useUnitLicenses();
 
   // G24 (decision 40): the units of the active branch only
   const q = useBranchQuery(async (branchId) => {
@@ -42,7 +45,7 @@ export default function AdminRooms() {
   return (
     <div>
       <SectionTitle title="الوحدات" subtitle={`${counts.active} فعالة من ${counts.total} — النشاط الإداري مستقل عن النظافة والإشغال`} action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id, license: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button></div>} />
       {q.error && rooms.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input w-36" aria-label="بحث برقم الوحدة" placeholder="بحث برقم الوحدة" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
@@ -54,13 +57,13 @@ export default function AdminRooms() {
       {q.error && rooms.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<DoorClosed className="h-10 w-10" />} title="لا توجد وحدات مطابقة" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {visible.map((r) => (
-            <Card key={r.id} className={r.archived_at ? "opacity-60" : ""}>
+            <Card key={r.id} className={r.archived_at ? "opacity-60" : ""} data-testid="admin-unit-card" data-room={r.room_number}>
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-base font-semibold text-ink-800">{r.room_number}</p>
                   <p className="text-xs text-ink-400">{r.category?.name_ar} · {r.block?.name ?? "—"} / {r.floor?.name ?? "—"}</p>
                 </div>
-                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => setDraft({ ...r, license: lic.licenses.get(r.id) ?? "" })} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <Badge className={ROOM_STATUS_COLORS[r.status]}>{ROOM_STATUS_LABELS[r.status]}</Badge>
@@ -68,6 +71,7 @@ export default function AdminRooms() {
                 {!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطلة</Badge>}
                 <ArchivedBadge archivedAt={r.archived_at} />
               </div>
+              {lic.reads && <p className="mt-2 text-xs text-ink-500" data-testid="unit-license">{lic.licenses.get(r.id) ? <>رقم الترخيص: <span dir="ltr" className="font-mono text-ink-700">{lic.licenses.get(r.id)}</span></> : "بلا رقم ترخيص"}</p>}
             </Card>
           ))}
         </div>
@@ -75,13 +79,23 @@ export default function AdminRooms() {
 
       <Modal open={!!draft} title={draft?.id ? `تعديل الوحدة ${draft.room_number}` : "وحدة جديدة"} onClose={() => setDraft(null)}>
         {draft && (
-          <ActionForm onSubmit={async () => { await opsApi.upsertRoom({ id: draft.id, branch_id: branchId, room_number: draft.room_number, category_id: draft.category_id, block_id: draft.block_id || null, floor_id: draft.floor_id || null, notes: draft.notes, is_active: draft.is_active, version: draft.version }); setDraft(null); await load(); }}>
+          <ActionForm onSubmit={async () => {
+            // the licence's rule is checked before anything is saved, so a wrong number saves nothing
+            const license = lic.reads ? normalizeUnitLicense(draft.license) : undefined;
+            const saved = await opsApi.upsertRoom({ id: draft.id, branch_id: branchId, room_number: draft.room_number, category_id: draft.category_id, block_id: draft.block_id || null, floor_id: draft.floor_id || null, notes: draft.notes, is_active: draft.is_active, version: draft.version });
+            if (license !== undefined && (license ?? "") !== (draft.id ? lic.licenses.get(draft.id) ?? "" : "")) await opsApi.setRoomLicense(saved.id, license);
+            setDraft(null); await load(); lic.reload();
+          }}>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="رقم / اسم الوحدة (مطلوب)"><input className="input" value={draft.room_number ?? ""} onChange={(e) => setDraft({ ...draft, room_number: e.target.value })} dir="ltr" /></Field>
               <Field label="نوع الوحدة (مطلوب)"><select className="input" value={draft.category_id ?? ""} onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
               <Field label="البلوك"><select className="input" value={draft.block_id ?? ""} onChange={(e) => setDraft({ ...draft, block_id: e.target.value || null, floor_id: null })}><option value="">—</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
               <Field label="الطابق" hint={draft.block_id ? undefined : "اختر البلوك أولًا"}><select className="input" disabled={!draft.block_id} value={draft.floor_id ?? ""} onChange={(e) => setDraft({ ...draft, floor_id: e.target.value || null })}><option value="">—</option>{draftFloors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
               <Field label="ملاحظات" className="sm:col-span-2"><input className="input" value={draft.notes ?? ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></Field>
+              {lic.reads && <Field label="رقم الترخيص" className="sm:col-span-2" hint="يراه المالك والمدير والمشرف فقط، ولا يظهر للنزيل. اتركه فارغًا إن لم يكن للوحدة ترخيص."
+                error={fieldError(() => normalizeUnitLicense(draft.license), VALIDATION_AR)}>
+                <input className="input" dir="ltr" value={draft.license ?? ""} onChange={(e) => setDraft({ ...draft, license: e.target.value })} data-testid="unit-license-input" maxLength={60} />
+              </Field>}
             </div>
             {draft.id && <div className="mt-3"><Toggle checked={draft.is_active ?? true} onChange={(v) => setDraft({ ...draft, is_active: v })} label="وحدة فعالة (التعطيل يُرفض إذا كانت عليها حجوزات مستقبلية)" /></div>}
             <Submit label="حفظ" onCancel={() => setDraft(null)} />

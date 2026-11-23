@@ -149,6 +149,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "security.password_changed": "تغيير كلمة المرور",
   "security.password_link_sent": "إرسال رابط تعيين كلمة المرور",
   "security.invite_sent": "إرسال دعوة دخول بالبريد",
+  // the unit's licence number (0075)
+  "room.license_set": "تعديل رقم ترخيص الوحدة",
   // assistant, knowledge and channels
   "ai_proposal.executed": "تنفيذ اقتراح مساعد العمليات",
   ai_settings_updated: "تعديل إعدادات الذكاء الاصطناعي",

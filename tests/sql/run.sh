@@ -86,6 +86,8 @@ echo "== running unit guides W7 tests (0071: a unit's way in and out shown only 
 psql -d "$DB" -f tests/sql/guides_w7_tests.sql
 echo "== running accounts tests (0074: security events of sign-in and passwords, who has an account, the invitation's target)"
 psql -d "$DB" -f tests/sql/accounts_tests.sql
+echo "== running unit licence tests (0075: the licence number read by the owner, the manager and the supervisor only, and changed with «definitions»)"
+psql -d "$DB" -f tests/sql/unit_license_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"

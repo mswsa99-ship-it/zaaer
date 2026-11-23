@@ -19,7 +19,7 @@ import { glRpcs, lockedEntryAdded } from "./gl";
 import { bankRpcs, seedBank } from "./bank";
 import { productRpcs, seedProducts } from "./products";
 import { journeyRpcs, seedJourney } from "./journey";
-import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
+import { checkMinAge, checkNameParts, checkPersonName, checkPhone, latinDigits, normalizePhone, normalizeUnitLicense, registrationTarget, validEmail, weakKeyboxCode } from "../lib/validation";
 import { COUNT } from "../lib/utils";
 import { makePermissions, permissionRpcs } from "./permissions";
 
@@ -268,6 +268,7 @@ type Filter = (r: Row) => boolean;
 const WRITE_RULES: Record<string, () => boolean> = {
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
+  room_licenses: () => false,   // 0075: written only through fn_admin_set_room_license
   bank_parse_rules: () => false, bank_messages: () => false, bank_movements: () => false, bank_mail_settings: () => false, bank_matches: () => false, bank_match_items: () => false,
   // 0068: the catalogue and the orders are written only through their functions
   product_categories: () => false, products: () => false, product_branches: () => false, product_orders: () => false, product_order_lines: () => false,
@@ -293,6 +294,7 @@ function visible(table: string, r: Row): boolean {
   if (["day_closings", "day_closing_requests"].includes(table)) return (can("day.close") || can("day.close.approve")) && branches.includes(r.branch_id);
   if (table === "expense_vouchers") return (can("expense.create") || can("expense.cancel") || can("ledger.view")) && branches.includes(r.branch_id);
   if (table === "expense_attachments") return false;
+  if (table === "room_licenses") return false;   // 0075: no role reads the table; fn_room_licenses does, for three roles
   // 0065/0066: the books and the bank's messages are read through their functions; these mirror the tables' policies
   if (["gl_accounts", "journal_entries", "journal_lines", "accounting_periods", "bank_mail_settings"].includes(table)) return false;
   if (table === "bank_parse_rules") return can("bank.view") || can("bank.manage");
@@ -2117,6 +2119,31 @@ Object.assign(rpcs, {
     requireRole("owner");
     const x = byId("staff_profiles", p_staff); if (!x) throw new Error("NOT_FOUND");
     return { staff_id: x.id, email: x.email, full_name: x.full_name, is_active: x.is_active !== false, linked: !!x.auth_user_id };
+  },
+  // 0075 (plan item 1.8): the unit's licence number — the owner, the manager and the supervisor read it; with
+  // «definitions» they change it; the log keeps its last four characters only
+  fn_room_licenses: ({ p_branch }: { p_branch: string }) => {
+    if (!hasRole("owner", "manager", "supervisor")) throw new Error("FORBIDDEN: licence");
+    requireBranch(p_branch);
+    const rooms = new Map(T("rooms").map((r) => [r.id, r]));
+    return T("room_licenses").filter((l) => l.branch_id === p_branch && l.license_number)
+      .sort((a, b) => String(rooms.get(a.room_id)?.room_number ?? "").localeCompare(String(rooms.get(b.room_id)?.room_number ?? "")))
+      .map((l) => ({ room_id: l.room_id, license_number: l.license_number, updated_at: l.updated_at }));
+  },
+  fn_admin_set_room_license: ({ p_room, p_number }: { p_room: string; p_number: string | null }) => {
+    if (!hasRole("owner", "manager", "supervisor")) throw new Error("FORBIDDEN: licence");
+    requireCap("definitions");
+    const r = byId("rooms", p_room); if (!r) throw new Error("NOT_FOUND");
+    requireBranch(r.branch_id);
+    const v = normalizeUnitLicense(p_number);
+    const rows = T("room_licenses"); const cur = rows.find((l) => l.room_id === r.id); const old = cur?.license_number ?? null;
+    if (old === v) return { ok: true, unchanged: true, license_number: v };
+    if (cur) Object.assign(cur, { license_number: v, updated_by: staffId(), updated_at: nowISO() });
+    else rows.push({ room_id: r.id, organization_id: r.organization_id, branch_id: r.branch_id, license_number: v, updated_by: staffId(), updated_at: nowISO() });
+    const tail = (x: string | null) => (x == null ? undefined : "…" + x.slice(-4));
+    audit(r.branch_id, "room.license_set", "room", r.id, { before: { license_number: tail(old) }, after: { license_number: tail(v) } });
+    emit("room_licenses");
+    return { ok: true, license_number: v };
   },
 });
 // review Phase 2b (0056): the branch guide, gallery and videos, booking sources, payment provider settings

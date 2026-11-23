@@ -10,6 +10,7 @@ import { roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_CO
 import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../../lib/utils";
 import { latinDigits } from "../../lib/validation";
 import { useReservations } from "../../lib/hooks";
+import { useUnitLicenses } from "../../lib/unitLicense";
 
 const unitKey = (s: string) => latinDigits(s).toLowerCase().replace(/[\s\-_]/g, "");
 
@@ -30,6 +31,8 @@ export default function StaffRooms() {
   // G24: the board and its summary belong to the active branch only; a late answer for another branch is dropped
   const board = useBranchQuery(async (b) => { const [units, summary] = await Promise.all([opsApi.unitsBoard(b), opsApi.dailySummary(b)]); return { units, summary }; }, [], NO_BOARD);
   const { units, summary } = board.data;
+  // 0075: the unit's licence number on its card — the owner, the manager and the supervisor only (no other role asks)
+  const lic = useUnitLicenses();
   const { reload } = board;
   useEffect(() => {
     const ch = supabase.channel("units-board").on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => reload()).on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => reload()).on("postgres_changes", { event: "*", schema: "public", table: "housekeeping_tasks" }, () => reload()).subscribe();
@@ -150,7 +153,8 @@ export default function StaffRooms() {
             return (
               <Card key={x.room_id} className={!x.is_active ? "opacity-60" : ""} data-testid="unit-card" data-room={x.room_number} data-urgency={urgency(x)}>
                 <div className="flex items-start justify-between">
-                  <div><p className="text-lg font-bold text-ink-800">{x.room_number}</p><p className="text-[11px] text-ink-400">{x.category}{x.block ? ` · ${x.block}` : ""}{x.floor ? ` / ${x.floor}` : ""}</p></div>
+                  <div><p className="text-lg font-bold text-ink-800">{x.room_number}</p><p className="text-[11px] text-ink-400">{x.category}{x.block ? ` · ${x.block}` : ""}{x.floor ? ` / ${x.floor}` : ""}</p>
+                    {lic.reads && lic.licenses.get(x.room_id) && <p className="text-[11px] text-ink-500" data-testid="unit-license">رقم الترخيص: <span dir="ltr" className="font-mono">{lic.licenses.get(x.room_id)}</span></p>}</div>
                   <Badge className={ROOM_STATUS_COLORS[x.status as RoomStatus] ?? "bg-ink-100"}>{roomStatusLabel(x.status, x.cleanliness)}</Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
