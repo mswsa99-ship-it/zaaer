@@ -1,0 +1,46 @@
+name: WebKit demo tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop, feature/corrections, 'work/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webkit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webkit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: '1'
+      VERIFY_OUT: verify-webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install WebKit and system libraries
+        run: npx playwright install --with-deps webkit
+      - name: Build synthetic demo only
+        run: npm run build:demo
+      - name: Run WebKit screen matrix
+        run: npx playwright test --project=webkit --workers=2
+      - name: Keep browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkit-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            verify-webkit/e2e.json
+            playwright-report
+            test-results
+          if-no-files-found: warn
+          retention-days: 14
