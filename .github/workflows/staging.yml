@@ -103,6 +103,9 @@ jobs:
           # GitHub Pages has no rewrites: a deep link (…/reception) is answered with 404.html, so that page is the
           # app itself and the router takes over from there.
           cp dist/index.html dist/404.html
+          # 7.8: stamp the build with the commit it was made from, so the post-publish check can prove the
+          # served version is the published commit
+          node scripts/build-version.mjs write dist
           echo "entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1)" >> "$GITHUB_OUTPUT"
           echo "base=${BASE_PATH%/}" >> "$GITHUB_OUTPUT"
       - name: Package the reception-computer WhatsApp program (Windows) next to the site
@@ -127,7 +130,8 @@ jobs:
           node scripts/serve-pages.mjs dist "$BASE" 4390 &
           for _ in $(seq 1 20); do curl -fsS "http://localhost:4390$BASE/" > /dev/null && break; sleep 0.5; done
           APP_BASE_URL="http://localhost:4390$BASE" bash scripts/smoke-deployed.sh
-          STAGING_URL="http://localhost:4390$BASE/" npx playwright test -c playwright.staging.config.ts
+          node scripts/build-version.mjs verify "http://localhost:4390$BASE" "$GITHUB_SHA"
+          EXPECTED_COMMIT="$GITHUB_SHA" STAGING_URL="http://localhost:4390$BASE/" npx playwright test -c playwright.staging.config.ts
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
@@ -202,9 +206,13 @@ jobs:
           APP_BASE_URL: ${{ needs.pages.outputs.url }}
           STATIC_HOST: github-pages
         run: bash scripts/smoke-deployed.sh
+      - name: The served version is the published commit (7.8)
+        run: node scripts/build-version.mjs verify "$STAGING_URL" "$GITHUB_SHA"
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Browser walk through the live stack
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: npx playwright test -c playwright.staging.config.ts
       - name: Upload report
         if: failure()
