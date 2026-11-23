@@ -25,7 +25,30 @@ export function OpsCopilot() {
   const [busy, setBusy] = useState(false);
   const [props, setProps] = useState<Record<string, ProposalState>>({});
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, open]);
+  // U10 (6.14): smooth scrolling is motion too — the reduced-motion preference turns it off
+  useEffect(() => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    endRef.current?.scrollIntoView({ behavior: still ? "auto" : "smooth" });
+  }, [msgs, open]);
+  // U1 (6.11): while the staff member scrolls down a page the floating button shrinks toward the corner so it
+  // covers less of what lies under it; it comes back at once on scrolling up, or a moment after the scroll stops.
+  // Visual only: the button keeps its place, its size for the layout, and its full keyboard operability.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    if (open) { setCollapsed(false); return; }   // the open panel owns the corner; the toggle stays full size
+    let timer: number | undefined;
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY + 4 && y > 96) setCollapsed(true);
+      else if (y < lastY - 4) setCollapsed(false);
+      lastY = y;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setCollapsed(false), 700);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); window.clearTimeout(timer); };
+  }, [open]);
   useEffect(() => { setConv(null); setMsgs([]); setProps({}); }, [branchId]);   // branch change = new context (G24)
   const branchRef = useRef(branchId);
   branchRef.current = branchId;
@@ -55,7 +78,7 @@ export function OpsCopilot() {
   if (!branchId) return null;
   return (
     <>
-      <button onClick={() => setOpen((o) => !o)} className="fixed bottom-[72px] left-4 z-40 flex h-12 w-12 lg:bottom-4 items-center justify-center gap-2 rounded-full bg-ink-800 text-sm font-medium text-white shadow-lg hover:bg-ink-900 sm:w-auto sm:px-4" aria-label="مساعد العمليات" aria-expanded={open}>
+      <button onClick={() => setOpen((o) => !o)} data-testid="ops-copilot-fab" data-collapsed={collapsed || undefined} className={`fixed bottom-[72px] left-4 z-40 flex h-12 w-12 lg:bottom-4 origin-bottom-left items-center justify-center gap-2 rounded-full bg-ink-800 text-sm font-medium text-white shadow-lg transition-[transform,opacity] duration-200 ease-out hover:bg-ink-900 motion-reduce:transition-none sm:w-auto sm:px-4 ${collapsed && !open ? "scale-[0.6] opacity-70" : ""}`} aria-label="مساعد العمليات" aria-expanded={open}>
         {/* U1 note 03: an icon on a phone, so it covers less of the cards beneath it */}
         <Bot className="h-5 w-5" /> <span className="hidden sm:inline">مساعد العمليات</span>
       </button>

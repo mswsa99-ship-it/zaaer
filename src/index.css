@@ -110,3 +110,17 @@ textarea {
   background: #cdd6e4;
   border-radius: 9999px;
 }
+
+/* U10 (6.14, SC 2.3.3): the system «تقليل الحركة» preference is honored everywhere — animations end instantly,
+   transitions do not tween, and programmatic smooth scrolling falls back to instant */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
