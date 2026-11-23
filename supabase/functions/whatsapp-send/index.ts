@@ -13,6 +13,7 @@
  * branch's credentials and records the outcome.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { textPayload, usable, waCheck, waSend, type WaChannel } from "../_shared/whatsapp.ts";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
@@ -24,8 +25,8 @@ Deno.serve(async (req) => {
   const auth = req.headers.get("authorization") ?? "";
   if (!auth.toLowerCase().startsWith("bearer ")) return json({ error: "unauthorized" }, 401);
   const url = Deno.env.get("SUPABASE_URL")!;
-  const user = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const user = createClient(url, projectKey("publishable"), { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
+  const admin = createClient(url, projectKey("secret"), { auth: { persistSession: false } });
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
 

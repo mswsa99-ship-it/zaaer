@@ -11,6 +11,7 @@
  * booking number instead — never a pretend "sent".
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { otpTemplatePayload, usable, waSend, type WaChannel } from "../_shared/whatsapp.ts";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
@@ -22,7 +23,7 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ status: "invalid" }, 400); }
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
   // no branch has a usable number with a code template → the page goes straight to the booking-number path
   const { count } = await db.from("branch_whatsapp_channels").select("branch_id", { count: "exact", head: true }).eq("enabled", true).not("otp_template", "is", null);
   if (!count) return json({ status: "channel_unavailable" });

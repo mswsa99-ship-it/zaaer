@@ -14,6 +14,7 @@
  *   - Secrets: GEMINI_API_KEY (Edge secret). Never returned.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs } from "../_shared/ops.ts";
 
@@ -42,8 +43,8 @@ Deno.serve(async (req) => {
   if (!auth.toLowerCase().startsWith("bearer ")) return json({ error: "unauthorized" }, 401);
 
   const url = Deno.env.get("SUPABASE_URL")!;
-  const user = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const user = createClient(url, projectKey("publishable"), { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
+  const admin = createClient(url, projectKey("secret"), { auth: { persistSession: false } });
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }

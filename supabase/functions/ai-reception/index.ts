@@ -12,6 +12,7 @@
  * Secrets: GEMINI_API_KEY, SUPABASE_SERVICE_ROLE_KEY, APP_BASE_URL (Edge secrets).
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { gateInput, gateOutput, scriptedReply, isEnglishMessage, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method" }, 405);
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
   const appBaseUrl = (Deno.env.get("APP_BASE_URL") ?? "").replace(/\/$/, "");
 
   let body: Record<string, unknown>;

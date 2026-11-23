@@ -28,6 +28,7 @@
     "../../supabase/functions/whatsapp-webhook/index.ts",
     "../../supabase/functions/whatsapp-send/index.ts",
     "../../supabase/functions/wa-bridge/index.ts",
-    "../../supabase/functions/bank-mail/index.ts"
+    "../../supabase/functions/bank-mail/index.ts",
+    "../../supabase/functions/staff-invite/index.ts"
   ]
 }

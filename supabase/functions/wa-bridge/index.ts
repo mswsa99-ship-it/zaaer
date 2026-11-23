@@ -20,6 +20,7 @@
  * The logic is _shared/wa_bridge.ts (the demo's WhatsApp simulator runs the same code against its own store).
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { handleBridge } from "../_shared/wa_bridge.ts";
 
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json" } });
@@ -28,10 +29,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
   try {
     const r = await handleBridge(db, req.headers.get("x-bridge-key") ?? "", body ?? {}, {
-      appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "", supabaseUrl: Deno.env.get("SUPABASE_URL")!, serviceKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "", supabaseUrl: Deno.env.get("SUPABASE_URL")!, serviceKey: projectKey("secret"),
     });
     return json(r.body, r.status);
   } catch (e) {

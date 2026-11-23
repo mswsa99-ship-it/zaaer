@@ -8,6 +8,7 @@
  * verify_jwt is off: the cron key or the staff member's session is checked here.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { pollMailbox } from "../_shared/bank_mail.ts";
 import type { Wire } from "../_shared/imap.ts";
 
@@ -32,7 +33,7 @@ async function tls(host: string, port: number): Promise<Wire> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method" }, 405);
-  const url = Deno.env.get("SUPABASE_URL")!; const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const url = Deno.env.get("SUPABASE_URL")!; const service = projectKey("secret");
   const db = createClient(url, service, { auth: { persistSession: false } });
   const cronKey = req.headers.get("x-cron-key");
   let allowed = false;
@@ -42,7 +43,7 @@ Deno.serve(async (req) => {
   } else {
     const auth = req.headers.get("authorization") ?? "";
     if (auth.toLowerCase().startsWith("bearer ")) {
-      const user = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { authorization: auth } }, auth: { persistSession: false } });
+      const user = createClient(url, projectKey("publishable"), { global: { headers: { authorization: auth } }, auth: { persistSession: false } });
       const r = await user.rpc("fn_bank_poll_allowed");
       allowed = r.data === true;
     }

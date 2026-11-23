@@ -13,6 +13,7 @@
  * (Supabase's built-in mail sends only to the project's team until a custom SMTP is set), rate_limited, failed.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { inviteError, resetUrl } from "../_shared/accounts.ts";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-correlation-id, x-client-source", "Access-Control-Allow-Methods": "POST, OPTIONS" };
@@ -31,8 +32,8 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const headers: Record<string, string> = { Authorization: auth };
   for (const h of ["x-correlation-id", "x-client-source"]) { const v = req.headers.get(h); if (v) headers[h] = v; }
-  const user = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers }, auth: { persistSession: false } });
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const user = createClient(url, projectKey("publishable"), { global: { headers }, auth: { persistSession: false } });
+  const admin = createClient(url, projectKey("secret"), { auth: { persistSession: false } });
 
   const { data: target, error: te } = await user.rpc("fn_admin_staff_invite_target", { p_staff: staffId });
   if (te) return json({ ok: false, error: /FORBIDDEN/.test(te.message) ? "forbidden" : /NOT_FOUND/.test(te.message) ? "not_found" : "failed" }, /FORBIDDEN/.test(te.message) ? 403 : 200);

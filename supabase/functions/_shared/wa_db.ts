@@ -5,6 +5,7 @@
  * whatsapp-webhook (Cloud API) and wa-bridge (the reception computer) differ only in how a message leaves (`send`)
  * and in what is known about the sender (`contact`); the conversation itself is wa_flow.ts.
  */
+import { keyHeaders } from "./keys.ts";
 import { WA_THREAD_HOURS, type WaBooking, type WaCheckout, type WaFlowPorts, type WaOrder, type WaShop, type WaThread } from "./wa_flow.ts";
 
 export interface WaContact {
@@ -115,7 +116,7 @@ export function dbPorts(db: Db, ch: WaBranch, c: WaContact, send: (payload: Reco
       try {
         const res = await (env.fetcher ?? fetch)(`${env.supabaseUrl}/functions/v1/ai-reception`, {
           method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${env.serviceKey}`, apikey: env.serviceKey },
+          headers: { "content-type": "application/json", ...keyHeaders(env.serviceKey) },
           body: JSON.stringify({ message, conversation_id: thread.id, guest_token: thread.guest_token, branch_id: ch.branch_id, channel: "whatsapp", client_fingerprint: "wa:" + c.key.slice(-4) }),
           signal: AbortSignal.timeout(25000),
         });

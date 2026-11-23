@@ -8,6 +8,7 @@
  *   error  — the configured model's failure, if it failed
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { createProvider, ProviderError } from "../_shared/llm.ts";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
@@ -19,7 +20,7 @@ const describe = (e: unknown) => e instanceof ProviderError ? (e.message && e.me
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const auth = req.headers.get("authorization") ?? "";
-  const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
+  const userClient = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("publishable"), { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
   const { data: role } = await userClient.rpc("fn_current_role");
   if (!role || !["owner", "manager"].includes(role)) return json({ error: "forbidden" }, 403);
 

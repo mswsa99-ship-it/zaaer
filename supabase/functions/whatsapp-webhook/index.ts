@@ -10,13 +10,14 @@
  * immediate (200); the reply is sent in the background. A branch set to the reception computer ignores Meta.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { projectKey } from "../_shared/keys.ts";
 import { parseInbound, usable, verifySignature, waSend, type WaChannel, type WaInbound } from "../_shared/whatsapp.ts";
 import { runWaFlow } from "../_shared/wa_flow.ts";
 import { dbPorts } from "../_shared/wa_db.ts";
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
 
   // ---- Meta's subscription check ----
   if (req.method === "GET") {
@@ -67,7 +68,7 @@ async function handle(db: Db, ch: WaChannel, m: WaInbound) {
     return r;
   };
   const ports = dbPorts(db, ch, { key: m.from, phone: m.from }, send, {
-    appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "", supabaseUrl: Deno.env.get("SUPABASE_URL")!, serviceKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "", supabaseUrl: Deno.env.get("SUPABASE_URL")!, serviceKey: projectKey("secret"),
   });
   await runWaFlow(m, ports);
 }
