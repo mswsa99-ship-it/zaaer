@@ -20,6 +20,8 @@ npm run verify:quick    # typecheck + unit + edge فقط (ثوانٍ، لكل ت
 | typecheck | P0 | `npm run typecheck` | الواجهة والـ demo تُترجم بلا أخطاء نوعية |
 | unit | P0 | `npm test` | حواجز الذكاء الاصطناعي، منطق مساعد العمليات، مطابقة قاعدة المعرفة، **عقد الأسماء** بين الواجهة وSQL والعرض التجريبي، **ثوابت العرض التجريبي** (نفس القواعد غير القابلة للتفاوض)، و**رموز الاختبارات** (§7) |
 | edge | P0 | `npm run typecheck:edge` | دوال Edge (Deno) تُترجم بشريحة TypeScript صارمة |
+| lint | P0 | `npm run lint` | فاحص الأسلوب، صفر أخطاء؛ التحذيرات تبقى ظاهرة |
+| raw-html | P0 | `npm run check:raw-html` | يرفض أي موضع HTML خام غير مراجع، ليس معقّمًا |
 | sql | P0 | `npm run test:sql` | **كل الترحيلات من الصفر** على قاعدة جديدة، ثم اختبارات الأمان (RLS/الأدوار/العزل بين المؤسسات)، واختبارات القبول الأساسية، واختبارات قاعدة المعرفة |
 | race | P0 | `npm run test:race` | سباقات حقيقية بجلستين متزامنتين: حجزان لنفس الوحدة (X01)، ردّان على نفس الرصيد (X02)، دفعتان بنفس مفتاح التكرار (F07c)، ودورة الإقامة: التمديد والتبديل وعدة وحدات مقابل حجز جديد (X01b–X01d)، المغادرة مقابل التمديد، والتعطيل والأرشفة مقابل الحجز، وإعادة الفتح مرتين (X05a–X05e) |
 | migration | P0 | `bash scripts/migration-check.sh` | الترحيلات غير المطبقة في الإنتاج على سجل اصطناعي: لا يُفقد صف ولا يتغير مبلغ أو مرجع دون شرح، والنسخة تُستعاد مطابقة (X10، القرار 41، G28) |
@@ -192,3 +194,11 @@ npm run verify
 
 `npm run lint` is a P0 gate in verify, zero errors required. Current warnings remain visible.
 `npm run check:raw-html` is a P0 review gate for unreviewed raw-HTML sinks. It is not a sanitizer.
+
+### Plan 2.8: platform operator, migration 0082
+
+The operator allowlist is separate from hotel staff and is provisioned only by the project administrator. No production operator is seeded. The registry exposes hotel metadata, not guests or money. Owner-approved support access is limited to one operator, one hotel, a reason and 1-24 hours; the narrow guest lookup returns at most 100 IDs/names and logs the access. Expiry, revocation, operator deactivation and hotel suspension deny it.
+
+Evidence: `platform_operator_tests.sql` has 39 controls, including new-owner claim and cross-hotel RLS isolation. `platform_operator.spec.ts` exercises demo onboarding, denied hotel-owner access and suspension with an in-app reason. Mail delivery is mocked in tests; real Auth invitation delivery and initial operator provisioning require live acceptance before claiming item 2.8 complete.
+
+The standalone `webkit.yml` workflow runs only the synthetic demo screen matrix on Ubuntu 24.04 with Playwright system dependencies. It has no deployment, production key or live database access. A passing Playwright WebKit run is engine coverage, not a physical Safari/iPhone test.

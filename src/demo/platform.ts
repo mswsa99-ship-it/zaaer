@@ -1,0 +1,30 @@
+import type { Row } from './data';
+export const DEMO_OPERATOR = {auth:'82000000-0000-0000-0000-000000000001',email:'platform@demo.sa',name:'مشغّل المنصة',role:'platform'};
+type Context={T:(t:string)=>Row[]; uid:()=>string; user:()=>string|null; owner:()=>Row|null; emit:(t:string)=>void; atomic:<V>(f:()=>V)=>V};
+export function platformRpcs(c:Context){
+ const {T,uid,user,owner,emit}=c;
+ const operator=()=>T('platform_operators').find(o=>o.auth_user_id===user()&&o.is_active)?.auth_user_id??null;
+ const requireOperator=()=>{const id=operator();if(!id)throw new Error('FORBIDDEN: platform operator required');return id;};
+ const event=(org:string,action:string,reason?:string,details:Row={})=>{T('platform_events').push({id:uid(),actor_user_id:user(),organization_id:org,action,reason,details,created_at:new Date().toISOString()});emit('platform_events');};
+ const requireOwner=()=>{const o=owner();if(o?.role!=='owner')throw new Error('FORBIDDEN: hotel owner required');return o;};
+ return {
+  fn_platform_operator_id:()=>operator(),
+  fn_platform_hotels:()=>{requireOperator();return T('organizations').map(o=>({id:o.id,name_ar:o.name_ar,slug:o.guest_slug??o.id,status:o.platform_status??'active',branches:T('branches').filter(b=>b.organization_id===o.id).length,pending_owner_id:T('staff_profiles').find(s=>s.organization_id===o.id&&s.role==='owner'&&s.is_active&&!s.auth_user_id)?.id??null,owner_invited:T('staff_profiles').some(s=>s.organization_id===o.id&&s.role==='owner'&&!!s.auth_user_id)}));},
+  fn_platform_create_hotel:({p}:{p:Row})=>c.atomic(()=>{requireOperator();const n=String(p?.name_ar??'').trim(),bn=String(p?.branch_name??'').trim(),on=String(p?.owner_name??'').trim(),em=String(p?.owner_email??'').trim().toLowerCase(),slug=String(p?.slug??'').trim().toLowerCase();
+ if([n,bn,on].some(x=>x.length<2||x.length>120)||em.length>254||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)||! /^[a-z0-9][a-z0-9-]{2,62}$/.test(slug))throw new Error('VALIDATION: hotel_fields');
+ if(T('staff_profiles').some(s=>String(s.email).toLowerCase()===em))throw new Error('VALIDATION: email_unavailable');
+ if(T('organizations').some(o=>o.guest_slug===slug))throw new Error('VALIDATION: slug_unavailable');
+ const id=uid(),branch_id=uid(),owner_profile_id=uid();T('organizations').push({id,name_ar:n,guest_slug:slug,platform_status:'active'});
+ T('branches').push({id:branch_id,organization_id:id,name_ar:bn,is_active:true,archived_at:null,timezone:'Asia/Riyadh',country_code:'SA',default_language:'ar',tax_rate_bp:0,prices_include_tax:true});
+ T('staff_profiles').push({id:owner_profile_id,organization_id:id,auth_user_id:null,full_name:on,email:em,role:'owner',is_active:true});T('branch_memberships').push({id:uid(),staff_id:owner_profile_id,branch_id,organization_id:id,removed_at:null});
+ // Fresh hotel settings, never copied from the first hotel's mutable settings.
+ T('system_settings').push({organization_id:id,demo_mode:false,primary_country:'SA',primary_language:'ar'});T('ai_settings').push({organization_id:id,enabled:false});
+ event(id,'hotel.created',undefined,{branch_id,owner_profile_id});for(const t of ['organizations','branches','staff_profiles','branch_memberships','system_settings','ai_settings'])emit(t);
+ return {id,branch_id,owner_profile_id,invitation_status:'pending'};}),
+  fn_platform_set_hotel_status:({p_org,p_status,p_reason}:Row)=>{requireOperator();if(!['active','suspended'].includes(p_status)||String(p_reason??'').trim().length<5||String(p_reason).length>500)throw new Error('VALIDATION: hotel_status');const o=T('organizations').find(o=>o.id===p_org);if(!o)throw new Error('NOT_FOUND');Object.assign(o,{platform_status:p_status,platform_status_reason:p_reason});if(p_status==='suspended')for(const s of T('staff_profiles').filter(s=>s.organization_id===p_org))s.sessions_ended_at=new Date().toISOString();event(o.id,'hotel.'+p_status,p_reason);emit('organizations');emit('staff_profiles');return{ok:true};},
+  fn_platform_owner_invite_target:({p_staff}:Row)=>{requireOperator();const s=T('staff_profiles').find(s=>s.id===p_staff&&s.role==='owner'&&s.is_active&&!s.auth_user_id);if(!s||T('organizations').find(o=>o.id===s.organization_id)?.platform_status==='suspended')throw new Error('NOT_FOUND');event(s.organization_id,'hotel.owner_invite_requested',undefined,{staff_id:s.id});return{email:s.email,full_name:s.full_name,organization_id:s.organization_id};},
+  fn_platform_grant_support:({p_operator,p_reason,p_hours=1}:Row)=>{const o=requireOwner();if(p_operator===user()||!T('platform_operators').some(s=>s.auth_user_id===p_operator&&s.is_active))throw new Error('VALIDATION: operator');if(!Number.isInteger(p_hours)||p_hours<1||p_hours>24||String(p_reason??'').trim().length<5||String(p_reason).length>500)throw new Error('VALIDATION: support_scope');const id=uid();T('platform_support_grants').push({id,organization_id:o.organization_id,operator_user_id:p_operator,approved_by:o.id,reason:p_reason,expires_at:new Date(Date.now()+p_hours*3600000).toISOString(),revoked_at:null});event(o.organization_id,'support.granted',p_reason,{grant_id:id});emit('platform_support_grants');return{id};},
+  fn_platform_revoke_support:({p_grant}:Row)=>{const o=requireOwner(),g=T('platform_support_grants').find(g=>g.id===p_grant&&g.organization_id===o.organization_id&&!g.revoked_at);if(!g)throw new Error('NOT_FOUND');g.revoked_at=new Date().toISOString();event(o.organization_id,'support.revoked',undefined,{grant_id:g.id});emit('platform_support_grants');return{ok:true};},
+  fn_platform_support_guests:({p_grant}:Row)=>{const id=requireOperator(),g=T('platform_support_grants').find(g=>g.id===p_grant&&g.operator_user_id===id&&!g.revoked_at&&Date.parse(g.expires_at)>Date.now()&&T('organizations').find(o=>o.id===g.organization_id)?.platform_status!=='suspended');if(!g)throw new Error('FORBIDDEN: support grant required');event(g.organization_id,'support.guests_read',g.reason,{grant_id:g.id,fields:['id','full_name'],limit:100});return T('guest_profiles').filter(s=>s.organization_id===g.organization_id).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,100).map(s=>({id:s.id,full_name:s.full_name}));}
+ };
+}

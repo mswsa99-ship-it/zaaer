@@ -107,6 +107,8 @@ echo "== running guest hotel tests (0080: address and phone sessions isolate hot
 run_tests tests/sql/guest_hotel_tests.sql
 echo "== running backend hotel tests (0081: monitor, bank jobs and budgets)"
 run_tests tests/sql/backend_hotel_tests.sql
+echo "== running platform operator and suspension tests (0082)"
+run_tests tests/sql/platform_operator_tests.sql
 echo "== running hotel settings tests (0079: independent defaults for each hotel)"
 run_tests tests/sql/hotel_settings_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"

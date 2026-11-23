@@ -29,6 +29,7 @@
     "../../supabase/functions/whatsapp-send/index.ts",
     "../../supabase/functions/wa-bridge/index.ts",
     "../../supabase/functions/bank-mail/index.ts",
-    "../../supabase/functions/staff-invite/index.ts"
+    "../../supabase/functions/staff-invite/index.ts",
+    "../../supabase/functions/platform-invite/index.ts"
   ]
 }

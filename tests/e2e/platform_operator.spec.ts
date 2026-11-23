@@ -1,0 +1,48 @@
+import {test,expect} from './fixtures';
+test('operator creates hotel, invited owner sees only its hotel and old owner stays isolated',async({page,go,errors})=>{
+ await go('/staff/login');
+ await page.getByRole('button',{name:'مشغّل المنصة (عرض تجريبي)'}).click();
+ await expect(page).toHaveURL(/#\/platform$/);
+ await page.getByLabel('اسم الفندق',{exact:true}).fill('فندق اختبار المشغّل');
+ await page.getByLabel('اسم موقع الفندق (حروف لاتينية)').fill('operator-onboarding-test');
+ await page.getByLabel('اسم أول فرع').fill('فرع المالك الجديد');
+ await page.getByLabel('اسم مالك الفندق').fill('مالك اختباري جديد');
+ await page.getByLabel('بريد مالك الفندق').fill('operator-owner@example.test');
+ await page.getByRole('button',{name:'إنشاء الفندق',exact:true}).click();
+ await expect(page.getByText('أُنشئ الفندق والفرع وملف المالك. لم تُرسل الدعوة بعد.')).toBeVisible();
+ await page.getByRole('button',{name:'إرسال دعوة المالك بالبريد'}).click();
+ await expect(page.getByRole('button',{name:'إرسال دعوة المالك بالبريد'})).toHaveCount(0);
+ await page.screenshot({path:'/tmp/deep-research/roomai/review/0082-operator-registry.png',fullPage:true});
+ await page.getByRole('button',{name:'تسجيل الخروج',exact:true}).click();
+ await go('/staff/login');
+ await page.getByLabel('البريد الإلكتروني',{exact:true}).fill('operator-owner@example.test');
+ await page.getByLabel('كلمة المرور',{exact:true}).fill('demo123');
+ await page.getByRole('button',{name:'دخول',exact:true}).click();
+ await expect(page).toHaveURL(/#\/(admin|staff)\//);
+ await go('/admin/branches');
+ await expect(page.getByText('فرع المالك الجديد',{exact:true}).first()).toBeVisible();
+ await expect(page.getByRole('heading',{name:/فرع الرياض/})).toHaveCount(0);
+ await page.screenshot({path:'/tmp/deep-research/roomai/review/0082-invited-owner.png',fullPage:true});
+ await page.evaluate(()=>sessionStorage.clear());await page.reload();
+ await go('/staff/login');await page.getByRole('button',{name:'المالك — كل الصلاحيات'}).click();
+ await go('/admin/branches');
+ await expect(page.getByRole('heading',{name:/فرع الرياض/}).first()).toBeVisible();
+ await expect(page.getByText('فرع المالك الجديد',{exact:true})).toHaveCount(0);
+ expect(errors).toEqual([]);
+});
+test('hotel staff cannot turn a platform URL into operator access',async({page,loginAs,go,errors})=>{
+ await loginAs('owner');await go('/platform');
+ await expect(page.getByText('غير متاح. يلزم حساب مشغّل منصة مسجّل ومفعّل.')).toBeVisible();
+ await expect(page.getByRole('button',{name:'إنشاء الفندق',exact:true})).toHaveCount(0);expect(errors).toEqual([]);
+});
+test('operator suspension requires an in-app reason and hides the public hotel',async({page,go,errors})=>{
+ await go('/staff/login');await page.getByRole('button',{name:'مشغّل المنصة (عرض تجريبي)'}).click();await expect(page).toHaveURL(/#\/platform$/);
+ await page.getByRole('button',{name:'إيقاف',exact:true}).first().click();
+ const modal=page.getByRole('dialog');await expect(modal.getByRole('button',{name:'تأكيد تغيير الحالة'})).toBeDisabled();
+ await modal.getByLabel('سبب التغيير').fill('اختبار إيقاف الفندق فقط');
+ await modal.getByRole('button',{name:'تأكيد تغيير الحالة'}).click();await expect(modal).toBeHidden();
+ await expect(page.getByRole('button',{name:'تفعيل',exact:true})).toBeVisible();
+ await page.screenshot({path:'/tmp/deep-research/roomai/review/0082-suspended-registry.png',fullPage:true});
+ await page.getByRole('button',{name:'تسجيل الخروج',exact:true}).click();await go('/h/00000000-0000-0000-0000-000000000001/reception');
+ await expect(page.getByTestId('wa-qr')).toHaveCount(0);expect(errors).toEqual([]);
+});

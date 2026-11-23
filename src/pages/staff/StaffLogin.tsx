@@ -10,7 +10,7 @@ import { useOrganizationName } from "../../lib/organization";
 
 export default function StaffLogin() {
   const orgName = useOrganizationName();
-  const { signIn, signUp, requestPasswordReset, session, profile, loading: authLoading } = useAuth();
+  const { signIn, signUp, requestPasswordReset, session, profile, isPlatformOperator, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
@@ -24,8 +24,8 @@ export default function StaffLogin() {
 
   useEffect(() => {
     // each role lands where its work starts (housekeeping → tasks, finance → ledger, others → operations board)
-    if (!authLoading && session) navigate(homeFor(profile?.role), { replace: true });
-  }, [session, profile, authLoading, navigate]);
+    if (!authLoading && session) navigate(isPlatformOperator ? "/platform" : homeFor(profile?.role), { replace: true });
+  }, [session, profile, isPlatformOperator, authLoading, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,7 +74,7 @@ export default function StaffLogin() {
           <div className="card mb-4 p-4">
             <p className="mb-2 text-sm font-semibold text-ink-800">عرض تجريبي — ادخل بدور جاهز (بدون كلمة مرور)</p>
             <div className="grid grid-cols-2 gap-2">
-              {[["owner@demo.sa", "المالك — كل الصلاحيات"], ["manager@demo.sa", "مدير الفرع"], ["reception@demo.sa", "مشرف الاستقبال"], ["finance@demo.sa", "المالية"], ["housekeeping@demo.sa", "خدمة الغرف (صلاحيات محدودة)"]].map(([em, label]) => (
+              {[["platform@demo.sa", "مشغّل المنصة (عرض تجريبي)"], ["owner@demo.sa", "المالك — كل الصلاحيات"], ["manager@demo.sa", "مدير الفرع"], ["reception@demo.sa", "مشرف الاستقبال"], ["finance@demo.sa", "المالية"], ["housekeeping@demo.sa", "خدمة الغرف (صلاحيات محدودة)"]].map(([em, label]) => (
                 <button key={em} type="button" onClick={async () => { setLoading(true); const { error } = await signIn(em, "demo"); if (error) setError(error); setLoading(false); }} className="btn-outline justify-start text-xs">{label}</button>
               ))}
             </div>

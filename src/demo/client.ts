@@ -6,6 +6,7 @@
  * roles, ledger-derived money, allocation overlap, idempotency) so the walkthrough behaves
  * like the real system. Nothing here talks to a server.
  */
+import { platformRpcs, DEMO_OPERATOR } from "./platform";
 import { mayResumeConversation } from "../../supabase/functions/_shared/reception_scope";
 import { hashToken } from "./journey";
 import { currentGuestScope } from "../lib/guestScope";
@@ -28,7 +29,7 @@ import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v9";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
-function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); seedJourney((t) => (s[t] ??= [])); return s; }
+function fullSeed(): Store { const s = seed(); s.platform_operators=[{auth_user_id:DEMO_OPERATOR.auth,full_name:"مشغّل تجريبي",is_active:true}]; s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); seedJourney((t) => (s[t] ??= [])); return s; }
 const SESSION_KEY = "zaaer_demo_session";
 
 // ---------------------------------------------------------------------------
@@ -74,7 +75,7 @@ type Session = { user: { id: string; email: string }; access_token: string; sign
 let session: Session = (() => { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null"); } catch { return null; } })();
 const authListeners = new Set<(e: string, s: Session) => void>();
 function setSession(s: Session) { session = s; try { if (s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } for (const l of authListeners) l(s ? "SIGNED_IN" : "SIGNED_OUT", s); }
-const DEMO_ACCOUNTS = Object.values(STAFF);
+const DEMO_ACCOUNTS = [...Object.values(STAFF),DEMO_OPERATOR];
 /** when a new session of this account opens: now, and strictly after any end the owner set on the person's sessions (fn_end_sessions) */
 function newSessionAt(authUserId: string): string { const sp = T("staff_profiles").find((s) => s.auth_user_id === authUserId); const ended = sp?.sessions_ended_at ? Date.parse(sp.sessions_ended_at) + 1 : 0; return new Date(Math.max(Date.now(), ended)).toISOString(); }
 
@@ -86,7 +87,7 @@ function me(): Row | null {
   const s = T("staff_profiles").find((x) => x.auth_user_id === session!.user.id && x.is_active);
   // fn_session_ok (0040, decision 34): a session ended by a forced sign-out or a deactivation is refused on its next
   // request, whatever token it still holds; a session without the mark (signed in before the rule) has nothing to check
-  if (!s || (s.sessions_ended_at && session.signed_in_at && Date.parse(s.sessions_ended_at) >= Date.parse(session.signed_in_at))) return null;
+  if (!s || byId("organizations",s.organization_id)?.platform_status === "suspended" || (s.sessions_ended_at && session.signed_in_at && Date.parse(s.sessions_ended_at) >= Date.parse(session.signed_in_at))) return null;
   return s;
 }
 /** fn_user_branch_ids: the owner is on every branch; the others on their live memberships (a retired one, removed_at set, no longer counts) */
@@ -269,6 +270,7 @@ type Filter = (r: Row) => boolean;
  *  0043: the matrix's rows decide the rest — «السياسات» (property_policies), «تولّي محادثة واتساب» (a staff reply and taking
  *  a conversation); role_permissions is written only through fn_admin_set_permissions / fn_admin_reset_permissions. */
 const WRITE_RULES: Record<string, () => boolean> = {
+  platform_operators:()=>false, platform_events:()=>false, platform_support_grants:()=>false,
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
   room_licenses: () => false,   // 0075: written only through fn_admin_set_room_license
@@ -281,18 +283,21 @@ const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "f
 /** Same public address selector as SQL. A missing/unknown address never chooses among several hotels. */
 function guestOrg(): string | null {
  const scope=currentGuestScope();
- if(scope.slug) return T("organizations").find(o=>(o.guest_slug ?? o.id)===scope.slug)?.id ?? null;
- if(scope.token) { const x=T("registration_sessions").find(s=>s.token===scope.token && Date.parse(s.expires_at)>Date.now()); return byId("reservations",x?.reservation_id)?.organization_id ?? T("guest_reviews").find(g=>g.token_hash===hashToken(scope.token!))?.organization_id ?? null; }
- const live=T("organizations").filter(o=>T("branches").some(b=>b.organization_id===o.id && b.is_active && !b.archived_at));
+ if(scope.slug) return T("organizations").find(o=>o.platform_status!=="suspended" && (o.guest_slug ?? o.id)===scope.slug)?.id ?? null;
+ if(scope.token) { const x=T("registration_sessions").find(s=>s.token===scope.token && Date.parse(s.expires_at)>Date.now()); const id=byId("reservations",x?.reservation_id)?.organization_id ?? T("guest_reviews").find(g=>g.token_hash===hashToken(scope.token!))?.organization_id ?? null;return byId("organizations",id)?.platform_status==="suspended"?null:id; }
+ const live=T("organizations").filter(o=>o.platform_status!=="suspended" && T("branches").some(b=>b.organization_id===o.id && b.is_active && !b.archived_at));
  return live.length===1 ? live[0].id : null;
 }
 /** Mirrors the row-level security of the real schema closely enough for the walkthrough. */
 function visible(table: string, r: Row): boolean {
   const m = me(); const branches = myBranches();
+  if (["platform_operators","platform_events","platform_support_grants"].includes(table)) return false;
+  if (m && r.organization_id && r.organization_id!==m.organization_id) return false;
   if (table === "branches") return m ? branches.includes(r.id) : r.organization_id===guestOrg() && !!r.is_active && !r.archived_at;
   if (table === "property_policies" && !m) return !!r.is_public && r.organization_id===guestOrg();
   if(table === "booking_sources" && !m) return r.organization_id===guestOrg() && !!r.is_active;
-  if (table === "booking_sources" || table === "organizations" || table === "system_settings") return true;
+  if (table === "organizations") return m ? r.id===m.organization_id : r.id===guestOrg();
+  if (table === "booking_sources" || table === "system_settings") return !!m && r.organization_id===m.organization_id;
   if (!m) return false;
   if (table === "staff_saved_views") return r.staff_id === m.id;   // own rows only (0040)
   // 0043: the money tables follow fn_sees_money (any money cell of the matrix); the guests of a stay keep their fixed roles
@@ -558,7 +563,12 @@ const guestCtx = {
 const rpcs: Record<string, (a: any) => any> = {
   fn_staff_id: () => staffId(),
   fn_user_branch_ids: () => myBranches(),
-  fn_claim_staff_profile: () => ({ ok: true, claimed: true }),
+  fn_claim_staff_profile: () => {
+    if(T("platform_operators").some(o=>o.auth_user_id===session?.user.id))return{ok:false,error:"PLATFORM_ACCOUNT"};
+    const pending=T("staff_profiles").find(s=>!s.auth_user_id&&s.is_active&&String(s.email).toLowerCase()===session?.user.email.toLowerCase()&&byId("organizations",s.organization_id)?.platform_status!=="suspended");
+    if(pending){pending.auth_user_id=session!.user.id;emit("staff_profiles");return{ok:true,claimed:true,role:pending.role};}
+    return me()?{ok:true,claimed:false}:{ok:false,error:"NO_INVITATION"};
+  },
   // 0040: a guest is no staff role; the invite re-opens a retired membership instead of a duplicate, and is logged
   fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => rpcs.fn_admin_invite_staff({ p: { email: p_email, full_name: p_full_name, role: p_role, branch_ids: p_branch_ids ?? [] } }),
   // 0055 (SETUP-08): the email checked, a branch for every role but the owner, the phone checked and kept normalised
@@ -2579,7 +2589,7 @@ let journeyTick: (branch: string) => unknown = () => undefined;
 /** server-only functions (service role in the real system): only the service client below reaches them */
 const serviceRpcs: Record<string, (a: any) => any> = {
   fn_whatsapp_phone_session: ({ p_phone,p_branch }) => { const ph = normPhone(p_phone); const b=byId("branches",p_branch); if (!ph || !b) throw new Error("VALIDATION: phone_or_branch"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, {phone:ph,org:b.organization_id,branch:b.id,service:true}); return token; },
-  fn_wa_bridge_auth: ({ p_key }) => { if (!/^zb_[0-9a-f]{64}$/.test(String(p_key ?? ""))) return null; const c = T("branch_whatsapp_channels").find((x) => x.mode === "web_bridge" && !!x.bridge_key && x.bridge_key === p_key); if (!c) return null; return { branch_id: c.branch_id, organization_id: c.organization_id, enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, status: c.status, display_phone: c.display_phone, human_pause_minutes: c.human_pause_minutes ?? 60, branch_name: byId("branches", c.branch_id)?.name_ar ?? null }; },
+  fn_wa_bridge_auth: ({ p_key }) => { if (!/^zb_[0-9a-f]{64}$/.test(String(p_key ?? ""))) return null; const c = T("branch_whatsapp_channels").find((x) => x.mode === "web_bridge" && !!x.bridge_key && x.bridge_key === p_key); if (!c || byId("organizations",c.organization_id)?.platform_status==="suspended") return null; return { branch_id: c.branch_id, organization_id: c.organization_id, enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, status: c.status, display_phone: c.display_phone, human_pause_minutes: c.human_pause_minutes ?? 60, branch_name: byId("branches", c.branch_id)?.name_ar ?? null }; },
   fn_wa_bridge_beat: ({ p_branch, p_status, p_phone, p_name, p_version, p_detail }) => { if (!["starting", "qr", "connected", "disconnected", "stopped"].includes(p_status)) throw new Error("VALIDATION: status"); const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch && x.mode === "web_bridge"); if (!c) return null; const ph = String(p_phone ?? "").replace(/\D/g, ""); const complete = waStatus(c) !== "not_configured";
     Object.assign(c, { bridge_status: p_status, bridge_last_seen: nowISO(), bridge_phone: /^\d{8,15}$/.test(ph) ? ph : c.bridge_phone ?? null, bridge_name: p_name || c.bridge_name || null, bridge_version: p_version || c.bridge_version || null });
     if (complete && p_status === "connected") Object.assign(c, { status: "active", last_error: null, last_checked_at: nowISO() });
@@ -2653,12 +2663,15 @@ rpcs.fn_public_organization=()=>{ const id=currentGuestScope().guest ? guestOrg(
 Object.assign(rpcs,{
   fn_guest_branches: ()=>T("branches").filter(b=>b.organization_id===guestOrg() && b.is_active && !b.archived_at),
 });
-rpcs.fn_guest_site=({p_slug})=>{const o=T("organizations").find(x=>(x.guest_slug ?? x.id)===p_slug);return o ? {id:o.id,slug:o.guest_slug ?? o.id,name_ar:o.name_ar,name_en:o.name_en ?? null}:null;};
+rpcs.fn_guest_site=({p_slug})=>{const o=T("organizations").find(x=>x.platform_status!=="suspended" && (x.guest_slug ?? x.id)===p_slug);return o ? {id:o.id,slug:o.guest_slug ?? o.id,name_ar:o.name_ar,name_en:o.name_en ?? null}:null;};
 for(const name of ["fn_public_review","fn_public_submit_review"]) {const f=rpcs[name];if(!f)continue;rpcs[name]=(a:any)=>{const review=T("guest_reviews").find(g=>g.token_hash===hashToken(a.p_token));if(currentGuestScope().slug && review?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return f(a);};}
 const originalSession=rpcs.fn_guest_session;
 rpcs.fn_guest_session=(a:any)=>{const x=T("registration_sessions").find(s=>s.token===a.p_token);const res=byId("reservations",x?.reservation_id);if(currentGuestScope().slug && res?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return originalSession(a);};
 
+Object.assign(rpcs,platformRpcs({T,uid,user:()=>session?.user.id??null,owner:me,emit,atomic:atomically}));
+
 function invoke(name: string, opts: any, trustedService = false) {
+  if(name === "platform-invite"){try{rpcs.fn_platform_owner_invite_target({p_staff:opts?.body?.staff_id});return{data:{ok:true,simulated:true},error:null};}catch{return{data:null,error:{message:"forbidden_or_unavailable"}};}}
   const body = opts?.body ?? {};
   if (name === "guest-otp") return { data: { status: "channel_unavailable" }, error: null };
   // WhatsApp (demo): the connection test answers from the demo row; a supervisor's reply is stored but nothing is sent
@@ -2687,6 +2700,7 @@ function invoke(name: string, opts: any, trustedService = false) {
   if (name === "ai-reception") {
     const branch=body.branch_id; const bbScope=byId("branches",branch);
     const organizationId=trustedService ? bbScope?.organization_id : me()?.organization_id ?? guestOrg();
+    if(byId("organizations",organizationId)?.platform_status==="suspended")return {data:null,error:{message:"hotel_unavailable"}};
     if(!branch || !bbScope || bbScope.organization_id!==organizationId || (!trustedService && me() && !myBranches().includes(branch)))return {data:null,error:{message:"invalid_branch_scope"}};
     const token=body.guest_token ?? null;
     if(token){const link=T("registration_sessions").find(s=>s.token===token && Date.parse(s.expires_at)>Date.now());const res=byId("reservations",link?.reservation_id);if(res?.organization_id!==organizationId || res?.branch_id!==branch)return{data:null,error:{message:"invalid_guest_scope"}};}
@@ -2710,7 +2724,7 @@ export function createDemoClient() {
       getSession: async () => ({ data: { session }, error: null }),
       onAuthStateChange: (cb: (e: string, s: Session) => void) => { authListeners.add(cb); return { data: { subscription: { unsubscribe: () => authListeners.delete(cb) } } }; },
       // a fresh sign-in is a new session (0040): it opens after any forced end of the person's sessions, so it is not refused by it
-      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const pending = T("staff_profiles").find(s=>String(s.email).toLowerCase()===String(email).trim().toLowerCase()); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? (pending ? {auth:pending.auth_user_id??("demo-invited-"+pending.id),email:pending.email} : DEMO_ACCOUNTS[0]); setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
       signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
       /** a token put back in hand (supabase.auth.setSession): the same session as before, refused if it was ended since */
       setSession: async (s: Session) => { if (!s?.user?.id) return { data: { session: null }, error: { message: "invalid session" } }; setSession({ user: { id: s.user.id, email: s.user.email }, access_token: s.access_token ?? "demo", signed_in_at: s.signed_in_at }); return { data: { session }, error: null }; },

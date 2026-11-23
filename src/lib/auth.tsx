@@ -19,6 +19,7 @@ interface AuthContextValue {
   session: Session | null;
   profile: StaffProfile | null;
   loading: boolean;
+  isPlatformOperator: boolean;
   /** the person's permissions (the owner: everything) */
   permissions: Permissions;
   /** may the person do this operation of the matrix? */
@@ -62,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPlatformOperator, setPlatformOperator] = useState(false);
   const [permissions, setPermissions] = useState<Permissions>(defaultPermissions(null));
   /** auth user id whose profile lookup has completed (found or not) — see onAuthStateChange. */
   const profileUserRef = useRef<string | null>(null);
@@ -89,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         profileReqRef.current++; // drop any in-flight lookup
         profileUserRef.current = null;
+        setPlatformOperator(false);
         setProfile(null);
         setPermissions(defaultPermissions(null));
         setLoading(false);
@@ -104,6 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(authUserId: string) {
     const token = ++profileReqRef.current;
+    const operator = await supabase.rpc("fn_platform_operator_id");
+    if (token !== profileReqRef.current) return;
+    setPlatformOperator(!operator.error && !!operator.data);
+    if (!operator.error && operator.data) {
+      profileUserRef.current = authUserId; setProfile(null); setPermissions(defaultPermissions(null)); setLoading(false); return;
+    }
     let { data } = await supabase
       .from("staff_profiles")
       .select("id, auth_user_id, organization_id, full_name, email, phone, role, is_active")
@@ -224,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
+    <AuthContext.Provider value={{ session, profile, loading, isPlatformOperator, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
       {children}
     </AuthContext.Provider>
   );

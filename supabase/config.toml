@@ -44,3 +44,7 @@ verify_jwt = true
 # a session; no platform JWT check — the function checks both itself (deployed so since 8 Nov)
 [functions.bank-mail]
 verify_jwt = false
+
+# Separate operator allowlist, checked again by the caller-scoped resolver.
+[functions.platform-invite]
+verify_jwt = true

@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     const { data } = await db.rpc("fn_guest_org_id"); organizationId = data;
   }
   if (!organizationId) return json({ error: "hotel_required" }, 400);
-  const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", organizationId).maybeSingle();
+  const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", organizationId).eq("platform_status", "active").maybeSingle();
   if (!org) return json({ error: "org_not_found" }, 400);
   if (!branchId) {
     const { data: list } = await db.from("branches").select("id").eq("organization_id", org.id).eq("is_active", true).is("archived_at", null).limit(2);

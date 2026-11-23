@@ -8,6 +8,8 @@
 #    P0  typecheck     tsc -b                      the app compiles
 #    P0  unit          vitest                      guardrails, ops logic, contract drift, demo invariants
 #    P0  edge          tsc (Deno shim)             edge functions compile
+#    P0  lint          eslint                      zero style errors
+#    P0  raw-html      source sink review          no unreviewed raw HTML
 #    P0  sql           tests/sql/run.sh            migrations from scratch + 51 security + 90+ core acceptance tests
 #    P0  race          tests/sql/concurrency.sh    two real sessions: booking race, refund race
 #    P0  migration     scripts/migration-check.sh  pending migrations on synthetic history: nothing lost, restore drill (G28)

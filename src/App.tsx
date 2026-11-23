@@ -40,6 +40,7 @@ import Inbox from "./pages/staff/Inbox";
 import StaffJourney from "./pages/staff/StaffJourney";
 import GuestReview from "./pages/guest/GuestReview";
 
+const PlatformHotels = lazy(() => import("./pages/admin/PlatformHotels"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminBranches = lazy(() => import("./pages/admin/AdminBranches"));
 const AdminRoomCategories = lazy(() => import("./pages/admin/AdminRoomCategories"));
@@ -98,6 +99,7 @@ export default function App() {
   return (
     <Suspense fallback={<LoadingScreen />}>
     <Routes>
+      <Route path="/platform" element={<PlatformHotels />} />
       {/* Guest */}
       <Route element={<GuestLayout />}>
         <Route path="/" element={<Landing />} />

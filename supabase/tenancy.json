@@ -321,6 +321,18 @@
   },
   "whatsapp_outbox": {
    "scope": "branch"
+  },
+  "platform_operators": {
+   "scope": "platform",
+   "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
+  },
+  "platform_events": {
+   "scope": "platform",
+   "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
+  },
+  "platform_support_grants": {
+   "scope": "platform",
+   "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
   }
  }
 }

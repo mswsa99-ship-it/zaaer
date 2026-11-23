@@ -14,6 +14,11 @@
     "fn_public_submit_review(p_token text, p jsonb)": "Guest side: sends the review of the one stay its link's token names (stored hashed, 14 days, once).",
     "fn_guest_org_id()": "Public site selector from the explicit hotel slug, a valid guest link, or the only active hotel. Returns only its public identifier, never private data or a permission grant.",
     "fn_guest_site(p_slug text)": "Public hotel address resolver. Exact slug lookup returns public hotel identity only. No hotel directory and no private data.",
-    "fn_guest_branches()": "Returns only active public branch fields of the explicit hotel address. No private data or cross-hotel fallback."
+    "fn_guest_branches()": "Returns only active public branch fields of the explicit hotel address. No private data or cross-hotel fallback.",
+    "fn_platform_create_hotel(p jsonb)": "Plan2.8 separate active operator allowlist, checked server-side through fn_require_platform_operator. Creates an atomic hotel, first branch and pending owner, never grants hotel read access.",
+    "fn_platform_hotels()": "Plan2.8 operator-only metadata registry: hotel identity, lifecycle, branch count and invitation state only. No guest, financial or secret fields.",
+    "fn_platform_owner_invite_target(p_staff uuid)": "Plan2.8 active operator only, narrow pending first owner target of an active hotel, audited. No arbitrary recipient or role selection.",
+    "fn_platform_set_hotel_status(p_org uuid, p_status text, p_reason text)": "Plan2.8 active operator only, lifecycle control with required reason and immutable audit. Not callable by hotel roles without operator allowlist.",
+    "fn_platform_support_guests(p_grant uuid)": "Plan2.8 active operator and current unrevoked owner-approved grant for this hotel, max24h, active hotel, audit on every read. Returns at most100 IDs/names, no broad RLS grant."
   }
 }

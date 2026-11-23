@@ -29,7 +29,7 @@ insert into tn_children values
 do $$ declare missing text; begin
   select string_agg(c.relname || '.' || col, ', ' order by c.relname) into missing
     from pg_class c cross join (values ('organization_id'), ('branch_id')) v(col)
-   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname <> 'organizations'
+   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname not in ('organizations','platform_operators','platform_events','platform_support_grants')
      and not (v.col = 'branch_id' and c.relname in (select t from tn_hotel_tables))
      and not exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = v.col and not a.attisdropped);
   perform tn_record('TN10 every table but the hotels'' registry has organization_id, and every branch table branch_id too', missing is null, missing);
@@ -38,7 +38,7 @@ end $$;
 -- ---------------------------------------------------------------- TN11 every row agrees with its branch and its parent
 do $$ declare r record; bad text := ''; n bigint; total bigint := 0; begin
   for r in select c.relname as t from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
-             and c.relname not in ('organizations', 'branches') and c.relname not in (select t from tn_hotel_tables) loop
+             and c.relname not in ('organizations', 'branches','platform_operators','platform_events','platform_support_grants') and c.relname not in (select t from tn_hotel_tables) loop
     execute format('select count(*) from public.%I x join branches b on b.id = x.branch_id where x.organization_id is distinct from b.organization_id', r.t) into n;
     if n > 0 then bad := bad || r.t || ':' || n || ' '; end if;
     execute format('select count(*) from public.%I', r.t) into n; total := total + n;
