@@ -1,0 +1,75 @@
+import { test, expect } from "./fixtures";
+
+test("identity checksum warning stays advisory and original document matching stays required", async ({ page, loginAs, go, errors }, testInfo) => {
+  await loginAs("supervisor");
+  await go("/staff/reservations");
+  await page.getByPlaceholder("مرجع / نزيل / جوال").fill("HMABC123");
+  await page.locator("table tbody tr").filter({ hasText: "HMABC123" }).getByRole("link", { name: "فتح" }).click();
+  await page.getByTestId(/^office-enter-/).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("الاسم الثلاثي").fill("نزيل تجريبي افتراضي");
+  await dialog.getByLabel("رقم الوثيقة", { exact: true }).fill("1000000009");
+  await dialog.getByLabel("تاريخ الميلاد").fill("1990-01-01");
+  await expect(dialog.getByTestId("identity-checksum-warning")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "حفظ واعتماد" })).toBeEnabled();
+  await dialog.screenshot({ path: testInfo.outputPath("a-identity-warning.png") });
+  await dialog.getByRole("button", { name: "حفظ واعتماد" }).click();
+  await expect(dialog.getByText("أكّد «طابقتُ الوثيقة الأصلية» قبل الحفظ.")).toBeVisible();
+  await dialog.getByLabel("رقم الوثيقة", { exact: true }).fill("1000000008");
+  await expect(dialog.getByTestId("identity-checksum-warning")).toHaveCount(0);
+  await dialog.getByLabel("رقم الوثيقة", { exact: true }).fill("1000000009");
+  await dialog.getByLabel("طابقتُ الوثيقة الأصلية").check();
+  await dialog.getByRole("button", { name: "حفظ واعتماد" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("نزيل تجريبي افتراضي")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("invalid IBAN is caught while typing and cannot save; valid and blank IBAN remain allowed", async ({ page, loginAs, go, errors }, testInfo) => {
+  await loginAs("owner");
+  await go("/admin/branches");
+  await page.getByRole("button", { name: "تعديل فرع الرياض" }).click();
+  const guide = page.getByTestId("branch-guide");
+  const iban = guide.getByRole("textbox", { name: "رقم الآيبان" });
+  await iban.fill("SA0480000000608010167519");
+  await expect(iban).toHaveAttribute("aria-invalid", "true");
+  await expect(guide.getByTestId("save-branch-guide")).toBeDisabled();
+  await expect(guide.getByRole("alert")).toContainText("رقم التحقق");
+  await guide.getByTestId("save-branch-guide").scrollIntoViewIfNeeded();
+  await guide.screenshot({ path: testInfo.outputPath("a-iban-invalid.png") });
+  await iban.fill("sa03 8000 0000 6080 1016 7519");
+  await expect(iban).toHaveAttribute("aria-invalid", "false");
+  await expect(guide.getByTestId("save-branch-guide")).toBeEnabled();
+  await iban.fill("");
+  await expect(guide.getByTestId("save-branch-guide")).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test("guest registration shows a non-blocking checksum advisory and keeps consent and format checks", async ({ page, go, errors }, testInfo) => {
+  await go("/booking/lookup");
+  await page.getByPlaceholder("05xxxxxxxx").fill("0501110009");
+  await page.getByRole("button", { name: "متابعة" }).click();
+  await page.getByPlaceholder("رقم الحجز").fill("R-26A0009");
+  await page.getByRole("button", { name: "عرض حجوزاتي" }).click();
+  await page.getByRole("link", { name: "استكمال البيانات" }).click();
+  await page.getByRole("button", { name: "استكمال البيانات" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder("الاسم الأول الأب الجد").fill("نزيل تجريبي افتراضي");
+  const number = dialog.getByRole("textbox", { name: "رقم الوثيقة", exact: true });
+  await number.fill("100");
+  await expect(dialog.getByTestId("identity-checksum-warning")).toHaveCount(0);
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await number.fill("1000000009");
+  await expect(dialog.getByTestId("identity-checksum-warning")).toBeVisible();
+  await dialog.locator("input[type=date]").fill("1990-01-01");
+  await dialog.getByRole("button", { name: "حفظ البيانات" }).click();
+  await expect(dialog.getByText("يجب الإقرار بصحة البيانات.")).toBeVisible();
+  await dialog.locator("input[type=checkbox]").first().check();
+  await dialog.getByLabel("أقرّ بملخص الإقامة").check();
+  await dialog.getByTestId("identity-checksum-warning").scrollIntoViewIfNeeded();
+  await dialog.screenshot({ path: testInfo.outputPath("a-guest-identity-warning.png") });
+  await dialog.getByRole("button", { name: "حفظ البيانات" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("نزيل تجريبي افتراضي")).toBeVisible();
+  expect(errors).toEqual([]);
+});

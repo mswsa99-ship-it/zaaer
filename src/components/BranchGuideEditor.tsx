@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Image as ImageIcon, Video, Archive, RotateCcw, Plus } from "lucide-react";
 import { ErrorBanner, Spinner } from "./ui";
 import { Field, ReasonInput } from "./forms";
+import { validSaudiIban } from "../lib/identityChecks";
 import { branchGuideApi, toArabicError, type MediaItem } from "../lib/api";
 
 export function BranchGuideEditor({ branchId }: { branchId: string }) {
@@ -55,6 +56,8 @@ export function BranchGuideEditor({ branchId }: { branchId: string }) {
   const archivedCount = gallery.filter((m) => m.archived_at).length;
   const set = (k: keyof typeof g) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setG({ ...g, [k]: e.target.value });
 
+  const ibanError = g.bank_iban.trim() && !validSaudiIban(g.bank_iban) ? "رقم الآيبان غير صحيح: يبدأ بـ SA ويتكون من 24 خانة، ويجب أن يصح رقم التحقق." : null;
+
   return (
     <div className="mt-4 space-y-4 rounded-xl border border-ink-100 p-3" data-testid="branch-guide">
       <p className="text-xs font-semibold text-ink-600">دليل النزيل — يظهر في صفحة حجزه</p>
@@ -67,13 +70,13 @@ export function BranchGuideEditor({ branchId }: { branchId: string }) {
         </Field>
         <Field label="اسم البنك"><input className="input" maxLength={80} value={g.bank_name} onChange={set("bank_name")} /></Field>
         <Field label="اسم المستفيد"><input className="input" maxLength={120} value={g.bank_beneficiary} onChange={set("bank_beneficiary")} /></Field>
-        <Field label="رقم الآيبان" className="sm:col-span-2" hint="يظهر للنزيل الذي يدفع بالتحويل. اتركه فارغًا لإخفاء بيانات البنك.">
-          <input className="input font-mono" dir="ltr" maxLength={34} value={g.bank_iban} onChange={set("bank_iban")} placeholder="SA00 0000 0000 0000 0000 0000" />
+        <Field label="رقم الآيبان" error={ibanError} className="sm:col-span-2" hint="يظهر للنزيل الذي يدفع بالتحويل. اتركه فارغًا لإخفاء بيانات البنك.">
+          <input className="input font-mono" dir="ltr" maxLength={34} value={g.bank_iban} aria-invalid={!!ibanError} onChange={set("bank_iban")} placeholder="SA00 0000 0000 0000 0000 0000" />
         </Field>
       </div>
       <div className="flex justify-end">
-        <button type="button" className="btn-primary text-sm" disabled={busy !== null} data-testid="save-branch-guide"
-          onClick={() => run("guide", () => branchGuideApi.setGuide({ branch_id: branchId, ...g }), "حُفظ دليل النزيل.")}>
+        <button type="button" className="btn-primary text-sm" disabled={busy !== null || !!ibanError} data-testid="save-branch-guide"
+          onClick={() => !ibanError && run("guide", () => branchGuideApi.setGuide({ branch_id: branchId, ...g }), "حُفظ دليل النزيل.")}>
           {busy === "guide" ? <Spinner className="h-4 w-4" /> : "حفظ الدليل"}
         </button>
       </div>

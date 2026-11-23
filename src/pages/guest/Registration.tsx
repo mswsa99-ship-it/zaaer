@@ -8,6 +8,7 @@ import { Card, ErrorBanner, Spinner } from "../../components/ui";
 import { Modal, Field } from "../../components/forms";
 import { IDENTITY_TYPE_LABELS, GUEST_VERIFICATION_LABELS, type IdentityType, type GuestVerificationStatus } from "../../lib/types";
 import { gregorianToHijri, hijriToGregorian, maskId, todayISO, COUNT, HIJRI_MONTH_NAMES, HIJRI_MONTH_NAMES_EN, radioGroupKeys } from "../../lib/utils";
+import { hasSaudiIdentityChecksumWarning } from "../../lib/identityChecks";
 import { checkIdentityNumber, checkMinAge, checkNameParts, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../../lib/validation";
 
 type GuestRow = GuestSession["guests"][number];
@@ -288,6 +289,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
               placeholder={passportLike ? t("حروف وأرقام", "Letters and digits") : t("10 أرقام", "10 digits")} />
           </Field>
         </div>
+        {hasSaudiIdentityChecksumWarning(identityType, identityNumber) && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900" role="status" data-testid="identity-checksum-warning">{t("تنبيه: رقم التحقق للهوية غير مطابق. راجع الرقم مع الوثيقة الأصلية؛ هذا التنبيه لا يمنع الحفظ.", "Warning: the ID checksum does not match. Check the number against the original document; this warning does not prevent saving.")}</p>}
         <div className="grid grid-cols-2 gap-4">
           <Field label={t("رقم الإصدار (إن وجد)", "Issue number (if any)")}><input value={issueNumber} onChange={(e) => setIssueNumber(e.target.value)} className="input" dir="ltr" /></Field>
           <Field label={t("الجنسية", "Nationality")}><input value={nationality} onChange={(e) => setNationality(e.target.value)} className="input" /></Field>

@@ -19,6 +19,7 @@ import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput, Toggle } from "./forms";
 import { IDENTITY_TYPE_LABELS, type IdentityType } from "../lib/types";
 import { formatCurrency, formatDateTime, todayISO, maskId, COUNT } from "../lib/utils";
+import { hasSaudiIdentityChecksumWarning } from "../lib/identityChecks";
 import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../lib/validation";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
@@ -143,6 +144,7 @@ export function OfficeGuestDialog({ open, reservationId, guest, onClose, onDone 
           <Field label="الاسم الثلاثي (كما في الوثيقة)" className="sm:col-span-2" error={errs.name}><input className="input" value={f.full_name} aria-invalid={!!errs.name} onChange={(e) => setF({ ...f, full_name: e.target.value })} aria-label="الاسم الثلاثي" /></Field>
           <Field label="نوع الوثيقة"><select className="input" value={f.identity_type} onChange={(e) => setF({ ...f, identity_type: e.target.value as IdentityType })} aria-label="نوع الوثيقة">{Object.entries(IDENTITY_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
           <Field label={correcting ? "رقم الوثيقة (فارغ = الرقم المحفوظ)" : "رقم الوثيقة"} error={errs.number} hint={guest?.identity_number_last4 ? `المحفوظ: ${maskId(guest.identity_number_last4)}` : undefined}><input className="input" dir="ltr" inputMode="numeric" autoComplete="off" value={f.identity_number} onChange={(e) => setF({ ...f, identity_number: e.target.value })} aria-label="رقم الوثيقة" /></Field>
+          {hasSaudiIdentityChecksumWarning(f.identity_type, idNumber) && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2" role="status" data-testid="identity-checksum-warning">تنبيه: رقم التحقق للهوية غير مطابق. راجع الرقم مع الوثيقة الأصلية؛ هذا التنبيه لا يمنع الحفظ.</p>}
           <Field label="رقم الإصدار (إن وجد)"><input className="input" dir="ltr" value={f.identity_issue_number} onChange={(e) => setF({ ...f, identity_issue_number: e.target.value })} /></Field>
           <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} aria-label="الجنسية" /></Field>
           <Field label="تاريخ الميلاد (ميلادي)" error={errs.birth}><input type="date" className="input" dir="ltr" max={maxBirthDate(todayISO())} value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} aria-label="تاريخ الميلاد" /></Field>
