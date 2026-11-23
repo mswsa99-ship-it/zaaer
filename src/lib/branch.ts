@@ -10,7 +10,9 @@
  *    re-renders every consumer of `useBranch()`, so each page's branch-keyed effects refetch. Out-of-order
  *    responses are dropped with a request token.
  */
+import { useLocation } from "react-router-dom";
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { guestScopeKey, currentGuestScope } from "./guestScope";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
 
@@ -49,11 +51,11 @@ const EMPTY: BranchLite[] = [];
 const storageKey = (scope: string) => `zaaer.branch.${scope}`;
 function readStored(scope: string | null): string | null {
   if (!scope) return null;
-  try { return (scope === "guest" ? sessionStorage : localStorage).getItem(storageKey(scope)); } catch { return null; }
+  try { return (scope.startsWith("guest:") ? sessionStorage : localStorage).getItem(storageKey(scope)); } catch { return null; }
 }
 function writeStored(scope: string | null, id: string) {
   if (!scope) return;
-  try { (scope === "guest" ? sessionStorage : localStorage).setItem(storageKey(scope), id); } catch { /* ignore */ }
+  try { (scope.startsWith("guest:") ? sessionStorage : localStorage).setItem(storageKey(scope), id); } catch { /* ignore */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +64,7 @@ function writeStored(scope: string | null, id: string) {
 type Loaded = { branches: BranchLite[]; error: string | null };
 
 async function loadGuestBranches(): Promise<Loaded> {
-  const { data, error } = await supabase.from("branches").select(BRANCH_COLUMNS).eq("is_active", true).order("created_at");
+  const { data, error } = await supabase.rpc("fn_guest_branches");
   if (error) return { branches: [], error: error.message };
   return { branches: (data as BranchLite[]) ?? [], error: null };
 }
@@ -86,10 +88,11 @@ async function loadStaffBranches(): Promise<Loaded> {
 // provider
 // ---------------------------------------------------------------------------
 export function BranchProvider({ children }: { children: ReactNode }) {
+  useLocation(); // Re-evaluate guest/staff scope on an in-app route change.
   const { session, loading: authLoading } = useAuth();
-  const userId = session?.user?.id ?? null;
+  const userId = currentGuestScope().guest ? null : session?.user?.id ?? null;
   // Persistence scope: the signed-in user (1:1 with the staff profile) or the shared guest scope.
-  const scope = authLoading ? null : userId ?? "guest";
+  const scope = authLoading ? null : userId ?? "guest:" + guestScopeKey();
 
   const [state, setState] = useState<{ scope: string | null; branches: BranchLite[]; loading: boolean; error: string | null }>({ scope: null, branches: [], loading: true, error: null });
   const [override, setOverride] = useState<{ scope: string; id: string } | null>(null);

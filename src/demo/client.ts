@@ -6,6 +6,8 @@
  * roles, ledger-derived money, allocation overlap, idempotency) so the walkthrough behaves
  * like the real system. Nothing here talks to a server.
  */
+import { hashToken } from "./journey";
+import { currentGuestScope } from "../lib/guestScope";
 import { seed, uid, todayISO, addDays, nowISO, ORG, STAFF, type Row, type Store } from "./data";
 import { scriptedReply, normalizeArabic } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
@@ -275,11 +277,20 @@ const WRITE_RULES: Record<string, () => boolean> = {
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
+/** Same public address selector as SQL. A missing/unknown address never chooses among several hotels. */
+function guestOrg(): string | null {
+ const scope=currentGuestScope();
+ if(scope.slug) return T("organizations").find(o=>(o.guest_slug ?? o.id)===scope.slug)?.id ?? null;
+ if(scope.token) { const x=T("registration_sessions").find(s=>s.token===scope.token && Date.parse(s.expires_at)>Date.now()); return byId("reservations",x?.reservation_id)?.organization_id ?? T("guest_reviews").find(g=>g.token_hash===hashToken(scope.token!))?.organization_id ?? null; }
+ const live=T("organizations").filter(o=>T("branches").some(b=>b.organization_id===o.id && b.is_active && !b.archived_at));
+ return live.length===1 ? live[0].id : null;
+}
 /** Mirrors the row-level security of the real schema closely enough for the walkthrough. */
 function visible(table: string, r: Row): boolean {
   const m = me(); const branches = myBranches();
-  if (table === "branches") return !m || branches.includes(r.id);
-  if (table === "property_policies" && !m) return !!r.is_public;
+  if (table === "branches") return m ? branches.includes(r.id) : r.organization_id===guestOrg() && !!r.is_active && !r.archived_at;
+  if (table === "property_policies" && !m) return !!r.is_public && r.organization_id===guestOrg();
+  if(table === "booking_sources" && !m) return r.organization_id===guestOrg() && !!r.is_active;
   if (table === "booking_sources" || table === "organizations" || table === "system_settings") return true;
   if (!m) return false;
   if (table === "staff_saved_views") return r.staff_id === m.id;   // own rows only (0040)
@@ -1298,9 +1309,9 @@ const rpcsMore: Record<string, (a: any) => any> = {
   fn_guest_lookup: ({ p_external_ref, p_phone_last4 }) => { const r = T("reservations").find((x) => (x.external_ref ?? "").toLowerCase() === String(p_external_ref).toLowerCase() || x.internal_ref.toLowerCase() === String(p_external_ref).toLowerCase()); if (!r) { T("human_handoff_tickets").unshift({ id: uid(), organization_id: ORG, branch_id: null, conversation_id: null, reservation_id: null, kind: "unmatched_reservation", external_ref: p_external_ref, source_name: null, details: "رقم حجز غير مطابق", status: "open", resolved_by: null, resolved_at: null, created_at: nowISO() }); emit("human_handoff_tickets"); return { status: "unmatched" }; } const g = T("reservation_guests").find((x) => x.reservation_id === r.id && x.is_primary); if (!g?.phone || !g.phone.endsWith(p_phone_last4)) return { status: "mismatch" }; const token = "DEMO" + Math.random().toString(16).slice(2, 14).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: r.id, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return { status: "ok", token }; },
   // phone-first lookup (0020). The demo has no WhatsApp: guest-otp answers channel_unavailable, so the page asks for a booking number
   fn_guest_phone_verify: () => ({ status: "expired" }),
-  fn_guest_phone_verify_ref: ({ p_phone, p_ref }) => { const ph = normPhone(p_phone); if (!ph) return { status: "invalid" }; const ids = phoneReservationIds(ph); const ok = T("reservations").some((r) => ids.includes(r.id) && [r.external_ref, r.internal_ref].some((x) => String(x ?? "").toUpperCase() === String(p_ref ?? "").trim().toUpperCase())); if (!ok) return { status: "mismatch" }; const token = "PH" + Math.random().toString(16).slice(2, 14).toUpperCase(); phoneSessions.set(token, ph); return { status: "ok", token }; },
-  fn_guest_phone_reservations: ({ p_token }) => { const ph = phoneSessions.get(p_token); if (!ph) throw new Error("TOKEN_INVALID"); const ids = phoneReservationIds(ph); return { phone_last4: ph.slice(-4), reservations: T("reservations").filter((r) => ids.includes(r.id)).sort((a, b) => (a.check_in < b.check_in ? -1 : 1)).map((r) => ({ ref: r.external_ref ?? r.internal_ref, internal_ref: r.internal_ref, status: r.status, check_in: r.check_in, check_out: r.check_out, nights: Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000), branch_name: byId("branches", r.branch_id)?.name_ar ?? null, category_name: byId("room_categories", r.room_category_id)?.name_ar ?? null, payment_status: r.payment_status, access_status: r.access_status, identity_status: r.identity_status })) }; },
-  fn_guest_phone_open: ({ p_token, p_internal_ref }) => { const ph = phoneSessions.get(p_token); if (!ph) throw new Error("TOKEN_INVALID"); const r = T("reservations").find((x) => x.internal_ref === p_internal_ref && phoneReservationIds(ph).includes(x.id)); if (!r) throw new Error("NOT_FOUND"); const token = "DEMO" + Math.random().toString(16).slice(2, 14).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: r.id, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return { status: "ok", token }; },
+  fn_guest_phone_verify_ref: ({ p_phone, p_ref }) => { const ph = normPhone(p_phone); if (!ph) return { status: "invalid" }; const ids = phoneReservationIds(ph); const ok = T("reservations").some((r) => ids.includes(r.id) && [r.external_ref, r.internal_ref].some((x) => String(x ?? "").toUpperCase() === String(p_ref ?? "").trim().toUpperCase())); if (!ok) return { status: "mismatch" }; const token = "PH" + Math.random().toString(16).slice(2, 14).toUpperCase(); if(!guestOrg()) return {status:"invalid"}; phoneSessions.set(token, {phone:ph,org:guestOrg()!}); return { status: "ok", token }; },
+  fn_guest_phone_reservations: ({ p_token }) => { const ps = phoneSessions.get(p_token); if (!ps || (!ps.service && ps.org!==guestOrg()) || (currentGuestScope().slug && ps.org!==guestOrg())) throw new Error("TOKEN_INVALID"); const ph=ps.phone; const ids = phoneReservationIds(ph,ps.org,ps.branch); return { phone_last4: ph.slice(-4), reservations: T("reservations").filter((r) => ids.includes(r.id)).sort((a, b) => (a.check_in < b.check_in ? -1 : 1)).map((r) => ({ ref: r.external_ref ?? r.internal_ref, internal_ref: r.internal_ref, status: r.status, check_in: r.check_in, check_out: r.check_out, nights: Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000), branch_name: byId("branches", r.branch_id)?.name_ar ?? null, category_name: byId("room_categories", r.room_category_id)?.name_ar ?? null, payment_status: r.payment_status, access_status: r.access_status, identity_status: r.identity_status })) }; },
+  fn_guest_phone_open: ({ p_token, p_internal_ref }) => { const ps = phoneSessions.get(p_token); if (!ps || (!ps.service && ps.org!==guestOrg()) || (currentGuestScope().slug && ps.org!==guestOrg())) throw new Error("TOKEN_INVALID"); const r = T("reservations").find((x) => x.internal_ref === p_internal_ref && phoneReservationIds(ps.phone,ps.org,ps.branch).includes(x.id)); if (!r) throw new Error("NOT_FOUND"); const token = "DEMO" + Math.random().toString(16).slice(2, 14).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: r.id, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return { status: "ok", token }; },
   // 0058 (GUEST-07): children under 15 by age — counted on the booking, out of the registration target
   fn_guest_children: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; return { children_ages: r.children_ages ?? [], target: registrationTarget(r) }; },
   fn_guest_set_children: ({ p_token, p_ages }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!;
@@ -2537,7 +2548,7 @@ function opsChat(body: any) {
 }
 
 // ---- phone-first lookup helpers (mirror fn_normalize_phone / fn_phone_reservation_ids) ----
-const phoneSessions = new Map<string, string>();
+const phoneSessions = new Map<string, {phone:string;org:string;branch?:string;service?:boolean}>();
 function normPhone(p: unknown): string | null {
   let d = String(p ?? "").replace(/[٠-٩]/g, (x) => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/\D/g, "");
   if (d.startsWith("00")) d = d.slice(2);
@@ -2547,8 +2558,8 @@ function normPhone(p: unknown): string | null {
   if (d.startsWith("966")) return null;
   return d.length >= 8 && d.length <= 15 ? d : null;
 }
-function phoneReservationIds(ph: string): string[] {
-  return T("reservations").filter((r) => r.status !== "rejected" && T("reservation_guests").some((g) => g.reservation_id === r.id && g.is_primary && normPhone(g.phone) === ph)).map((r) => r.id);
+function phoneReservationIds(ph: string,org: string|null=guestOrg(),branch?:string): string[] {
+  return T("reservations").filter((r) => r.organization_id===org && (!branch || r.branch_id===branch) && r.status !== "rejected" && T("reservation_guests").some((g) => g.reservation_id === r.id && g.is_primary && normPhone(g.phone) === ph)).map((r) => r.id);
 }
 // ---- WhatsApp on the reception computer (0023) ----
 function waStatus(c: Row): string {
@@ -2566,7 +2577,7 @@ const bridgeOnline = (c: Row | undefined) => !!c?.bridge_last_seen && Date.now()
 let journeyTick: (branch: string) => unknown = () => undefined;
 /** server-only functions (service role in the real system): only the service client below reaches them */
 const serviceRpcs: Record<string, (a: any) => any> = {
-  fn_whatsapp_phone_session: ({ p_phone }) => { const ph = normPhone(p_phone); if (!ph) throw new Error("VALIDATION: phone"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, ph); return token; },
+  fn_whatsapp_phone_session: ({ p_phone,p_branch }) => { const ph = normPhone(p_phone); const b=byId("branches",p_branch); if (!ph || !b) throw new Error("VALIDATION: phone_or_branch"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, {phone:ph,org:b.organization_id,branch:b.id,service:true}); return token; },
   fn_wa_bridge_auth: ({ p_key }) => { if (!/^zb_[0-9a-f]{64}$/.test(String(p_key ?? ""))) return null; const c = T("branch_whatsapp_channels").find((x) => x.mode === "web_bridge" && !!x.bridge_key && x.bridge_key === p_key); if (!c) return null; return { branch_id: c.branch_id, organization_id: c.organization_id, enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, status: c.status, display_phone: c.display_phone, human_pause_minutes: c.human_pause_minutes ?? 60, branch_name: byId("branches", c.branch_id)?.name_ar ?? null }; },
   fn_wa_bridge_beat: ({ p_branch, p_status, p_phone, p_name, p_version, p_detail }) => { if (!["starting", "qr", "connected", "disconnected", "stopped"].includes(p_status)) throw new Error("VALIDATION: status"); const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch && x.mode === "web_bridge"); if (!c) return null; const ph = String(p_phone ?? "").replace(/\D/g, ""); const complete = waStatus(c) !== "not_configured";
     Object.assign(c, { bridge_status: p_status, bridge_last_seen: nowISO(), bridge_phone: /^\d{8,15}$/.test(ph) ? ph : c.bridge_phone ?? null, bridge_name: p_name || c.bridge_name || null, bridge_version: p_version || c.bridge_version || null });
@@ -2632,6 +2643,19 @@ Object.assign(rpcs, journey.rpcs);
 }
 journeyTick = (branch) => journey.tick(branch, false);
 afterRpc = () => { bankSync({}); products.sync(); journey.sync(); };
+
+for(const name of ["fn_public_branch","fn_public_whatsapp","fn_public_branch_guide","fn_branch_media"]) {
+ const original=rpcs[name]; if(!original) continue;
+ rpcs[name]=(a:any)=>{ const b=byId("branches",a.p_branch); if(!b || (me() ? !myBranches().includes(b.id) : b.organization_id!==guestOrg())) return null; return original(a); };
+}
+rpcs.fn_public_organization=()=>{ const id=currentGuestScope().guest ? guestOrg() : me()?.organization_id; const o=byId("organizations",id); return o ? {name_ar:o.name_ar,name_en:o.name_en ?? null,logo:o.logo ?? null} : null; };
+Object.assign(rpcs,{
+  fn_guest_branches: ()=>T("branches").filter(b=>b.organization_id===guestOrg() && b.is_active && !b.archived_at),
+});
+rpcs.fn_guest_site=({p_slug})=>{const o=T("organizations").find(x=>(x.guest_slug ?? x.id)===p_slug);return o ? {id:o.id,slug:o.guest_slug ?? o.id,name_ar:o.name_ar,name_en:o.name_en ?? null}:null;};
+for(const name of ["fn_public_review","fn_public_submit_review"]) {const f=rpcs[name];if(!f)continue;rpcs[name]=(a:any)=>{const review=T("guest_reviews").find(g=>g.token_hash===hashToken(a.p_token));if(currentGuestScope().slug && review?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return f(a);};}
+const originalSession=rpcs.fn_guest_session;
+rpcs.fn_guest_session=(a:any)=>{const x=T("registration_sessions").find(s=>s.token===a.p_token);const res=byId("reservations",x?.reservation_id);if(currentGuestScope().slug && res?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return originalSession(a);};
 
 function invoke(name: string, opts: any) {
   const body = opts?.body ?? {};

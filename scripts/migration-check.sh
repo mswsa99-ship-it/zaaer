@@ -26,7 +26,7 @@ REPORT="$OUTDIR/migration-report.txt"
 mkdir -p "$OUTDIR"
 source tests/sql/bootstrap.sh
 
-apply() { psql -d "$1" -v ON_ERROR_STOP=1 -q -f "$2" 2>&1 | grep -v NOTICE || true; }
+apply() { psql -d "$1" -v ON_ERROR_STOP=1 -q -f "$2" 2>&1 | awk '!/NOTICE/'; }
 
 bootstrap_db "$DB" >/dev/null
 pending=()
@@ -47,7 +47,7 @@ psql -d "$DB" -v ON_ERROR_STOP=1 -q -v phase=after -f scripts/migration-snapshot
 # restore drill: dump the migrated database and restore it elsewhere
 psql -q -c "drop database if exists $RESTORED;" -c "create database $RESTORED;" >/dev/null
 pg_dump -d "$DB" --no-owner --format=custom --file "$OUTDIR/migration-drill.dump"
-pg_restore -d "$RESTORED" --no-owner "$OUTDIR/migration-drill.dump" 2>&1 | grep -v "already exists" || true
+pg_restore -d "$RESTORED" --no-owner --exit-on-error "$OUTDIR/migration-drill.dump"
 rm -f "$OUTDIR/migration-drill.dump"   # synthetic data only, but a dump is never kept with the run's results
 psql -d "$RESTORED" -v ON_ERROR_STOP=1 -q -v phase=restored -f scripts/migration-snapshot.sql >/dev/null
 

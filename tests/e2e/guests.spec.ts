@@ -32,7 +32,7 @@ async function openByRef(page: Page, go: (p: string) => Promise<void>, ref: stri
 
 /** «حجوزاتي» as the guest: the phone, then one booking number proves it. */
 async function openGuestStatus(page: Page, go: (p: string) => Promise<void>, phone: string, ref: string) {
-  await page.evaluate(() => { try { sessionStorage.removeItem("guest_phone_session"); } catch { /* storage blocked */ } });
+  await page.evaluate(() => { try { for (const k of Object.keys(sessionStorage)) if (k === "guest_phone_session" || k.startsWith("guest_phone_session:")) sessionStorage.removeItem(k); } catch { /* storage blocked */ } });
   await go("/booking/lookup");
   await page.getByPlaceholder("05xxxxxxxx").fill(phone);
   await page.getByRole("button", { name: "متابعة" }).click();

@@ -12,7 +12,7 @@ import { projectKey } from "../_shared/keys.ts";
 import { pollMailbox } from "../_shared/bank_mail.ts";
 import type { Wire } from "../_shared/imap.ts";
 
-const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-cron-key" };
+const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token, x-cron-key" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "content-type": "application/json" } });
 
 async function tls(host: string, port: number): Promise<Wire> {

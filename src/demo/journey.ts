@@ -95,7 +95,7 @@ function local(at: number, tz: string) {
   return { date: `${g("year")}-${g("month")}-${g("day")}`, min: (Number(g("hour")) % 24) * 60 + Number(g("minute")) };
 }
 /** a review's page key is kept only as its hash (the demo's hash is not cryptographic; the server's is sha-256) */
-function hashToken(t: string) {
+export function hashToken(t: string) {
   let a = 0x811c9dc5, b = 0x9e3779b9;
   for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); a = Math.imul(a ^ c, 16777619) >>> 0; b = Math.imul(b + c, 2246822519) >>> 0; }
   return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0") + t.length.toString(16);

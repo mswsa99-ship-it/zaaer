@@ -24,7 +24,7 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!branchId) return;
+    if (!branchId) { setLoading(false); return; }
     let alive = true;
     setLoading(true); setQr(null);
     whatsappApi.publicInfo(branchId)

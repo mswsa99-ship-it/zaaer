@@ -17,7 +17,7 @@ export default function BookingNew() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!branchId) return;
+    if (!branchId) { setLoading(false); return; }
     let alive = true;
     setLoading(true); setImage(null);
     guestApi.branch(branchId).then(async (p) => {

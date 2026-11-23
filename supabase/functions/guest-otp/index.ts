@@ -14,7 +14,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { projectKey } from "../_shared/keys.ts";
 import { otpTemplatePayload, usable, waSend, type WaChannel } from "../_shared/whatsapp.ts";
 
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "content-type": "application/json" } });
 
 Deno.serve(async (req) => {
@@ -23,9 +23,11 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ status: "invalid" }, 400); }
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { global: { headers: { "x-hotel-slug": req.headers.get("x-hotel-slug") ?? "" } }, auth: { persistSession: false } });
+  const { data: hotel } = await db.rpc("fn_guest_org_id");
+  if (!hotel) return json({ status: "invalid" }, 400);
   // no branch has a usable number with a code template → the page goes straight to the booking-number path
-  const { count } = await db.from("branch_whatsapp_channels").select("branch_id", { count: "exact", head: true }).eq("enabled", true).not("otp_template", "is", null);
+  const { count } = await db.from("branch_whatsapp_channels").select("branch_id", { count: "exact", head: true }).eq("organization_id", hotel).eq("enabled", true).not("otp_template", "is", null);
   if (!count) return json({ status: "channel_unavailable" });
 
   const fingerprint = String(body.client_fingerprint ?? req.headers.get("x-forwarded-for") ?? "").slice(0, 120) || null;

@@ -84,7 +84,7 @@ reset role;
 -- the WhatsApp sender is the proof: a session for the sender lists that number's bookings and opens one
 set role service_role;
 do $$ declare t text; l jsonb; o jsonb; begin
-  t := fn_whatsapp_phone_session('+966500000111');
+  t := fn_whatsapp_phone_session('+966500000111','00000000-0000-0000-0000-000000000010');
   l := fn_guest_phone_reservations(t);
   o := fn_guest_phone_open(t, l->'reservations'->0->>'internal_ref');
   perform t_record('WA10 a WhatsApp sender session lists the sender''s bookings and opens one (audited as whatsapp)',

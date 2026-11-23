@@ -5,7 +5,7 @@
 import { test, expect } from "./fixtures";
 
 test("QF09 a cancelled booking's guest page says so plainly — no steps, no amounts, no registration", async ({ page, go }) => {
-  await page.evaluate(() => { try { sessionStorage.removeItem("guest_phone_session"); } catch { /* storage blocked */ } }).catch(() => undefined);
+  await page.evaluate(() => { try { for (const k of Object.keys(sessionStorage)) if (k === "guest_phone_session" || k.startsWith("guest_phone_session:")) sessionStorage.removeItem(k); } catch { /* storage blocked */ } }).catch(() => undefined);
   await go("/booking/lookup");
   await page.getByPlaceholder("05xxxxxxxx").fill("0501110016");
   await page.getByRole("button", { name: "متابعة" }).click();

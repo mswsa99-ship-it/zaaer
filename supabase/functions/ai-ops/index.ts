@@ -18,7 +18,7 @@ import { projectKey } from "../_shared/keys.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs } from "../_shared/ops.ts";
 
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
 const MAX_TOOL_ROUNDS = 4;
 const HISTORY_TURNS = 16;

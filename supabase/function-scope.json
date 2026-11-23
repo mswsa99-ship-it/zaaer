@@ -10,9 +10,10 @@
     "fn_guest_phone_reservations(p_token text)": "Guest side: the bookings of the phone a guest proved by a WhatsApp code (its session token), and nothing else. Bound to the hotel of the site's address in item 2.6.",
     "fn_guest_phone_verify(p_phone text, p_code text, p_fingerprint text)": "Guest side: checks the WhatsApp code sent to a phone (five tries) and opens a phone session; it answers only the session token. Bound to the hotel of the site's address in item 2.6.",
     "fn_guest_phone_verify_ref(p_phone text, p_ref text, p_fingerprint text)": "Guest side: a phone and one of its bookings' numbers open a phone session (tries limited per number); it answers only the session token. Bound to the hotel of the site's address in item 2.6.",
-    "fn_public_organization()": "Guest side: the name and logo shown on the guest's pages. With one hotel it is that hotel; the hotel of the site's address replaces the first hotel in items 2.6 and 2.9.",
     "fn_public_review(p_token text)": "Guest side: the review page of one stay, reached by the review link's token (stored hashed, 14 days); it answers the branch's name, the stay's dates and whether it was sent.",
     "fn_public_submit_review(p_token text, p jsonb)": "Guest side: sends the review of the one stay its link's token names (stored hashed, 14 days, once).",
-    "fn_public_whatsapp(p_branch uuid)": "Guest side: the WhatsApp number and phone an active branch shows its visitors (public by design). Bound to the hotel of the site's address in item 2.6."
+    "fn_guest_org_id()": "Public site selector from the explicit hotel slug, a valid guest link, or the only active hotel. Returns only its public identifier, never private data or a permission grant.",
+    "fn_guest_site(p_slug text)": "Public hotel address resolver. Exact slug lookup returns public hotel identity only. No hotel directory and no private data.",
+    "fn_guest_branches()": "Returns only active public branch fields of the explicit hotel address. No private data or cross-hotel fallback."
   }
 }

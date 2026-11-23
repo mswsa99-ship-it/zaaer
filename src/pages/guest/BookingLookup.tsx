@@ -1,3 +1,4 @@
+import { guestScopeKey } from "../../lib/guestScope";
 import { COUNT } from "../../lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
@@ -12,7 +13,7 @@ import { RESERVATION_STATUS_LABELS, type ReservationStatus } from "../../lib/typ
  * Until WhatsApp is connected the code step is replaced by "the number of any one of your bookings".
  */
 type Step = "phone" | "code" | "ref" | "list";
-const SESSION_KEY = "guest_phone_session";
+const SESSION_KEY = "guest_phone_session:" + guestScopeKey();
 const toLatin = (s: string) => s.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
 
 /** GUEST-13: «r26a0008», «26A0008» and «R 26A0008» are R-26A0008; a platform's own number is passed as typed */

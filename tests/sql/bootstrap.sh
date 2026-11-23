@@ -56,5 +56,5 @@ EOF
 # Fixtures write "today" as current_date and mean the property's day, so suite sessions run in the property's zone
 # (set here, not taken from the machine: CI runners are UTC). The product itself must not depend on the session zone
 # (UTC on a hosted project): PL09 keeps session-zone dates out of every function, and local_date_tests.sql runs in UTC.
-psql -d "$DB" -v ON_ERROR_STOP=1 -q -c "alter database $DB set app.keybox_key = 'test-keybox-key'; alter database $DB set app.identity_key = 'test-identity-key';" -c "alter database $DB set search_path = \"\$user\", public, extensions;" -c "alter database $DB set timezone = 'Asia/Riyadh';"
+psql -d "$DB" -v ON_ERROR_STOP=1 -q -c "alter database $DB set app.keybox_key = 'test-keybox-key'; alter database $DB set app.identity_key = 'test-identity-key';" -c "alter database $DB set search_path = \"\$user\", public, extensions;" -c "alter database $DB set timezone = 'Asia/Riyadh'; alter database $DB set request.headers = '{\"x-hotel-slug\":\"00000000-0000-0000-0000-000000000001\"}';"
 }

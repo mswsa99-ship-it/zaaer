@@ -19,7 +19,7 @@ run_tests() {
 }
 for f in supabase/migrations/*.sql; do
   echo "== applying $f"
-  psql -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | grep -v NOTICE || true
+  psql -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | awk '!/NOTICE/'
 done
 echo "== running platform tests (hosted-Supabase compatibility)"
 run_tests tests/sql/platform_tests.sql
@@ -103,6 +103,8 @@ echo "== running tenancy tests (0076: every row says its hotel, every branch row
 run_tests tests/sql/tenancy_tests.sql
 echo "== running function scope tests (0078: every function a visitor or a staff member may call keeps to the hotel and the branch; no row points to another hotel)"
 run_tests tests/sql/function_scope_tests.sql
+echo "== running guest hotel tests (0080: address and phone sessions isolate hotels)"
+run_tests tests/sql/guest_hotel_tests.sql
 echo "== running hotel settings tests (0079: independent defaults for each hotel)"
 run_tests tests/sql/hotel_settings_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"

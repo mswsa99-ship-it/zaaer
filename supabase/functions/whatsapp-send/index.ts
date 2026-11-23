@@ -16,7 +16,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { projectKey } from "../_shared/keys.ts";
 import { textPayload, usable, waCheck, waSend, type WaChannel } from "../_shared/whatsapp.ts";
 
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "content-type": "application/json" } });
 
 Deno.serve(async (req) => {

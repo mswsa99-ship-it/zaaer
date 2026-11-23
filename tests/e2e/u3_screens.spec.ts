@@ -76,7 +76,7 @@ test("UB05 the owner sees the branches side by side, the platforms net of commis
 });
 
 test("UB06 the guest's page welcomes them with the branch, lists the steps before arrival and the branch's own stay rules", async ({ page, go }) => {
-  await page.evaluate(() => { try { sessionStorage.removeItem("guest_phone_session"); } catch { /* storage blocked */ } }).catch(() => undefined);
+  await page.evaluate(() => { try { for (const k of Object.keys(sessionStorage)) if (k === "guest_phone_session" || k.startsWith("guest_phone_session:")) sessionStorage.removeItem(k); } catch { /* storage blocked */ } }).catch(() => undefined);
   await go("/booking/lookup");
   await page.getByPlaceholder("05xxxxxxxx").fill("0501110008");
   await page.getByRole("button", { name: "متابعة" }).click();

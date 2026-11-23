@@ -180,7 +180,7 @@ test.describe("the stay cycle (phase 3)", () => {
   test("SU07 the guest's page: the arrival at reception first, then the code — or, in the annex, the key", async ({ page, go }) => {
     const open = async (phone: string, ref: string) => {
       // «حجوزاتي» keeps a verified phone's list for the tab; another guest starts from the phone
-      await page.evaluate(() => { try { sessionStorage.removeItem("guest_phone_session"); } catch { /* storage blocked */ } });
+      await page.evaluate(() => { try { for (const k of Object.keys(sessionStorage)) if (k === "guest_phone_session" || k.startsWith("guest_phone_session:")) sessionStorage.removeItem(k); } catch { /* storage blocked */ } });
       await go("/booking/lookup");
       await page.getByPlaceholder("05xxxxxxxx").fill(phone);
       await page.getByRole("button", { name: "متابعة" }).click();

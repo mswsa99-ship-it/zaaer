@@ -1,3 +1,4 @@
+import { guestHeaders } from "./guestScope";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /** Demo build (VITE_DEMO=1): an in-browser backend replaces Supabase so the whole UI can be explored without a server. */
@@ -7,7 +8,7 @@ function realClient(): SupabaseClient {
   const url = import.meta.env.VITE_SUPABASE_URL as string;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   if (!url || !anonKey) throw new Error("Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env");
-  return createClient(url, anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  return createClient(url, anonKey, { global: { fetch: (input, init) => { const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)); for (const [k,v] of Object.entries(guestHeaders())) headers.set(k,v); return fetch(input, { ...init, headers }); } }, auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 }
 
 async function demoClient(): Promise<SupabaseClient> {
