@@ -34,3 +34,8 @@ verify_jwt = true
 # bridge key (x-bridge-key), checked against its SHA-256 (fn_wa_bridge_auth) before anything else runs
 [functions.wa-bridge]
 verify_jwt = false
+
+# The owner invites a staff member by e-mail (0074): signed-in staff only; the database decides, as the caller, who may
+# invite and to which address (fn_admin_staff_invite_target), and the invitation is Supabase Auth's own e-mail
+[functions.staff-invite]
+verify_jwt = true
