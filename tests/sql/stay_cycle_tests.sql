@@ -23,6 +23,8 @@ $$;
 create or replace function t_id(p_k text) returns uuid language sql security definer as $$ select v from ids where k = p_k $$;
 create or replace function t_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function t_unit(p uuid) returns rooms language sql security definer as $$ select * from rooms where id = p $$;
+-- what stands before a booking's code, as the server's own functions ask it (since 0078 no one signed in may call fn_evaluate_access)
+create or replace function t_evaluate(p uuid) returns table(allowed boolean, reasons text[]) language sql security definer as $$ select allowed, reasons from fn_evaluate_access(p, false) $$;
 create or replace function t_box(p uuid) returns keyboxes language sql security definer as $$ select * from keyboxes where room_id = p $$;
 create or replace function t_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;
 create or replace function t_due(p uuid, p_at timestamptz) returns jsonb language sql security definer as $$ select fn_stay_due_internal(p, p_at) $$;
@@ -537,7 +539,7 @@ exception when others then perform t_record('SC19a finance and housekeeping do n
 -- ---------------------------------------------------------------- SC20: the guest's page
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare e record; begin
-  select * into e from fn_evaluate_access(t_id('resDirty'), false);
+  select * into e from t_evaluate(t_id('resDirty'));
   perform t_record('SC20 before the arrival, what stands before the code is the arrival itself at reception',
     not e.allowed and array_to_string(e.reasons, ' | ') like '%يُسجَّل الوصول في الاستقبال%', array_to_string(e.reasons, ' | '));
 exception when others then perform t_record('SC20 before the arrival, what stands before the code is the arrival itself at reception', false, sqlerrm); end $$;

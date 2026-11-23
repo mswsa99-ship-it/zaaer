@@ -18,6 +18,8 @@ $$;
 create or replace function t_kb_count(p_org uuid) returns int language sql security definer as $$ select count(*)::int from knowledge_entries where organization_id = p_org $$;
 create or replace function t_unanswered(p_norm text) returns table(asked int, status text) language sql security definer as $$ select asked_count, status from unanswered_questions where normalized = p_norm $$;
 create or replace function t_audit_count(p_action text, p_entity uuid) returns int language sql security definer as $$ select count(*)::int from audit_events where action = p_action and entity_id = p_entity $$;
+-- the public answers as the reception assistant reads them (the server's key): since 0078 no one signed in may call fn_public_knowledge
+create or replace function t_public_knowledge(p_branch uuid) returns table(id uuid) language sql security definer as $$ select id from fn_public_knowledge(p_branch) $$;
 
 -- fixtures: a staff-only entry + an inactive entry + a second-org entry (as superuser)
 reset role;
@@ -118,9 +120,9 @@ do $$ declare r jsonb; kid uuid; v int; begin
   end;
   perform fn_admin_archive_knowledge(kid, 'لم تعد الخدمة متاحة', true);
   perform t_record('K11b archived entry disappears from public answers but the row stays',
-    not exists (select 1 from fn_public_knowledge('00000000-0000-0000-0000-000000000010') p where p.id = kid) and exists (select 1 from knowledge_entries k where k.id = kid and k.archived_at is not null));
+    not exists (select 1 from t_public_knowledge('00000000-0000-0000-0000-000000000010') p where p.id = kid) and exists (select 1 from knowledge_entries k where k.id = kid and k.archived_at is not null));
   perform fn_admin_archive_knowledge(kid, null, false);
-  perform t_record('K11c restored entry is public again', exists (select 1 from fn_public_knowledge('00000000-0000-0000-0000-000000000010') p where p.id = kid));
+  perform t_record('K11c restored entry is public again', exists (select 1 from t_public_knowledge('00000000-0000-0000-0000-000000000010') p where p.id = kid));
 end $$;
 reset role;
 

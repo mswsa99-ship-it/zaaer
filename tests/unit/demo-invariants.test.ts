@@ -931,9 +931,10 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
 
   it("SD03 the code comes after the arrival, once, for a unit with a key box — and is the guest's own on their page; a unit without a box takes its key at reception", async () => {
     const r = await book(K1, 0, 2); const token = await prepare(r.id, r.internal_ref);
-    const ev = (await rpc<any[]>("fn_evaluate_access", { p_reservation: r.id }))[0];
+    const ev = (await rpc<any>("fn_guest_session", { p_token: token })).access;
     expect(ev.allowed).toBe(false);
     expect(ev.reasons).toContain("يُسجَّل الوصول في الاستقبال ثم يُسلَّم الرمز");
+    expect(await fails(rpc("fn_evaluate_access", { p_reservation: r.id }))).toMatch(/permission denied/);   // 0078: internal only
     expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "supervisor" })).reasons).toEqual(["لم يُسجَّل الوصول بعد"]);
     expect((await rpc<any>("fn_guest_access_code", { p_token: token })).allowed).toBe(false);
     expect((await rpc<any>("fn_guest_session", { p_token: token })).reservation).toMatchObject({ has_keybox: true, first_night_paid: false });
@@ -1869,7 +1870,7 @@ describe("G01/G02/G03/G19/G22 — guests, platforms and the website in the demo 
     const card = await rpc<any>("fn_public_branch", { p_branch: A });
     expect(typeof card.booking_platform_url === "string" || card.booking_platform_url === null).toBe(true);
     await login("reception@demo.sa");
-    expect(Array.isArray(await rpc<any>("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toBe(true);   // the staff still read it inside
+    expect(await fails(rpc("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toMatch(/permission denied/);   // 0078: nor the staff; the server's jobs only
   });
 });
 

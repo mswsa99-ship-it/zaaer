@@ -60,8 +60,7 @@ begin
     tz || ' branch=' || b_today || ' session=' || current_date);
 end $$;
 
-select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
-set role authenticated;
+-- asked as the server's own functions ask it (since 0078 no one signed in may call fn_evaluate_access)
 do $$ declare res uuid := (select v::uuid from ld where k = 'res'); rs text[]; begin
   select reasons into rs from fn_evaluate_access(res);
   perform t_record('LD04 a stay that starts on the branch''s today is inside the stay period, whatever the UTC date',
