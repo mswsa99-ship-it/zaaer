@@ -103,6 +103,8 @@ echo "== running tenancy tests (0076: every row says its hotel, every branch row
 run_tests tests/sql/tenancy_tests.sql
 echo "== running function scope tests (0078: every function a visitor or a staff member may call keeps to the hotel and the branch; no row points to another hotel)"
 run_tests tests/sql/function_scope_tests.sql
+echo "== running hotel settings tests (0079: independent defaults for each hotel)"
+run_tests tests/sql/hotel_settings_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 run_tests tests/sql/whatsapp_purge_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
