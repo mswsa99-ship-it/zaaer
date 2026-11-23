@@ -88,6 +88,8 @@ echo "== running accounts tests (0074: security events of sign-in and passwords,
 psql -d "$DB" -f tests/sql/accounts_tests.sql
 echo "== running unit licence tests (0075: the licence number read by the owner, the manager and the supervisor only, and changed with «definitions»)"
 psql -d "$DB" -f tests/sql/unit_license_tests.sql
+echo "== running tenancy tests (0076: every row says its hotel, every branch row its branch; a row naming another hotel is refused)"
+psql -d "$DB" -f tests/sql/tenancy_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 psql -d "$DB" -f tests/sql/whatsapp_purge_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"

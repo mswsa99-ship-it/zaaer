@@ -63,6 +63,16 @@ describe("TN — every table belongs to the platform, a hotel or a branch", () =
     }
   });
 
+  it("TN06 the SQL tests' list of hotel tables is this file's", () => {
+    const tests = readFileSync(join(ROOT, "tests/sql/tenancy_tests.sql"), "utf8");
+    const block = /insert into tn_hotel_tables values([\s\S]*?);/.exec(tests)![1];
+    const listed = [...block.matchAll(/\('([a-z_]+)'\)/g)].map((m) => m[1]).sort();
+    expect(listed).toEqual(Object.entries(T).filter(([, e]) => e.scope === "hotel").map(([t]) => t).sort());
+    const kids = /insert into tn_children values([\s\S]*?);/.exec(tests)![1];
+    const pairs = [...kids.matchAll(/\('([a-z_]+)','([a-z_]+)','([a-z_]+)'\)/g)].map((m) => `${m[1]}<${m[2]}`).sort();
+    expect(pairs).toEqual(Object.entries(T).filter(([, e]) => e.via && e.via !== "branches").map(([t, e]) => `${t}<${e.via}`).sort());
+  });
+
   it("TN05 a table with no hotel column and no parent to take it from is one of the guest's three, each with its reason", () => {
     const orphans = Object.entries(T).filter(([, e]) => e.adds?.includes("organization_id") && !e.via).map(([t]) => t);
     const reasoned = orphans.filter((t) => (T[t].note ?? "").length > 20);

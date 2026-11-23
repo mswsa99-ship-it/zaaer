@@ -1,21 +1,13 @@
 {
- "rule": "Plan item 2.1 (owner's decisions of 23 Nov 2026: many hotels, many branches in each; one account belongs to one hotel). Every table in public is classified once: platform (the hotels' registry, read by the platform operator), hotel (one hotel's rows: organization_id) or branch (one branch's rows: organization_id and branch_id). «via» names the parent a row's hotel and branch come from today; «adds» lists the columns item 2.2 adds so the scope is in the row itself. tests/unit/tenancy.test.ts refuses a table created in a migration that is not here.",
+ "rule": "Plan item 2.1 (owner's decisions of 23 Nov 2026: many hotels, many branches in each; one account belongs to one hotel). Every table in public is classified once: platform (the hotels' registry, read by the platform operator), hotel (one hotel's rows: organization_id) or branch (one branch's rows: organization_id and branch_id). «via» names the parent a row's hotel and branch come from today; Since 0076 (item 2.2) every hotel row carries organization_id and every branch row branch_id too; for a table with «via», fn_tenant_fill fills both from that parent and refuses a row that names another. tests/unit/tenancy.test.ts refuses a table created in a migration that is not here.",
  "tables": {
   "access_delivery_events": {
    "scope": "branch",
-   "via": "reservations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "reservations"
   },
   "access_release_requests": {
    "scope": "branch",
-   "via": "reservations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "reservations"
   },
   "accounting_periods": {
    "scope": "hotel"
@@ -25,33 +17,21 @@
   },
   "ai_guardrail_events": {
    "scope": "branch",
-   "via": "conversations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "conversations"
   },
   "ai_ops_conversations": {
    "scope": "branch"
   },
   "ai_ops_messages": {
    "scope": "branch",
-   "via": "ai_ops_conversations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "ai_ops_conversations"
   },
   "ai_settings": {
    "scope": "hotel"
   },
   "ai_tool_executions": {
    "scope": "branch",
-   "via": "conversations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "conversations"
   },
   "ai_usage_daily": {
    "scope": "hotel"
@@ -94,20 +74,14 @@
   },
   "branch_media": {
    "scope": "branch",
-   "via": "branches",
-   "adds": [
-    "organization_id"
-   ]
+   "via": "branches"
   },
   "branch_media_items": {
    "scope": "branch"
   },
   "branch_memberships": {
    "scope": "branch",
-   "via": "branches",
-   "adds": [
-    "organization_id"
-   ]
+   "via": "branches"
   },
   "branch_payment_settings": {
    "scope": "branch"
@@ -129,42 +103,24 @@
   },
   "code_rotation_events": {
    "scope": "branch",
-   "via": "keyboxes",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "keyboxes"
   },
   "conversation_messages": {
    "scope": "branch",
-   "via": "conversations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "conversations"
   },
   "conversations": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "data_purge_requests": {
    "scope": "branch"
   },
   "day_closing_lines": {
    "scope": "branch",
-   "via": "day_closings",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "day_closings"
   },
   "day_closing_requests": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "day_closings": {
    "scope": "branch"
@@ -173,10 +129,7 @@
    "scope": "hotel"
   },
   "expense_attachments": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "expense_categories": {
    "scope": "hotel"
@@ -201,27 +154,15 @@
   },
   "guest_lookup_attempts": {
    "scope": "branch",
-   "note": "the guest's attempts to find a booking by its number — keyed by phone and device; scoped to the hotel whose site was opened (2.6)",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "note": "the guest's attempts to find a booking by its number — keyed by phone and device; scoped to the hotel whose site was opened (2.6)"
   },
   "guest_phone_challenges": {
    "scope": "branch",
-   "note": "the WhatsApp code sent to a guest's phone — sent from the branch's own channel and scoped to that hotel (2.6, S3)",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "note": "the WhatsApp code sent to a guest's phone — sent from the branch's own channel and scoped to that hotel (2.6, S3)"
   },
   "guest_phone_sessions": {
    "scope": "branch",
-   "note": "a guest's verified phone session — valid on the hotel whose site issued it only (2.6)",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "note": "a guest's verified phone session — valid on the hotel whose site issued it only (2.6)"
   },
   "guest_profiles": {
    "scope": "hotel"
@@ -239,10 +180,7 @@
    "scope": "hotel"
   },
   "inventory_periods": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "invoices": {
    "scope": "branch"
@@ -252,47 +190,28 @@
   },
   "journal_lines": {
    "scope": "branch",
-   "via": "journal_entries",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "journal_entries"
   },
   "journey_messages": {
    "scope": "branch"
   },
   "journey_ticks": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "keyboxes": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "knowledge_entries": {
    "scope": "branch"
   },
   "maintenance_tickets": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "monitor_runs": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "notifications": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "organizations": {
    "scope": "platform",
@@ -300,11 +219,7 @@
   },
   "payment_transactions": {
    "scope": "branch",
-   "via": "reservations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "reservations"
   },
   "platform_payouts": {
    "scope": "branch"
@@ -335,40 +250,23 @@
   },
   "registration_sessions": {
    "scope": "branch",
-   "via": "reservations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "reservations"
   },
   "release_rules": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "released_slots": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "reservation_allocations": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "reservation_charges": {
    "scope": "branch"
   },
   "reservation_guests": {
    "scope": "branch",
-   "via": "reservations",
-   "adds": [
-    "organization_id",
-    "branch_id"
-   ]
+   "via": "reservations"
   },
   "reservation_nights": {
    "scope": "branch"
@@ -419,16 +317,10 @@
    "scope": "branch"
   },
   "whatsapp_inbound_messages": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   },
   "whatsapp_outbox": {
-   "scope": "branch",
-   "adds": [
-    "organization_id"
-   ]
+   "scope": "branch"
   }
  }
 }
