@@ -78,6 +78,8 @@ run_gate lint       P0 SKIP_LINT      npm run lint
 run_gate raw-html   P0 SKIP_RAW_HTML  npm run check:raw-html
 
 if [[ "${QUICK:-}" != "1" ]]; then
+  # plan 5.5: dependency audit, no high/critical (needs the npm registry; SKIP_AUDIT=1 only offline, never in CI)
+  run_gate audit      P0 SKIP_AUDIT npm audit --audit-level=high
   if pg_reachable || [[ -n "${CI:-}" ]]; then
     run_gate sql   P0 SKIP_SQL  bash tests/sql/run.sh
     run_gate race  P0 SKIP_SQL  bash tests/sql/concurrency.sh
