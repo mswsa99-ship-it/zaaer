@@ -5,7 +5,7 @@
  * The demo backend answers at once; `window.__demoLatency` (src/demo/client.ts) delays chosen answers so the
  * races below are replayed deterministically.
  */
-import { test, expect } from "./fixtures";
+import { test, expect, bookingNext, fillGuest } from "./fixtures";
 
 const RIYADH = "00000000-0000-0000-0000-000000000010";
 const JEDDAH = "00000000-0000-0000-0000-000000000012";
@@ -98,8 +98,9 @@ test.describe("trace codes (decision 60)", () => {
   test("TR06 a failed operation shows its trace code, and the owner finds what happened by that code", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/staff/reservations/new");
-    await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("ضيف تجربة التتبع");
-    await page.getByPlaceholder("05xxxxxxxx").fill("0501112233");
+    await bookingNext(page);
+    await fillGuest(page, "ضيف تجربة التتبع", "0501112233");
+    await bookingNext(page);
     await page.locator("div:has(> label:has-text('مصدر الحجز')) select").selectOption({ label: "Booking.com" });
     await page.getByTestId("platform-collects").selectOption("property");   // 0038: who collects is chosen on the form
     await page.waitForTimeout(500);
@@ -125,8 +126,9 @@ test.describe("trace codes (decision 60)", () => {
     await loginAs("owner");
     // any audited operation from the staff screens: create a reservation
     await go("/staff/reservations/new");
-    await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("ضيف تجربة السجل");
-    await page.getByPlaceholder("05xxxxxxxx").fill("0501112244");
+    await bookingNext(page);
+    await fillGuest(page, "ضيف تجربة السجل", "0501112244");
+    await bookingNext(page);
     await page.waitForTimeout(500);
     await page.getByRole("button", { name: "إنشاء الحجز" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });

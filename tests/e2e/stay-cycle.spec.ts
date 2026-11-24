@@ -37,8 +37,9 @@ test.describe("the stay cycle (phase 3)", () => {
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
     await expect(page.getByTestId("reasons").first()).toContainText("التأمين لم يُستلم كاملًا");
     await expect(arrival).toBeVisible();
-    // the branch's deposit, on its own voucher
+    // the branch's deposit, on its own voucher, with its «استلمت» confirmation
     await deposit.locator("input[data-money]").fill("50");
+    await deposit.getByLabel(/استلمت المبلغ/).check();
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
     await expect(page.getByTestId("stay-notice")).toContainText("سُجِّل الوصول");
     await expect.poll(() => financeCell(page, "رصيد التأمين")).toBe(50);

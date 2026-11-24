@@ -69,6 +69,7 @@ export default function StaffReservationNew() {
   // Zaaer parity (0011): companions by name, extra units in the same booking (one reservation per unit, created atomically)
   const [companionRows, setCompanionRows] = useState<Array<{ full_name: string; relationship: string }>>([]);
   const [extraUnits, setExtraUnits] = useState<Array<{ category_id: string; adults: number; companions: number }>>([]);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [times, setTimes] = useState({ arrival: "", departure: "" });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [rooms, setRooms] = useState<Array<{ room_id: string; room_number: string; status: string; cleanliness: string; block_name: string | null }>>([]);
@@ -134,6 +135,19 @@ export default function StaffReservationNew() {
   const guestDataOk = !nameErr && !phoneErr && companionErr.every((x) => !x) && (!!guest || !!f.guest_phone.trim());
   const capacityOk = (cat ? f.adults + Math.max(f.companions, namedCompanions) <= cat.max_capacity : true)
     && extraUnits.every((u) => { const c = cats.find((x) => x.id === u.category_id); return !c || u.adults + u.companions <= c.max_capacity; });
+  // 6.8 (U9): a disabled create button always says why (the first missing condition, in the order the form is filled)
+  const blockReason: string | null =
+    nights <= 0 ? "اختر تاريخ وصول ومغادرة صحيحين (ليلة واحدة على الأقل)."
+    : !f.guest_name.trim() ? "اكتب اسم النزيل."
+    : !guestDataOk ? "أكمل بيانات النزيل (الجوال) أو صحّح الخطأ الظاهر تحت الحقل."
+    : !capacityOk ? "عدد النزلاء يتجاوز سعة نوع الوحدة، قلّل العدد أو اختر نوعًا أوسع."
+    : pastStay && !canLate ? "الإقامة في الماضي وصلاحيتك لا تسمح بالتسجيل المتأخر."
+    : pastStay && !lateReason.trim() ? "اكتب سبب التسجيل المتأخر."
+    : source?.kind === "external" && f.platform_collects == null ? "حدّد من يحصّل المبلغ: المنصة أم الفندق."
+    : !quote ? "لا يوجد سعر محسوب لهذه الفترة بعد، تحقق من النوع والتواريخ."
+    : null;
+  const step1Ok = nights > 0 && !!f.category_id && (!pastStay || (canLate && !!lateReason.trim()));
+  const step2Ok = !!f.guest_name.trim() && guestDataOk && capacityOk;
   return (
     <div>
       <button onClick={() => navigate("/staff/reservations")} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> الحجوزات</button>
@@ -147,9 +161,14 @@ export default function StaffReservationNew() {
           <button type="button" className="btn-ghost px-3 py-1 text-xs" onClick={clearDraft}>تجاهلها</button>
         </div>
       )}
+      <ol className="mb-4 flex gap-2 text-sm" aria-label="خطوات الحجز" data-testid="wizard-steps">
+        {STEPS.map((t, i) => (
+          <li key={t} className={`flex-1 rounded-xl px-3 py-2 text-center ${step === i + 1 ? "bg-brand-600 font-semibold text-white" : "bg-ink-100 text-ink-600"}`} aria-current={step === i + 1 ? "step" : undefined}>{i + 1} · {t}</li>
+        ))}
+      </ol>
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <Card>
+        <div className={step === 3 ? "space-y-4 lg:col-span-2" : "space-y-4 lg:col-span-3"}>
+          <div hidden={step !== 1} data-testid="step-1"><Card>
             <h2 className="mb-3 font-semibold text-ink-800">المدة والوحدة</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="الوصول"><input type="date" className="input" dir="ltr" value={f.check_in} onChange={(e) => setF({ ...f, check_in: e.target.value, check_out: f.check_out <= e.target.value ? addDays(e.target.value, 1) : f.check_out })} /></Field>
@@ -187,8 +206,8 @@ export default function StaffReservationNew() {
               <button type="button" onClick={() => setExtraUnits([...extraUnits, { category_id: f.category_id, adults: 1, companions: 0 }])} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> وحدة أخرى في نفس الحجز</button>
               {extraUnits.length > 0 && <p className="text-[11px] text-ink-400">يُنشأ حجز لكل وحدة بنفس النزيل والتواريخ، دفعة واحدة: إن تعذّر أحدها لا يُنشأ أي منها. تُخصَّص وحدات الحجوزات الإضافية من صفحة كل حجز.</p>}
             </div>
-          </Card>
-          <Card>
+          </Card></div>
+          <div hidden={step !== 2} data-testid="step-2"><Card>
             <h2 className="mb-3 font-semibold text-ink-800">النزيل الرئيسي</h2>
             {/* decision 2: a returning guest is picked from the profiles (by name, phone or document); a new one gets a new profile */}
             <div className="mb-3 rounded-xl border border-ink-100 p-3" data-testid="profile-picker">
@@ -231,8 +250,8 @@ export default function StaffReservationNew() {
                 {companionRows.length > 0 && <p className="text-[11px] text-ink-400">يُسجَّل كل مرافق كنزيل في الحجز وتبقى مطابقة هويته عند الوصول.</p>}
               </div>
             </div>
-          </Card>
-          <Card>
+          </Card></div>
+          <div hidden={step !== 3} data-testid="step-3"><Card>
             <h2 className="mb-3 font-semibold text-ink-800">المصدر والتفاصيل</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="مصدر الحجز"><select className="input" value={f.source_id} onChange={(e) => setF({ ...f, source_id: e.target.value })}>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
@@ -250,9 +269,10 @@ export default function StaffReservationNew() {
               <Field label="الغرض"><select className="input" value={f.visit_purpose} onChange={(e) => setF({ ...f, visit_purpose: e.target.value })}><option value="">—</option>{["سياحة", "زيارة أقارب", "عمل", "ديني", "رياضة وترفيه", "أخرى"].map((x) => <option key={x} value={x}>{x}</option>)}</select></Field>
               <Field label="ملاحظات" className="sm:col-span-2"><textarea className="input" rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
             </div>
-          </Card>
+          </Card></div>
+          <WizardNav step={step} setStep={setStep} canNext={step === 1 ? step1Ok : step === 2 ? step2Ok : false} />
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4" hidden={step !== 3}>
           <Card>
             <h2 className="mb-3 flex items-center gap-2 font-semibold text-ink-800"><Calculator className="h-4 w-4 text-brand-600" /> التسعير</h2>
             <div className="space-y-3">
@@ -278,10 +298,20 @@ export default function StaffReservationNew() {
           <Card>
             <Toggle checked={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} label="تأكيد الحجز مباشرة" />
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
-            <button type="submit" disabled={busy || !quote || !f.guest_name.trim() || !guestDataOk || !capacityOk || nights <= 0 || (pastStay && (!canLate || !lateReason.trim())) || (source?.kind === "external" && f.platform_collects == null)} className="btn-primary mt-4 w-full">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
+            <button type="submit" disabled={busy || !!blockReason} aria-describedby={blockReason ? "create-block-reason" : undefined} title={blockReason ?? undefined} className="btn-primary mt-4 w-full" data-testid="create-reservation">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
+            {blockReason && !busy && <p id="create-block-reason" className="mt-2 text-xs text-ink-600" role="status" data-testid="create-block-reason">لا يمكن الإنشاء الآن: {blockReason}</p>}
           </Card>
         </div>
       </form>
+    </div>
+  );
+}
+const STEPS = ["المدة والوحدة", "النزيل", "المصدر والسعر"];
+function WizardNav({ step, setStep, canNext }: { step: 1 | 2 | 3; setStep: (n: 1 | 2 | 3) => void; canNext: boolean }) {
+  return (
+    <div className="flex justify-between gap-2" data-testid="wizard-nav">
+      {step > 1 ? <button type="button" className="btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>السابق</button> : <span />}
+      {step < 3 && <button type="button" className="btn-primary" disabled={!canNext} onClick={() => setStep((step + 1) as 2 | 3)}>التالي</button>}
     </div>
   );
 }

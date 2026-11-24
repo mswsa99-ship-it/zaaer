@@ -5,7 +5,7 @@
  * covers the whole stay or nothing), G03 (every change audited with who, when and why), G19 (corrections only with a
  * reason), G22 (the owner's review list), G27 (the screen shows the server's refusal, never a fake success).
  */
-import { test, expect, createReservation, financeCell } from "./fixtures";
+import { test, expect, createReservation, financeCell, bookingNext, fillGuest } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Opens the stay whose unit is `room`, among the reservations of `status`. */
@@ -54,14 +54,15 @@ const todayRiyadh = () => new Date().toLocaleDateString("en-CA", { timeZone: "As
 /** A new platform booking from the staff form (decision 4): the number, who collects, the day it was booked there. */
 async function createPlatformReservation(page: Page, opts: { guest: string; phone: string; ref: string; collects: "platform" | "property"; units?: number }) {
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-  await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill(opts.guest);
-  await page.getByPlaceholder("05xxxxxxxx").fill(opts.phone);
+  for (let i = 1; i < (opts.units ?? 1); i++) await page.getByRole("button", { name: "وحدة أخرى في نفس الحجز" }).click();
+  await bookingNext(page);
+  await fillGuest(page, opts.guest, opts.phone);
+  await bookingNext(page);
   const src = page.locator("select").filter({ has: page.locator("option:has-text('Booking.com')") });
   await src.selectOption({ label: "Booking.com" });
   await page.getByLabel("رقم الحجز في المنصة").fill(opts.ref);
   await page.getByTestId("platform-collects").selectOption(opts.collects);
   await page.getByLabel("تاريخ الحجز في المنصة").fill(todayRiyadh());
-  for (let i = 1; i < (opts.units ?? 1); i++) await page.getByRole("button", { name: "وحدة أخرى في نفس الحجز" }).click();
   await page.waitForTimeout(400);
   await page.getByRole("button", { name: /إنشاء الحجز|إنشاء \d+ حجوزات/ }).click();
 }
@@ -173,8 +174,9 @@ test.describe("guests, platforms and the website (phase 5)", () => {
   test("GE04 a platform's booking: who collects and the day it was booked there are required; the platform collecting makes its receipt for the whole stay; «طابقتُ مع المنصة»; cancelled with the platform's number", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-    await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("ضيف بوكينق");
-    await page.getByPlaceholder("05xxxxxxxx").fill("0509001001");
+    await bookingNext(page);
+    await fillGuest(page, "ضيف بوكينق", "0509001001");
+    await bookingNext(page);
     await page.locator("select").filter({ has: page.locator("option:has-text('Booking.com')") }).selectOption({ label: "Booking.com" });
     await expect(page.getByText("رقم الحجز في المنصة (مطلوب)")).toBeVisible();
     await page.getByLabel("رقم الحجز في المنصة").fill("BK-E2E-1");

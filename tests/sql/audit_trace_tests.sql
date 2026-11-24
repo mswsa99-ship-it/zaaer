@@ -63,7 +63,7 @@ select set_config('request.headers', '{"x-correlation-id":"AbC-12345678","x-clie
 do $$ declare v jsonb; a audit_events; begin
   v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-03'));
   a := t_audit((v->>'voucher_id')::uuid, 'voucher.receipt_created');
-  perform t_record('AT03 the app''s correlation and source headers are used when well formed', a.correlation_id = 'AbC-12345678' and a.source = 'staff-app', row_to_json(a)::text);
+  perform t_record('AT03 the app''s correlation header is used when well formed; a client source header no longer writes the source (plan 5.3, 0082)', a.correlation_id = 'AbC-12345678' and a.source = 'screen', row_to_json(a)::text);
 exception when others then perform t_record('AT03 the app''s correlation and source headers are used when well formed', false, sqlerrm); end $$;
 select set_config('request.headers', '{"x-correlation-id":"bad id; select 1","x-client-source":"<script>"}', false);
 do $$ declare v jsonb; a audit_events; begin

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Link2, CheckCircle2, Circle } from "lucide-react";
 import { opsApi, toArabicError, type PlatformCheckRow } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
-import { SectionTitle, Card, EmptyState, Badge, ErrorBanner, Spinner, LoadingScreen } from "../../components/ui";
+import { SectionTitle, Card, EmptyState, Badge, ErrorBanner, Spinner, LoadingScreen, LoadErrorCard } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { RESERVATION_STATUS_LABELS, type ReservationStatus } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
@@ -28,9 +28,10 @@ export default function PlatformCheck() {
   const pending = (rows ?? []).filter((r) => !r.verified_at && !["cancelled", "no_show"].includes(r.status)).length;
   return (
     <div>
-      <SectionTitle title="مطابقة المنصات" subtitle={`وصول اليوم والغد من المنصات: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex flex-wrap items-center gap-2"><input type="date" className="input" dir="ltr" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="اليوم" /><BranchPicker /></div>} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      {(rows ?? []).length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا حجوزات من المنصات في هذين اليومين" /> : (
+      <SectionTitle title="مطابقة المنصات" subtitle={error && (rows ?? []).length === 0 ? "وصول اليوم والغد من المنصات: تعذّر تحميل القائمة" : `وصول اليوم والغد من المنصات: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex flex-wrap items-center gap-2"><input type="date" className="input" dir="ltr" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="اليوم" /><BranchPicker /></div>} />
+      {/* 6.6 (U3): a failed load is one error card with a retry, never an error next to «لا حجوزات»; a failed mark keeps the rows and shows the banner */}
+      {error && (rows ?? []).length > 0 && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {error && (rows ?? []).length === 0 ? <LoadErrorCard message={error} onRetry={load} /> : (rows ?? []).length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا حجوزات من المنصات في هذين اليومين" /> : (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-ink-100 text-xs text-ink-400">

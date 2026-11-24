@@ -4,7 +4,7 @@
  * list shows each voucher with its files; the management cancels one only with a reason, which is recorded and sent to
  * «بحاجة لمراجعة». The categories are the owner's list (a setting, edited here by who holds «التعريفات»).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Receipt, Paperclip, Plus, Ban, Tags } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { expenseApi, newIdempotencyKey, toArabicError, type CashAccount, type ExpenseCategory, type ExpenseRow } from "../../lib/api";
@@ -139,6 +139,21 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
   const [fileErr, setFileErr] = useState<string | null>(null);
   const [key] = useState(newIdempotencyKey());
 
+  // 6.5 (U4): what is typed survives a reload (this tab, per branch) and the form offers to restore it; the receipt file is never stored
+  const draftKey = `zaaer:expense-draft:${branchId}`;
+  type ExpenseDraft = { accountId: string; categoryId: string; amount: number | null; day: string; payee: string; desc: string; reference: string };
+  const [draft, setDraft] = useState<ExpenseDraft | null>(null);
+  const typed = !!(desc.trim() || payee.trim() || amount || reference.trim());
+  useEffect(() => {
+    try { const raw = sessionStorage.getItem(draftKey); const d = raw ? JSON.parse(raw) as ExpenseDraft : null; setDraft(d && (d.desc || d.payee || d.amount || d.reference) ? d : null); } catch { setDraft(null); }
+  }, [draftKey]);
+  useEffect(() => {
+    if (!typed) return;
+    const t = window.setTimeout(() => { try { sessionStorage.setItem(draftKey, JSON.stringify({ accountId, categoryId, amount, day, payee, desc, reference })); } catch { /* storage off */ } }, 300);
+    return () => window.clearTimeout(t);
+  }, [typed, draftKey, accountId, categoryId, amount, day, payee, desc, reference]);
+  const clearDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* storage off */ } setDraft(null); };
+
   useEffect(() => {
     Promise.all([
       supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version").eq("branch_id", branchId).is("archived_at", null).eq("is_active", true).order("kind", { ascending: false }),
@@ -155,7 +170,7 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
     setFileErr(null);
     const next = [...files, ...Array.from(list ?? [])];
     if (next.length > MAX_FILES) { setFileErr("خمسة مرفقات على الأكثر."); return; }
-    if (next.some((f) => f.size > MAX_BYTES)) { setFileErr("حجم المرفق أكبر من 2 ميجابايت."); return; }
+    if (next.some((f) => f.size > MAX_BYTES)) { setFileErr("حجم المرفق أكبر من 10 ميجابايت."); return; }
     if (next.some((f) => !/^(image\/(png|jpeg|webp)|application\/pdf)$/.test(f.type))) { setFileErr("المرفق صورة (PNG أو JPEG أو WebP) أو ملف PDF فقط."); return; }
     setFiles(next);
   }
@@ -168,8 +183,16 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
       const attachments = await Promise.all(files.map(async (f) => ({ data_base64: await toBase64(f), file_name: f.name })));
       await expenseApi.create({ branch_id: branchId, account_id: accountId, category_id: categoryId, amount_halalas: amount, description: desc.trim(), payee: payee.trim() || null,
                                 reference: isBank ? reference.trim() || null : null, occurred_on: day, idempotency_key: key, attachments });
+      clearDraft();
       onDone();
     }}>
+      {draft && !typed && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-700" data-testid="expense-draft">
+          مسودة سند لم تُحفظ{draft.desc ? `: ${draft.desc}` : ""}. (المرفق يُرفع من جديد)
+          <button type="button" className="btn-primary px-3 py-1 text-xs" onClick={() => { setAccountId(draft.accountId || accountId); setCategoryId(draft.categoryId); setAmount(draft.amount); setDay(draft.day || day); setPayee(draft.payee); setDesc(draft.desc); setReference(draft.reference); setDraft(null); }}>استعادة المسودة</button>
+          <button type="button" className="btn-ghost px-3 py-1 text-xs" onClick={clearDraft}>تجاهلها</button>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="يُصرف من"><select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="يُصرف من">{accounts.map((a) => <option key={a.id} value={a.id}>{a.kind === "cash_box" ? "الصندوق" : "الحساب البنكي"} — {a.name}</option>)}</select></Field>
         <Field label="التصنيف"><select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="التصنيف"><option value="">اختر…</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
@@ -178,7 +201,7 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
         <Field label="الوصف" className="sm:col-span-2"><input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={500} aria-label="الوصف" placeholder="مثال: قطع غيار للمكيف" /></Field>
         <Field label="المستفيد (اختياري)"><input className="input" value={payee} onChange={(e) => setPayee(e.target.value)} maxLength={120} aria-label="المستفيد" /></Field>
         {isBank && <Field label="رقم العملية البنكية (اختياري)"><input className="input" dir="ltr" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} maxLength={60} aria-label="رقم العملية" /></Field>}
-        <Field label="المرفق (إلزامي)" hint="صورة الفاتورة أو الإيصال: صورة أو PDF، حتى 5 ملفات، 2 ميجابايت للملف." className="sm:col-span-2" error={fileErr}>
+        <Field label="المرفق (إلزامي)" hint="صورة الفاتورة أو الإيصال: صورة أو PDF، حتى 5 ملفات، 10 ميجابايت للملف." className="sm:col-span-2" error={fileErr}>
           <input type="file" className="input" accept="image/png,image/jpeg,image/webp,application/pdf" multiple onChange={(e) => { pick(e.target.files); e.target.value = ""; }} aria-label="المرفق" />
         </Field>
         {files.length > 0 && <ul className="sm:col-span-2 space-y-1 text-sm" data-testid="expense-files">{files.map((f, i) => <li key={i} className="flex items-center justify-between gap-2"><span className="truncate"><Paperclip className="ml-1 inline h-3.5 w-3.5" />{f.name}</span><button type="button" className="btn-ghost text-xs" onClick={() => setFiles(files.filter((_, k) => k !== i))}>إزالة</button></li>)}</ul>}
@@ -194,7 +217,14 @@ function Categories() {
   const [tick, setTick] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { supabase.from("expense_categories").select("id, name, sort_order, is_active, version").order("sort_order").then(({ data }) => setRows((data ?? []) as ExpenseCategory[])); }, [tick]);
-  const run = async (fn: () => Promise<unknown>) => { setErr(null); try { await fn(); setTick((t) => t + 1); } catch (e) { setErr(toArabicError(e)); } };
+  // 6.7 (U7): one request at a time; the ref closes the same-tick double press, the state disables and shows the buttons
+  const inFlight = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<unknown>) => {
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setErr(null);
+    try { await fn(); setTick((t) => t + 1); } catch (e) { setErr(toArabicError(e)); } finally { inFlight.current = false; setBusy(false); }
+  };
   if (!rows) return <Spinner />;
   return (
     <div>
@@ -202,13 +232,13 @@ function Categories() {
         {rows.map((c) => (
           <div key={c.id} className="flex items-center justify-between gap-2 py-2">
             <span className={c.is_active ? "text-ink-800" : "text-ink-400 line-through"}>{c.name}</span>
-            <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => run(() => expenseApi.upsertCategory({ id: c.id, name: c.name, is_active: !c.is_active, version: c.version }))}>{c.is_active ? "إيقاف" : "تفعيل"}</button>
+            <button type="button" disabled={busy} className="btn-ghost min-h-[44px] text-xs" onClick={() => run(() => expenseApi.upsertCategory({ id: c.id, name: c.name, is_active: !c.is_active, version: c.version }))}>{c.is_active ? "إيقاف" : "تفعيل"}</button>
           </div>
         ))}
       </div>
       <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(async () => { await expenseApi.upsertCategory({ name: name.trim() }); setName(""); }); }}>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="تصنيف جديد" aria-label="تصنيف جديد" />
-        <button type="submit" className="btn-primary text-sm">إضافة</button>
+        <button type="submit" disabled={busy} className="btn-primary text-sm">{busy ? <Spinner className="h-4 w-4" /> : null} إضافة</button>
       </form>
       {err && <p className="mt-2 text-sm text-danger-600" role="alert">{err}</p>}
     </div>

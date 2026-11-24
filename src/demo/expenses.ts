@@ -103,7 +103,7 @@ export function expensesRpcs(c: ExpensesCtx): Record<string, (a: any) => any> {
       if (files.length > 5) throw new Error("VALIDATION: attachments_count");
       const decoded = files.map((f: Row) => {
         const bin = decode(String(f.data_base64 ?? "")); if (!bin || bin.length === 0) throw new Error("VALIDATION: attachment");
-        if (bin.length > 2097152) throw new Error("VALIDATION: attachment_too_large");
+        if (bin.length > 10485760) throw new Error("VALIDATION: attachment_too_large");
         const mime = sniff(bin); if (!mime) throw new Error("VALIDATION: attachment_type");
         return { mime, size: bin.length, data: String(f.data_base64).replace(/^data:[^,]*,/, "").replace(/\s/g, ""), name: String(f.file_name ?? "").trim().slice(0, 120) || null };
       });

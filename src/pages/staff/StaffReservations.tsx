@@ -191,7 +191,7 @@ export default function StaffReservations() {
 
   return (
     <div>
-      <SectionTitle title="الحجوزات" subtitle={`${data.total ? `الحجوزات المطابقة: ${data.total}` : "لا حجوزات مطابقة"}${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
+      <SectionTitle title="الحجوزات" subtitle={`${data.total ? `الحجوزات المطابقة: ${data.total}` : list.error ? "تعذّر تحميل القائمة" : "لا حجوزات مطابقة"}${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
         <div className="flex flex-wrap items-center gap-2">
           <BranchPicker />
           <Link to="/staff/rooms?view=calendar" className="btn-outline text-sm" data-testid="open-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</Link>

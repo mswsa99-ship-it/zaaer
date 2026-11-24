@@ -73,14 +73,26 @@ const escHtml = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/
 const cellText = (c: XlsxCell) => (c == null ? "" : typeof c === "object" ? (c.fmt === "money" ? c.v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : c.v.toLocaleString("en-US")) : String(c));
 
 /**
- * The document that is printed (or saved as PDF from the print dialog): the statement as a header, then the table, then
- * (OWNER-17) each further sheet of a report as its own table under its name, so the paper holds what the Excel file holds.
- * Pure, so a test reads it.
+ * 6.10 (U2 الطباعة): the print page is independent and divided into pages — the rows split into page-sized
+ * sections, each its own table that repeats the column header and carries its page number, so a 5,000-row list
+ * never makes the browser lay out one giant table.
  */
-export function buildPrintDocument(s: ExportStatement, t: ExportTable): string {
-  const [title, ...meta] = statementLines(s);
+export const PRINT_ROWS_PER_PAGE = 40;
+
+/** One page section: its own table with the repeated column header, then the page's number. */
+function printPageSections(t: ExportTable, rowsPerPage: number, from: number, to: number, pageCount: number): string {
   const th = t.columns.map((c) => `<th>${escHtml(c)}</th>`).join("");
-  const body = t.rows.map((r) => `<tr>${t.columns.map((_, j) => `<td>${escHtml(cellText(r[j]))}</td>`).join("")}</tr>`).join("");
+  const out: string[] = [];
+  const pages = Math.max(1, Math.ceil(t.rows.length / rowsPerPage));
+  for (let p = from; p < to && p < pages; p++) {
+    const rows = t.rows.slice(p * rowsPerPage, (p + 1) * rowsPerPage);
+    const body = rows.map((r) => `<tr>${t.columns.map((_, j) => `<td>${escHtml(cellText(r[j]))}</td>`).join("")}</tr>`).join("");
+    out.push(`<table class="pg${p === pages - 1 ? " last" : ""}"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table><p class="pageno">صفحة ${p + 1} من ${pageCount}</p>`);
+  }
+  return out.join("");
+}
+
+function printShell(title: string, meta: string[], pages: string, s: ExportStatement, t: ExportTable): string {
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${escHtml(title)}</title>
 <style>
   body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; color: #1b2430; margin: 16mm 12mm; font-size: 11px; }
@@ -93,15 +105,58 @@ export function buildPrintDocument(s: ExportStatement, t: ExportTable): string {
   tr { break-inside: avoid; }
   thead { display: table-header-group; }
   tfoot { display: table-footer-group; }
+  table.pg { break-after: page; }
+  table.pg.last { break-after: auto; }
+  .pageno { margin: 4px 0 0; color: #4a5568; font-size: 10px; text-align: center; }
   .foot { margin-top: 8px; color: #4a5568; }
   @page { size: A4 landscape; margin: 10mm; }
 </style></head><body>
 <h1>${escHtml(title)}</h1>
 <p class="meta">${meta.map((m) => `<span>${escHtml(m)}</span>`).join("")}</p>
-<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>
+${pages}
 ${(t.sheets ?? []).map((sh) => sheetTable(sh)).join("\n")}
 <p class="foot">${s.report ? "التقرير كاملًا" : `${escHtml(scopeText(s.scope))} · ${t.count ?? t.rows.length} صفًا في هذه الطباعة`}</p>
 </body></html>`;
+}
+
+/**
+ * The document that is printed (or saved as PDF from the print dialog): the statement as a header, then the table
+ * divided into page sections, then (OWNER-17) each further sheet of a report as its own table under its name, so
+ * the paper holds what the Excel file holds. Pure, so a test reads it.
+ */
+export function buildPrintDocument(s: ExportStatement, t: ExportTable): string {
+  const [title, ...meta] = statementLines(s);
+  const pages = Math.max(1, Math.ceil(t.rows.length / PRINT_ROWS_PER_PAGE));
+  return printShell(title, meta, printPageSections(t, PRINT_ROWS_PER_PAGE, 0, pages, pages), s, t);
+}
+
+export interface PrintBuildOptions {
+  /** rows per printed page section (default PRINT_ROWS_PER_PAGE) */
+  rowsPerPage?: number;
+  /** after this many page sections the builder yields to the event loop (default 5) */
+  yieldEveryPages?: number;
+  /** progress in page sections, for the button's busy line */
+  onProgress?: (donePages: number, totalPages: number) => void;
+}
+
+const yieldToEventLoop = () => new Promise<void>((r) => setTimeout(r, 0));
+
+/**
+ * buildPrintDocument in chunks: between page sections the tab's event loop turns, so building the printout of a
+ * 5,000-row list never freezes the tab (6.10/U2). The resulting document is identical to the synchronous one.
+ */
+export async function buildPrintDocumentAsync(s: ExportStatement, t: ExportTable, opts: PrintBuildOptions = {}): Promise<string> {
+  const rowsPerPage = Math.max(1, opts.rowsPerPage ?? PRINT_ROWS_PER_PAGE);
+  const every = Math.max(1, opts.yieldEveryPages ?? 5);
+  const pages = Math.max(1, Math.ceil(t.rows.length / rowsPerPage));
+  const parts: string[] = [];
+  for (let p = 0; p < pages; p += every) {
+    parts.push(printPageSections(t, rowsPerPage, p, Math.min(p + every, pages), pages));
+    opts.onProgress?.(Math.min(p + every, pages), pages);
+    if (p + every < pages) await yieldToEventLoop();
+  }
+  const [title, ...meta] = statementLines(s);
+  return printShell(title, meta, parts.join(""), s, t);
 }
 
 /** A further sheet as a printed table: its header row as the table head, the rows after it as the body. */

@@ -1,7 +1,10 @@
+import { roomaiAsset } from "../lib/brand";
 import { DemoBanner } from "../components/DemoBanner";
+import { useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { Hotel, ShieldCheck, Languages } from "lucide-react";
-import { useOrganizationName } from "../lib/organization";
+import { useOrganization } from "../lib/organization";
+import { guestLogoSource } from "../lib/guestBranding";
 import { GuestLangProvider, useGuestLang } from "../lib/guestLang";
 
 /** GUEST-10: the pages a foreign guest must complete read in English too; the others stay Arabic. */
@@ -18,7 +21,10 @@ export default function GuestLayout() {
 }
 
 function GuestShell({ bilingual }: { bilingual: boolean }) {
-  const orgName = useOrganizationName();
+  const org = useOrganization();
+  const orgName = org?.name_ar ?? "";
+  const logo = guestLogoSource(org?.logo);
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
   const { en, t, lang, setLang, dir } = useGuestLang();
   return (
     <div dir={dir} lang={lang} className="flex min-h-screen flex-col bg-gradient-to-b from-brand-50 via-ink-50 to-white">
@@ -26,12 +32,15 @@ function GuestShell({ bilingual }: { bilingual: boolean }) {
       <header className="border-b border-ink-100 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link to="/" className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
-              <Hotel className="h-5 w-5" />
-            </div>
+            {logo && failedLogo !== logo ? (
+              <img src={logo} alt={`${t("شعار", "Logo of")} ${orgName}`}
+                className="h-10 max-w-[100px] shrink-0 object-contain" referrerPolicy="no-referrer"
+                onError={() => setFailedLogo(logo)} />
+            ) : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
+              <Hotel className="h-5 w-5" aria-hidden="true" />
+            </div>}
             <div className="min-w-0 leading-tight">
               <p className="truncate text-sm font-semibold text-ink-800">{orgName}</p>
-              <p className="text-[11px] text-ink-400">{t("مساعد الاستقبال الذكي", "Digital reception")}</p>
             </div>
           </Link>
           <div className="flex items-center gap-3 text-xs text-ink-400">
@@ -54,6 +63,12 @@ function GuestShell({ bilingual }: { bilingual: boolean }) {
         <Link to="/privacy" className="hover:text-ink-600">{t("سياسة الخصوصية", "Privacy policy")}{en ? " (Arabic)" : ""}</Link> ·{" "}
         <Link to="/terms" className="hover:text-ink-600">{t("شروط الاستخدام", "Terms of use")}{en ? " (Arabic)" : ""}</Link> ·{" "}
         <Link to="/staff/login" className="hover:text-ink-600">{t("بوابة الموظفين والإدارة", "Staff portal")}</Link>
+        {/* plan 3.5 + approved identity (GuestBrand): the platform's name lives in the footer only, at caption
+            size with the 16px mark — the arch in the text colour, the spark in the approved spark value #0FA3B1 */}
+        <p className="mt-2 flex items-center justify-center gap-1.5" data-testid="powered-by-roomai"><span className="flex items-center gap-1.5" data-testid="guest-powered-by">
+          <img src={roomaiAsset("roomai-mark.svg")} alt="" width="16" height="16" className="shrink-0" />
+          {t("يعمل بـ RoomAI", "Powered by RoomAI")}
+        </span></p>
       </footer>
     </div>
   );

@@ -126,19 +126,24 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
   const c = s.checkin!;
   const core = c.blockers;
   const accounts = useCashAccounts(money ? branchId : null);
-  const [rent, setRent] = useState<number | null>(c.first_night_short ?? 0);
+  // M1 (plan 4.1): no prefilled amount — the clerk types what was actually received, at most the shortage
+  const [rent, setRent] = useState<number | null>(null);
   const [rentMethod, setRentMethod] = useState<PaymentMethod>("cash"); const [rentAccount, setRentAccount] = useState(""); const [rentRef, setRentRef] = useState("");
-  const [deposit, setDeposit] = useState<number | null>(c.deposit_short ?? 0);
+  const [deposit, setDeposit] = useState<number | null>(null);
   const [depMethod, setDepMethod] = useState<PaymentMethod>("cash"); const [depAccount, setDepAccount] = useState(""); const [depRef, setDepRef] = useState("");
+  // M1 (plan 4.1): no voucher at the arrival without an explicit «استلمت» confirmation
+  const [rentReceived, setRentReceived] = useState(false);
+  const [depReceived, setDepReceived] = useState(false);
   const [reason, setReason] = useState("");
   // one arrival, one pair of entries: a resend after a refusal recorded nothing, so the keys stay the same
   const [keys] = useState(() => ({ rent: newIdempotencyKey(), deposit: newIdempotencyKey() }));
-  useEffect(() => { setRent(c.first_night_short ?? 0); }, [c.first_night_short]);
-  useEffect(() => { setDeposit(c.deposit_short ?? 0); }, [c.deposit_short]);
+  const rentShort = Math.max(c.first_night_short ?? 0, 0);
   const depositShort = Math.max((c.deposit_short ?? 0) - (deposit ?? 0), 0);
   const entry = (amount: number | null, method: PaymentMethod, account: string, ref: string, key: string): PaymentEntry | undefined =>
     amount && amount > 0 ? { amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? account || undefined : undefined, reference: ref.trim() || undefined, idempotency_key: key } : undefined;
   const submit = async () => {
+    if ((rent ?? 0) > rentShort || (deposit ?? 0) > (c.deposit_short ?? 0)) throw new Error("VALIDATION: amount_exceeds_short");
+    if (((rent ?? 0) > 0 && !rentReceived) || ((deposit ?? 0) > 0 && !depReceived)) throw new Error("VALIDATION: received_confirm");
     if ((rent ?? 0) > 0 && METHOD_NEEDS_REFERENCE.includes(rentMethod) && !rentRef.trim()) throw new Error("VALIDATION: reference_required");
     if ((deposit ?? 0) > 0 && METHOD_NEEDS_REFERENCE.includes(depMethod) && !depRef.trim()) throw new Error("VALIDATION: reference_required");
     const r: CheckInResult = await stayApi.checkIn({ reservation_id: id, expected_version: s.version, rent: entry(rent, rentMethod, rentAccount, rentRef, keys.rent), deposit: entry(deposit, depMethod, depAccount, depRef, keys.deposit), deposit_reason: depositShort > 0 && reason.trim() ? reason.trim() : undefined });
@@ -162,21 +167,37 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
       {canAct && core.length === 0 && (
         <ActionForm onSubmit={submit}>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {rentShort > 0 && (
             <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">
               <legend className="px-1 text-xs font-semibold text-ink-600">سند قبض الإيجار</legend>
-              <Field label="المبلغ" hint={(c.first_night_short ?? 0) > 0 ? `المطلوب قبل الوصول: ${sar(c.first_night_short)} — الليلة الأولى كاملة، والدفعة الجزئية لا تكفي.` : "الليلة الأولى مدفوعة؛ يمكن قبض المزيد الآن أو تركه صفرًا."}>
+              <Field label="المبلغ" hint={`المطلوب قبل الوصول: ${sar(rentShort)} — الليلة الأولى كاملة، والدفعة الجزئية لا تكفي، ولا يقبل السند أكثر من المطلوب.`}>
                 <MoneyInput valueHalalas={rent} onChange={setRent} />
               </Field>
               {(rent ?? 0) > 0 && <PaymentFields method={rentMethod} setMethod={setRentMethod} accountId={rentAccount} setAccountId={setRentAccount} reference={rentRef} setReference={setRentRef} accounts={accounts.active} verb="receive" />}
+              {(rent ?? 0) > 0 && (
+                <label className="flex items-start gap-2 text-sm text-ink-700">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={rentReceived} onChange={(e) => setRentReceived(e.target.checked)} />
+                  أؤكد أنني استلمت المبلغ فعلًا
+                </label>
+              )}
             </fieldset>
+            )}
+            {(c.deposit_short ?? 0) > 0 && (
             <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">
               <legend className="px-1 text-xs font-semibold text-ink-600">سند قبض التأمين</legend>
-              <Field label="المبلغ" hint={(c.deposit_short ?? 0) > 0 ? `تأمين الفرع ${sar(c.deposit_required)}؛ يُحتجز منفصلًا ويُرد بعد المغادرة وفحصها.` : "التأمين مستلم كاملًا."}>
+              <Field label="المبلغ" hint={`تأمين الفرع ${sar(c.deposit_required)}؛ يُحتجز منفصلًا ويُرد بعد المغادرة وفحصها، ولا يقبل السند أكثر من النقص.`}>
                 <MoneyInput valueHalalas={deposit} onChange={setDeposit} />
               </Field>
               {(deposit ?? 0) > 0 && <PaymentFields method={depMethod} setMethod={setDepMethod} accountId={depAccount} setAccountId={setDepAccount} reference={depRef} setReference={setDepRef} accounts={accounts.active} verb="receive" deposit />}
+              {(deposit ?? 0) > 0 && (
+                <label className="flex items-start gap-2 text-sm text-ink-700">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={depReceived} onChange={(e) => setDepReceived(e.target.checked)} />
+                  أؤكد أنني استلمت المبلغ فعلًا
+                </label>
+              )}
               {depositShort > 0 && <ReasonInput value={reason} onChange={setReason} label="سبب عدم استلام التأمين كاملًا (إلزامي)" placeholder="مثال: نزيل شركة بعقد سارٍ" />}
             </fieldset>
+            )}
           </div>
           <Submit label="تسجيل الوصول" />
         </ActionForm>

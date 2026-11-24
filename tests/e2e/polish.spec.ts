@@ -3,7 +3,7 @@
  * content, a new reservation's draft survives a reload, the offline line appears, the drawer keeps focus inside it and
  * returns it, and counts read as Arabic.
  */
-import { test, expect } from "./fixtures";
+import { test, expect, bookingNext } from "./fixtures";
 
 test.describe("polish", () => {
   test("QP10 each page names the browser tab after its own title", async ({ page, loginAs, go }) => {
@@ -29,12 +29,14 @@ test.describe("polish", () => {
   test("QP12 a new reservation's typed details come back after a reload", async ({ page, loginAs, go }) => {
     await loginAs("supervisor");
     await go("/staff/reservations/new");
+    await bookingNext(page);
     await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("سالم عبدالله القحطاني");
     await page.waitForTimeout(700);
     page.on("dialog", (d) => void d.accept());
     await page.reload();
     await expect(page.getByTestId("reservation-draft")).toContainText("سالم عبدالله القحطاني");
     await page.getByRole("button", { name: "استعادة المسودة" }).click();
+    await bookingNext(page);
     await expect(page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first()).toHaveValue("سالم عبدالله القحطاني");
   });
 

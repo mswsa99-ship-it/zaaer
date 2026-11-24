@@ -154,6 +154,9 @@ export const VALIDATION_AR: Record<string, string> = {
   shomoos_guest_count: "تغيّر عدد النزلاء بعد تسجيل شموس؛ حدِّث التسجيل أولًا.",
   first_night_unpaid: "الليلة الأولى غير مدفوعة كاملة.",
   deposit_reason: "التأمين لم يُستلم كاملًا: اكتب سبب ذلك.",
+  // M1 (plan 4.1): the arrival's vouchers — an explicit «استلمت», and never more than the shortage
+  received_confirm: "أكّد «استلمت المبلغ فعلًا» قبل تسجيل السند.",
+  amount_exceeds_short: "المبلغ أكبر من المطلوب قبل الوصول؛ لا يقبل سند الوصول أكثر من قيمة النقص.",
   deposit_refund_before_checkout: "يُرد تأمين الإقامة بعد تسجيل المغادرة وفحصها.",
   inspection_result: "اختر نتيجة الفحص: سليمة أو بملاحظات.",
   inspection_notes: "اكتب ملاحظات الفحص.",
@@ -224,7 +227,7 @@ export const VALIDATION_AR: Record<string, string> = {
   enabled: "قيمة التشغيل غير صحيحة.",
   attachments_count: "خمسة مرفقات على الأكثر للسند.",
   attachment: "تعذّرت قراءة المرفق؛ اختره من جديد.",
-  attachment_too_large: "حجم المرفق أكبر من 2 ميجابايت.",
+  attachment_too_large: "حجم المرفق أكبر من 10 ميجابايت.",
   attachment_type: "المرفق صورة (PNG أو JPEG أو WebP) أو ملف PDF فقط.",
   category: "اختر تصنيف المصروف.",
   description: "اكتب وصف المصروف (500 حرف على الأكثر).",

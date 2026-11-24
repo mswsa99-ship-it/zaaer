@@ -4,7 +4,7 @@
  * Controls: G10 (a partial payment is never "paid"), G11 (the deposit is a separate balance), G14 (money in halalas),
  * G22 (every change audited), G27 (the UI shows what the server stored, never a fake success).
  */
-import { test, expect, createReservation, parseSar } from "./fixtures";
+import { test, expect, createReservation, parseSar, reachPrice } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Sign the current user out (same control as S04), so the next loginAs() starts from the login screen. */
@@ -151,6 +151,7 @@ test.describe("core money (phase 1)", () => {
     await signOut(page);
     await loginAs("owner");
     await go("/staff/reservations/new");
+    await reachPrice(page);
     await expect(page.getByText("الإجمالي").first()).toBeVisible();
     await expect(page.getByText(/^الضريبة/)).toHaveCount(0);
 
@@ -163,6 +164,7 @@ test.describe("core money (phase 1)", () => {
     await expect(page.getByText(/ضريبة: الإيجار 15% \(غير شاملة\)/).first()).toBeVisible();
 
     await go("/staff/reservations/new");
+    await reachPrice(page);
     await expect(page.getByText(/^الضريبة 15%/)).toBeVisible();
   });
 
@@ -189,6 +191,7 @@ test.describe("core money (phase 1)", () => {
     await expect(page.getByText(/ضريبة: الخدمات 15%، المنتجات 5% \(غير شاملة\)/).first()).toBeVisible();
     // the rent is not taxed: a new quote has no tax line
     await go("/staff/reservations/new");
+    await reachPrice(page);
     await expect(page.getByText("الإجمالي").first()).toBeVisible();
     await expect(page.getByText(/^الضريبة/)).toHaveCount(0);
     // opened again, the switches are as saved

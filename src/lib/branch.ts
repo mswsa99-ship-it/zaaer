@@ -79,7 +79,8 @@ async function loadStaffBranches(): Promise<Loaded> {
       .filter((x): x is string => typeof x === "string" && x.length > 0)
   );
   if (allowed.size === 0) return { branches: [], error: null };
-  const { data, error: e2 } = await supabase.from("branches").select(BRANCH_COLUMNS).eq("is_active", true).order("created_at");
+  // 7.2 (O5): archived_at too, so the picker never depends on archive always implying is_active=false
+  const { data, error: e2 } = await supabase.from("branches").select(BRANCH_COLUMNS).eq("is_active", true).is("archived_at", null).order("created_at");
   if (e2) return { branches: [], error: e2.message };
   return { branches: ((data as BranchLite[]) ?? []).filter((b) => allowed.has(b.id)), error: null };
 }

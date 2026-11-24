@@ -56,6 +56,36 @@ export const OPS_TOOL_DECLARATIONS: ToolDeclaration[] = [
 
 export function isOpsTool(name: string): boolean { return OPS_TOOL_DECLARATIONS.some((t) => t.name === name); }
 
+// ---------------------------------------------------------------------------
+// 6.12 (U5 سرعة المساعد): a simple question goes to the fastest approved model
+// ---------------------------------------------------------------------------
+/** Imperative words that make a message an action request, never a "simple question". Misreading one toward
+ *  "simple" would route a write-intent to the weakest model, so the list is strict; a miss only keeps the
+ *  question on the regular (stronger) chain, which is the safe direction. */
+const OPS_ACTION_INTENT = /(أنشئ|انشئ|أضف|اضف|نفذ|نفّذ|مدد|مدّد|بدل|بدّل|ألغ|الغِ|الغي|سجل|سجّل|غيّر|اقبض|أكمل|اكمل|أصدر|اصدر|احجز|سوّي|سوي|أسند|اسند|أرسل|ارسل|سند|قبض|فاتور|تأمين|تمديد|تبديل|إيداع|ايداع|تحويل|خصم|مهمة|مهمّة)/;
+const SIMPLE_QUESTION_MAX_CHARS = 120;
+
+/** A short status question with no action intent (the copilot's own suggestions are the model). */
+export function isSimpleOpsQuestion(message: string): boolean {
+  const m = (message ?? "").trim();
+  if (!m || m.length > SIMPLE_QUESTION_MAX_CHARS) return false;
+  return !OPS_ACTION_INTENT.test(m);
+}
+
+/**
+ * The model chain for one message: the configured model then the owner's fallbacks (llm.ts order). A simple
+ * question starts from the fastest approved model — the flash-lite in the chain — with the whole chain still
+ * behind it, so a slow/unavailable fast model costs one attempt, not the answer. Nothing is routed away when
+ * the chain holds no flash-lite.
+ */
+export function opsModelOrder(message: string, configured: string, fallbacks: string[]): string[] {
+  const chain = [...new Set([configured, ...(Array.isArray(fallbacks) ? fallbacks : [])].map((m) => String(m ?? "").trim()).filter(Boolean))];
+  if (!isSimpleOpsQuestion(message)) return chain;
+  const fast = chain.find((m) => /flash-lite/i.test(m));
+  if (!fast || fast === chain[0]) return chain;
+  return [fast, ...chain.filter((m) => m !== fast)];
+}
+
 export function validateOpsArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
   const a = args ?? {};
   const str = (k: string, re?: RegExp) => { const v = a[k]; if (v == null) return undefined; if (typeof v !== "string" || (re && !re.test(v))) throw new Error(`INVALID_ARG: ${k}`); return v; };
@@ -208,4 +238,42 @@ export function fallbackOpsReply(message: string, ctx: Record<string, any>): str
   if (/(متبقي|رصيد|مديون|دفع|تأمين|balance|deposit|مال)/.test(m)) return "المقيمون وعليهم متبقٍ:\n" + list(ctx.in_house_with_balance ?? [], (r) => `${r.ref} — وحدة ${r.room ?? "—"} — ${sar(r.balance_due)}`, "لا مديونيات على المقيمين.") + "\n\nتأمينات بعد المغادرة لم تُسوَّ:\n" + list(ctx.checked_out_with_deposit ?? [], (r) => `${r.ref} — ${sar(r.deposit_balance)}`, "لا تأمينات معلقة.");
   if (/(متاح|فاضي|خالي|available|توفر)/.test(m)) { const u = ctx.summary?.units ?? {}; return `الوحدات: ${u.ready} جاهزة للدخول، ${u.reserved} محجوزة، ${u.occupied} مؤجرة، ${u.dirty} تحتاج تنظيفًا، ${u.maintenance} صيانة. للتحقق من توفر فترة محددة استخدم شاشة «حجز جديد» أو اسأل بصيغة: المتاح من YYYY-MM-DD إلى YYYY-MM-DD.`; }
   return buildBriefing(ctx).text + "\n\n(المحرك الذكي غير مفعّل حاليًا؛ هذه إجابة مبنية مباشرة على بيانات النظام. يمكنك السؤال عن: الوصول، المغادرة، النظافة والمهام، الأرصدة والتأمينات.)";
+}
+
+// ---------------------------------------------------------------------------
+// 6.13 (U6): the assistant's honesty guards, deterministic and independent of the model
+// ---------------------------------------------------------------------------
+/**
+ * The staff member's own note, exactly as typed: «ملاحظة: …» to the end of the message, or a quoted text after the word
+ * «ملاحظة». Returns null when the message carries no note. The note is never reworded by the model (see applyVerbatimNote).
+ */
+export function extractStaffNote(message: string): string | null {
+  const m = (message ?? "").trim();
+  const colon = m.match(/(?:^|[\s.،؛])(?:ملاحظ[ةتي]\S*|note)\s*[:：]\s*([\s\S]+)$/i);
+  if (colon) { const t = colon[1].trim().replace(/^[«"“]([\s\S]*)[»"”]$/, "$1").trim(); return t || null; }
+  const quoted = m.match(/ملاحظ\S*[^«"“\n]{0,40}[«"“]([^»"”]+)[»"”]/);
+  return quoted ? quoted[1].trim() || null : null;
+}
+
+/** A proposal's `note` argument is the staff member's own words when they gave one: the model's version is replaced, never merged. */
+export function applyVerbatimNote(args: Record<string, unknown>, staffMessage: string): Record<string, unknown> {
+  if (args.action === undefined || !args.args || typeof args.args !== "object") return args;
+  const note = extractStaffNote(staffMessage);
+  if (note == null) return args;
+  if (note.length > 300) throw new Error("INVALID_ARG: note_too_long");
+  return { ...args, args: { ...(args.args as Record<string, unknown>), note } };
+}
+
+export interface AnomalySummary { count: number; kinds?: Record<string, number> }
+const FIGURES_RE = /(\d[\d.,٫٬]*\s*(?:ر\.?\s?س|ريال|%)|المتبقي|الإجمالي|رصيد|المقبوض|الإشغال)/;
+const ANOMALY_WORD_RE = /(شذوذ|بنود المراجعة|بند مراجعة|بنود شاذة|تنبيه مالي)/;
+
+/**
+ * When a reply shows figures and the branch has open anomaly items (rules of 4.6), the reply says so: the numbers are never
+ * shown clean beside unreviewed anomalies. Adds one line only when the reply does not already mention them.
+ */
+export function withAnomalyNotice(reply: string, anomalies: AnomalySummary | null | undefined): string {
+  const count = Number(anomalies?.count ?? 0);
+  if (!(count > 0) || !FIGURES_RE.test(reply) || ANOMALY_WORD_RE.test(reply)) return reply;
+  return `${reply}\n\nتنبيه: يوجد ${count} بند شذوذ مفتوح في المراجعة، وقد تتأثر الأرقام أعلاه بها؛ راجعها قبل الاعتماد عليها.`;
 }

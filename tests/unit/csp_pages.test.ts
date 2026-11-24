@@ -35,11 +35,12 @@ describe("سياسة الصفحة الرئيسية", () => {
     expect(scriptSrc).not.toContain("unsafe-eval");
   });
 
-  it("الأصول التي يحتاجها التطبيق فعلًا مسموحة: Supabase وRealtime وخطوط Google وصور data/blob", () => {
+  it("الأصول التي يحتاجها التطبيق فعلًا مسموحة: Supabase وRealtime وخطوط محلية وصور data/blob", () => {
     expect(csp).toMatch(/connect-src [^;]*https:\/\/\*\.supabase\.co/);
     expect(csp).toMatch(/connect-src [^;]*wss:\/\/\*\.supabase\.co/);
-    expect(csp).toMatch(/style-src [^;]*https:\/\/fonts\.googleapis\.com/);
-    expect(csp).toMatch(/font-src [^;]*https:\/\/fonts\.gstatic\.com/);
+    expect(csp).not.toContain("fonts.googleapis.com");
+    expect(csp).not.toContain("fonts.gstatic.com");
+    expect(csp).toContain("font-src 'self'");
     expect(csp).toMatch(/img-src [^;]*data:/);
     expect(csp).toMatch(/img-src [^;]*blob:/);
   });

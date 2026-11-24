@@ -137,7 +137,8 @@ let requestHeaders: Record<string, string> | null = null;
 /**
  * Test hook (end-to-end tests only): `window.__demoLatency(target, detail)` returns a delay in ms for a read
  * (target = table name, detail = its filters such as "branch_id=…") or an RPC (target = "rpc:<name>", detail = its
- * arguments as JSON), so a test can replay a slow or out-of-order answer. Unset → no delay.
+ * arguments as JSON) or an Edge Function call (target = "fn:<name>", detail = its body as JSON), so a test can
+ * replay a slow or out-of-order answer. Unset → no delay.
  */
 function demoLatency(target: string, detail: string[]): number {
   const f = (globalThis as { __demoLatency?: (t: string, d: string[]) => unknown }).__demoLatency;
@@ -145,8 +146,8 @@ function demoLatency(target: string, detail: string[]): number {
   try { const n = Number(f(target, detail)); return Number.isFinite(n) && n > 0 ? Math.min(n, 10_000) : 0; } catch { return 0; }
 }
 /** Test hook (end-to-end tests only): `window.__demoFail(target, detail)` returns an error message to make that read
- *  (target = table) or RPC (target = "rpc:<name>") fail, so a test can show a failed load next to an empty one (U04)
- *  or a failed save (U01). Unset → nothing fails. */
+ *  (target = table) or RPC (target = "rpc:<name>") or Edge Function call (target = "fn:<name>") fail, so a test can
+ *  show a failed load next to an empty one (U04) or a failed save (U01). Unset → nothing fails. */
 function demoFailure(target: string, detail: string[]): string | null {
   const f = (globalThis as { __demoFail?: (t: string, d: string[]) => unknown }).__demoFail;
   if (typeof f !== "function") return null;
@@ -2740,7 +2741,15 @@ export function createDemoClient() {
     },
     channel: (_name: string) => { const mine: Listener[] = []; const ch = { on: (_e: string, f: { table: string }, cb: () => void) => { const l = { table: f.table, cb }; mine.push(l); listeners.add(l); return ch; }, subscribe: () => ch, unsubscribe: () => { for (const l of mine) listeners.delete(l); }, _mine: mine }; return ch; },
     removeChannel: async (ch: { _mine?: Listener[] }) => { for (const l of ch?._mine ?? []) listeners.delete(l); return "ok"; },
-    functions: { invoke: async (name: string, opts?: any) => invoke(name, opts) },
+    // the test hooks __demoLatency / __demoFail apply to a function call as "fn:<name>" (detail = its body as JSON),
+    // exactly as they do to an RPC ("rpc:<name>") or a table read — so a test can replay a slow or failed function
+    functions: { invoke: async (name: string, opts?: any) => {
+      const detail = [JSON.stringify(opts?.body ?? {})];
+      await later(demoLatency("fn:" + name, detail), null);
+      const fail = demoFailure("fn:" + name, detail);
+      if (fail) return { data: null, error: { message: fail } };
+      return invoke(name, opts);
+    } },
   };
 }
 export const DEMO_LOGINS = DEMO_ACCOUNTS.map((a) => ({ email: a.email, name: a.name, role: a.role }));

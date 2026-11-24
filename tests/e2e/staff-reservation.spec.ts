@@ -5,7 +5,7 @@
  * deposit is a separate balance — SR01), G12 (refunds capped at what was received; cancel never refunds — SR03),
  * G22 (operations are audited — SR01).
  */
-import { test, expect, createReservation, financeCell, parseSar } from "./fixtures";
+import { test, expect, createReservation, financeCell, parseSar, bookingNext, fillGuest } from "./fixtures";
 
 test.describe("staff reservation lifecycle", () => {
   test("SR01 create → deposit → partial payment stays 'دفع جزئي' → extension is audited", async ({ page, loginAs }) => {
@@ -64,9 +64,7 @@ test.describe("staff reservation lifecycle", () => {
 
     // second reservation for the same dates: that room must no longer be offered
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-    await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("ضيف الثاني");
-    await page.getByPlaceholder("05xxxxxxxx").fill("0501110002");
-    await page.waitForTimeout(500);
+        await page.waitForTimeout(500);
     const roomSel = page.locator("select").filter({ has: page.locator("option:has-text('تخصيص لاحقًا')") });
     const options = await roomSel.locator("option").allTextContents();
     expect(options.some((o) => o.includes(roomNumber))).toBe(false);
@@ -132,13 +130,14 @@ test.describe("staff reservation lifecycle", () => {
   test("SR05 Zaaer parity: arrival time, named companions and two units in one booking (atomic group)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-    await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("عائلة المجموعة");
-    await page.getByPlaceholder("05xxxxxxxx").fill("0501110009");
     await page.locator("div:has(> label:has-text('وقت الوصول المتوقع')) input").fill("18:30");
+    await page.getByRole("button", { name: "وحدة أخرى في نفس الحجز" }).click();
+    await bookingNext(page);
+    await fillGuest(page, "عائلة المجموعة", "0501110009");
     await page.getByRole("button", { name: /تسجيل اسم مرافق/ }).click();
     await page.getByPlaceholder("اسم المرافق 1").fill("سارة");
     await page.getByPlaceholder("صلة القرابة").fill("ابنة");
-    await page.getByRole("button", { name: "وحدة أخرى في نفس الحجز" }).click();
+    await bookingNext(page);
     await page.getByRole("button", { name: "إنشاء 2 حجوزات" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
     await expect(page.getByText(/حجز جماعي G-[0-9A-F]+ — 2 وحدات/)).toBeVisible();

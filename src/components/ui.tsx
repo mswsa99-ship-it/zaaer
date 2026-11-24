@@ -1,4 +1,6 @@
 import { useEffect, type HTMLAttributes, type ReactNode } from "react";
+import { PRODUCT_NAME } from "../lib/designTokens";
+import { currentGuestScope } from "../lib/guestScope";
 import { cn } from "../lib/utils";
 import { useOrganizationName } from "../lib/organization";
 
@@ -12,7 +14,8 @@ export function SectionTitle({ title, subtitle, action, level = 1 }: { title: st
   const H = level === 1 ? "h1" : "h2";
   // A11Y-10 (SC 2.4.2): each page names the browser tab after its own title
   const org = useOrganizationName();
-  useEffect(() => { if (level === 1 && title) document.title = org ? `${title} — ${org}` : title; }, [level, title, org]);
+  // Plan 3.4: a staff tab carries the product name; a guest tab carries the hotel's name (guests see the hotel, not RoomAI)
+  useEffect(() => { if (level === 1 && title) { const suffix = currentGuestScope().guest ? org : PRODUCT_NAME; document.title = suffix ? `${title} — ${suffix}` : title; } }, [level, title, org]);
   return (
     // on a phone the action (branch picker, buttons) moves under the title instead of squeezing it into a narrow column
     <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">

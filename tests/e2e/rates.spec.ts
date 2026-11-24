@@ -4,7 +4,7 @@
  * Controls: G06 (a stay's price moves with its nights), G14 (halalas, one rounding rule), G19 (no edit lost — the
  * calendar answers with what it changed), G22 (audited), G27 (a price change never reprices a booked stay).
  */
-import { test, expect, parseSar } from "./fixtures";
+import { test, expect, parseSar, bookingNext, fillGuest } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const riyadhToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
@@ -13,13 +13,14 @@ const plus = (iso: string, n: number) => { const d = new Date(`${iso}T00:00:00Z`
 /** Fills the new-booking form up to the quote: type, dates, guest. */
 async function startBooking(page: Page, type: RegExp, from: string, to: string, guest = "ضيف الأسعار") {
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-  await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill(guest);
-  await page.getByPlaceholder("05xxxxxxxx").fill("0501234500");
   const typeSelect = page.locator("select").filter({ has: page.locator("option", { hasText: type }) }).first();
   const value = await typeSelect.locator("option", { hasText: type }).first().getAttribute("value");
   await typeSelect.selectOption(value!);
   await page.locator("input[type=date]").nth(0).fill(from);
   await page.locator("input[type=date]").nth(1).fill(to);
+  await bookingNext(page);
+  await fillGuest(page, guest, "0501234500");
+  await bookingNext(page);
   await expect(page.getByTestId("quote-runs")).toBeVisible();
 }
 const totalText = (page: Page) => page.locator('div:has(> :is(p, span):text-is("الإجمالي")) > :is(p, span)[dir=ltr]').first().innerText();
@@ -108,8 +109,10 @@ test.describe("rates (phase 2)", () => {
     const t = riyadhToday();
     await loginAs("owner");
     await startBooking(page, /استوديو مريح/, plus(t, 100), plus(t, 102), "ثلاثة نزلاء");
+    await page.getByRole("button", { name: "السابق" }).click();   // the guests are on step 2
     await page.locator("div:has(> label:has-text('بالغون')) input").first().fill("2");
     await page.locator("div:has(> label:has-text('مرافقون')) input").first().fill("1");
+    await bookingNext(page);
     await page.getByRole("button", { name: "إنشاء الحجز" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
 

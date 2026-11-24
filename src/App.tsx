@@ -36,6 +36,7 @@ import Codes from "./pages/staff/Codes";
 import Tickets from "./pages/staff/Tickets";
 import ResetPassword from "./pages/staff/ResetPassword";
 import Account from "./pages/staff/Account";
+import Shortcuts from "./pages/staff/Shortcuts";
 import Inbox from "./pages/staff/Inbox";
 import StaffJourney from "./pages/staff/StaffJourney";
 import GuestReview from "./pages/guest/GuestReview";
@@ -87,6 +88,8 @@ const AdminReview = lazy(() => import("./pages/admin/AdminReview"));
 /** IX-08: the owner's screens load on first use, so the staff and guest pages start faster on a weak network */
 /** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
 const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
+/** demo only (plan 3.3): the component gallery — every base component and its states on one page */
+const DesignGallery = isDemo ? lazy(() => import("./pages/DesignGallery")) : null;
 
 function ProtectedStaff({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -118,6 +121,8 @@ export default function App() {
         <Route path="/terms" element={<Terms />} />
       </Route>
 
+      {DesignGallery && <Route path="/design-gallery" element={<Suspense fallback={<LoadingScreen />}><DesignGallery /></Suspense>} />}
+
       {/* Staff login (public) */}
       <Route path="/staff/login" element={<StaffLogin />} />
       {/* 0074: every e-mailed link (forgotten password, change, invitation) opens here; public — the link brings the session */}
@@ -128,6 +133,7 @@ export default function App() {
         <Route element={<RequireRole />}>
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
           <Route path="/staff/account" element={<Account />} />
+          <Route path="/staff/shortcuts" element={<Shortcuts />} />
           <Route path="/staff/arrivals" element={<Arrivals />} />
           <Route path="/staff/reservations" element={<StaffReservations />} />
           <Route path="/staff/reservations/new" element={<StaffReservationNew />} />

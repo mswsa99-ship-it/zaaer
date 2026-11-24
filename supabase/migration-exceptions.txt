@@ -2,3 +2,4 @@
 # Keys come from scripts/migration-snapshot.sql (rows:<table>, money:..., reservations:..., allocations:...).
 # When a migration listed here reaches production (supabase/production-applied.txt), remove its lines.
 rows:booking_sources: 0038 adds the ten remaining sources of decision 22 (2 → 12); the two existing rows keep their ids and reservations
+rows:discount_approvals: 0084 adds the table (the owner's prior approvals for over-threshold discounts, 4.8); it starts empty

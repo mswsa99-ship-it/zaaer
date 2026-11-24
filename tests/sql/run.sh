@@ -45,16 +45,19 @@ echo "== running key-box code tests («الرموز»)"
 run_tests tests/sql/keybox_codes_tests.sql
 echo "== running audit trace and mid-operation failure tests (G22, X08)"
 run_tests tests/sql/audit_trace_tests.sql
+run_tests tests/sql/audit_chain_tests.sql
 echo "== running core money tests (methods, accounts, settlements, tax zero — Phase 1)"
 run_tests tests/sql/money_core_tests.sql
 echo "== running rates tests (0030: price calendar, weekly/monthly, nights, discount limits)"
 run_tests tests/sql/rates_tests.sql
+run_tests tests/sql/phase4_money_controls_tests.sql
 echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
 run_tests tests/sql/stay_cycle_tests.sql
 echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"
 run_tests tests/sql/invoices_review_tests.sql
 echo "== running monitoring tests (0037: the seven checks, once each, the owner's throttle)"
 run_tests tests/sql/monitors_tests.sql
+run_tests tests/sql/reserved_without_booking_tests.sql
 echo "== running guest and platform tests (0038–0039: two paths for guest data, bans, ratings, platform fields, groups, the stay summary, branch fields)"
 run_tests tests/sql/guests_platforms_tests.sql
 echo "== running lists, calendar, log, exports, report filters, task times, staff editor, forced sign-out and capability usage tests (0040–0041, Phase 6)"
@@ -111,9 +114,16 @@ echo "== running platform operator and suspension tests (0082)"
 run_tests tests/sql/platform_operator_tests.sql
 echo "== running hotel settings tests (0079: independent defaults for each hotel)"
 run_tests tests/sql/hotel_settings_tests.sql
+run_tests tests/sql/phase4_controls_tests.sql
+run_tests tests/sql/finance_role_matrix_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 run_tests tests/sql/whatsapp_purge_tests.sql
 echo "== running purge tenant isolation tests (0083)"
 run_tests tests/sql/purge_scope_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
+run_tests tests/sql/guest_quota_tests.sql
+run_tests tests/sql/otp_limits_tests.sql
+bash tests/sql/guest_quota_race.sh "$DB"
+run_tests tests/sql/free_text_limits_tests.sql
+run_tests tests/sql/lookup_limits_tests.sql
 run_tests tests/sql/purge_trial_tests.sql

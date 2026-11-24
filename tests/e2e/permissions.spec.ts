@@ -39,6 +39,7 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     await expect(cell(page, "res.create", "supervisor")).toBeChecked();
     await expect(cell(page, "res.create", "finance")).not.toBeChecked();
     await expect(page.locator("[data-testid=perm-row][data-code='voucher.correct']")).toContainText("سنداته خلال 24 ساعة");
+    await page.getByTestId("export-trigger").first().click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-xlsx").first().click()]);
     const rows = firstSheetRows(new Uint8Array(readFileSync((await download.path())!)));
     expect(rows[0][0]).toBe("مصفوفة الصلاحيات");

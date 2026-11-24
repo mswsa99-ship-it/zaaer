@@ -1,0 +1,83 @@
+/* RoomAI components (plan 3.3) — the approved component styles, scoped to the rai- classes.
+   Source: the approved bundle.css, with two deliberate omissions: its body/html globals (the current app keeps
+   its shell until the screens are rebuilt in phase 6) and its Google Fonts @import (self-hosted fonts, 3.7).
+   Every colour, length and radius is a token variable from src/tokens.css. */
+
+.rai-page { background: var(--paper); color: var(--ink); font-family: var(--font-sans); font-size: 14px; line-height: 22px; min-height: 100%; }
+.rai-menu { background: var(--surface-sunken); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); }
+.rai-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; padding: var(--space-4); }
+.rai-col { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
+.rai-num, .rai-code { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+.rai-code { font-family: var(--font-mono); font-size: 14px; }
+
+/* Button — the primary (night) appears once per area; everything else is the default outlined button or quiet */
+.rai-btn { font: inherit; font-size: 13px; font-weight: 500; height: var(--field-height); padding: 0 var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+.rai-btn svg { width: 18px; height: 18px; flex: none; }
+[dir="rtl"] .rai-dir, html[dir="rtl"] .rai-dir { transform: scaleX(-1); } /* direction icons mirror in right-to-left */
+.rai-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rai-btn-primary { background: var(--night); border-color: var(--night); color: var(--on-night); }
+.rai-btn-quiet { background: transparent; border-color: transparent; color: var(--ink); }
+.rai-btn-danger { background: var(--surface); border-color: var(--danger); color: var(--danger); }
+.rai-btn-ai { background: var(--spark-tint); border-color: var(--spark); color: var(--spark-text); }
+.rai-btn-ai svg { color: var(--spark); }
+.rai-btn-touch { height: var(--target-min); }
+.rai-btn[disabled] { opacity: .55; cursor: not-allowed; }
+
+/* Field — a label above, the field, and one line under it: a hint, or the error that replaces it */
+.rai-field { display: flex; flex-direction: column; gap: 6px; max-width: 320px; }
+.rai-label { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink); display: flex; align-items: center; gap: var(--space-2); }
+.rai-input { font: inherit; height: var(--field-height); padding: 0 var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
+.rai-input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rai-hint { font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+.rai-field.is-error .rai-input { border-color: var(--danger); }
+.rai-field.is-error .rai-hint { color: var(--danger); }
+.rai-lock { font-size: 12px; color: var(--ink-muted); display: inline-flex; gap: 4px; align-items: center; }
+.rai-lock svg { width: 14px; height: 14px; }
+
+/* RoomStatus pill — colour, icon and word together; colour never carries the meaning alone */
+.rai-pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 var(--space-3); border-radius: var(--radius-pill); font-size: 13px; font-weight: 500; }
+.rai-pill svg { width: 14px; height: 14px; }
+.rai-pill-available { background: var(--success-tint); color: var(--success); }
+.rai-pill-reserved { background: var(--saffron-tint); color: var(--saffron-text); }
+.rai-pill-occupied { background: var(--night); color: var(--on-night); }
+.rai-pill-cleaning { background: var(--sky-tint); color: var(--sky); }
+.rai-pill-out { background: var(--stone-tint); color: var(--stone); }
+
+/* Card and stat tile */
+.rai-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: var(--space-5); }
+.rai-stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: var(--space-4) var(--space-5); min-width: 150px; display: flex; flex-direction: column; gap: 2px; }
+.rai-stat-label { font-size: 13px; color: var(--ink-muted); }
+.rai-stat-value { font-family: var(--font-display); font-size: 32px; line-height: 40px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rai-stat-note { font-size: 12px; color: var(--ink-muted); }
+.rai-stat.is-warning .rai-stat-value { color: var(--warning); }
+button.rai-stat { font: inherit; text-align: start; cursor: pointer; } /* a tile is a link to the list behind the number */
+
+/* AI suggestion — the one place that sparkles: spark tint, spark edge, spark icon and «اقتراح من المساعد» */
+.rai-ai { background: var(--spark-tint); border: 1.5px solid var(--spark); border-radius: var(--radius-lg); padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); max-width: 520px; }
+.rai-ai-head { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; font-weight: 600; color: var(--spark-text); }
+.rai-ai-head svg { width: 18px; height: 18px; color: var(--spark); }
+.rai-ai-body { font-size: 14px; line-height: 22px; color: var(--ink); margin: 0; }
+.rai-ai-foot { font-size: 12px; color: var(--ink-muted); }
+.rai-ai-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* Notice — what happened, why, what next, in the colour of its outcome */
+.rai-notice { display: flex; gap: var(--space-3); align-items: flex-start; border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); font-size: 14px; line-height: 22px; max-width: 560px; }
+.rai-notice svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.rai-notice b { font-weight: 600; }
+.rai-notice-success { background: var(--success-tint); color: var(--success); }
+.rai-notice-warning { background: var(--warning-tint); color: var(--warning); }
+.rai-notice-danger { background: var(--danger-tint); color: var(--danger); }
+.rai-notice-info { background: var(--sky-tint); color: var(--sky); }
+
+/* Guest pages: the hotel first, RoomAI in the footer (GuestBrand) */
+.rai-guest { max-width: 390px; margin: 0 auto; background: var(--sand-sheer); min-height: 100%; }
+.rai-guest-hero { background: var(--hotel, var(--night)); color: var(--on-night); border-radius: 0 0 var(--radius-xl) var(--radius-xl); padding: var(--space-6) var(--space-5) var(--space-6); }
+.rai-guest-hotel { font-family: var(--font-display); font-size: 24px; line-height: 32px; font-weight: 600; margin: 0; }
+.rai-guest-welcome { font-size: 16px; line-height: 26px; margin: var(--space-2) 0 0; opacity: .92; }
+.rai-guest-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.rai-guest-foot { display: flex; align-items: center; justify-content: center; gap: 6px; padding: var(--space-5) 0 var(--space-6); font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+.rai-guest-foot img, .rai-guest-foot svg { height: 16px; width: 16px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rai-btn, .rai-notice, .rai-pill { transition: background-color 150ms, color 150ms, border-color 150ms; }
+}

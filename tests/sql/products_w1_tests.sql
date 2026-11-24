@@ -461,6 +461,29 @@ reset role;
 select tp_record('PD14b its own reading gives the order without a stay, not nothing',
   (select fn_product_order_json(id)->>'number' from product_orders where number = 'ORD-PURGED-1') = 'ORD-PURGED-1');
 
+select tp_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+-- the products branch list is a selection list: an archived branch never appears in it, a restored one returns (7.2)
+do $$ declare r jsonb; b3 uuid; begin
+  r := fn_admin_upsert_branch('{"name_ar":"فرع الأرشفة","name_en":"Archive branch","tax_rate_bp":0}'); b3 := (r->>'id')::uuid;
+  insert into ids values ('b3', b3) on conflict (k) do update set v = excluded.v;
+  perform fn_admin_archive_definition('branch', b3, 'اختبار 7.2', true);
+  r := fn_admin_products();
+  perform tp_record('PD20 the archived branch is not in the products branch list',
+    not exists (select 1 from jsonb_array_elements(r->'branches') x where (x->>'id')::uuid = b3),
+    (select string_agg(x->>'name', '، ') from jsonb_array_elements(r->'branches') x));
+  perform tp_record('PD21 the active branches stay in the products branch list',
+    exists (select 1 from jsonb_array_elements(r->'branches') x where (x->>'id')::uuid = tp_id('b')),
+    (select string_agg(x->>'name', '، ') from jsonb_array_elements(r->'branches') x));
+  perform fn_admin_archive_definition('branch', b3, 'استعادة', false);
+  r := fn_admin_products();
+  perform tp_record('PD22 the restored branch returns to the products branch list',
+    exists (select 1 from jsonb_array_elements(r->'branches') x where (x->>'id')::uuid = b3),
+    (select string_agg(x->>'name', '، ') from jsonb_array_elements(r->'branches') x));
+end $$;
+
+reset role;
+
 -- ---------------------------------------------------------------- results
 \set ON_ERROR_STOP on
 select case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from test_results order by name;

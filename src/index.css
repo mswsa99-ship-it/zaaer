@@ -1,3 +1,7 @@
+@import "./tokens.css";
+@import "./roomai.css";
+@import "./fonts.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

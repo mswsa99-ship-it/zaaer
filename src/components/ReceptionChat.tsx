@@ -126,7 +126,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
           {!kiosk && !embedded && <button onClick={() => navigate("/")} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100" aria-label="رجوع"><ArrowLeft className="h-5 w-5" /></button>}
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-600 text-white lg:hidden"><Hotel className="h-5 w-5" /></div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-ink-800">مساعد الاستقبال الذكي</p>
+            <p className="text-sm font-semibold text-ink-800">مساعد RoomAI</p>
             <p className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
               {status.handedOff ? <span className="inline-flex items-center gap-1 text-warning-700"><UserRound className="h-3 w-3" /> تم التحويل إلى موظف الاستقبال — سيرد هنا</span>
                 : status.mode === "ai" ? <span className="inline-flex items-center gap-1 text-accent-700"><Bot className="h-3 w-3" /> مساعد رقمي</span>

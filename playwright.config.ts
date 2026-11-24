@@ -14,7 +14,7 @@ const PORT = Number(process.env.E2E_PORT || 4174);
 const executablePath = process.env.PW_CHROMIUM;
 const chromiumLaunch = executablePath ? { executablePath } : {};
 // Exercise screen interactions on both engines, without tripling every desktop-only suite.
-const crossBrowserScreens = /(browser-coverage|smoke|guest-reception|housekeeping|staff-reservation|invoices)\.spec\.ts/;
+const crossBrowserScreens = /(browser-coverage|cross_browser|keybox_three_states|self-hosted-fonts|smoke|guest-reception|housekeeping|staff-reservation|invoices)\.spec\.ts/;
 
 export default defineConfig({
   testDir: "tests/e2e",

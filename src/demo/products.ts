@@ -212,7 +212,8 @@ export function productRpcs(ctx: ProductsCtx) {
         categories: T("product_categories").slice().sort(byOrder).map((c) => ({ id: c.id, name: c.name, sort_order: c.sort_order, is_active: c.is_active, version: c.version, is_sample: !!c.is_sample, products: T("products").filter((x) => x.category_id === c.id).length })),
         products: T("products").slice().sort(byOrder).map((x) => ({ id: x.id, category_id: x.category_id, name: x.name, description: x.description ?? null, price_halalas: x.price_halalas, taxable: x.taxable, is_active: x.is_active, sort_order: x.sort_order, version: x.version, is_sample: !!x.is_sample,
           branches: T("product_branches").filter((pb) => pb.product_id === x.id && pb.available).map((pb) => pb.branch_id).sort() })),
-        branches: T("branches").slice().sort((a, b) => String(a.name_ar).localeCompare(String(b.name_ar), "ar")).map((b) => ({ id: b.id, name: b.name_ar, mine: mine.includes(b.id) })),
+        // 7.2 (O5): an archived branch is never a choice, «ومنها المنتجات» — it stays in the management screen only
+        branches: T("branches").filter((b) => !b.archived_at).sort((a, b) => String(a.name_ar).localeCompare(String(b.name_ar), "ar")).map((b) => ({ id: b.id, name: b.name_ar, mine: mine.includes(b.id) })),
       };
     },
 

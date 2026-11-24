@@ -17,6 +17,7 @@ async function workbook(download: Download) {
   return { statement: rows.slice(0, blank).map((r) => r[0] ?? ""), header: rows[blank + 1] ?? [], data: rows.slice(blank + 2).filter((r) => r.some((c) => c !== "")) };
 }
 async function exportAll(page: Page, scope: "all" | "page" = "all") {
+  await page.getByTestId("export-trigger").first().click();
   await page.getByTestId("export-xlsx").first().click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`export-scope-${scope}`).click()]);
   return workbook(download);
@@ -101,7 +102,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     expect(pageScope.statement[4]).toBe(`النطاق: هذه الصفحة فقط (${Math.min(cancelled, 25)} من ${cancelled})`);
     expect(pageScope.data.length).toBe(Math.min(cancelled, 25));
     // the print document takes the same statement (the dialog itself cannot be asserted here)
-    await expect(page.getByTestId("export-print")).toBeEnabled();
+    await expect(page.getByTestId("export-trigger")).toBeEnabled();
   });
 
   test("LE03 «تقويم الحجوزات»: the units against the days, each stay a bar that opens the booking; the type and floor filters", async ({ page, loginAs, go }) => {
@@ -211,6 +212,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await page.getByTestId("filter-method").selectOption("");
     await page.getByTestId("filter-staff").selectOption({ index: 1 });
     await expect(page.getByTestId("report-filter-words")).toContainText("الموظف:");
+    await page.getByTestId("export-trigger").first().click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-xlsx").first().click()]);
     const wb = await workbook(download);
     expect(wb.statement[0]).toBe("التقرير المالي");
@@ -340,6 +342,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await expect(page.locator("[data-testid=usage-row][data-status='idle']")).toHaveCount(0);
     await page.getByTestId("weeks-1").click();
     await expect(page.getByTestId("usage-summary")).toBeVisible();
+    await page.getByTestId("export-trigger").first().click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-xlsx").first().click()]);
     const wb = await workbook(download);
     expect(wb.statement[0]).toBe("استعمال القدرات");

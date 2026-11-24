@@ -11,6 +11,9 @@ export default {
       },
       fontFamily: {
         sans: ['"IBM Plex Sans Arabic"', '"Noto Sans Arabic"', "system-ui", "sans-serif"],
+        // RoomAI tokens (plan 3.2): the display and code faces of the approved system (3.7 self-hosts the files)
+        display: ['"Readex Pro"', '"IBM Plex Sans Arabic"', "system-ui", "sans-serif"],
+        mono: ['"IBM Plex Mono"', "ui-monospace", "monospace"],
       },
       colors: {
         brand: {
@@ -44,6 +47,39 @@ export default {
         },
         // U2: the border of fields and check boxes (3.07:1 on white — ink-200 is decoration only)
         "border-control": "#8494b0",
+        // RoomAI approved tokens (plan 3.2): the single token file is src/lib/designTokens.ts; these reference
+        // its CSS variables (bg-rai-night, text-rai-ink-muted, border-rai-line-strong …) so a token edit
+        // re-skins every consumer. Legacy scales above stay until the screens are rebuilt (phase 6).
+        rai: {
+          paper: "var(--paper)",
+          surface: "var(--surface)",
+          "surface-sunken": "var(--surface-sunken)",
+          line: "var(--line)",
+          "line-strong": "var(--line-strong)",
+          ink: "var(--ink)",
+          "ink-muted": "var(--ink-muted)",
+          night: "var(--night)",
+          "on-night": "var(--on-night)",
+          spark: "var(--spark)",
+          "spark-text": "var(--spark-text)",
+          "spark-tint": "var(--spark-tint)",
+          saffron: "var(--saffron)",
+          "saffron-text": "var(--saffron-text)",
+          "saffron-tint": "var(--saffron-tint)",
+          sand: "var(--sand)",
+          "sand-sheer": "var(--sand-sheer)",
+          success: "var(--success)",
+          "success-tint": "var(--success-tint)",
+          warning: "var(--warning)",
+          "warning-tint": "var(--warning-tint)",
+          danger: "var(--danger)",
+          "danger-tint": "var(--danger-tint)",
+          sky: "var(--sky)",
+          "sky-tint": "var(--sky-tint)",
+          stone: "var(--stone)",
+          "stone-tint": "var(--stone-tint)",
+          focus: "var(--focus)",
+        },
         success: {
           50: "#e8f5ee",
           500: "#2f9e5b",

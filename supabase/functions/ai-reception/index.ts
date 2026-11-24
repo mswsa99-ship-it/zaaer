@@ -16,7 +16,8 @@ import { projectKey } from "../_shared/keys.ts";
 import { gateInput, gateOutput, scriptedReply, isEnglishMessage, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
-import { mayResumeConversation, aiBudgetAvailable } from "../_shared/reception_scope.ts";
+import { mayResumeConversation } from "../_shared/reception_scope.ts";
+import { budgetReadAvailable, sessionCountReadable } from "../_shared/budget_reads.ts";
 import { localDay } from "../_shared/dates.ts";
 
 const CORS = {
@@ -105,8 +106,9 @@ Deno.serve(async (req) => {
   let handedOff = conv?.status === "handed_off";
 
   // ---- per-session limit --------------------------------------------------
-  const { count: msgCount } = await db.from("conversation_messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversationId).eq("sender", "guest");
-  if ((msgCount ?? 0) >= s.per_session_message_limit) {
+  const sessionCount = await db.from("conversation_messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversationId).eq("sender", "guest");
+  if (!sessionCountReadable(sessionCount)) return json({ error: "budget_unavailable" }, 503);
+  if (sessionCount.count >= s.per_session_message_limit) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "session_message_limit" });
     return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: handedOff, reply: english ? "This chat has reached its message limit. To continue, contact the reception or start a new chat." : "وصلت المحادثة إلى الحد الأقصى للرسائل. للمتابعة، تواصل مع الاستقبال أو ابدأ جلسة جديدة.", actions: [{ label: english ? "Start again" : "البدء من جديد", route: "/reception" }] });
   }
@@ -212,8 +214,8 @@ Deno.serve(async (req) => {
   if (!provider) return respondScripted("fallback", { ai_status: s.enabled ? "awaiting_credentials" : "disabled" });
 
   // ---- daily budgets ---------------------------------------------------------
-  const { data: usage } = await db.from("ai_usage_daily").select("*").eq("organization_id", org.id).eq("day", dayKey).maybeSingle();
-  if (!aiBudgetAvailable(s, usage)) {
+  const usageRead = await db.from("ai_usage_daily").select("*").eq("organization_id", org.id).eq("day", dayKey).maybeSingle();
+  if (!budgetReadAvailable(s, usageRead)) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "daily_budget_exhausted" });
     return respondScripted("fallback", { ai_status: "budget_exhausted" });
   }

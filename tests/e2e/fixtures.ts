@@ -84,16 +84,31 @@ export async function openFirstReservation(page: Page) {
 }
 
 /** Creates a confirmed reservation through the UI and returns its detail URL. */
+/** 6.4: the booking form has three steps. Moves forward to step `n` (2 = the guest, 3 = source and price); a step opens only when the one before is complete. */
+export async function bookingNext(page: Page, times = 1) {
+  for (let i = 0; i < times; i++) await page.getByRole("button", { name: "التالي" }).click();
+}
+/** From step 1 to step 3 (price) with invented guest data. */
+export async function reachPrice(page: Page, name = "ضيف اختبار الأسعار", phone = "0501110077") {
+  await bookingNext(page);
+  await fillGuest(page, name, phone);
+  await bookingNext(page);
+}
+export async function fillGuest(page: Page, name: string, phone: string) {
+  await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill(name);
+  await page.getByPlaceholder("05xxxxxxxx").fill(phone);
+}
 export async function createReservation(page: Page, guestName: string, phone: string, opts: { pickRoom?: boolean } = {}) {
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-  await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill(guestName);
-  await page.getByPlaceholder("05xxxxxxxx").fill(phone);
   await page.waitForTimeout(500);
   if (opts.pickRoom !== false) {
     const roomSel = page.locator("select").filter({ has: page.locator("option:has-text('تخصيص لاحقًا')") });
     const n = await roomSel.locator("option").count();
     if (n > 1) await roomSel.selectOption({ index: 1 });
   }
+  await bookingNext(page);                 // step 1 → 2
+  await fillGuest(page, guestName, phone);
+  await bookingNext(page);                 // step 2 → 3
   await page.getByRole("button", { name: "إنشاء الحجز" }).click();
   await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });
   await page.waitForTimeout(500);

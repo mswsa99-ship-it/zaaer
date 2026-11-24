@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { roomaiAsset } from "../../lib/brand";
 import { useNavigate, Link } from "react-router-dom";
-import { Hotel, LogIn, UserPlus, Mail } from "lucide-react";
+import { LogIn, UserPlus, Mail } from "lucide-react";
 import { useAuth, takeSignOutReason } from "../../lib/auth";
 import { passwordProblem, PASSWORD_HINT } from "../../lib/password";
 import { isDemo } from "../../lib/supabase";
@@ -63,11 +64,9 @@ export default function StaffLogin() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-800 to-brand-800 px-4">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center text-white">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
-            <Hotel className="h-7 w-7" />
-          </div>
-          <h1 className="text-xl font-bold">{orgName ? `${orgName} — ` : ""}بوابة الموظفين</h1>
-          <p className="mt-1 text-sm text-white/60">مركز العمليات</p>
+          <img src={roomaiAsset("roomai-logo-reversed.svg")} alt="RoomAI" className="mx-auto mb-3 h-12" />
+          <h1 className="text-xl font-bold">بوابة الموظفين</h1>
+          <p className="mt-1 text-sm text-white/60">{orgName || "مركز العمليات"}</p>
         </div>
 
         {isDemo && (

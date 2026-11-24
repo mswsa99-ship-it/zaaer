@@ -37,8 +37,8 @@ test("السياسة تُقرأ من الصفحة: script-src ذاتي بلا in
   expect(csp).not.toMatch(/script-src [^;]*unsafe-inline/);
   expect(csp).not.toMatch(/script-src [^;]*unsafe-eval/);
   expect(csp).toContain("https://*.supabase.co");
-  expect(csp).toContain("https://fonts.googleapis.com");
-  expect(csp).toContain("https://fonts.gstatic.com");
+  expect(csp).not.toContain("https://fonts.googleapis.com");
+  expect(csp).not.toContain("https://fonts.gstatic.com");
 });
 
 test("نص محقون لا يُنفَّذ: لا سكربت مضمّن ولا معالج أحداث", async ({ page }) => {

@@ -55,7 +55,17 @@ export interface NavPage {
    */
   cap?: readonly string[];
   capFull?: boolean;
+  /** 6.2: the centre (with tabs) the page lives in; its link is not in the menu, the centre's is. */
+  hub?: HubId;
 }
+
+/** 6.2 (U11): three centres with tabs replace 13 separate menu links — the staff menu goes from 22 items to 9 at most. */
+export type HubId = "guest" | "finance" | "review";
+export const HUBS: Record<HubId, { label: string; icon: LucideIcon }> = {
+  guest: { label: "النزيل", icon: UserCheck },
+  finance: { label: "المالية", icon: Wallet },
+  review: { label: "المراجعة", icon: ClipboardCheck },
+};
 
 export const PAGES: readonly NavPage[] = [
   // ---- staff (operations centre) — order = navigation order ----
@@ -64,37 +74,39 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/dashboard", label: "لوحة العمليات", icon: LayoutDashboard, area: "staff", roles: ALL_STAFF },
   // 0074: the person's own account (password, devices); reached from their name in the menu, not listed
   { path: "/staff/account", label: "حسابي", icon: UserCog, area: "staff", roles: ALL_STAFF, scope: "org", hidden: true },
-  { path: "/staff/arrivals", label: "وصول اليوم", icon: CalendarClock, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
+  // 6.15: the list of keyboard shortcuts; reached with «?» and from the account menu, not listed
+  { path: "/staff/shortcuts", label: "اختصارات لوحة المفاتيح", icon: UserCog, area: "staff", roles: ALL_STAFF, scope: "org", hidden: true },
+  { path: "/staff/arrivals", label: "وصول اليوم", icon: CalendarClock, hub: "guest", area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
   { path: "/staff/reservations", label: "الحجوزات", icon: BookCheck, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
   { path: "/staff/reservations/new", label: "حجز جديد", icon: BookCheck, area: "staff", roles: ["owner", "manager", "supervisor"], hidden: true, cap: ["res.create"] },
   { path: "/staff/reservations/:id", label: "تفاصيل الحجز", icon: BookCheck, area: "staff", roles: ALL_STAFF, hidden: true },
-  { path: "/staff/identity-verification", label: "مطابقة الهويات", icon: UserCheck, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["identity.approve", "guest.enter"] },
-  { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt", "voucher.refund", "invoice.issue"] },
+  { path: "/staff/identity-verification", label: "مطابقة الهويات", icon: UserCheck, hub: "guest", area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["identity.approve", "guest.enter"] },
+  { path: "/staff/payments", label: "المدفوعات", icon: CreditCard, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt", "voucher.refund", "invoice.issue"] },
   // 0068 (W1): the guests' product orders — the payment at reception, then the voucher and the delivery task
-  { path: "/staff/orders", label: "طلبات المنتجات", icon: ShoppingBag, area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt"] },
+  { path: "/staff/orders", label: "طلبات المنتجات", icon: ShoppingBag, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["voucher.receipt"] },
   // 0070 (W3–W6): the guest's journey after the stay — departures, extensions held, the unit's check, the deposits, reviews, alerts
-  { path: "/staff/journey", label: "رحلة الضيف", icon: Route, area: "staff", roles: ["owner", "manager", "supervisor"] },
+  { path: "/staff/journey", label: "رحلة الضيف", icon: Route, hub: "guest", area: "staff", roles: ["owner", "manager", "supervisor"] },
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   // A2/A3 (0063): the closing of the day — the boxes counted against the system, the review, the edit window
-  { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
+  { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, hub: "review", area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
   // A4 (0064): the expense vouchers and the ledger of the box and the bank account
-  { path: "/staff/expenses", label: "المصروفات", icon: HandCoins, area: "staff", roles: MONEY_ROLES, cap: ["expense.create", "expense.cancel", "ledger.view"] },
-  { path: "/staff/ledger", label: "دفتر الحركة", icon: ClipboardList, area: "staff", roles: MONEY_ROLES, cap: ["ledger.view"] },
+  { path: "/staff/expenses", label: "المصروفات", icon: HandCoins, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["expense.create", "expense.cancel", "ledger.view"] },
+  { path: "/staff/ledger", label: "دفتر الحركة", icon: ClipboardList, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["ledger.view"] },
   // A5 (0065): the double entry — trial balance, income statement, balance sheet, chart and statements, the month lock
-  { path: "/staff/accounts", label: "الحسابات", icon: Scale, area: "staff", roles: ["owner", "manager", "finance"], cap: ["accounts.view", "accounts.close_month"] },
+  { path: "/staff/accounts", label: "الحسابات", icon: Scale, hub: "finance", area: "staff", roles: ["owner", "manager", "finance"], cap: ["accounts.view", "accounts.close_month"] },
   // A6/A7 (0066): the movements the bank's messages told, and (the owner) the messages as they arrived
-  { path: "/staff/bank", label: "الحركات البنكية", icon: Landmark, area: "staff", roles: ["owner", "manager", "finance"], cap: ["bank.view", "bank.manage"] },
-  { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, area: "staff", roles: MONEY_ROLES, cap: ["pos.settle"] },
-  { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["checkin", "code.deliver"] },
+  { path: "/staff/bank", label: "الحركات البنكية", icon: Landmark, hub: "finance", area: "staff", roles: ["owner", "manager", "finance"], cap: ["bank.view", "bank.manage"] },
+  { path: "/staff/pos-settlement", label: "تسوية الشبكة", icon: Calculator, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["pos.settle"] },
+  { path: "/staff/access-approvals", label: "الوصول وتسليم الرمز", icon: KeyRound, hub: "guest", area: "staff", roles: ["owner", "manager", "supervisor"], cap: ["checkin", "code.deliver"] },
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)
-  { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
+  { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, hub: "guest", area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
   // decision 4: today's and tomorrow's platform arrivals, matched against the platform (the supervisor's daily list)
-  { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, area: "staff", roles: ["owner", "manager", "supervisor"] },
-  { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
+  { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, hub: "review", area: "staff", roles: ["owner", "manager", "supervisor"] },
+  { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
   { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
   { path: "/staff/codes", label: "الرموز", icon: KeyRound, area: "staff", roles: CODES_ROLES, cap: ["keybox.code"] },
   { path: "/staff/tickets", label: "البلاغات", icon: Wrench, area: "staff", roles: ALL_STAFF },
-  { path: "/staff/inbox", label: "الوارد", icon: Inbox, area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
+  { path: "/staff/inbox", label: "الوارد", icon: Inbox, hub: "guest", area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
 
   // ---- admin — order within a group = navigation order ----
   { path: "/admin/dashboard", label: "لوحة الإدارة", icon: LayoutDashboard, area: "admin", group: "نظرة عامة", roles: ADMIN_ROLES },
@@ -188,6 +200,31 @@ export function canOpen(role: string | null | undefined, pathname: string, allow
 /** Staff sidebar / top bar links for a role, in table order. */
 export function staffNav(role: string | null | undefined, allows?: Allows): NavPage[] {
   return PAGES.filter((p) => p.area === "staff" && !p.hidden && pageListed(p, role, allows));
+}
+
+/** The order of a centre's tabs (the first it has is where its menu link leads). */
+const HUB_ORDER: Record<HubId, string[]> = {
+  guest: ["/staff/access-approvals", "/staff/arrivals", "/staff/identity-verification", "/staff/journey", "/staff/followups", "/staff/inbox"],
+  finance: ["/staff/payments", "/staff/orders", "/staff/expenses", "/staff/ledger", "/staff/accounts", "/staff/bank", "/staff/pos-settlement", "/staff/day-summary"],
+  review: ["/staff/day-close", "/staff/platforms"],
+};
+/** The tabs of a centre for a role, in order (only pages the role sees). */
+export function hubTabs(hub: HubId, role: string | null | undefined, allows?: Allows): NavPage[] {
+  const pages = staffNav(role, allows).filter((p) => p.hub === hub);
+  return HUB_ORDER[hub].map((path) => pages.find((p) => p.path === path)).filter((p): p is NavPage => !!p);
+}
+/** The staff menu (6.2): pages outside the centres, in table order, and one entry per centre the role has any tab of. */
+export function staffMenu(role: string | null | undefined, allows?: Allows): Array<NavPage & { members?: string[] }> {
+  const out: Array<NavPage & { members?: string[] }> = [];
+  const done = new Set<HubId>();
+  for (const p of staffNav(role, allows)) {
+    if (!p.hub) { out.push(p); continue; }
+    if (done.has(p.hub)) continue;
+    done.add(p.hub);
+    const tabs = hubTabs(p.hub, role, allows);
+    out.push({ ...p, path: tabs[0].path, label: HUBS[p.hub].label, icon: HUBS[p.hub].icon, members: tabs.map((t) => t.path) });
+  }
+  return out;
 }
 
 /** Admin sidebar groups for a role; empty groups are dropped. */

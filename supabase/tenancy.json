@@ -15,6 +15,15 @@
   "ai_action_proposals": {
    "scope": "branch"
   },
+  "ai_branch_usage_daily": {
+   "scope": "branch"
+  },
+  "ai_guest_usage_daily": {
+   "scope": "branch"
+  },
+  "ai_guest_session_usage": {
+   "scope": "branch"
+  },
   "ai_guardrail_events": {
    "scope": "branch",
    "via": "conversations"
@@ -163,6 +172,9 @@
   "guest_phone_sessions": {
    "scope": "branch",
    "note": "a guest's verified phone session — valid on the hotel whose site issued it only (2.6)"
+  },
+  "guest_phone_optouts": {
+   "scope": "hotel"
   },
   "guest_profiles": {
    "scope": "hotel"
@@ -333,6 +345,12 @@
   "platform_support_grants": {
    "scope": "platform",
    "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
+  },
+  "finance_control_settings": {
+   "scope": "hotel"
+  },
+  "discount_approvals": {
+   "scope": "branch"
   }
  }
 }

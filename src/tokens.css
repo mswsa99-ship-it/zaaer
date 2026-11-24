@@ -1,0 +1,87 @@
+/* RoomAI design tokens (plan 3.2) — CSS variables of the single token file.
+   Values verbatim from the approved tokens.json v1 (see src/lib/designTokens.ts).
+   The approved tokens.css loses the alpha of surface-sunken and omits sand-sheer; this file follows tokens.json,
+   the richer source (flagged to the integrator). No font loading here — self-hosted fonts are item 3.7. */
+:root, [data-theme="light"] {
+  --paper: #fffffe;
+  --surface: #ffffff;
+  --surface-sunken: rgba(241,235,225,0.6);
+  --line: #e2d9cb;
+  --line-strong: #8c8170;
+  --ink: #10262d;
+  --ink-muted: #5a6a6d;
+  --night: #10343f;
+  --on-night: #ffffff;
+  --spark: #0fa3b1;
+  --spark-text: #0b6f78;
+  --spark-tint: #e3f6f7;
+  --saffron: #d9952b;
+  --saffron-text: #875812;
+  --saffron-tint: #f2f0ed;
+  --sand: #f4ede2;
+  --sand-sheer: rgba(244,237,226,0.5);
+  --success: #276e3d;
+  --success-tint: #e5f3e9;
+  --warning: #8a5300;
+  --warning-tint: #e8e5e0;
+  --danger: #d21606;
+  --danger-tint: #fbe8e6;
+  --sky: #2f6db0;
+  --sky-tint: #e6eff9;
+  --stone: #5f686a;
+  --stone-tint: #eef0f0;
+  --focus: #0b6f78;
+  --shadow-1: 0 1px 3px 2px #1017190f, 0 1px 1px rgba(16,38,45,0.04);
+  --shadow-2: 0 8px 24px 2px rgba(16,38,45,0.10);
+}
+[data-theme="dark"] {
+  --paper: #435054;
+  --surface: #112830;
+  --surface-sunken: #17323a;
+  --line: #24434c;
+  --line-strong: #0b1f24;
+  --ink: #ecf2f1;
+  --ink-muted: #a6b8b9;
+  --night: #cfe6e8;
+  --on-night: #5c6061;
+  --spark: #38c6d2;
+  --spark-text: #4bafb7;
+  --spark-tint: #2a585f;
+  --saffron: #e8ae4c;
+  --saffron-text: #f0c27a;
+  --saffron-tint: #3a2a10;
+  --sand: #2a241b;
+  --sand-sheer: #2a241b;
+  --success: #6ccb8a;
+  --success-tint: #133222;
+  --warning: #f1b85a;
+  --warning-tint: #3a2a0b;
+  --danger: #f08a7e;
+  --danger-tint: #3d1612;
+  --sky: #7fb0ea;
+  --sky-tint: #13283f;
+  --stone: #9aa6a8;
+  --stone-tint: #1c2b2f;
+  --focus: #6fdce5;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-2: 0 8px 24px #12111180;
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+  --target-min: 44px;
+  --field-height: 40px;
+  --font-display: "Readex Pro", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans Arabic", "Noto Sans Arabic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
