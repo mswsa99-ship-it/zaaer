@@ -87,10 +87,14 @@ test.describe("user accounts", () => {
     await reception.getByTestId("staff-reset-link").click();
     await expect(page.getByTestId("staff-notice")).toContainText("أُرسل رابط تعيين كلمة المرور إلى reception@demo.sa");
     await expect(page.locator("[data-testid=staff-card][data-email='owner@demo.sa']").getByTestId("staff-reset-link")).toHaveCount(0);   // one's own is in «حسابي»
-    // a new owner-level person (no branch needed): the invitation e-mail follows at once
+    // Owners self-register. Staff invitations must use a non-owner role and
+    // explicit branch membership, while retaining the same email-link checks.
     await page.getByLabel("البريد الإلكتروني").first().fill("partner@demo.sa");
     await page.getByLabel("الاسم الكامل").first().fill("شريك جديد");
-    await page.getByLabel("الدور").first().selectOption("owner");
+    const role = page.getByLabel("الدور").first();
+    await expect(role.locator('option[value="owner"]')).toHaveCount(0);
+    await role.selectOption("manager");
+    await page.getByRole("checkbox", { name: /الرياض/ }).first().check();
     await page.getByRole("button", { name: /^دعوة$|إرسال الدعوة|دعوة الموظف/ }).first().click();
     await expect(page.getByTestId("staff-notice")).toContainText("أُرسلت الدعوة إلى partner@demo.sa");
     const partner = page.locator("[data-testid=staff-card][data-email='partner@demo.sa']");
