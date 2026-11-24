@@ -4,7 +4,7 @@
  * check-out inspection, «مغلق», and the corrections within their windows. It reads fn_stay_status only, and every
  * action is a server function: the server decides, this screen shows why.
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, AlertTriangle, BadgeCheck, CheckCircle2, ClipboardCheck, FileCheck, KeyRound, LogIn, LogOut, Moon, RotateCcw, ShieldAlert, Undo2, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -59,7 +59,7 @@ export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { 
       {notice && <div className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" role="status" data-testid="stay-notice">{notice}</div>}
       {reasons && <Reasons title="تعذّر تنفيذ الإجراء للأسباب التالية:" items={reasons} />}
       {(["pending_verification", "confirmed", "checked_in"].includes(s.status) || s.shomoos.registered) && <ShomoosCard {...common} canAct={canShomoos} money={money} />}
-      {before && s.checkin && <ArrivalCard {...common} branchId={branchId} canAct={canArrive} money={money} />}
+      {before && s.checkin && <ArrivalCard {...common} branchId={branchId} canAct={canArrive} canDeliver={can("code.deliver")} money={money} onReveal={setRevealed} />}
       {s.status === "checked_in" && <InHouseCard {...common} canAct={canAct} canInspect={canInspect} money={money} isMgr={can("checkin.undo")} onReveal={setRevealed} />}
       {departed && <DepartedCard {...common} canInspect={canInspect} money={money} isMgr={can("stay.reopen")} />}
       {s.status === "cancelled" && can("res.undo_cancel") && s.corrections.undo_cancel_until && <UndoCancel {...common} until={s.corrections.undo_cancel_until} />}
@@ -122,7 +122,7 @@ function ShomoosCard({ s, id, done, fail, canAct, money }: Common & { canAct: bo
 }
 
 // ---------------------------------------------------------------- the arrival (decisions 1, 2, 3)
-function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common & { branchId: string; canAct: boolean; money: boolean }) {
+function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money, onReveal }: Common & { branchId: string; canAct: boolean; canDeliver: boolean; money: boolean; onReveal: (code: string) => void }) {
   const c = s.checkin!;
   const core = c.blockers;
   const accounts = useCashAccounts(money ? branchId : null);
@@ -138,6 +138,26 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
   // one arrival, one pair of entries: a resend after a refusal recorded nothing, so the keys stay the same
   const [keys] = useState(() => ({ rent: newIdempotencyKey(), deposit: newIdempotencyKey() }));
   const rentShort = Math.max(c.first_night_short ?? 0, 0);
+  // plan 6.3 (U12): with no financial shortfall the arrival and the code are one click. With a shortfall the form below
+  // stays as it is (4.1: the typed amount, «استلمت», the cap, the reason): nothing here records a voucher.
+  const oneStep = canDeliver && s.has_keybox && rentShort === 0 && (c.deposit_short ?? 0) === 0;
+  const [channel, setChannel] = useState<"screen" | "supervisor">("screen");
+  const inFlight = useRef(false);
+  const [oneBusy, setOneBusy] = useState(false);
+  const [oneError, setOneError] = useState<string | null>(null);
+  const arriveAndDeliver = async () => {
+    if (inFlight.current) return;          // a double click is one request, not two
+    inFlight.current = true; setOneBusy(true); setOneError(null);
+    try {
+      const r: CheckInResult = await stayApi.checkIn({ reservation_id: id, expected_version: s.version });
+      if (!r.ok) { refused(r.reasons ?? []); return; }
+      // the server decides the code too (its own blockers, role and branch); the arrival above is already recorded
+      const d = await staffApi.deliverAccessCode(id, channel);
+      if (!d.ok) { await done("سُجِّل الوصول، ولم يُسلَّم الرمز بعد."); refused(d.reasons ?? []); return; }
+      if (channel === "supervisor" && d.code) onReveal(d.code);
+      await done(channel === "supervisor" ? "سُجِّل الوصول وسُلِّم رمز الصندوق شفهيًا." : "سُجِّل الوصول وسُلِّم رمز الصندوق؛ يظهر للنزيل في صفحته.");
+    } catch (e) { setOneError(toArabicError(e)); } finally { inFlight.current = false; setOneBusy(false); }
+  };
   const depositShort = Math.max((c.deposit_short ?? 0) - (deposit ?? 0), 0);
   const entry = (amount: number | null, method: PaymentMethod, account: string, ref: string, key: string): PaymentEntry | undefined =>
     amount && amount > 0 ? { amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? account || undefined : undefined, reference: ref.trim() || undefined, idempotency_key: key } : undefined;
@@ -154,7 +174,7 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
   return (
     <Card data-testid="arrival">
       <Head icon={LogIn} title="تسجيل الوصول" />
-      <p className="mb-3 text-xs text-ink-500">شروط الوصول واحدة في كل الفروع ولا تجاوز لها. رمز الصندوق يُسلَّم بعد تسجيل الوصول، كخطوة مستقلة.</p>
+      <p className="mb-3 text-xs text-ink-500">شروط الوصول واحدة في كل الفروع ولا تجاوز لها. {oneStep ? "حين لا نقص مالي يُسلَّم الرمز مع الوصول في نقرة واحدة." : "رمز الصندوق يُسلَّم بعد تسجيل الوصول، كخطوة مستقلة."}</p>
       {core.length > 0 ? <Reasons title="شروط لم تكتمل بعد:" items={core} /> : <Ok>الشروط الثابتة مكتملة: الحجز مؤكد، والنزلاء مسجلون ومطابقون، وشموس مقبول، والوحدة نظيفة ومتاحة.</Ok>}
       {money && (
         <AmountGrid className="mt-3">
@@ -164,7 +184,22 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
           <AmountBox label="التأمين المستلم" value={sar(c.deposit_balance)} tone={(c.deposit_short ?? 0) > 0 ? "text-warning-700" : "text-success-600"} />
         </AmountGrid>
       )}
-      {canAct && core.length === 0 && (
+      {canAct && core.length === 0 && oneStep && (
+        <div className="mt-4 space-y-3" data-testid="one-step">
+          {oneError && <ErrorBanner message={oneError} />}
+          <p className="text-xs text-ink-500">لا نقص مالي على هذا الحجز: خطوة واحدة تسجّل الوصول ثم تسلّم رمز الصندوق، والخادم يتحقق من كل شرط في الخطوتين.</p>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" onKeyDown={radioGroupKeys} aria-label="قناة تسليم الرمز">
+            {(["screen", "supervisor"] as const).map((ch) => (
+              <button key={ch} type="button" role="radio" aria-checked={channel === ch} tabIndex={channel === ch ? 0 : -1} onClick={() => setChannel(ch)}
+                className={`rounded-xl border px-3 py-2 text-sm ${channel === ch ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100 text-ink-600"}`}>{ch === "screen" ? "صفحة النزيل" : "شفهيًا عبر المشرف"}</button>
+            ))}
+          </div>
+          <button type="button" disabled={oneBusy} onClick={arriveAndDeliver} className="btn-primary w-full" data-testid="arrive-and-deliver">
+            {oneBusy ? <Spinner className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />} تسجيل الوصول وتسليم الرمز
+          </button>
+        </div>
+      )}
+      {canAct && core.length === 0 && !oneStep && (
         <ActionForm onSubmit={submit}>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {rentShort > 0 && (
