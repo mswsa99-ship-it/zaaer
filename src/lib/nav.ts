@@ -162,6 +162,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/usage", label: "استعمال القدرات", icon: Activity, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["reports.identities_usage"] },
   // §16: corrections, invoice edits and cancellations, and what the monitors find (decision 54) wait for the owner alone
   { path: "/admin/review", label: "بحاجة لمراجعة وتدقيق", icon: ClipboardCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["review.list"] },
+  { path: "/admin/backups", label: "النسخ الاحتياطي", icon: ShieldCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["security"] },
   { path: "/admin/data-purge", label: "تفريغ البيانات", icon: Trash2, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["security"] },
 ];
 

@@ -74,6 +74,7 @@ const AdminTaskTypes = lazy(() => import("./pages/admin/AdminTaskTypes"));
 const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
 const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"));
 const AdminAssistant = lazy(() => import("./pages/admin/AdminAssistant"));
+const AdminBackup = lazy(() => import("./pages/admin/AdminBackup"));
 const AdminDataPurge = lazy(() => import("./pages/admin/AdminDataPurge"));
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
 import PosSettlement from "./pages/staff/PosSettlement";
@@ -197,6 +198,7 @@ export default function App() {
           <Route path="/admin/ai-settings" element={<AdminAiSettings />} />
           <Route path="/admin/whatsapp" element={<AdminWhatsapp />} />
           <Route path="/admin/assistant" element={<AdminAssistant />} />
+          <Route path="/admin/backups" element={<AdminBackup />} />
           <Route path="/admin/data-purge" element={<AdminDataPurge />} />
           <Route path="/admin/payment-providers" element={<AdminPaymentProviders />} />
           <Route path="/admin/policies" element={<AdminPolicies />} />

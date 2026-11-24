@@ -354,6 +354,10 @@
   },
   "finance_refund_approvals": {
    "scope": "branch"
+  },
+  "backup_runs": {
+   "scope": "platform",
+   "note": "Explicit organization-scoped owner status through fn_backup_status only; no direct tenant table access"
   }
  }
 }

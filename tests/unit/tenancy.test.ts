@@ -43,7 +43,7 @@ describe("TN — every table belongs to the platform, a hotel or a branch", () =
 
   it("TN02 the three scopes only, and platform tables are explicitly bounded", () => {
     for (const [t, e] of Object.entries(T)) expect(["platform", "hotel", "branch"], t).toContain(e.scope);
-    expect(Object.entries(T).filter(([, e]) => e.scope === "platform").map(([t]) => t).sort()).toEqual(["organizations","platform_events","platform_operators","platform_support_grants"]);
+    expect(Object.entries(T).filter(([, e]) => e.scope === "platform").map(([t]) => t).sort()).toEqual(["backup_runs","organizations","platform_events","platform_operators","platform_support_grants"]);
   });
 
   it("TN03 a parent named in «via» is classified, and its scope is the same or wider", () => {

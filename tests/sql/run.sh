@@ -136,3 +136,5 @@ run_tests tests/sql/owner_self_signup_tests.sql
 run_tests tests/sql/owner_registration_branches_tests.sql
 
 run_tests tests/sql/owner_hotel_only_tests.sql
+
+run_tests acceptance/backup-state-tests.sql
