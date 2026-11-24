@@ -34,3 +34,49 @@ node tests/isolation/matrix-generator.mjs /tmp/roomai-catalog.json /tmp/roomai-m
 ```
 
 This is intentionally not wired as P0 yet. Full plan acceptance still requires actual authorized fixtures, all table CRUD probes, all function adapters, post-call mutation detection, public-link crossover probes and integration into the shared verification gate. Review all exemptions against the authoritative schema before promoting it. Do not infer isolation from inventory generation or unit tests.
+
+## Executable partial gate, worker F (24 Nov 2026)
+
+`local-smoke.sh` now bootstraps its own disposable database, creates concrete synthetic fixtures,
+executes controls before actor probes and writes raw probes plus detailed JSON/CSV matrices.
+It requires an explicit Unix socket, port, and `TEST_DB=iso_*`. It rejects libpq remote overrides.
+It drops that named disposable DB using the existing bootstrap. Never point it at a shared instance.
+
+```sh
+PGHOST=/your/local/socket PGPORT=5432 PGUSER=postgres TEST_DB=iso_matrix \
+  ISOLATION_OUT=/tmp/isolation-evidence bash tests/isolation/local-smoke.sh
+```
+
+This command is intentionally **nonzero**. Item 2.11 is not accepted. No aggregate matrix row is
+reported PASS. The runner has only partial table adapters, no general RPC adapters and no complete
+role-operation oracle. The two phone-link functions have a separate executed guest slice. Unsupported
+cells and existing inventory exemptions remain visible as `unexecuted` and `exception-review`.
+The generator's old exemption list is not a new reviewed exception grant.
+
+Evidence files: `catalog.json`, `fixtures.json`, `seed-errors.json`, `probes.json`, `guest-links.json`,
+`matrix.json`, `matrix.csv`, `summary.json`, and execution logs. The reporter exits 1 for incomplete
+coverage, including an empty or all-denial run. `snapshot-tests.sql` checks all-table snapshots,
+added/deleted slices, real mutation detection and rollback cleanliness.
+
+Known gaps, do not interpret these as security denial successes:
+
+- Composite-primary-key tables need unique tuple locators. They are not probed through a broad
+  organization selector. Several singleton create controls conflict with existing rows.
+- Some direct CRUD operations are not a valid application path (immutable financial/audit rows,
+  FK-restricted deletes, last-owner guard). They need a source-backed exception or a valid control.
+- The current update payload is a no-op SET statement, not a proven content-changing update adapter.
+- Table-owner controls prove statement shape only, not allowed API-role behavior. Allowed controls
+  for each role/capability remain missing. `oracle-incomplete` preserves that gap.
+- Six roles appear in the inventory. Staff have 18 actual auth identities. Guest table probes use one
+  anon identity, since public SQL does not consume phone-session tokens; four guest capabilities
+  are tested separately, not counted as four distinct SQL logins.
+- Platform tables, helpers, triggers, and inaccessible signatures retain the old inventory reasons
+  pending review, never PASS. All exposed RPC signatures still need exact operation adapters.
+- Full-table content snapshots detect persisted row changes before rollback, including trigger effects.
+  They do not monitor sequences, advisory locks, timing channels, external network effects or storage.
+- Successful same-hotel cross-branch reads in `branch_memberships`, `ai_guardrail_events` and
+  `ai_tool_executions` violate the inventory's blanket branch expectation. Current policies explicitly
+  allow these reads. They are policy discrepancies for review, not confirmed vulnerabilities.
+
+`wiring.diff` is a proposal for the lead to apply sequentially. It is not applied and must not be
+called a green P0 gate. All future work must keep incomplete adapters fail-closed.

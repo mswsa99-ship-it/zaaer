@@ -1,0 +1,11 @@
+diff --git a/scripts/verify.sh b/scripts/verify.sh
+--- a/scripts/verify.sh
++++ b/scripts/verify.sh
+@@ -103,3 +103,7 @@
+ echo "==========================================================================="
+ if [[ $overall -ne 0 ]]; then echo "RESULT: FAIL — at least one P0 gate failed or was skipped"; exit 1; fi
+ echo "RESULT: PASS"
++
++# P0 isolation proposal. Requires explicit local socket and port; currently fails closed.
++# Separate disposable database prevents isolation fixtures contaminating the baseline.
++PGHOST="$PGHOST" PGPORT="$PGPORT" TEST_DB=iso_matrix bash tests/isolation/local-smoke.sh
