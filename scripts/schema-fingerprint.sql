@@ -20,7 +20,7 @@ with fn as (
     and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
 ), objs as (
   select 'function' as kind, f.name,
-         md5(case when p.proname = 'fn_admin_delete_definition' then regexp_replace(p.prosrc, '\s+', '', 'g') else replace(p.prosrc, E'\r', '') end
+         md5(case when p.proname in ('fn_admin_delete_definition', 'fn_admin_delete_definition__impl') then regexp_replace(p.prosrc, '\s+', '', 'g') else replace(p.prosrc, E'\r', '') end
              || '|' || coalesce(array_to_string(p.proconfig, ','), '') || '|' || p.prosecdef::text || '|' || p.provolatile::text) as fp
   from fn f join pg_proc p on p.oid = f.oid
   union all
