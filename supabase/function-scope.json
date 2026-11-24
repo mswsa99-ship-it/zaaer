@@ -17,6 +17,9 @@
     "fn_guest_branches()": "Returns only active public branch fields of the explicit hotel address. No private data or cross-hotel fallback.",
     "fn_platform_hotels()": "Plan2.8 operator-only metadata registry: hotel identity, lifecycle, branch count and invitation state only. No guest, financial or secret fields.",
     "fn_platform_set_hotel_status(p_org uuid, p_status text, p_reason text)": "Plan2.8 active operator only, lifecycle control with required reason and immutable audit. Not callable by hotel roles without operator allowlist.",
-    "fn_platform_support_guests(p_grant uuid)": "Plan2.8 active operator and current unrevoked owner-approved grant for this hotel, max24h, active hotel, audit on every read. Returns at most100 IDs/names, no broad RLS grant."
+    "fn_platform_support_guests(p_grant uuid)": "Plan2.8 active operator and current unrevoked owner-approved grant for this hotel, max24h, active hotel, audit on every read. Returns at most100 IDs/names, no broad RLS grant.",
+    "fn_hotel_exit_export(p_org uuid)": "Owner-only full hotel export, guarded by same-hotel owner and active session; exports tenant tables for hotel exit.",
+    "fn_hotel_exit_suspend(p_org uuid)": "Owner-only hotel exit suspension after verified completed export.",
+    "fn_hotel_exit_delete(p_org uuid, p_confirm_name text, p_confirm_id text)": "Owner-only hotel deletion after suspension, confirmed hotel name and ID, verified fresh export."
   }
 }

@@ -21,7 +21,7 @@ export default function AdminFinanceControls() {
     let active = true;
     supabase.rpc("fn_finance_controls_get").then(({ data: d, error: e }) => {
       if (!active) return;
-      if (e) setError("تعذر تحميل إعدادات الضبط المالي"); else load(d as FinanceControls);
+      if (e) setError("تعذّر تحميل إعدادات الضبط المالي"); else load(d as FinanceControls);
     });
     return () => { active = false; };
   }, []);
@@ -44,7 +44,7 @@ export default function AdminFinanceControls() {
       const { data: result, error: e } = await supabase.rpc("fn_finance_controls_set", { p });
       if (e) throw new Error("لم تُحفظ الإعدادات. تحقق من الصلاحية والقيم ثم أعد المحاولة");
       load(result as FinanceControls); setSaved(true);
-    } catch (e) { setError(e instanceof Error ? e.message : "تعذر الحفظ"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذّر الحفظ"); }
     finally { setBusy(false); }
   }
   const input = (k: string, label: string, hint?: string) => <label key={k} className="block space-y-2 text-sm">

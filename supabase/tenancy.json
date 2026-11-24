@@ -358,6 +358,12 @@
   "backup_runs": {
    "scope": "platform",
    "note": "Explicit organization-scoped owner status through fn_backup_status only; no direct tenant table access"
+  },
+  "hotel_exit_archives": {
+   "scope": "hotel"
+  },
+  "hotel_exit_rows": {
+   "scope": "hotel"
   }
  }
 }

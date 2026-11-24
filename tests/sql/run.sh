@@ -52,6 +52,8 @@ echo "== running rates tests (0030: price calendar, weekly/monthly, nights, disc
 run_tests tests/sql/rates_tests.sql
 run_tests tests/sql/phase4_money_controls_tests.sql
 run_tests tests/sql/opening_negative_cash_tests.sql
+run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
+run_tests tests/release-proof/finance_role_scenarios_tests.sql
 echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
 run_tests tests/sql/stay_cycle_tests.sql
 echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"
@@ -123,6 +125,8 @@ echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 run_tests tests/sql/whatsapp_purge_tests.sql
 echo "== running purge tenant isolation tests (0083)"
 run_tests tests/sql/purge_scope_tests.sql
+echo "== running hotel exit tests (2.12: the owner's full export, suspension, confirmed deletion, restore)"
+run_tests tests/hotel-exit/hotel_exit_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
 run_tests tests/sql/guest_limits_settings_tests.sql
 run_tests tests/sql/guest_quota_tests.sql
