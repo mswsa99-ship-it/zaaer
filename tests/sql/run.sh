@@ -51,6 +51,7 @@ run_tests tests/sql/money_core_tests.sql
 echo "== running rates tests (0030: price calendar, weekly/monthly, nights, discount limits)"
 run_tests tests/sql/rates_tests.sql
 run_tests tests/sql/phase4_money_controls_tests.sql
+run_tests tests/sql/opening_negative_cash_tests.sql
 echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
 run_tests tests/sql/stay_cycle_tests.sql
 echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"
