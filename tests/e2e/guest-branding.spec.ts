@@ -55,10 +55,12 @@ test.describe("guest branding (plan item 3.5)", () => {
     await expect(page.locator("footer")).toContainText(POWERED_AR);
   });
 
-  test("a keyed guest page (review invitation) follows the same branding", async ({ page, go }) => {
+  test("a keyed guest page (review invitation) follows the same branding", async ({ page, go, loginAs }) => {
     // a synthetic review invitation in the demo store — invented data, no server involved
     const token = "gb35-synthetic-review";
+    await loginAs("owner");
     await go("/");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("zaaer_demo_store_v9"))).not.toBeNull();
     await page.evaluate((tok) => {
       const key = "zaaer_demo_store_v9";
       const s = JSON.parse(localStorage.getItem(key)!);
@@ -86,10 +88,12 @@ test.describe("guest branding (plan item 3.5)", () => {
     expect(mentions.body).toBe(mentions.footer);
   });
 
-  test("the hotel's own logo, when the owner sets one, leads the header before the name", async ({ page, go }) => {
+  test("the hotel's own logo, when the owner sets one, leads the header before the name", async ({ page, go, loginAs }) => {
     // an invented one-pixel logo stored as the organisation's logo in the demo store
     const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    await loginAs("owner");
     await go("/");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("zaaer_demo_store_v9"))).not.toBeNull();
     await page.evaluate((logo) => {
       const key = "zaaer_demo_store_v9";
       const s = JSON.parse(localStorage.getItem(key)!);

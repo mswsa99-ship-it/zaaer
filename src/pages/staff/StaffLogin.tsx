@@ -1,3 +1,4 @@
+import "./StaffLogin.typography.css";
 import { useState, useEffect } from "react";
 import { roomaiAsset } from "../../lib/brand";
 import { useNavigate, Link } from "react-router-dom";
@@ -61,7 +62,7 @@ export default function StaffLogin() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-800 to-brand-800 px-4">
+    <main className="login-type-midpoint flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-800 to-brand-800 px-4">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center text-white">
           <img src={roomaiAsset("roomai-logo-reversed.svg")} alt="RoomAI" className="mx-auto mb-3 h-12" />
