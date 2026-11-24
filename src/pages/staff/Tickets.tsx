@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
@@ -80,6 +80,7 @@ export default function Tickets() {
   const canSeeHandoff = profile?.role === "owner" || profile?.role === "manager" || profile?.role === "supervisor";
 
   const [acting, setActing] = useState<string | null>(null);
+  const creatingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -131,6 +132,9 @@ export default function Tickets() {
     e.preventDefault();
     setFormError(null);
     if (!newTitle.trim() || !newRoom) { setFormError("العنوان والوحدة مطلوبان."); return; }
+    // 6.7 (U7): the lock is a ref, not only the acting state — two submits in the same tick create one ticket
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     setActing("create");
     try {
       await staffApi.createMaintenance(newRoom, newTitle.trim(), newDesc.trim() || null);
@@ -139,6 +143,7 @@ export default function Tickets() {
     } catch (err) {
       setFormError(toArabicError(err));
     } finally {
+      creatingRef.current = false;
       setActing(null);
     }
   }
