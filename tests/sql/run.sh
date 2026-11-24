@@ -52,8 +52,6 @@ echo "== running rates tests (0030: price calendar, weekly/monthly, nights, disc
 run_tests tests/sql/rates_tests.sql
 run_tests tests/sql/phase4_money_controls_tests.sql
 run_tests tests/sql/opening_negative_cash_tests.sql
-run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
-run_tests tests/release-proof/finance_role_scenarios_tests.sql
 echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
 run_tests tests/sql/stay_cycle_tests.sql
 echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"
@@ -143,3 +141,6 @@ run_tests tests/sql/owner_registration_branches_tests.sql
 run_tests tests/sql/owner_hotel_only_tests.sql
 
 run_tests acceptance/backup-state-tests.sql
+
+run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
+run_tests tests/release-proof/finance_role_scenarios_tests.sql
