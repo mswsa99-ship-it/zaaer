@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput, useFormDraft, DraftRestoreBanner } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { BILLING_UNIT_LABELS } from "../../lib/types";
 import { formatCurrency } from "../../lib/utils";
@@ -26,6 +26,12 @@ export default function AdminServices() {
     return { rows: must(s) as Service[], taskTypes: (t.data as { id: string; name: string }[]) ?? [] };
   }, [], NO_DATA);
   const { rows, taskTypes } = q.data; const load = q.reload; const branchId = q.branchId;
+
+  // 6.5 (U4): a new service's form survives a reload — the draft is offered back, never applied silently
+  const svcPristine = (d: Partial<Service>) => !d.name_ar?.trim() && !d.name_en?.trim() && !d.description?.trim()
+    && d.price_halalas == null && !d.task_type_id && !d.late_checkout_until && d.billing_unit === "once" && d.is_free === false && d.taxable === true;
+  const isNew = !!draft && !draft.id;
+  const fd = useFormDraft<Partial<Service>>({ storageKey: isNew && branchId ? `zaaer:service-draft:${branchId}` : null, open: isNew, value: draft ?? {}, pristine: svcPristine, apply: (v) => setDraft(v) });
 
   if (q.loading) return <LoadingScreen />;
   const visible = rows.filter((r) => showArchived || !r.archived_at);
@@ -54,7 +60,8 @@ export default function AdminServices() {
       )}
       <Modal open={!!draft} title={draft?.id ? "تعديل خدمة" : "خدمة جديدة"} onClose={() => setDraft(null)}>
         {draft && (
-          <ActionForm onSubmit={async () => { await opsApi.upsertService({ id: draft.id, branch_id: branchId, name_ar: draft.name_ar, name_en: draft.name_en, description: draft.description, billing_unit: draft.billing_unit, price_halalas: draft.price_halalas, is_free: draft.is_free, taxable: draft.taxable, task_type_id: draft.task_type_id || null, late_checkout_until: (draft.billing_unit ?? "once") === "once" ? draft.late_checkout_until || null : null, is_active: draft.is_active, version: draft.version }); setDraft(null); await load(); }}>
+          <ActionForm onSubmit={async () => { await opsApi.upsertService({ id: draft.id, branch_id: branchId, name_ar: draft.name_ar, name_en: draft.name_en, description: draft.description, billing_unit: draft.billing_unit, price_halalas: draft.price_halalas, is_free: draft.is_free, taxable: draft.taxable, task_type_id: draft.task_type_id || null, late_checkout_until: (draft.billing_unit ?? "once") === "once" ? draft.late_checkout_until || null : null, is_active: draft.is_active, version: draft.version }); fd.clearSaved(); setDraft(null); await load(); }}>
+            {fd.saved && <DraftRestoreBanner label="مسودة خدمة لم تُحفظ" summary={fd.saved.name_ar?.trim() || null} onRestore={fd.restoreSaved} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} /></Field>
