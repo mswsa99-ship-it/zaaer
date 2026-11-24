@@ -15,6 +15,10 @@ const EXCLUDED = new Set(["src/demo/data.ts"]);
 
 /** Banned outright — the guide names the approved alternative for each (COPY_GUIDE.md §1). */
 const BANNED: Array<{ word: string; approved: string }> = [
+  // Preventive spelling checks, not terminology/API-key replacements.
+  { word: "الى", approved: "إلى" },
+  { word: "تعذر", approved: "تعذّر" },
+  { word: "عذرا", approved: "ابدأ بما حدث، بلا اعتذار افتتاحي" },
   { word: "زبون", approved: "نزيل" },
   { word: "ساكن", approved: "نزيل" },
   { word: "أيصال", approved: "إيصال" },
