@@ -18,6 +18,7 @@ import { createProvider, ProviderError, type ChatTurn, type ToolResult } from ".
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
 import { mayResumeConversation } from "../_shared/reception_scope.ts";
 import { budgetReadAvailable, sessionCountReadable } from "../_shared/budget_reads.ts";
+import { reserveApplies, mapReserveStatus, countedRequests } from "../_shared/guest_reserve.ts";
 import { localDay } from "../_shared/dates.ts";
 
 const CORS = {
@@ -86,10 +87,17 @@ Deno.serve(async (req) => {
   const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
 
   // ---- conversation -------------------------------------------------------
-  // A token supplied by the caller must name a current booking in this exact hotel and branch.
+  // A token supplied by the caller must name a current booking in this exact hotel and branch, or a live phone
+  // session (0083's «حجوزاتي» code) in this hotel — verified here, never a client-supplied boolean.
+  let verifiedGuest = false;
+  const phoneSessionLive = async (token: string) => {
+    const { data } = await db.from("guest_phone_sessions").select("token").eq("token", token).eq("organization_id", org.id).gt("expires_at", new Date().toISOString()).maybeSingle();
+    return !!data;
+  };
   if (guestToken) {
     const { data: link } = await db.from("registration_sessions").select("reservation_id, organization_id, branch_id").eq("token", guestToken).gt("expires_at", new Date().toISOString()).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
-    if (!link) return json({ error: "invalid_guest_scope" }, 403);
+    if (!link && !(await phoneSessionLive(guestToken))) return json({ error: "invalid_guest_scope" }, 403);
+    verifiedGuest = true;
   }
   if (conversationId) {
     const { data: c } = await db.from("conversations").select("id, organization_id, status, guest_token, branch_id, client_fingerprint, channel").eq("id", conversationId).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
@@ -111,6 +119,38 @@ Deno.serve(async (req) => {
   if (sessionCount.count >= s.per_session_message_limit) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "session_message_limit" });
     return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: handedOff, reply: english ? "This chat has reached its message limit. To continue, contact the reception or start a new chat." : "وصلت المحادثة إلى الحد الأقصى للرسائل. للمتابعة، تواصل مع الاستقبال أو ابدأ جلسة جديدة.", actions: [{ label: english ? "Start again" : "البدء من جديد", route: "/reception" }] });
+  }
+
+  // ---- guest quota reserve (0082) -------------------------------------------
+  // A screen guest's message is admitted atomically BEFORE it is written: fn_ai_guest_reserve moves the session,
+  // device, branch and hotel counters all-or-nothing, so a refused message consumes nothing and a flood of
+  // simultaneous messages never passes a cap. A booking link or a verified phone code (checked above and here,
+  // never a client boolean) skips the OTP gate but stays under the ordinary caps.
+  let reserveCounted = false;
+  if (reserveApplies({ channel, trustedService, staff: !!staffId })) {
+    if (!verifiedGuest) {
+      const headerToken = scopeHeaders["x-guest-token"];
+      if (headerToken && headerToken.length >= 8) {
+        const { data: link } = await db.from("registration_sessions").select("reservation_id").eq("token", headerToken).gt("expires_at", new Date().toISOString()).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
+        verifiedGuest = !!link || (await phoneSessionLive(headerToken));
+      }
+    }
+    const { data: reserve, error: reserveError } = await db.rpc("fn_ai_guest_reserve", { p_branch: branch.id, p_conversation: conversationId, p_fingerprint: fingerprint, p_verified: verifiedGuest });
+    if (reserveError) {
+      // fail closed: a quota that cannot be checked is not spent, and the guest gets the busy reply, never a bypass
+      await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "guest_reserve_error", detail: String(reserveError.message ?? "").slice(0, 200) });
+      const busy = mapReserveStatus("branch_limit", english);
+      return json({ conversation_id: conversationId, mode: "scripted", verified: verifiedGuest, handed_off: handedOff, reply: busy.reply, actions: [] });
+    }
+    const reserveStatus = String((reserve as { status?: string } | null)?.status ?? "");
+    if (reserveStatus !== "ok") {
+      const d = mapReserveStatus(reserveStatus, english);
+      if (d.error) return json({ error: d.error }, d.errorStatus ?? 400);
+      // a refused message consumed nothing and is not written
+      await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: d.rule });
+      return json({ conversation_id: conversationId, mode: "scripted", verified: verifiedGuest, handed_off: handedOff, reply: d.reply, actions: d.actions ?? [], ...d.extra });
+    }
+    reserveCounted = true;   // the hotel's daily request was spent inside the reserve; the bump below adds tokens only
   }
 
   // ---- persist guest message (PII-redacted) --------------------------------
@@ -163,7 +203,7 @@ Deno.serve(async (req) => {
   const dayKey = new Date().toISOString().slice(0, 10);
   // atomic server-side increment (fn_ai_usage_bump, service role only): concurrent requests never overwrite counters
   const bump = async (patch: Record<string, number>) => {
-    const { data } = await db.rpc("fn_ai_usage_bump", { p_org: org.id, p_day: dayKey, p_requests: patch.requests ?? 0, p_tokens_in: patch.tokens_in ?? 0, p_tokens_out: patch.tokens_out ?? 0, p_fallbacks: patch.fallbacks ?? 0, p_blocks: patch.guardrail_blocks ?? 0 });
+    const { data } = await db.rpc("fn_ai_usage_bump", { p_org: org.id, p_day: dayKey, p_requests: countedRequests(patch.requests ?? 0, reserveCounted), p_tokens_in: patch.tokens_in ?? 0, p_tokens_out: patch.tokens_out ?? 0, p_fallbacks: patch.fallbacks ?? 0, p_blocks: patch.guardrail_blocks ?? 0 });
     return data;
   };
 

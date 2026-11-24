@@ -26,6 +26,7 @@ exception when others then
 end $$;
 create or replace function t_closing(p uuid) returns day_closings language sql security definer as $$ select * from day_closings where id = p $$;
 create or replace function t_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
+create or replace function t_compute(p_branch uuid, p_date date) returns jsonb language sql security definer as $$ select fn_day_closing_compute(p_branch, p_date) $$;
 create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
 -- what a script could compute itself from what it reads: the md5 of the day's money (no review token)
 create or replace function t_forge(p uuid) returns text language sql security definer as $$
@@ -56,8 +57,8 @@ do $$ declare r jsonb; b uuid; cat uuid; res uuid; begin
          'check_out', (t_today(b) + 32)::text, 'guest_phone', '0551000081', 'guest_name', 'نزيل المصروفات', 'source_id', '00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   insert into ids values ('b', b), ('res', res);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 30000, 'method','cash', 'idempotency_key','ex-1'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 10000, 'method','bank_transfer', 'reference','EX-TR-1', 'idempotency_key','ex-2'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method','cash', 'idempotency_key','ex-1'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method','bank_transfer', 'reference','EX-TR-1', 'idempotency_key','ex-2'));
 exception when others then perform t_record('EX00 the branch and its money are set up', false, sqlerrm);
 end $$;
 
@@ -109,14 +110,16 @@ do $$ declare r jsonb; nocancel text; l jsonb; f jsonb; begin
 exception when others then perform t_record('EX04 the supervisor lists the expenses with their files and reads a file; cancelling is the management''s', false, sqlerrm);
 end $$;
 -- the closing of the day counts the cash expenses: cash 300.00 − 45.00; the bank expense is shown, the transfers stay 100.00
-do $$ declare g jsonb; begin
+do $$ declare g jsonb; c jsonb; begin
   g := fn_day_closing_get(t_id('b'), t_today(t_id('b')));
-  perform t_record('EX05 the day''s closing subtracts the expenses from the cash box (300.00 − 45.00) and shows the bank expense (20.00) without changing the transfers (100.00)',
-    (select (b->>'system_halalas')::bigint from jsonb_array_elements(g->'live'->'boxes') b where b->>'key' = 'cash') = 25500
-    and (select (b->>'system_halalas')::bigint from jsonb_array_elements(g->'live'->'boxes') b where b->>'key' = 'bank_transfer') = 10000
+  c := t_compute(t_id('b'), t_today(t_id('b')));
+  perform t_record('EX05 the day''s closing subtracts the expenses from the cash box (300.00 − 45.00) and shows the bank expense (20.00) without changing the transfers (100.00); the get keeps the count blind (4.4)',
+    (select (b->>'system_halalas')::bigint from jsonb_array_elements(c->'boxes') b where b->>'key' = 'cash') = 25500
+    and (select (b->>'system_halalas')::bigint from jsonb_array_elements(c->'boxes') b where b->>'key' = 'bank_transfer') = 10000
     and (g->'live'->'expenses'->>'bank_transfer')::bigint = 2000
-    and (g->'live'->'expenses'->>'count')::int = 2, g->'live'->>'boxes');
-exception when others then perform t_record('EX05 the day''s closing subtracts the expenses from the cash box (300.00 − 45.00) and shows the bank expense (20.00) without changing the transfers (100.00)', false, sqlerrm);
+    and (g->'live'->'expenses'->>'count')::int = 2
+    and not exists (select 1 from jsonb_array_elements(g->'live'->'boxes') b where b ? 'system_halalas'), g->'live'->>'boxes');
+exception when others then perform t_record('EX05 the day''s closing subtracts the expenses from the cash box (300.00 − 45.00) and shows the bank expense (20.00) without changing the transfers (100.00); the get keeps the count blind (4.4)', false, sqlerrm);
 end $$;
 reset role;
 

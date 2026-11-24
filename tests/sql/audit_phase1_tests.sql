@@ -262,7 +262,7 @@ do $$ declare r jsonb; begin
   insert into ids values ('m2', (r->>'id')::uuid);
 end $$;
 do $$ declare r jsonb; c jsonb; acc uuid; v0 financial_vouchers%rowtype; n_rev int; st text; ritem int; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m1'), 'kind', 'receipt', 'amount_halalas', 30000, 'method', 'pos', 'reference', 'TRX-QM-1', 'idempotency_key', 'qm-1'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m1'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method', 'pos', 'reference', 'TRX-QM-1', 'idempotency_key', 'qm-1'));
   reset role; select * into v0 from financial_vouchers where id = (r->>'voucher_id')::uuid; set role authenticated;
   perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', v0.account_id, 'business_date', fn_branch_today(t_id('b'))::text, 'terminal_total_halalas', 30000));
   c := fn_staff_correct_voucher(jsonb_build_object('voucher_id', v0.id, 'amount_halalas', 25000, 'reason', 'المبلغ الصحيح 250', 'idempotency_key', 'qm-1c'));
@@ -280,7 +280,7 @@ do $$ declare r jsonb; c jsonb; acc uuid; v0 financial_vouchers%rowtype; n_rev i
 exception when others then perform t_record('QM01 a voucher of a settled day is not touched: a reversing voucher and the correct one are issued, with a review item', false, sqlerrm);
 end $$;
 do $$ declare r jsonb; c jsonb; t0 timestamptz; t1 timestamptz; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m1'), 'kind', 'receipt', 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'qm-2',
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m1'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'qm-2',
          'occurred_at', (now() - interval '2 days')::text));
   c := fn_staff_correct_voucher(jsonb_build_object('voucher_id', (r->>'voucher_id')::uuid, 'amount_halalas', 4000, 'reason', 'خطأ في المبلغ', 'idempotency_key', 'qm-2c'));
   reset role;
@@ -305,9 +305,9 @@ do $$ declare r jsonb; acc uuid; n int; n2 int; begin
 exception when others then perform t_record('QM02 a POS settlement with a difference raises a review item for the owner, and again when the difference changes', false, sqlerrm);
 end $$;
 do $$ declare msg text := ''; r jsonb; n int; begin
-  begin perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('m2'), 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'pos', 'reference', 'trx-qm-1', 'idempotency_key', 'qm-3'));
+  begin perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('m2'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'pos', 'reference', 'trx-qm-1', 'idempotency_key', 'qm-3'));
   exception when others then msg := sqlerrm; end;
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m2'), 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'pos', 'reference', 'trx-qm-1', 'idempotency_key', 'qm-3b', 'duplicate_reference_ok', true));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m2'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'pos', 'reference', 'trx-qm-1', 'idempotency_key', 'qm-3b', 'duplicate_reference_ok', true));
   reset role;
   select count(*) into n from review_items where kind = 'voucher_duplicate_reference' and entity_id = (r->>'voucher_id')::uuid;
   perform t_record('QM03 a terminal number already on another stay is a warning naming it; confirmed, it is recorded with a review item',

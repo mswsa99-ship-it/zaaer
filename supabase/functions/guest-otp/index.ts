@@ -4,7 +4,8 @@
  * POST { phone, client_fingerprint? } → { status: "sent" | "channel_unavailable" | "throttled" | "invalid" | "send_failed" }
  *
  * The code is created in the database (fn_guest_phone_start, service role only) and goes straight to WhatsApp; it is
- * never returned to the browser. It is sent from the WhatsApp number of the branch of the guest's latest booking
+ * never returned to the browser. The challenge is marked sent only after the channel actually took it
+ * (fn_guest_phone_mark_sent); a failed or impossible send frees the pending quota it tentatively held (0083). It is sent from the WhatsApp number of the branch of the guest's latest booking
  * (branch_whatsapp_channels, set up by the owner on /admin/whatsapp), with that branch's approved Authentication
  * template. "sent" is also the answer for a phone with no bookings (nothing is sent then), so this endpoint does not
  * reveal who has a booking. A branch without a usable channel answers "channel_unavailable" and the page asks for a
@@ -38,9 +39,15 @@ Deno.serve(async (req) => {
 
   const { data: ch } = await db.rpc("fn_whatsapp_channel", { p_branch: data.branch_id });
   const channel = ch as WaChannel | null;
-  if (!usable(channel) || !channel.otp_template) return json({ status: "channel_unavailable" });
+  if (!usable(channel) || !channel.otp_template) {
+    // no send happened: the pending challenge frees its slot again (0083)
+    await db.rpc("fn_guest_phone_mark_sent", { p_challenge: data.challenge_id, p_sent: false });
+    return json({ status: "channel_unavailable" });
+  }
 
   const r = await waSend(channel, otpTemplatePayload(data.phone, data.code, channel.otp_template, channel.template_lang || "ar"));
+  // 0083: only a message the channel actually took spends the phone's allowance; a failed send frees its slot
+  await db.rpc("fn_guest_phone_mark_sent", { p_challenge: data.challenge_id, p_sent: r.ok });
   // the outcome is kept for the owner (no code, no full phone)
   await db.from("integration_events").insert({
     organization_id: channel.organization_id, source: "whatsapp", external_event_id: String(data.challenge_id), kind: "guest.otp",

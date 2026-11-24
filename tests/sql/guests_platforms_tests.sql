@@ -473,7 +473,7 @@ end $$;
 set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare res uuid := t_id('resDup2'); begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'ss03-pay'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'ss03-pay'));
 end $$;
 set role anon;
 do $$ declare tok text := current_setting('test.tok'); s jsonb := fn_guest_stay_summary(tok); begin

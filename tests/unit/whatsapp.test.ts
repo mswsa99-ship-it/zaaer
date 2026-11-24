@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createHmac } from "node:crypto";
 import {
-  verifySignature, parseInbound, toWhatsAppMessage, buttonsPayload, listPayload, otpTemplatePayload, maskTokens, waSend, usable, BTN, type WaChannel,
+  verifySignature, parseInbound, toWhatsAppMessage, buttonsPayload, listPayload, otpTemplatePayload, maskTokens, waSend, usable, BTN, guestOptCommand, type WaChannel,
 } from "../../supabase/functions/_shared/whatsapp";
 
 const sign = (secret: string, body: string) => "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
@@ -96,5 +96,23 @@ describe("sending (WA-U04)", () => {
     expect(usable({ ...channel, access_token: null })).toBe(false);
     expect(usable({ ...channel, mode: "web_bridge" })).toBe(false);   // answered from the reception computer, never via Meta
     expect(usable(channel)).toBe(true);
+  });
+});
+
+describe("guest stop/start command (WA-U05)", () => {
+  it("«إيقاف» and stop opt the phone out, «استئناف» and start opt it back in; anything else is a normal message", () => {
+    expect(guestOptCommand("إيقاف")).toBe("optout");
+    expect(guestOptCommand("ايقاف")).toBe("optout");
+    expect(guestOptCommand("  إيقاف  ")).toBe("optout");
+    expect(guestOptCommand("stop")).toBe("optout");
+    expect(guestOptCommand("STOP")).toBe("optout");
+    expect(guestOptCommand("استئناف")).toBe("optin");
+    expect(guestOptCommand("إستئناف")).toBe("optin");
+    expect(guestOptCommand("start")).toBe("optin");
+    expect(guestOptCommand("أوقفوا الرسائل")).toBeNull();
+    expect(guestOptCommand("stop please")).toBeNull();
+    expect(guestOptCommand("")).toBeNull();
+    expect(guestOptCommand(null)).toBeNull();
+    expect(guestOptCommand(undefined)).toBeNull();
   });
 });

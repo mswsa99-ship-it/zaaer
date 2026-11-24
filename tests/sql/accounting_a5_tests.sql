@@ -101,9 +101,9 @@ do $$ declare r jsonb; b uuid; cat uuid; res uuid; v jsonb; begin
          'check_out', (t_today(b) + 32)::text, 'guest_phone', '0551000091', 'guest_name', 'نزيل القيود', 'source_id', '00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   insert into ids values ('b', b), ('res', res);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 30000, 'method','cash', 'idempotency_key','gl-1'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method','cash', 'idempotency_key','gl-1'));
   insert into ids values ('v1', (v->>'voucher_id')::uuid);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 8500, 'method','bank_transfer', 'reference','GL-TR-1', 'idempotency_key','gl-2'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 8500, 'method','bank_transfer', 'reference','GL-TR-1', 'idempotency_key','gl-2'));
   v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit', 'amount_halalas', 5000, 'method','cash', 'idempotency_key','gl-3'));
   insert into ids values ('vdep', (v->>'voucher_id')::uuid);
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind','deposit_apply', 'amount_halalas', 1500, 'reason','تغطية من التأمين', 'idempotency_key','gl-4'));
@@ -170,7 +170,7 @@ do $$ declare b uuid := t_id('b'); res uuid := t_id('res'); r1 text; r2 text; r3
   r5 := t_fails(format('select fn_accounting_lock_month(%L, true, %L)', t_today(b), ''), 'VALIDATION: reason%');
   perform fn_accounting_lock_month(t_today(b), true, 'إقفال الشهر بعد المراجعة');
   select count(*) into n0 from financial_vouchers where reservation_id = res;
-  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 700, 'method','cash', 'idempotency_key','gl-lock-1')), 'PERIOD_LOCKED%');
+  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 700, 'method','cash', 'idempotency_key','gl-lock-1')), 'PERIOD_LOCKED%');
   r2 := t_fails(format('select fn_expense_create(%L::jsonb)', jsonb_build_object('branch_id', b, 'account_id', t_accid(b, 'cash_box'),
           'category_id', (select id from expense_categories where name = 'صيانة وإصلاح' and organization_id = fn_user_org_id()),
           'amount_halalas', 300, 'description', 'بعد القفل', 'attachments', jsonb_build_array(jsonb_build_object('data_base64', t_png())))), 'PERIOD_LOCKED%');
@@ -183,7 +183,7 @@ do $$ declare b uuid := t_id('b'); res uuid := t_id('res'); r1 text; r2 text; r3
     and fn_trial_balance(t_today(b), t_today(b), b)->'locked_months' ? to_char(t_today(b), 'YYYY-MM'),
     concat_ws(' / ', r1, r2, r3, r4, r5));
   perform fn_accounting_lock_month(t_today(b), false, 'تصحيح سند متأخر');
-  ok := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 700, 'method','cash', 'idempotency_key','gl-lock-2'));
+  ok := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 700, 'method','cash', 'idempotency_key','gl-lock-2'));
   perform t_record('GL11 the owner opens it again with a reason (both recorded in the log), and the voucher is accepted',
     ok->>'voucher_id' is not null and exists (select 1 from accounting_periods where month = date_trunc('month', t_today(b))::date and not locked)
     and t_count('select count(*) from audit_events where action in (''accounting.month_locked'', ''accounting.month_opened'')') >= 2);
@@ -202,7 +202,7 @@ do $$ declare b uuid := t_id('b'); box uuid; led jsonb; begin
 exception when others then perform t_record('GL16 the box in the journal stands where its ledger (0064) ends: the opening balance is what was counted on its day', false, sqlerrm);
 end $$;
 do $$ declare v jsonb; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 600, 'method','cash', 'idempotency_key','gl-old-1'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 600, 'method','cash', 'idempotency_key','gl-old-1'));
   insert into ids values ('vold', (v->>'voucher_id')::uuid);
 end $$;
 reset role;

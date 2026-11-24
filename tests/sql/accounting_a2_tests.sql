@@ -54,27 +54,25 @@ do $$ declare r jsonb; b uuid; cat uuid; res uuid; ota uuid; begin
          'external_ref', 'DC-OTA-1', 'platform_collects', true, 'platform_booked_on', t_today(b)::text));
   ota := (r->>'id')::uuid;
   insert into ids values ('b', b), ('res', res), ('ota', ota);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 15000, 'method','cash', 'idempotency_key','dc-1'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 15000, 'method','cash', 'idempotency_key','dc-1'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit', 'amount_halalas', 5000, 'method','cash', 'idempotency_key','dc-2'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 10000, 'method','pos', 'reference','DC-TRX-1', 'idempotency_key','dc-3'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', ota, 'kind','receipt', 'amount_halalas', 30000, 'method','ota_deferred', 'idempotency_key','dc-4'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method','pos', 'reference','DC-TRX-1', 'idempotency_key','dc-3'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', ota, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method','ota_deferred', 'idempotency_key','dc-4'));
 exception when others then perform t_record('DC00 the day''s money is set up', false, sqlerrm);
 end $$;
 
--- ---------------------------------------------------------------- DC02 what the system computes
-do $$ declare g jsonb; boxes jsonb; cash bigint; pos bigint; tr bigint; plat jsonb; m jsonb; begin
+-- ---------------------------------------------------------------- DC02 the blind count (4.4): before sending, no system figure, no matrix
+do $$ declare g jsonb; boxes jsonb; cash jsonb; begin
   g := fn_day_closing_get(t_id('b'), t_today(t_id('b')));
   boxes := g->'live'->'boxes';
-  cash := (select (b->>'system_halalas')::bigint from jsonb_array_elements(boxes) b where b->>'key' = 'cash');
-  pos := (select (b->>'system_halalas')::bigint from jsonb_array_elements(boxes) b where b->>'key' = 'pos');
-  tr := (select (b->>'system_halalas')::bigint from jsonb_array_elements(boxes) b where b->>'key' = 'bank_transfer');
-  plat := (select b from jsonb_array_elements(boxes) b where b->>'box' = 'platform' limit 1);
-  m := (select x from jsonb_array_elements(g->'live'->'matrix') x where x->>'box' = 'cash' limit 1);
-  perform t_record('DC02 the day is computed: cash 200.00 (rent 150 + deposit 50), terminal 100.00, transfer 0, one platform line with that platform''s deferred money, the method × source table, 2 units',
-    g->>'state' = 'none' and cash = 20000 and pos = 10000 and tr = 0 and (plat->>'system_halalas')::bigint = t_count(format('select sum(amount_halalas) from financial_vouchers where reservation_id = %L and method = ''ota_deferred'' and status = ''approved''', t_id('ota')))
-    and (m->>'rent_in')::bigint = 15000 and (m->>'deposit_in')::bigint = 5000 and (g->'live'->'rooms'->>'units')::int = 2,
-    concat_ws(' / ', cash, pos, tr, g->'live'->>'rooms', m::text));
-exception when others then perform t_record('DC02 the day is computed: cash 200.00 (rent 150 + deposit 50), terminal 100.00, transfer 0, one platform line with that platform''s deferred money, the method × source table, 2 units', false, sqlerrm);
+  cash := (select b from jsonb_array_elements(boxes) b where b->>'key' = 'cash');
+  perform t_record('DC02 the count is blind before sending: the state and the rooms show, but no system figure and no source matrix; the money was still collected (rent 150 + deposit 50 in cash, 100 terminal, one platform deferral)',
+    g->>'state' = 'none' and cash is not null and not (cash ? 'system_halalas')
+    and not exists (select 1 from jsonb_array_elements(boxes) b where b ? 'system_halalas')
+    and g->'live'->'matrix' = '[]'::jsonb
+    and (g->'live'->'rooms'->>'units')::int = 2,
+    (g->'live')::text);
+exception when others then perform t_record('DC02 the count is blind before sending: the state and the rooms show, but no system figure and no source matrix; the money was still collected (rent 150 + deposit 50 in cash, 100 terminal, one platform deferral)', false, sqlerrm);
 end $$;
 reset role;
 
@@ -172,7 +170,7 @@ exception when others then perform t_record('DC08 the edit window is a setting o
 end $$;
 -- a voucher of that day after sending: the frozen figures stay, the closing says the day changed
 do $$ declare g jsonb; begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 2500, 'method','bank_transfer', 'reference','DC-TR-9', 'idempotency_key','dc-9'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 2500, 'method','bank_transfer', 'reference','DC-TR-9', 'idempotency_key','dc-9'));
   g := fn_day_closing_get(t_id('b'), t_today(t_id('b')));
   perform t_record('DC09 a voucher of the day after sending leaves the sent figures as they were, and the closing says the day changed',
     (g->>'changed_since_sent')::boolean

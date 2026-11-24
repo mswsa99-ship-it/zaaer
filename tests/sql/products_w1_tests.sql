@@ -58,7 +58,7 @@ do $$ declare r jsonb; b uuid; b2 uuid; b3 uuid; cat uuid; cat2 uuid; cat3 uuid;
          'guest_phone', '0551000096', 'guest_name', 'نزيل المنتجات', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('b', b), ('res1', (r->>'id')::uuid);
   -- an ordinary receipt of the stay (not an order's)
-  perform fn_create_voucher(jsonb_build_object('reservation_id', (r->>'id')::uuid, 'kind', 'receipt', 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'pr-base'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', (r->>'id')::uuid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'pr-base'));
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (tp_today(b) + 5)::text, 'check_out', (tp_today(b) + 6)::text,
          'guest_phone', '0551000097', 'guest_name', 'نزيل لم يصل', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res2', (r->>'id')::uuid);

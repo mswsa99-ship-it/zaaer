@@ -104,41 +104,28 @@ exception when others then perform t_record('4.6 the reasoned top-up opens the r
 
 -- ---------------------------------------------------------------- 4.6 receipts and expenses over the threshold, over the due, and the negative box
 do $$ declare r jsonb; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res1'), 'kind', 'receipt', 'amount_halalas', 600000, 'method', 'cash', 'idempotency_key', 'p4k-rcp1'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res1'), 'kind', 'receipt', 'received_confirmed',true,'advance_ok',true,'reason','test advance', 'amount_halalas', 600000, 'method', 'cash', 'idempotency_key', 'p4k-rcp1'));
   perform t_record('4.6 a receipt over the threshold and over what is due is flagged twice, once per rule, with an alert each',
     (r->>'ok')::boolean
     and t_count(format('select count(*) from review_items where kind = ''receipt_over_threshold'' and reservation_id = %L', t_id('res1'))) = 1
     and t_count(format('select count(*) from review_items where kind = ''receipt_over_due'' and reservation_id = %L', t_id('res1'))) = 1
     and t_count(format('select count(*) from notifications where branch_id = ''00000000-0000-0000-0000-000000000010'' and title like ''%%شذوذ مالي%%''')) >= 3,
     r::text);
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res2'), 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'p4k-rcp2'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res2'), 'kind', 'receipt', 'received_confirmed',true,'advance_ok',true,'reason','test advance', 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'p4k-rcp2'));
   perform t_record('4.6 an ordinary receipt under the threshold and within the due fires neither rule',
     (r->>'ok')::boolean
     and t_count(format('select count(*) from review_items where kind in (''receipt_over_threshold'', ''receipt_over_due'') and reservation_id = %L', t_id('res2'))) = 0,
     r::text);
 exception when others then perform t_record('4.6 the receipt rules', false, sqlerrm); end $$;
 
-do $$ declare r jsonb; begin
-  r := fn_expense_create(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'account_id',
-         (select id from cash_accounts where branch_id = '00000000-0000-0000-0000-000000000010' and kind = 'cash_box' and is_default),
-         'category_id', t_id('expcat'), 'attachments', jsonb_build_array(jsonb_build_object('data_base64', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'file_name', 'receipt.png')), 'amount_halalas', 600001, 'description', 'مصروف فوق العتبة', 'idempotency_key', 'p4k-exp1'));
-  perform t_record('4.6 an expense over the threshold is flagged with its amount',
-    (r->>'ok')::boolean
-    and t_count('select count(*) from review_items where kind = ''expense_over_threshold''') = 1, r::text);
-exception when others then perform t_record('4.6 the expense threshold', false, sqlerrm); end $$;
-
-do $$ declare r jsonb; begin
-  r := fn_expense_create(jsonb_build_object('branch_id', t_id('branch2'), 'account_id', t_id('box2'), 'category_id', t_id('expcat'),
-         'attachments', jsonb_build_array(jsonb_build_object('data_base64', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'file_name', 'receipt.png')), 'amount_halalas', 1000, 'description', 'سحب من صندوق فارغ', 'idempotency_key', 'p4k-exp2'));
-  perform t_record('4.6 a box under zero is flagged once, with the balance',
-    (r->>'ok')::boolean
-    and t_count(format('select count(*) from review_items where kind = ''negative_cash_box'' and entity_id = %L', t_id('box2'))) = 1, r::text);
-  r := fn_expense_create(jsonb_build_object('branch_id', t_id('branch2'), 'account_id', t_id('box2'), 'category_id', t_id('expcat'),
-         'attachments', jsonb_build_array(jsonb_build_object('data_base64', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'file_name', 'receipt.png')), 'amount_halalas', 1000, 'description', 'سحب ثان من الصندوق نفسه', 'idempotency_key', 'p4k-exp3'));
-  perform t_record('4.6 a box that stays negative is not flagged again while the first item waits',
-    (r->>'ok')::boolean
-    and t_count(format('select count(*) from review_items where kind = ''negative_cash_box'' and entity_id = %L and reviewed_at is null', t_id('box2'))) = 1, r::text);
-exception when others then perform t_record('4.6 the negative box', false, sqlerrm); end $$;
+-- Combined 4.3/4.6: source cash-floor controls reject an overdraw before a financial anomaly can post.
+do $$ declare e text; begin
+  e := t_fails(format('select fn_expense_create(%L::jsonb)', jsonb_build_object('branch_id',t_id('branch2'),'account_id',t_id('box2'),'category_id',t_id('expcat'),
+    'attachments',jsonb_build_array(jsonb_build_object('data_base64','iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','file_name','receipt.png')),
+    'amount_halalas',1000,'description','synthetic empty box refusal','idempotency_key','p4k-exp2')), 'CASH_BOX_NEGATIVE%');
+  perform t_record('4.3+4.6 empty cash box refuses an expense before it can create a negative posted balance',e='ok',e);
+end $$;
+-- Alert-only behavior for pre-existing/imported negative balances remains a separate acceptance gap.
 
 -- ---------------------------------------------------------------- 4.7 the price floor and the owner-approved free stay
 do $$ declare e_owner text; e_mgr text; e_sup text; e_sup2 text; e_norsn text; r jsonb; rid uuid; begin

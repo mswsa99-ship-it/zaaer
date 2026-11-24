@@ -123,7 +123,7 @@ exception when others then perform t_record('KC06 the supervisor sees the code o
 do $$ declare r jsonb; f jsonb; begin
   f := fn_reservation_finance(t_id('res'));
   if (f->>'balance_due')::bigint > 0 then
-    perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind', 'receipt', 'amount_halalas', (f->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'kc-pay'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (f->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'kc-pay'));
   end if;
   r := fn_staff_checkout(t_id('res'), 'اختبار المغادرة');
   if not (r->>'ok')::boolean then raise exception 'checkout refused: %', r; end if;

@@ -40,8 +40,8 @@ do $$ declare r jsonb; b uuid; cat uuid; begin
   insert into ids values ('s1', (r->>'id')::uuid);
 end $$;
 do $$ declare r jsonb; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('s1'), 'kind', 'receipt', 'amount_halalas', 30000, 'method', 'pos', 'reference', 'TRX-QO-1', 'idempotency_key', 'qo-1'));
-  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('s1'), 'kind', 'receipt', 'amount_halalas', 10000, 'method', 'ota_deferred', 'reference', 'OTA-QO-1', 'idempotency_key', 'qo-2'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('s1'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method', 'pos', 'reference', 'TRX-QO-1', 'idempotency_key', 'qo-1'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('s1'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method', 'ota_deferred', 'reference', 'OTA-QO-1', 'idempotency_key', 'qo-2'));
 end $$;
 reset role;
 -- one unit occupied, the other taken out of service: occupancy 100% of the working units, 50% of all
@@ -76,7 +76,7 @@ do $$ declare b uuid := t_id('b'); d date := fn_branch_today(t_id('b')); r jsonb
   perform t_record('QO06 the collection rate is what the period''s stays paid at the property over their charges (75%), not the platform''s',
     (r->'collection'->>'due')::bigint = 40000 and (r->'collection'->>'paid')::bigint = 30000 and (r->'collection'->>'platform')::bigint = 10000
     and (r->>'collection_rate_pct')::numeric = 75.0, (r->'collection')::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('s1'), 'kind', 'receipt', 'amount_halalas', 20000, 'method', 'cash', 'idempotency_key', 'qo-3'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('s1'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 20000, 'method', 'cash', 'idempotency_key', 'qo-3', 'advance_ok', true, 'reason', 'تجاوز مقصود لاختبار التقارير'));
   r := fn_reports_finance(b, d - 6, d, '{}');
   perform t_record('QO07 an overpaid stay shows 100% and keeps the raw figure to explain it',
     (r->>'collection_rate_pct')::numeric = 100 and (r->'collection'->>'raw_pct')::numeric = 125.0, (r->'collection')::text);

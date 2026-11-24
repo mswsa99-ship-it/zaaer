@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { budgetReadAvailable, sessionCountReadable } from "../../supabase/functions/_shared/budget_reads";
+import { reserveApplies, mapReserveStatus, countedRequests } from "../../supabase/functions/_shared/guest_reserve";
 import { aiBudgetAvailable } from "../../supabase/functions/_shared/reception_scope";
 
 // Execute the actual entry points with invented local database/provider responses, not a live backend.
@@ -41,6 +42,7 @@ function handler(entry: string, failed: "session" | "daily" | null, mode = "chat
   };
   const dependencies: Record<string, unknown> = {
     "npm:@supabase/supabase-js@2.45.4": { createClient: () => db },
+    "../_shared/guest_reserve.ts": { reserveApplies, mapReserveStatus, countedRequests },
     "../_shared/keys.ts": { projectKey: () => "synthetic-key" },
     "../_shared/budget_reads.ts": { budgetReadAvailable, sessionCountReadable },
     "../_shared/reception_scope.ts": { aiBudgetAvailable },

@@ -245,7 +245,7 @@ do $$ declare r jsonb; begin
 end $$;
 -- R11 duplicate OTA cancellation event → one cancel, no refund
 do $$ declare r1 jsonb; r2 jsonb; res uuid := (select v from ids where k='resOTA'); begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10000, 'method','ota_deferred','reference','OTA-PAY-1','idempotency_key','k-ota-1'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 10000, 'method','ota_deferred','reference','OTA-PAY-1','idempotency_key','k-ota-1'));
   r1 := fn_staff_cancel_reservation(res, 'إلغاء من المنصة', 'booking_com', 'EVT-1');
   r2 := fn_staff_cancel_reservation(res, 'إلغاء من المنصة', 'booking_com', 'EVT-1');
   perform t_record('R11 duplicate OTA cancel event processed once; no implicit refund; refund flagged as separate action',
@@ -258,7 +258,7 @@ exception when others then perform t_record('R11 duplicate OTA cancel event proc
 -- R14 checkout twice → one cleaning task, no deposit refund
 do $$ declare r1 jsonb; r2 jsonb; res uuid := (select v from ids where k='resIn'); room uuid := (select v from ids where k='room2'); begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 20000, 'method','cash','idempotency_key','k-dep-in'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method','cash','idempotency_key','k-rcp-in'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method','cash','idempotency_key','k-rcp-in'));
   r1 := fn_staff_checkout(res, 'اختبار المغادرة');
   r2 := fn_staff_checkout(res, 'اختبار المغادرة');
   perform t_record('R14 repeated checkout: single transition, one cleaning task, deposit NOT auto-refunded',
@@ -279,13 +279,13 @@ do $$ declare r jsonb; b uuid; cat uuid; res uuid; begin
 exception when others then perform t_record('F01a total = 3 nights × 100 = 300.00 SAR (30000 halalas), status pending', false, sqlerrm); end $$;
 
 do $$ declare res uuid := (select v from ids where k='resF'); f jsonb; begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10000, 'method','cash','idempotency_key','kF1'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 10000, 'method','cash','idempotency_key','kF1'));
   f := t_fin(res);
   perform t_record('F01 receipt 100 of 300 → partially_paid, due 200', f->>'payment_status' = 'partially_paid' and (f->>'balance_due')::bigint = 20000, f::text);
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 10000, 'method','pos','reference','MADA-1','idempotency_key','kF2'));
   f := t_fin(res);
   perform t_record('F02 deposit 100 does not settle the stay: due still 200, deposit balance 100', (f->>'balance_due')::bigint = 20000 and (f->>'deposit_balance')::bigint = 10000 and f->>'payment_status' = 'partially_paid', f::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 20000, 'method','cash','idempotency_key','kF3'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 20000, 'method','cash','idempotency_key','kF3'));
   f := t_fin(res);
   perform t_record('F03 receipt 200 → paid, derived from ledger', f->>'payment_status' = 'paid' and (f->>'balance_due')::bigint = 0 and (t_res(res)).payment_status = 'paid', f::text);
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind','deposit_refund','amount_halalas', 6000, 'method','cash','reason','مغادرة دون أضرار','idempotency_key','kF4'));
@@ -299,19 +299,19 @@ end $$;
 
 -- F07/F08 idempotency
 do $$ declare res uuid := (select v from ids where k='resF'); r1 jsonb; r2 jsonb; begin
-  r1 := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 500, 'method','cash','idempotency_key','kF7'));
-  r2 := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 500, 'method','cash','idempotency_key','kF7'));
+  r1 := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 500, 'method','cash','idempotency_key','kF7', 'advance_ok', true, 'reason', 'دفعة مقدمة لاختبار التكرار'));
+  r2 := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 500, 'method','cash','idempotency_key','kF7', 'advance_ok', true, 'reason', 'دفعة مقدمة لاختبار التكرار'));
   perform t_record('F07 same key + same content → one voucher, same result', (r2->>'duplicate')::boolean and r1->>'voucher_id' = r2->>'voucher_id' and (select count(*) from financial_vouchers where idempotency_key = 'kF7') = 1, r2::text);
   begin
-    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 999, 'method','cash','idempotency_key','kF7'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 999, 'method','cash','idempotency_key','kF7'));
     perform t_record('F08 same key + different amount rejected', false, 'accepted');
   exception when others then perform t_record('F08 same key + different amount rejected', sqlerrm like '%IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   begin
-    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 0, 'method','cash','idempotency_key','kF9a'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 0, 'method','cash','idempotency_key','kF9a'));
     perform t_record('F09 zero amount rejected', false, 'accepted');
   exception when others then perform t_record('F09 zero amount rejected', sqlerrm like '%amount%', sqlerrm); end;
   begin
-    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', -100, 'method','cash','idempotency_key','kF9b'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', -100, 'method','cash','idempotency_key','kF9b'));
     perform t_record('F09b negative amount rejected', false, 'accepted');
   exception when others then perform t_record('F09b negative amount rejected', sqlerrm like '%amount%', sqlerrm); end;
 end $$;
@@ -357,13 +357,13 @@ do $$ declare q jsonb; r jsonb; res uuid; f jsonb; begin
         'check_in',(current_date + 30)::text,'check_out',(current_date + 33)::text,'guest_phone', '0551000003', 'guest_name','ضيف التقريب','source_id','00000000-0000-0000-0000-000000000021',
         'nightly_rate_halalas', 10005, 'discount_halalas', 10, 'discount_reason', 'خصم ثابت للاختبار'));
   res := (r->>'id')::uuid; insert into ids values ('resX07', res);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 10001, 'method','cash','idempotency_key','kX07-1'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 10001, 'method','cash','idempotency_key','kX07-1'));
   f := t_fin(res);
   perform t_record('X07a1 tax zero: 3 × 100.05 − 0.10 = 30005 halalas exactly, no tax line; 100.01 received leaves 20004 and is partly paid',
     (q->>'total')::bigint = 30005 and (q->>'tax')::bigint = 0 and (f->>'total')::bigint = 30005 and (f->>'tax')::bigint = 0
     and (select count(*) from reservation_charges where reservation_id = res and kind = 'tax') = 0
     and (f->>'balance_due')::bigint = 20004 and f->>'payment_status' = 'partially_paid', q::text || ' / ' || f::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 20004, 'method','cash','idempotency_key','kX07-2'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 20004, 'method','cash','idempotency_key','kX07-2'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','deposit','amount_halalas', 5000, 'method','cash','idempotency_key','kX07-3'));
   f := t_fin(res);
   perform t_record('X07a2 then 200.04 leaves exactly zero (paid); a 50.00 deposit is held apart and changes no charge',
@@ -495,7 +495,7 @@ do $$ begin
   perform t_record('A10e branch-B staff cannot create task in branch A by passing its ids', false, 'accepted');
 exception when others then perform t_record('A10e branch-B staff cannot create task in branch A by passing its ids', sqlerrm like '%FORBIDDEN%', sqlerrm); end $$;
 do $$ begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k='resA'), 'kind','receipt','amount_halalas', 100, 'method','cash','idempotency_key','kX4'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k='resA'), 'kind','receipt', 'received_confirmed', true,'amount_halalas', 100, 'method','cash','idempotency_key','kX4'));
   perform t_record('A10f branch-B staff cannot collect money on branch A reservation', false, 'accepted');
 exception when others then perform t_record('A10f branch-B staff cannot collect money on branch A reservation', sqlerrm like '%FORBIDDEN%', sqlerrm); end $$;
 do $$ begin
@@ -644,7 +644,7 @@ do $$ declare r jsonb; b uuid; cat uuid; rm uuid; res uuid; begin
   res := (r->>'id')::uuid;
   reset role; update reservations set status = 'checked_in', actual_check_in = now() where id = res; update rooms set status = 'occupied' where id = rm;
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 20000, 'method','cash','idempotency_key','rv4'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 20000, 'method','cash','idempotency_key','rv4'));
   r := fn_staff_checkout(res, 'اختبار المغادرة');
   perform t_record('RV04b checkout in a freshly created branch creates the cleaning task', (r->>'ok')::boolean and (select count(*) from housekeeping_tasks where room_id = rm and status = 'pending') = 1, r::text);
   insert into ids values ('branchRV', b);
@@ -682,11 +682,11 @@ do $$ declare r jsonb; res uuid := (select v from ids where k='resRV'); other uu
   exception when others then perform t_record('RV07 payment key reused for another reservation rejected (not silently dropped)', sqlerrm like '%IDEMPOTENCY_CONFLICT%', sqlerrm); end;
 end $$;
 do $$ declare r jsonb; res uuid := (select v from ids where k='resRV'); vid uuid; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 500, 'method','cash','idempotency_key','key-rv-8'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 500, 'method','cash','idempotency_key','key-rv-8'));
   vid := (r->>'voucher_id')::uuid;
   perform fn_cancel_voucher(vid, 'خطأ');
   begin
-    r := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt','amount_halalas', 500, 'method','cash','idempotency_key','key-rv-8'));
+    r := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true,'amount_halalas', 500, 'method','cash','idempotency_key','key-rv-8'));
     perform t_record('RV08 replaying the key of a cancelled voucher is an explicit error, not a silent success', false, 'accepted: ' || r::text);
   exception when others then perform t_record('RV08 replaying the key of a cancelled voucher is an explicit error, not a silent success', sqlerrm like '%IDEMPOTENCY_CANCELLED%', sqlerrm); end;
 end $$;
@@ -747,7 +747,7 @@ do $$ declare res uuid := (select v from ids where k='resRV'); a record; begin
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
   -- paid up, so that no overdue night (decision 3) is what refuses the extension
   if (t_fin(res)->>'balance_due')::bigint > 0 then
-    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'rv12-pay'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'rv12-pay'));
   end if;
   begin
     perform fn_staff_amend_stay(res, (select check_out + 1 from reservations where id = res), 'keep_rate', 'تمديد', t_ver('reservations', res));

@@ -33,12 +33,12 @@ begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (current_date + 5)::text,
          'check_out', (current_date + 7)::text, 'guest_phone', '0551000015', 'guest_name', 'ضيف سجل ثان', 'source_id', src));
   rid := (r->>'id')::uuid; insert into _hist_ids values ('r2', rid);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'hist-r2-rcp'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'hist-r2-rcp'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'deposit', 'amount_halalas', 5000, 'method', 'pos', 'reference', 'POS-1', 'idempotency_key', 'hist-r2-dep'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 1500, 'method', 'bank_transfer', 'reference', 'TR-1', 'idempotency_key', 'hist-r2-rcp2'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 1200, 'method', 'ota_deferred', 'reference', 'OTA-1', 'idempotency_key', 'hist-r2-rcp4'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 900, 'method', 'pos', 'reference', 'POS-2', 'idempotency_key', 'hist-r2-rcp5'));
-  v := fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'amount_halalas', 700, 'method', 'bank_transfer', 'reference', 'TR-2', 'idempotency_key', 'hist-r2-rcp3'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1500, 'method', 'bank_transfer', 'reference', 'TR-1', 'idempotency_key', 'hist-r2-rcp2'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1200, 'method', 'ota_deferred', 'reference', 'OTA-1', 'idempotency_key', 'hist-r2-rcp4'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 900, 'method', 'pos', 'reference', 'POS-2', 'idempotency_key', 'hist-r2-rcp5'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', rid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 700, 'method', 'bank_transfer', 'reference', 'TR-2', 'idempotency_key', 'hist-r2-rcp3'));
   perform fn_cancel_voucher((v->>'voucher_id')::uuid, 'خطأ إدخال');
   perform fn_refund(jsonb_build_object('reservation_id', rid, 'kind', 'refund', 'amount_halalas', 1000, 'method', 'cash', 'reason', 'رد جزئي', 'idempotency_key', 'hist-r2-ref'));
   perform fn_refund(jsonb_build_object('reservation_id', rid, 'kind', 'deposit_refund', 'amount_halalas', 2000, 'method', 'cash', 'reason', 'رد تأمين جزئي', 'idempotency_key', 'hist-r2-depref'));

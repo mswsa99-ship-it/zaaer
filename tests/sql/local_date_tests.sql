@@ -28,9 +28,9 @@ do $$ declare r jsonb; res uuid; begin
   r := fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2033-03-10","check_out":"2033-03-12","guest_name":"تاريخ محلي","guest_phone":"0500004444","source_id":"00000000-0000-0000-0000-000000000021"}'::jsonb);
   res := (r->>'id')::uuid;
   insert into ld values ('res', res::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 2000, 'method', 'cash',
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 2000, 'method', 'cash',
     'idempotency_key', 'ld-before-midnight', 'occurred_at', '2033-03-10 20:30:00+00'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'cash',
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'cash',
     'idempotency_key', 'ld-after-midnight', 'occurred_at', '2033-03-10 21:30:00+00'));
 end $$;
 

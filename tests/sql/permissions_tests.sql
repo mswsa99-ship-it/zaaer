@@ -140,7 +140,7 @@ do $$ declare r jsonb; v jsonb; before_money boolean; after_money boolean; seen 
   before_money := fn_sees_money();
   perform t_set_cells('[{"code": "voucher.receipt", "role": "housekeeping", "allowed": true}]');
   after_money := fn_sees_money();
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res_pm'), 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'pm05-' || gen_random_uuid()));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res_pm'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'pm05-' || gen_random_uuid()));
   seen := (select count(*) from financial_vouchers where id = (v->>'voucher_id')::uuid);
   perform t_record('PM05 ticking «سند قبض» for housekeeping: they issue a receipt on their next request, and from then on see money (the voucher reads back through the table''s own rule)',
     not before_money and after_money and (v->>'ok')::boolean and seen = 1,
@@ -196,7 +196,7 @@ select t_reset();
 do $$ declare v jsonb; a text; begin
   -- a receipt the supervisor did not issue: the owner's
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res_pm'), 'kind', 'receipt', 'amount_halalas', 1500, 'method', 'cash', 'idempotency_key', 'pm10-' || gen_random_uuid()));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res_pm'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1500, 'method', 'cash', 'idempotency_key', 'pm10-' || gen_random_uuid()));
   perform t_set('v_owner', (v->>'voucher_id')::uuid);
   perform t_login('a0000000-0000-0000-0000-000000000004', 'fin@test.local');
   perform t_set_cells('[{"code": "voucher.correct", "role": "finance", "allowed": true}]');

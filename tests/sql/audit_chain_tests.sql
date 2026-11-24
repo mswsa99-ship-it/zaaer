@@ -52,14 +52,14 @@ select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 -- the source derives in the server: a client header no longer writes it; the trusted in-database setting does
 select set_config('request.headers', '{"x-client-source":"staff-app"}', false);
 do $$ declare r jsonb; a audit_events; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k = 'res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','n7-src-1'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k = 'res'), 'kind','receipt', 'received_confirmed',true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','n7-src-1'));
   select * into a from audit_events where entity_id = (r->>'voucher_id')::uuid order by chain_seq desc limit 1;
   perform t_record('the client source header no longer writes the log''s source', a.source = 'screen', a.source);
 exception when others then perform t_record('the client source header no longer writes the log''s source', false, sqlerrm); end $$;
 select set_config('request.headers', '', false);
 select set_config('app.source', 'ops_assistant', false);
 do $$ declare r jsonb; a audit_events; begin
-  r := fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k = 'res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','n7-src-2'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k = 'res'), 'kind','receipt', 'received_confirmed',true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','n7-src-2'));
   select * into a from audit_events where entity_id = (r->>'voucher_id')::uuid order by chain_seq desc limit 1;
   perform t_record('a trusted in-database source is still recorded', a.source = 'ops_assistant', a.source);
 exception when others then perform t_record('a trusted in-database source is still recorded', false, sqlerrm); end $$;

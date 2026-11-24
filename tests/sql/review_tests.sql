@@ -48,7 +48,7 @@ do $$ declare res uuid := (select v from rf where k='res'); a jsonb; b jsonb; be
     perform t_record('RF03 A03 same key with a different method → IDEMPOTENCY_CONFLICT', false, 'accepted');
   exception when others then perform t_record('RF03 A03 same key with a different method → IDEMPOTENCY_CONFLICT', sqlerrm like 'IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   begin
-    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'rf-key-1'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'rf-key-1'));
     perform t_record('RF04 A03 the voucher path cannot reuse a key taken by the payment path with other content', false, 'accepted');
   exception when others then perform t_record('RF04 A03 the voucher path cannot reuse a key taken by the payment path with other content', sqlerrm like 'IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   perform t_record('RF04b A03 after all replays: exactly one receipt, paid = 100 SAR', t_vouchers(res, 'receipt') = 1 and t_paid(res) = 10000, 'paid=' || t_paid(res));

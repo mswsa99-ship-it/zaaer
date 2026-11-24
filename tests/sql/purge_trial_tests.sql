@@ -81,7 +81,7 @@ do $$ declare r jsonb; b uuid; cat uuid; room uuid; res uuid; pc uuid; pr uuid; 
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', td_today(b)::text, 'check_out', (td_today(b) + 1)::text,
          'guest_phone', '0559100001', 'guest_name', 'نزيل التجربة', 'room_id', room, 'source_id', '00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid; insert into ids values ('res', res);
-  r := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (td_fin(res)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'td-rent'));
+  r := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (td_fin(res)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'td-rent'));
   insert into ids values ('voucher', (r->>'voucher_id')::uuid);
   perform td_check_in(res, room);
   r := fn_admin_upsert_product_category('{"name":"فئة بيانات التجربة"}'); pc := (r->>'id')::uuid;
