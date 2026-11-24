@@ -7,6 +7,21 @@ import { test, expect } from "./fixtures";
 const STORE_KEY = "zaaer_demo_store_v9";
 const ROWS = 5000;
 
+/**
+ * The audit screen opens on "today" (property time zone). The seeded events span the last ROWS seconds, which crosses
+ * local midnight during the first ROWS seconds of a day (the CI run that failed started 00:57 Riyadh and counted 3457).
+ * Select an explicit date range that covers every seeded event instead of depending on the clock of day.
+ */
+async function selectSeededRange(page: import("@playwright/test").Page) {
+  const range = await page.evaluate((rows) => {
+    const fmt = (ms: number) => new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+    const now = Date.now();
+    return { from: fmt(now - (rows + 1) * 1000), to: fmt(now) };
+  }, ROWS);
+  await page.getByLabel("من", { exact: true }).fill(range.from);
+  await page.getByLabel("إلى", { exact: true }).fill(range.to);
+}
+
 test.describe("طباعة قائمة ضخمة", () => {
   test("قائمة سجل من 5,000 صف تُبنى صفحةً صفحة دون تجميد التبويب، والمستند مقسّم مرقّم", async ({ page, loginAs }) => {
     test.setTimeout(120_000);
@@ -46,6 +61,7 @@ test.describe("طباعة قائمة ضخمة", () => {
 
     await page.reload({ waitUntil: "networkidle" });
     await page.goto("/#/admin/audit-logs", { waitUntil: "networkidle" });
+    await selectSeededRange(page);
     await expect(page.getByText(/الأحداث المطابقة: 5,?\d\d\d/)).toBeVisible({ timeout: 30_000 });
 
     // التبويب يبقى مستجيبًا أثناء القراءة والبناء: عداد رسم يتقدم طوال العملية
@@ -89,4 +105,33 @@ test.describe("طباعة قائمة ضخمة", () => {
     await page.getByRole("button", { name: "كل الفترات" }).click();
     await expect(page.getByText(/الأحداث المطابقة: 5,?\d\d\d/)).toBeVisible();
   });
+
+  // Boundary instants (Asia/Riyadh, UTC+3): just after local midnight, the failing CI minute, the old pass threshold, just before midnight.
+  for (const at of ["2026-11-25T00:00:30+03:00", "2026-11-25T00:57:40+03:00", "2026-11-25T01:24:00+03:00", "2026-11-25T23:59:59+03:00"]) {
+    test(`الفترة الصريحة تغطي كل الأحداث المزروعة عند ${at}`, async ({ page, loginAs }) => {
+      test.setTimeout(90_000);
+      await page.clock.install({ time: new Date(at) });
+      await loginAs("owner");
+      await page.getByRole("button", { name: "مساعد العمليات" }).click();
+      await page.getByPlaceholder("اكتب سؤالك أو طلبك…").fill("ما وضع اليوم؟");
+      await page.getByPlaceholder("اكتب سؤالك أو طلبك…").press("Enter");
+      await expect(page.locator("div.whitespace-pre-wrap")).toHaveCount(2, { timeout: 15_000 });
+      await page.waitForFunction((k) => !!localStorage.getItem(k), STORE_KEY);
+      await page.waitForTimeout(400);
+      await page.evaluate(({ k, rows }) => {
+        const store = JSON.parse(localStorage.getItem(k) ?? "{}");
+        const template = (store.audit_events ?? [])[0];
+        if (!template) throw new Error("no audit template row in the demo store");
+        const base = Date.now();
+        const invented: Record<string, unknown>[] = [];
+        for (let i = 0; i < rows; i++) invented.push({ ...template, id: `load-${i}`, created_at: new Date(base - (i + 1) * 1000).toISOString(), correlation_id: `load-${i}`, details: { reason: `حدث اصطناعي رقم ${i}` } });
+        store.audit_events = [...invented, ...(store.audit_events ?? [])];
+        localStorage.setItem(k, JSON.stringify(store));
+      }, { k: STORE_KEY, rows: ROWS });
+      await page.reload({ waitUntil: "networkidle" });
+      await page.goto("/#/admin/audit-logs", { waitUntil: "networkidle" });
+      await selectSeededRange(page);
+      await expect(page.getByText(/الأحداث المطابقة: 5,?\d\d\d/)).toBeVisible({ timeout: 30_000 });
+    });
+  }
 });
