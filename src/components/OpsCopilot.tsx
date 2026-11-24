@@ -5,6 +5,7 @@
  *    confirmation calls fn_ai_ops_execute_proposal → the regular RPC under the user's own role.
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bot, Send, X, Check, XCircle, Sparkles, AlertTriangle } from "lucide-react";
 import { useBranch } from "../lib/branch";
 import { aiOpsChat, opsApi, toArabicError, type OpsProposal, type OpsReply } from "../lib/api";
@@ -26,6 +27,13 @@ const SUGGESTIONS = ["ما وضع اليوم؟", "من يصل اليوم ومن 
 export function OpsCopilot() {
   const { branchId, branch } = useBranch();
   const [open, setOpen] = useState(false);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const breakpoint = window.matchMedia("(min-width: 1024px)");
+    const place = () => setDock(document.getElementById(breakpoint.matches ? "ops-assistant-desktop-dock" : "ops-assistant-phone-dock"));
+    place(); breakpoint.addEventListener("change", place);
+    return () => breakpoint.removeEventListener("change", place);
+  }, []);
   const { profile } = useAuth();
   const canFound = profile?.role === "owner" || profile?.role === "manager";
   const [tab, setTab] = useState<"chat" | "founding">("chat");
@@ -97,10 +105,9 @@ export function OpsCopilot() {
   if (!branchId) return null;
   return (
     <>
-      <button onClick={() => setOpen((o) => !o)} data-testid="ops-copilot-fab" data-collapsed={collapsed || undefined} className={`fixed bottom-[72px] left-4 z-40 flex h-12 w-12 lg:bottom-4 origin-bottom-left items-center justify-center gap-2 rounded-full bg-ink-800 text-sm font-medium text-white shadow-lg transition-[transform,opacity] duration-200 ease-out hover:bg-ink-900 motion-reduce:transition-none sm:w-auto sm:px-4 ${collapsed && !open ? "scale-[0.6] opacity-70" : ""}`} aria-label="مساعد العمليات" aria-expanded={open}>
-        {/* U1 note 03: an icon on a phone, so it covers less of the cards beneath it */}
-        <Bot className="h-5 w-5" /> <span className="hidden sm:inline">مساعد العمليات</span>
-      </button>
+      {dock && createPortal(<button onClick={() => setOpen((o) => !o)} data-testid="ops-copilot-fab" data-collapsed={collapsed || undefined} className={`flex h-11 w-11 lg:w-full origin-center items-center justify-center gap-2 rounded-xl bg-ink-800 text-sm font-medium text-white transition-transform duration-200 ease-out hover:bg-ink-900 motion-reduce:transition-none ${collapsed && !open ? "scale-[0.6]" : ""}`} aria-label="مساعد العمليات" aria-expanded={open}>
+        <Bot className="h-5 w-5" /> <span className="hidden lg:inline">مساعد العمليات</span>
+      </button>, dock)}
       {open && (
         <div role="dialog" aria-label="مساعد العمليات" className="fixed bottom-[136px] left-5 z-40 flex h-[min(640px,70vh)] lg:bottom-20 w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-ink-100 bg-ink-800 px-4 py-3 text-white">

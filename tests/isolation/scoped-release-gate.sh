@@ -17,9 +17,23 @@ for f in supabase/migrations/*.sql; do
   psql -d "$BASE" -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>/tmp/scoped-mig.err || { echo "SCOPED GATE FAILED: migration $f"; cat /tmp/scoped-mig.err; exit 1; }
 done
 fail=0
+SEED_WANT_PASS=61   # measured: tests/sql/security_tests.sql on a correctly configured v9e clone prints 61 PASS, 0 FAIL, 0 psql ERROR
 clone() { # db [seed-sql]: a fresh copy of the migrated database; the 0122 suite needs the rows tests/sql/security_tests.sql leaves
-  psql -q -c "drop database if exists $1" -c "create database $1 template $BASE" >/dev/null 2>&1
-  if [ -n "${2:-}" ]; then psql -X -q -d "$1" -f "$2" >/dev/null 2>&1; fi
+  # CREATE DATABASE ... TEMPLATE does not copy ALTER DATABASE settings (keys, time zone, search_path, request.headers): re-apply them
+  # and fail closed if any is missing, so a degraded clone can never produce a baseline.
+  psql -q -c "drop database if exists $1" -c "create database $1 template $BASE" >/dev/null 2>&1 || { echo "SCOPED GATE FAILED: cannot clone $BASE to $1"; return 1; }
+  apply_db_settings "$1" >/dev/null 2>&1 || { echo "SCOPED GATE FAILED: apply_db_settings on $1"; return 1; }
+  assert_db_settings "$1" || return 1
+  if [ -n "${2:-}" ]; then
+    # the seed output is no longer discarded: it must print exactly the measured PASS rows, no FAIL row and no psql error
+    local sout sp sf se; sout=$(psql -X -d "$1" -f "$2" 2>&1)
+    sp=$(grep -cE '^[[:space:]]*PASS[[:space:]]*\|' <<<"$sout" || true)
+    sf=$(grep -cE '^[[:space:]]*FAIL[[:space:]]*\|' <<<"$sout" || true)
+    se=$(grep -cE '^psql:.*ERROR:' <<<"$sout" || true)
+    if [ "$sp" != "$SEED_WANT_PASS" ] || [ "$sf" != 0 ] || [ "$se" != 0 ]; then
+      echo "SCOPED GATE FAILED: seed $2 on $1 printed pass=$sp (want $SEED_WANT_PASS) fail=$sf err=$se"; printf '%s\n' "$sout" | grep -E '^[[:space:]]*FAIL|^psql:.*ERROR:' | head -20; return 1
+    fi
+  fi
 }
 run_suite() { # db file -> prints "pass fail err"
   local out; out=$(psql -X -d "$1" -f "$2" 2>&1)
@@ -39,7 +53,7 @@ SUITES=(
 for s in "${SUITES[@]}"; do
   IFS='|' read -r file want seed <<<"$s"
   [ -f "$file" ] || { echo "SCOPED GATE FAILED: missing $file"; fail=1; continue; }
-  clone "${BASE}_run" "$seed"
+  clone "${BASE}_run" "$seed" || { echo "  FAIL $file (clone/seed precondition)"; fail=1; continue; }
   read -r p f e <<<"$(run_suite "${BASE}_run" "$file")"
   if [ "$p" = "$want" ] && [ "$f" = 0 ] && [ "$e" = 0 ]; then echo "  ok   $file pass=$p"; else echo "  FAIL $file pass=$p (want $want) fail=$f err=$e"; fail=1; fi
 done
@@ -54,7 +68,7 @@ MUTANTS=(
 for m in "${MUTANTS[@]}"; do
   IFS='|' read -r name file sql <<<"$m"
   seed=""; [ "$file" = tests/sql/audit_direct_columns_0122_tests.sql ] && seed=tests/sql/security_tests.sql
-  clone "${BASE}_mut" "$seed"
+  clone "${BASE}_mut" "$seed" || { echo "  FAIL mutant '$name' (clone/seed precondition)"; fail=1; continue; }
   psql -X -q -d "${BASE}_mut" -v ON_ERROR_STOP=1 -c "$sql" >/dev/null 2>&1 || { echo "  FAIL mutant '$name' could not be applied"; fail=1; continue; }
   read -r p f e <<<"$(run_suite "${BASE}_mut" "$file")"
   if [ "$f" -ge 1 ] || [ "$e" -ge 1 ]; then echo "  ok   mutant '$name' turns $file RED (fail=$f err=$e)"; else echo "  FAIL mutant '$name' left $file green (pass=$p)"; fail=1; fi

@@ -78,6 +78,7 @@ export default function StaffLayout() {
           ))}
           <AdminMenuGroups groups={grouped.adminGroups} idPrefix="side" />
         </nav>
+        <div id="ops-assistant-desktop-dock" className="p-3" />
         <div className="border-t border-ink-100 p-3">
           <div className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
             <div className="min-w-0 leading-tight">
@@ -101,7 +102,8 @@ export default function StaffLayout() {
           <header className="flex items-center gap-2 border-b border-ink-100 bg-white/90 px-3 py-1.5 backdrop-blur lg:hidden">
             <img src={roomaiAsset("roomai-mark.svg")} alt="" className="h-8 w-8" />
             <span className="text-sm font-semibold text-ink-800">{PRODUCT_NAME}</span>
-            <Link to="/staff/account" className="mr-auto flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
+            <div id="ops-assistant-phone-dock" className="mr-auto" />
+            <Link to="/staff/account" className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
             <button onClick={handleSignOut} className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>

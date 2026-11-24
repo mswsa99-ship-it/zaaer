@@ -36,28 +36,46 @@ test.describe("floating assistant on a phone and motion/contrast (plan 6.11 and 
       // the check runs against the resting state: the button is back at full size after the scroll settles
       await expect(fab).not.toHaveAttribute("data-collapsed", "true", { timeout: 8_000 });
       const hits = await page.evaluate(() => {
-        const fabEl = document.querySelector('[data-testid="ops-copilot-fab"]');
-        if (!fabEl) return ["<assistant button missing>"];
-        const f = fabEl.getBoundingClientRect();
+        const fab = document.querySelector<HTMLElement>('[data-testid="ops-copilot-fab"]');
+        if (!fab) return ["<assistant button missing>"];
+        const header = [...document.querySelectorAll("header")].find((el) => el.getBoundingClientRect().height > 0);
+        const tabs = document.querySelector<HTMLElement>('[data-testid="bottom-tabs"]');
+        const safeTop = () => header ? Math.max(0, header.getBoundingClientRect().bottom) : 0;
+        const safeBottom = () => tabs && tabs.getBoundingClientRect().height > 0 ? tabs.getBoundingClientRect().top : innerHeight;
         const out: string[] = [];
-        const els = document.querySelectorAll<HTMLElement>(
-          '#main a[href], #main button, #main input, #main select, #main textarea, #main [role="button"], #main summary'
-        );
-        for (const el of els) {
-          if (typeof el.checkVisibility === "function" && !el.checkVisibility()) continue;
+        const all = [...document.querySelectorAll<HTMLElement>('#main a[href], #main button, #main input, #main select, #main textarea, #main [role="button"], #main summary')];
+        // Bottom-viewport targets include rectangles behind the sticky chrome. Never skip those:
+        // bring each one into the usable area and prove pointer AND keyboard reachability there.
+        const targets = all.filter((el) => {
           const r = el.getBoundingClientRect();
-          if (r.width === 0 || r.height === 0) continue;
-          const ox = Math.min(r.right, f.right) - Math.max(r.left, f.left);
-          const oy = Math.min(r.bottom, f.bottom) - Math.max(r.top, f.top);
-          if (ox <= 1 || oy <= 1) continue;
-          // a rect crossing is not yet a cover (clipped table cells keep their rect): ask what is really on top
-          const cx = Math.max(r.left, f.left) + ox / 2;
-          const cy = Math.max(r.top, f.top) + oy / 2;
-          const top = document.elementFromPoint(cx, cy);
-          if (top && (top === el || el.contains(top))) continue;   // the control itself is reachable there
-          if (top && (top === fabEl || fabEl.contains(top))) {
-            out.push(`${el.tagName.toLowerCase()}:${(el.textContent ?? "").trim().slice(0, 30)}`);
-          }
+          return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && !el.matches(":disabled, [aria-disabled=true]");
+        });
+        for (const el of targets) {
+          el.scrollIntoView({ block: "center", inline: "center" });
+          const r = el.getBoundingClientRect();
+          const top = Math.max(r.top, safeTop()), bottom = Math.min(r.bottom, safeBottom());
+          const left = Math.max(r.left, 0), right = Math.min(r.right, innerWidth);
+          const name = `${el.tagName.toLowerCase()}:${(el.textContent ?? "").trim().slice(0, 30)}`;
+          if (bottom <= top || right <= left) { out.push(`outside usable viewport: ${name}`); continue; }
+          const points = [[.5,.5],[.2,.5],[.8,.5],[.5,.2],[.5,.8]];
+          const reachable = points.some(([x,y]) => {
+            const hit = document.elementFromPoint(left + (right-left)*x, top + (bottom-top)*y);
+            return hit === el || !!hit && el.contains(hit);
+          });
+          if (!reachable) { const hit = document.elementFromPoint((left+right)/2,(top+bottom)/2); out.push(`pointer blocked: ${name} by ${hit?.tagName}:${hit?.textContent?.slice(0,40)} rect ${r.x},${r.y},${r.width},${r.height}`); }
+          el.focus({ preventScroll: true });
+          if (document.activeElement !== el) out.push(`focus blocked: ${name}`);
+        }
+        // Independently reject FAB overlap in the actual usable viewport, even if another
+        // part of a wide control can still be clicked. Sticky header/nav are separate chrome.
+        const f = fab.getBoundingClientRect();
+        for (const el of all) {
+          const r = el.getBoundingClientRect();
+          const l = Math.max(r.left,f.left), right = Math.min(r.right,f.right);
+          const top = Math.max(r.top,f.top,safeTop()), bottom = Math.min(r.bottom,f.bottom,safeBottom());
+          if (right <= l || bottom <= top) continue;
+          const hit = document.elementFromPoint((l+right)/2,(top+bottom)/2);
+          if (hit && (hit === fab || fab.contains(hit))) out.push(`assistant overlap: ${el.tagName.toLowerCase()}`);
         }
         return out;
       });
