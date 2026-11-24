@@ -1,0 +1,112 @@
+/* Operations Center only. Text colors follow the surface they actually sit on. */
+.ops-type-trial {
+  --ops-ink: #10262d;
+  --ops-muted: #354d55;
+  --ops-link: #095865;
+  --ops-warning: #624000;
+  --ops-danger: #92190f;
+  --ops-success: #155b30;
+  --ops-accent: #3e4678;
+  color: var(--ops-ink);
+}
+.ops-type-trial [class*="text-ink-"] { color: var(--ops-ink); }
+.ops-type-trial .text-ink-400,
+.ops-type-trial .text-ink-500,
+.ops-type-trial .text-ink-600 { color: var(--ops-muted); }
+.ops-type-trial [class*="text-brand-"],
+.ops-type-trial .btn-ghost { color: var(--ops-link); }
+.ops-type-trial [class*="text-warning-"],
+.ops-type-trial [data-testid="followups-banner"] { color: var(--ops-warning); }
+.ops-type-trial [class*="text-danger-"] { color: var(--ops-danger); }
+.ops-type-trial [class*="text-success-"] { color: var(--ops-success); }
+.ops-type-trial [class*="text-accent-"] { color: var(--ops-accent); }
+.ops-type-trial .badge { color: #243c45; background-color: #e5edf0; }
+.ops-type-trial .badge[class*="text-success-"] { color: #15502c; background-color: #dcefe2; }
+.ops-type-trial .badge[class*="text-warning-"] { color: #624000; background-color: #f7ead2; }
+.ops-type-trial .badge[class*="text-danger-"] { color: #851c17; background-color: #f8e2df; }
+.ops-type-trial .badge[class*="text-accent-"] { color: #383d70; background-color: #e8e8f5; }
+.ops-type-trial .badge[class*="text-brand-"] { color: #124c59; background-color: #dfeef2; }
+/* Links remain identifiable without relying on their hue. */
+.ops-type-trial .ops-briefing a,
+.ops-type-trial a.text-brand-600 { text-decoration: underline; text-underline-offset: 3px; }
+[data-theme="dark"] .ops-type-trial .card {
+  /* 85% surface opacity only: keep text and controls fully opaque. */
+  background-color: rgb(17 40 48 / 85%);
+  --ops-ink: #f1f7f7;
+  --ops-muted: #d5e3e6;
+  --ops-link: #b4f1f6;
+  --ops-warning: #ffd58c;
+  --ops-danger: #ffb9af;
+  --ops-success: #a3e8b7;
+  --ops-accent: #d2ceff;
+  color: var(--ops-ink);
+}
+[data-theme="dark"] .ops-type-trial select,
+[data-theme="dark"] .ops-type-trial .input {
+  background-color: #244a54;
+  color: #f4fafa;
+}
+[data-theme="dark"] .ops-type-trial .input::placeholder { color: #e0eeee; opacity: 1; }
+[data-theme="dark"] .ops-type-trial .card .btn-ghost:hover { background-color: #244a54; }
+/* Explicit status pairs retain contrast in night mode. */
+[data-theme="dark"] .ops-type-trial .badge { color: #e2eef0; background-color: #29434d; }
+[data-theme="dark"] .ops-type-trial .badge[class*="text-success-"] { color: #b6f1c7; background-color: #193f2a; }
+[data-theme="dark"] .ops-type-trial .badge[class*="text-warning-"] { color: #ffe1a6; background-color: #49350e; }
+[data-theme="dark"] .ops-type-trial .badge[class*="text-danger-"] { color: #ffc4bb; background-color: #4b201b; }
+[data-theme="dark"] .ops-type-trial .badge[class*="text-accent-"] { color: #dfdcff; background-color: #33304e; }
+[data-theme="dark"] .ops-type-trial .badge[class*="text-brand-"] { color: #b4edf5; background-color: #173f49; }
+/* Route-scoped shell: never changes a different staff/admin/guest page. */
+.ops-center-shell [data-testid="keybox-alert"],
+.ops-center-shell .bg-danger-500 { background-color: #8c211b; color: #ffffff; }
+.ops-center-shell [data-testid="keybox-alert"] .bg-danger-600 { background-color: #691711; }
+[data-theme="dark"] .ops-center-shell {
+  background-color: #091c24;
+  color: #f1f7f7;
+}
+[data-theme="dark"] .ops-center-shell aside,
+[data-theme="dark"] .ops-center-shell header,
+[data-theme="dark"] .ops-center-shell [data-testid="bottom-tabs"] {
+  background-color: #112b35;
+  color: #f1f7f7;
+  border-color: #37525c;
+}
+[data-theme="dark"] .ops-center-shell [class*="text-ink-"] { color: #d5e3e6; }
+[data-theme="dark"] .ops-center-shell [class*="text-brand-"] { color: #b4f1f6; }
+[data-theme="dark"] .ops-center-shell .bg-ink-50,
+[data-theme="dark"] .ops-center-shell .bg-brand-50,
+[data-theme="dark"] .ops-center-shell [class*="bg-white"] { background-color: #183b47; }
+[data-theme="dark"] .ops-center-shell [class*="text-warning-"] { color: #ffe1a6; }
+[data-theme="dark"] .ops-center-shell > .flex > .relative.text-warning-700,
+[data-theme="dark"] .ops-center-shell [data-testid="review-banner"],
+[data-theme="dark"] .ops-center-shell [data-testid="followups-banner"] { background-color: #3a2c13; }
+[data-theme="dark"] .ops-center-shell .ops-type-trial {
+  --ops-ink: #f1f7f7;
+  --ops-muted: #d5e3e6;
+  --ops-link: #b4f1f6;
+  --ops-warning: #ffe1a6;
+  --ops-danger: #ffb9af;
+  --ops-success: #a3e8b7;
+  --ops-accent: #d2ceff;
+}
+[data-theme="dark"] .ops-center-shell .ops-type-trial [class*="text-ink-"] { color: var(--ops-ink); }
+[data-theme="dark"] .ops-center-shell .ops-type-trial .text-ink-400,
+[data-theme="dark"] .ops-center-shell .ops-type-trial .text-ink-500,
+[data-theme="dark"] .ops-center-shell .ops-type-trial .text-ink-600 { color: var(--ops-muted); }
+[data-theme="dark"] .ops-center-shell .ops-type-trial .badge { color: #e2eef0; background-color: #29434d; }
+[data-theme="dark"] .ops-center-shell .ops-type-trial .badge[class*="text-success-"] { color: #b6f1c7; background-color: #193f2a; }
+[data-theme="dark"] .ops-center-shell .ops-type-trial .badge[class*="text-warning-"] { color: #ffe1a6; background-color: #49350e; }
+[data-theme="dark"] .ops-center-shell .ops-type-trial .badge[class*="text-danger-"] { color: #ffc4bb; background-color: #4b201b; }
+.ops-center-shell aside .text-ink-400,
+.ops-center-shell [data-testid="bottom-tabs"],
+.ops-center-shell [data-testid="bottom-tabs"] [class*="text-ink-"] { color: #354d55; }
+.ops-center-shell > .flex > .relative.text-warning-700 { color: #624000; }
+.ops-center-shell .ops-type-trial .card { background-color: rgb(255 255 255 / 85%); }
+[data-theme="dark"] .ops-center-shell aside .text-ink-400,
+[data-theme="dark"] .ops-center-shell [data-testid="bottom-tabs"],
+[data-theme="dark"] .ops-center-shell [data-testid="bottom-tabs"] [class*="text-ink-"] { color: #d5e3e6; }
+[data-theme="dark"] .ops-center-shell > .flex > .relative.text-warning-700 { color: #ffe1a6; }
+[data-theme="dark"] .ops-center-shell .ops-type-trial .card { background-color: rgb(17 40 48 / 85%); }
+
+[data-theme="dark"] .ops-center-shell [data-testid="keybox-alert"] .bg-white { background-color: #ffffff; }
+[data-theme="dark"] .ops-center-shell aside img,
+[data-theme="dark"] .ops-center-shell header img { background-color: #e7f1f2; border-radius: 8px; padding: 3px; }

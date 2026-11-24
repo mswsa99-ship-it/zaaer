@@ -1,4 +1,5 @@
 import "./StaffDashboard.typography.css";
+import "./StaffDashboard.contrast.css";
 import { COUNT, arabicCount } from "../../lib/utils";
 import { canOpen } from "../../lib/nav";
 import { useReservations } from "../../lib/hooks";

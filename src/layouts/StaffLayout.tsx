@@ -45,7 +45,7 @@ export default function StaffLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-ink-50">
+    <div className={cn("flex min-h-screen bg-ink-50", location.pathname === "/staff/dashboard" && "ops-center-shell")}>
       <a href="#main" onClick={focusMain} className="sr-only z-50 rounded-xl bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow focus:not-sr-only focus:fixed focus:right-4 focus:top-4">تخطَّ إلى المحتوى</a>
       <aside className="fixed inset-y-0 right-0 z-20 hidden w-64 flex-col border-l border-ink-100 bg-white lg:flex">
         <div className="flex items-center gap-2.5 border-b border-ink-100 px-5 py-4">
