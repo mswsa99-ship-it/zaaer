@@ -104,7 +104,7 @@ cp "$OUT/rowcounts-before-0101.txt" "$OUT/rowcounts-before-0101.txt.orig"
 
 # ---- measurement setup + round A (before 0101/0106) ----
 echo "== measurement round: before"
-$PSQL -f tests/load/20-measure.sql > /dev/null 2>&1   # harness: contexts, variants, load_run_cell
+$PSQL -f tests/load/20-measure.sql > "$OUT/measure-setup.log" 2>&1   # harness: contexts, variants, load_run_cell
 date -Is > "$OUT/measure-before-started.txt"
 $PSQL -v round=before -f tests/load/22-measure-all.sql > "$OUT/measure-before.log" 2>&1
 date -Is > "$OUT/measure-before-finished.txt"
@@ -130,6 +130,7 @@ if diff -q "$OUT/rowcounts-before-0101.txt" "$OUT/rowcounts-after-0101.txt" >/de
   echo "0101+0106 data preservation: IDENTICAL row counts" | tee "$OUT/0101-preservation.txt"
 else
   echo "0101+0106 data preservation: ROW COUNTS CHANGED (investigate)" | tee "$OUT/0101-preservation.txt"
+  exit 1
 fi
 
 # ---- measurement round B (after 0101+0106) ----
@@ -142,6 +143,30 @@ $PSQL -v round=after0106 -f tests/load/23-measure-summary.sql > "$OUT/results-af
 # ---- EXPLAIN evidence ----
 echo "== explain evidence"
 $PSQL -f tests/load/30-explain.sql > "$OUT/explain.txt" 2>&1
+
+# ---- fail-closed acceptance, independently of the printed summary ----
+# Require the full plan volume and all 30 context/variant cells with 15
+# samples each. A reduced smoke run is useful but cannot pass item 2.10.
+$PSQL <<'SQL'
+do $$
+begin
+  if (select count(*) from load_contexts) <> 3 or (select count(*) from load_variants) <> 10 then
+    raise exception 'Load matrix is incomplete';
+  end if;
+  if (select count(*) from organizations where name_ar like 'فندق اختبار %') < 50 then
+    raise exception 'Full 50-hotel fixture is required for acceptance';
+  end if;
+  if (select count(*) from load_results where round = 'after0106') <> 450 or
+     (select count(*) from (select context, fn, variant from load_results where round = 'after0106'
+                             group by context, fn, variant having count(*) = 15) cells) <> 30 then
+    raise exception 'Expected 30 complete measurement cells, 15 samples each';
+  end if;
+  if exists (select 1 from load_results where round = 'after0106' group by context, fn, variant
+             having percentile_cont(0.95) within group (order by ms) >= 500) then
+    raise exception 'Load p95 criterion failed';
+  end if;
+end $$;
+SQL
 
 date -Is | tee "$OUT/run-finished.txt"
 echo "== done: $OUT"
