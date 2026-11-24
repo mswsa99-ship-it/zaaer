@@ -10,6 +10,9 @@ import { useBranch } from "../lib/branch";
 import { aiOpsChat, opsApi, toArabicError, type OpsProposal, type OpsReply } from "../lib/api";
 import { withTimeout } from "../lib/async";
 import { Spinner } from "./ui";
+import { RoomAiFounding } from "./RoomAiFounding";
+import { useAuth } from "../lib/auth";
+import "../roomaiFounding.css";
 
 interface Msg { role: "staff" | "assistant"; text: string; mode?: string; proposals?: OpsProposal[]; aiStatus?: string }
 interface ProposalState { status: "proposed" | "executing" | "executed" | "rejected" | "failed"; detail?: string }
@@ -23,6 +26,9 @@ const SUGGESTIONS = ["ما وضع اليوم؟", "من يصل اليوم ومن 
 export function OpsCopilot() {
   const { branchId, branch } = useBranch();
   const [open, setOpen] = useState(false);
+  const { profile } = useAuth();
+  const canFound = profile?.role === "owner" || profile?.role === "manager";
+  const [tab, setTab] = useState<"chat" | "founding">("chat");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [conv, setConv] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -101,6 +107,8 @@ export function OpsCopilot() {
             <div className="flex items-center gap-2"><Bot className="h-5 w-5" /><div className="leading-tight"><p className="text-sm font-semibold">مساعد العمليات</p><p className="text-[11px] text-ink-200">{branch?.name_ar}</p><p className="text-[11px] text-ink-200">يقرأ البيانات ويقترح؛ أنت من ينفذ</p></div></div>
             <button onClick={() => setOpen(false)} className="rounded-lg p-2.5 text-ink-200 hover:bg-white/10 hover:text-white" aria-label="إغلاق المساعد"><X className="h-4 w-4" /></button>
           </div>
+          {canFound && <div className="rfo-tabs" role="tablist" aria-label="أقسام المساعد"><button role="tab" className="rfo-tab" aria-selected={tab === "chat"} onClick={() => setTab("chat")}>محادثة</button><button role="tab" className="rfo-tab" aria-selected={tab === "founding"} onClick={() => setTab("founding")} data-testid="ops-tab-founding">تأسيس الفندق</button></div>}
+          {canFound && tab === "founding" ? <div className="flex-1 overflow-y-auto p-3 scrollbar-thin"><RoomAiFounding /></div> : <>
           <div className="flex-1 space-y-3 overflow-y-auto p-3 scrollbar-thin" role="log" aria-live="polite" aria-label="المحادثة">
             {msgs.length === 0 && (
               <div className="space-y-2">
@@ -144,6 +152,7 @@ export function OpsCopilot() {
             <input value={input} onChange={(e) => setInput(e.target.value)} className="input" aria-label="سؤالك أو طلبك" placeholder="اكتب سؤالك أو طلبك…" disabled={busy} />
             <button type="submit" disabled={busy || !input.trim()} className="btn-primary px-3" aria-label="إرسال"><Send className="h-4 w-4" /></button>
           </form>
+          </>}
         </div>
       )}
     </>

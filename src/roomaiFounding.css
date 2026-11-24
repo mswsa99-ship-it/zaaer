@@ -1,0 +1,29 @@
+/* Room AI founding panel: token colours only, no card borders, filled borderless fields (owner design decisions). */
+.rfo { display: flex; flex-direction: column; gap: var(--space-3); color: var(--ink); font-size: 13px; line-height: 20px; }
+.rfo-note { background: var(--spark-tint); color: var(--spark-text); border-radius: var(--radius-md); padding: var(--space-3); font-size: 12px; }
+.rfo-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.rfo-step { font: inherit; font-size: 12px; border: 0; border-radius: var(--radius-pill); padding: 6px 12px; min-height: 32px; background: var(--surface-sunken); color: var(--ink); cursor: pointer; }
+.rfo-step[aria-pressed="true"] { background: var(--night); color: var(--on-night); }
+.rfo-step:focus-visible, .rfo-btn:focus-visible, .rfo-in:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rfo-card { background: var(--surface-sunken); border-radius: var(--radius-md); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.rfo-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.rfo-title { font-weight: 600; font-size: 13px; }
+.rfo-muted { color: var(--ink-muted); font-size: 12px; }
+.rfo-btn { font: inherit; font-size: 12px; font-weight: 500; border: 0; border-radius: var(--radius-md); min-height: 36px; padding: 0 var(--space-3); background: var(--surface-sunken); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.rfo-btn-ai { background: var(--spark-tint); color: var(--spark-text); }
+.rfo-btn-primary { background: var(--night); color: var(--on-night); }
+.rfo-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.rfo-in { font: inherit; font-size: 13px; width: 100%; border: 0; border-radius: var(--radius-md); padding: 8px 10px; background: var(--paper); color: var(--ink); }
+.rfo-in::placeholder { color: var(--ink-muted); }
+[data-theme="dark"] .rfo-in { background: var(--field-fill); color: var(--field-ink); }
+.rfo-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-muted); }
+.rfo-warn { color: var(--warning); font-size: 12px; }
+.rfo-ok { color: var(--success); font-size: 12px; }
+.rfo-bad { color: var(--danger); font-size: 12px; }
+.rfo-sev { display: inline-flex; border-radius: var(--radius-pill); padding: 1px 10px; font-size: 11px; font-weight: 600; }
+.rfo-sev-risk { background: var(--danger-tint); color: var(--danger); }
+.rfo-sev-warn { background: var(--warning-tint); color: var(--warning); }
+.rfo-sev-note { background: var(--sky-tint); color: var(--sky); }
+.rfo-tabs { display: flex; gap: 4px; padding: 6px 8px; background: var(--surface-sunken); }
+.rfo-tab { font: inherit; font-size: 12px; border: 0; border-radius: var(--radius-pill); padding: 6px 14px; min-height: 32px; background: transparent; color: var(--ink-muted); cursor: pointer; }
+.rfo-tab[aria-selected="true"] { background: var(--spark-tint); color: var(--spark-text); font-weight: 600; }
