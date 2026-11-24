@@ -10,6 +10,9 @@ const ROWS = 5000;
 test.describe("طباعة قائمة ضخمة", () => {
   test("قائمة سجل من 5,000 صف تُبنى صفحةً صفحة دون تجميد التبويب، والمستند مقسّم مرقّم", async ({ page, loginAs }) => {
     test.setTimeout(120_000);
+    // Keep the prepared document inspectable: headless Chrome closes native print immediately and fires afterprint.
+    // This test checks the paginated document, not an operating-system printer dialog.
+    await page.addInitScript(() => { window.print = () => {}; });
     await loginAs("owner");
 
     // أثّر في المخزن ليُحفظ محليًا (رسالة مساعد واحدة)، ثم ازرع 5,000 حدث اصطناعي فيه وأعد الإقلاع

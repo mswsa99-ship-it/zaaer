@@ -6,7 +6,7 @@ const TEST_LOGO = "data:image/png;base64," + readFileSync("tests/e2e/assets/hote
 const HOTEL_A = "00000000-0000-0000-0000-000000000001";
 const HOTEL_B = "90000000-0000-0000-0000-000000000202";
 
-test("guest hotel header uses its uploaded logo and footer attribution", async ({ page, loginAs, errors }) => {
+test("guest hotel header uses its uploaded logo and footer attribution", async ({ page, loginAs, errors }, testInfo) => {
   await loginAs("owner");
   await expect.poll(() => page.evaluate(() => !!localStorage.getItem("zaaer_demo_store_v9"))).toBe(true);
   await page.evaluate(({ HOTEL_B, TEST_LOGO }) => {
@@ -35,9 +35,9 @@ test("guest hotel header uses its uploaded logo and footer attribution", async (
   expect(contrast).toBeGreaterThanOrEqual(4.5);
   console.log(`Guest footer contrast on white: ${contrast.toFixed(2)}:1`);
 
-  await page.screenshot({ path: "/downloads/h-branding-desktop.png", fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("h-branding-desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: "/downloads/h-branding-mobile.png", fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("h-branding-mobile.png"), fullPage: true });
   await page.getByRole("link", { name: "سياسة الخصوصية", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/h/${HOTEL_A}/privacy`));
   await page.getByRole("link", { name: /فايف اورز/ }).click();
