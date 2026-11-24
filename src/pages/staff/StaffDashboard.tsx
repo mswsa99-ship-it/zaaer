@@ -1,3 +1,4 @@
+import "./StaffDashboard.typography.css";
 import { COUNT, arabicCount } from "../../lib/utils";
 import { canOpen } from "../../lib/nav";
 import { useReservations } from "../../lib/hooks";
@@ -32,7 +33,7 @@ export default function StaffDashboard() {
   const listError = e1 ?? e2;
   if (listError && all.length === 0 && arrivals.length === 0) {
     return (
-      <div>
+      <div className="ops-type-trial">
         <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
         <LoadErrorCard message={listError} onRetry={() => { r1(); r2(); sumQ.reload(); }} />
       </div>
@@ -88,7 +89,7 @@ export default function StaffDashboard() {
   const shownTiles = tiles.filter((t) => open(t.to));
 
   return (
-    <div>
+    <div className="ops-type-trial">
       <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
       <ShiftBoard role={role} title={board.title} subtitle={board.subtitle} tiles={shownTiles} rowsTitle={board.rowsTitle} rows={board.rows} />
       <ReviewBanner summary={review} />
@@ -103,7 +104,7 @@ export default function StaffDashboard() {
       )}
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><DailyBriefing /></div>
+        <div className="ops-briefing lg:col-span-2"><DailyBriefing /></div>
         <div className="grid grid-cols-2 gap-3 content-start">
           {!sum && sumQ.error && <div className="col-span-2"><LoadErrorCard message={sumQ.error} onRetry={sumQ.reload} /></div>}
           {sum && [
@@ -117,7 +118,7 @@ export default function StaffDashboard() {
               { l: "متبقٍ على المقيمين", v: formatCurrency(sum.finance.outstanding_in_house / 100), to: "/staff/reservations" },
               { l: "تأمينات محتجزة", v: formatCurrency(sum.finance.deposits_held / 100), to: "/admin/finance" },
             ] : []),
-          ].map((t) => <Link key={t.l} to={t.to} className="card p-3 hover:shadow-md"><p className="text-lg font-bold text-ink-800" dir="ltr">{t.v}</p><p className="text-[11px] text-ink-400">{t.l}</p></Link>)}
+          ].map((t) => <Link key={t.l} to={t.to} className="card p-3 hover:shadow-md"><p className="text-lg font-bold text-ink-800" dir="ltr">{t.v}</p><p className="ops-summary-label text-[11px] text-ink-400">{t.l}</p></Link>)}
         </div>
       </div>
 
@@ -128,7 +129,7 @@ export default function StaffDashboard() {
               <s.icon className="h-5 w-5" />
             </div>
             <p className="min-w-0 break-words text-xl font-bold tabular-nums text-ink-800 sm:text-2xl">{s.value}</p>
-            <p className="text-xs text-ink-400">{s.label}</p>
+            <p className="ops-stat-label text-xs text-ink-400">{s.label}</p>
           </Link>
         ))}
       </div>
@@ -137,7 +138,7 @@ export default function StaffDashboard() {
       {arrivals.length === 0 ? (
         <EmptyState icon={<CalendarClock className="h-10 w-10" />} title="لا توجد وصولات اليوم" />
       ) : (
-        <div className="space-y-3">
+        <div className="ops-reservations space-y-3">
           {arrivals.map((r) => <ReservationCardRow key={r.id} r={r} />)}
         </div>
       )}
@@ -146,7 +147,7 @@ export default function StaffDashboard() {
         <>
           <div className="mt-8" />
           <SectionTitle level={2} title="جاهز لتسجيل الوصول" subtitle={`اكتملت هويته وشموس: ${readyForApproval.length}`} action={<Link to="/staff/access-approvals" className="text-sm text-brand-600">عرض الكل</Link>} />
-          <div className="space-y-3">
+          <div className="ops-reservations space-y-3">
             {readyForApproval.slice(0, 5).map((r) => <ReservationCardRow key={r.id} r={r} />)}
           </div>
         </>
