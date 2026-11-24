@@ -10,6 +10,7 @@
 | 2 | bootstrap_db + تطبيق كل الترحيلات (96) على قاعدة مهملة | PASS — الكل يُطبق بلا خطأ على PG15. ملاحظة: PG14 يرفض `security_invoker`؛ السلسلة تحتاج PG15+ |
 | 3 | ملفات السلسلة الممهدة (platform..phase4_money_controls، 16 ملفًا) | PASS 16/16 |
 | 4 | tests/release-proof/phase4_anomaly_six_rules_tests.sql | **14 PASS / 1 FAIL مقصود (أحمر)**: RP46-14b يثبت فجوة القبول — الرصيد الافتتاحي السالب المستورد لا ينشئ بند «صندوق سالب» ولا تنبيهًا (ينشئ account_opening_set فقط). البند 4.6 يبقى **مفتوحًا** حتى يُصلح منطق المنتج |
+| 4ب | tests/release-proof/finance_role_scenarios_tests.sql (4.13 صناعي) | **PASS 10/10**: المشرف ينفذ قبضًا ومصروفًا فعليًا ويُرفض له الاسترداد؛ محاولات المدقق الثلاث (وصول بلا دفع — الرد ok:false وأسبابه «الليلة الأولى غير مدفوعة»، سند 99,999، مصروف 999,999 بانتظار اعتماد)؛ المالية تسترد ويُرفض لها الوصول؛ النظافة تُرفض ماليًا؛ المالك ينفذ |
 | 5 | bash tests/release-proof/check_app_assets.sh | PASS 7/7 (شعار SVG، أيقونات 32/192/512، قابلة للقص، og-image 1200x630، manifest) |
 | 6 | node tests/release-proof/assistant-latency/measure.mjs (بدون --live) | PASS dry-run: يتحقق من الأسئلة العشرين ويطبع الخطة؛ لا طلبات ولا إنفاق |
 | 7 | psql -f tests/release-proof/setup_data_checker.sql | PASS (يعمل قراءة فقط) — يخرج MISSING على القاعدة الصناعية كما هو متوقع؛ على الإنتاج (سجل المرحلة): 23 وحدة / 0 صناديق / 0 سؤالًا |
@@ -28,6 +29,6 @@
 | 1.4/1.5 | التسليم الحقيقي وإبطال الجلسات على staging (runbook جاهز) | خدمة: إذن staging + 1.3 |
 
 ## ملاحظات للمنسق
-- wiring.diff: يُدخل ملف 4.6 في run.sh بعد phase4_money_controls_tests.sql (يُدمج تسلسليًا؛ سيُحمر السطر حتى يُغلق RP46-14b).
+- wiring.diff: يُدخل ملفي 4.6 و4.13 في run.sh بعد phase4_money_controls_tests.sql (يُدمج تسلسليًا؛ سطر 4.6 سيُحمر حتى يُغلق RP46-14b).
 - لا تعديل على run.sh أو verify أو package.json في الشجرة؛ لا منطق منتج؛ الملفات كلها تحت acceptance/release-proof/ و tests/release-proof/ + wiring.diff.
 - 3.2/3.3/6.14: لم أقترب (محجوبة بقرار المالك — 4 تعارضات تباين في المصدر المعتمد).
