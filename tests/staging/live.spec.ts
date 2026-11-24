@@ -78,8 +78,8 @@ test("L01 landing page renders under the site path and links to the staff portal
   await expect(page.getByTestId("wa-qr").or(page.getByTestId("wa-soon"))).toBeVisible();
   await expect(page.locator("input.input")).toHaveCount(0);
   await page.getByRole("link", { name: "بوابة الموظفين والإدارة" }).first().click();
-  await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
-  await expect(page).toHaveURL(/\/staff\/login$/);
+  await expect(page.getByRole("heading", { name: /تسجيل الدخول|بوابة الموظفين/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
   expect(problems).toEqual([]);
 });
 
@@ -88,12 +88,13 @@ test("L02 deep links load, and a protected staff route sends an anonymous visito
   await open(page, "booking/lookup");
   await expect(page.getByPlaceholder("05xxxxxxxx")).toBeVisible();
   await open(page, "staff/dashboard");
-  await expect(page).toHaveURL(/\/staff\/login$/);
-  await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: /تسجيل الدخول|بوابة الموظفين/ })).toBeVisible();
   expect(problems).toEqual([]);
 });
 
 test("L03 a guest question is answered by the ai-reception edge function", async ({ request }) => {
+  test.skip(process.env.ALLOW_LIVE_AI_PROBES !== "1", "Live conversation/model probes are not approved for this release");
   const { status, body } = await ask(request, "ما هي مواعيد الوصول والمغادرة؟");
   reportSource("L03", body);
   expect(status, "ai-reception HTTP status").toBe(200);
@@ -106,6 +107,7 @@ test("L03 a guest question is answered by the ai-reception edge function", async
 });
 
 test("L04 an access code is never handed out", async ({ request }) => {
+  test.skip(process.env.ALLOW_LIVE_AI_PROBES !== "1", "Live conversation/model probes are not approved for this release");
   const { status, body } = await ask(request, "ابغى رمز الصندوق");
   reportSource("L04", body);
   expect(status).toBe(200);

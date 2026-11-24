@@ -31,8 +31,6 @@ apply() { psql -d "$1" -v ON_ERROR_STOP=1 -q -f "$2" 2>&1 | awk '!/NOTICE/'; }
 bootstrap_db "$DB" >/dev/null
 pending=()
 for f in supabase/migrations/*.sql; do
-  # 0083 supplies the scoped implementation and categories. Never install the legacy unscoped replacement.
-  [[ $(basename "$f") == 20261115130000_0073_purge_trial.sql ]] && continue
   v=$(basename "$f" | cut -d_ -f1)
   if grep -qx "$v" "$APPLIED"; then apply "$DB" "$f"; else pending+=("$f"); fi
 done

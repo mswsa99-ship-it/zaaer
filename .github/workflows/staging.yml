@@ -11,7 +11,7 @@ name: staging
 # web      the public build settings come from .env.staging (committed: URL + anon key, nothing secret);
 #          repository variables STAGING_SUPABASE_URL / STAGING_SUPABASE_ANON_KEY override them if set.
 # live     read-only checks of the published site and the staging API (scripts/smoke-deployed.sh), then a browser
-#          walk through the real stack (tests/staging/). One guest conversation per run; nothing else is written.
+#          walk through the real stack (tests/staging/), with conversation/model probes opt-in only.
 on:
   push:
     branches: [develop]
