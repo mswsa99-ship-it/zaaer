@@ -109,6 +109,8 @@ test.describe("staff reservation lifecycle", () => {
   test("SR04 the reservations list shows money as SAR with partial state, never a rounded 'paid'", async ({ page, loginAs }) => {
     await loginAs("finance");
     await page.goto("/#/staff/reservations", { waitUntil: "networkidle" });
+    // Hash navigation can settle before React replaces the finance landing table.
+    await expect(page.getByRole("heading", { name: "الحجوزات", exact: true })).toBeVisible();
     await expect(page.locator("table tbody tr").first()).toBeVisible();
     const rows = page.locator("table tbody tr");
     const n = await rows.count();
