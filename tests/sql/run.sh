@@ -122,6 +122,7 @@ run_tests tests/sql/whatsapp_purge_tests.sql
 echo "== running purge tenant isolation tests (0083)"
 run_tests tests/sql/purge_scope_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
+run_tests tests/sql/guest_limits_settings_tests.sql
 run_tests tests/sql/guest_quota_tests.sql
 run_tests tests/sql/otp_limits_tests.sql
 bash tests/sql/guest_quota_race.sh "$DB"

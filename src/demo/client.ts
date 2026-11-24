@@ -585,11 +585,12 @@ const rpcs: Record<string, (a: any) => any> = {
     const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone, role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
     for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
     emit("staff_profiles"); emit("branch_memberships"); audit(null, "staff_invited", "staff_profile", id, { role, branch_ids: branches, phone: !!phone }); return { ok: true, staff_id: id }; },
-  fn_admin_update_ai_settings: ({ p }) => { requireCap("security");
+  fn_admin_update_ai_settings: ({ p }) => { requireRole("owner"); requireCap("security");
     // 0052 (SEC-02): the guard's four numbers keep their ranges
-    const rng: Record<string, [number, number]> = { guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
+    const rng: Record<string, [number, number]> = { guest_otp_after_messages: [1, 100], guest_device_daily_message_limit: [1, 1000], guest_branch_daily_message_limit: [1, 100000], guest_otp_device_hourly_limit: [1, 100], guest_otp_phone_hourly_limit: [1, 200], guest_otp_cooldown_seconds: [10, 3600], guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
     for (const [k, [lo, hi]] of Object.entries(rng)) if (p?.[k] != null && !(Number.isInteger(Number(p[k])) && Number(p[k]) >= lo && Number(p[k]) <= hi)) throw new Error("VALIDATION: ai_guard");
-    Object.assign(T("ai_settings")[0], p, { updated_at: nowISO() }); emit("ai_settings"); return { ok: true }; },
+    const setting = T("ai_settings").find((x) => x.organization_id === ORG);
+    const before = { ...setting }; Object.assign(setting!, p, { updated_at: nowISO() }); emit("ai_settings"); audit(null, "ai_settings_updated", "ai_settings", ORG, { before, after: p }); return { ok: true }; },
   fn_definition_dependencies: ({ p_entity, p_id }) => { requireCap("definitions"); return deps(p_entity, p_id); },
 
   // ---- definitions ----
