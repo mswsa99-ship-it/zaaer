@@ -13,16 +13,27 @@ PGHOST=/tmp PGPORT=54333 PGUSER=postgres scripts/load-roomai.sh /tmp/load-roomai
 The driver (`scripts/load-roomai.sh`):
 
 1. creates a fresh database shaped like the hosted project (tests/sql/bootstrap.sh);
-2. applies every migration except 0101;
+2. applies every migration except 0101 and 0106;
 3. generates the fixture: **50 hotels × 30 branches × one rolling year of
    bookings** (`tests/load/10-fixture-hotel.sql`, one run per hotel);
 4. measures the main read functions with real session contexts (staff JWT
    claims of the hotel's owner): 2 warmup + 15 measured calls per variant per
-   context, 3 branch contexts in 3 hotels (`tests/load/20-measure.sql`);
-5. applies migration **0101** between the before/after rounds and verifies row
-   counts are identical (data preservation);
+   context, 3 branch contexts in 3 hotels. `tests/load/20-measure.sql` is the
+   setup (contexts, variants, `load_run_cell`); `tests/load/22-measure-all.sql`
+   sweeps every cell, `tests/load/21-measure-one.sql` measures one cell
+   (resumable — each cell commits on its own), `tests/load/23-measure-summary.sql`
+   renders p50/p95/max per round;
+5. applies migrations **0101** (load-driven indexes) and **0106**
+   (fn_reservation_list hoist) between the before/after0106 rounds and verifies
+   row counts are identical (data preservation);
 6. captures EXPLAIN (ANALYZE, BUFFERS) for every measured function
    (`tests/load/30-explain.sql`).
+
+The companion gate `scripts/load-roomai-equivalence.sh` builds a small
+database (2 fixture hotels), captures the fn_reservation_list call matrix
+(`tests/load/40-list-capture.sql` — roles, filters, pagination, membership,
+cross-hotel isolation) with the 0040 body, applies 0106, captures again and
+diffs: the two bodies must return byte-identical results.
 
 Criterion: **p95 < 500 ms for every named function**, measured server-side
 (clock_timestamp around the call — PostgREST/network overhead excluded).

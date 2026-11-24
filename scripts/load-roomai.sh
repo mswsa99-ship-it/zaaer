@@ -13,11 +13,13 @@
 # (365 check-in days ending 60 days in the future, so arrival screens have
 # realistic data «today»).
 #
-# Stages: fresh DB -> all migrations -> synthetic fixture (50 x 30 x 1y)
-# -> ANALYZE -> measurement round "before" -> migration 0101 (indexes)
-# -> measurement round "after" -> EXPLAIN (ANALYZE, BUFFERS) evidence ->
-# volume/environment capture. Data-row counts are captured before and
-# after 0101 to prove the index migration preserves data.
+# Stages: fresh DB -> all migrations except 0101/0106 -> synthetic fixture
+# (50 x 30 x 1y) -> ANALYZE -> measurement round "before" -> migrations
+# 0101 (indexes) and 0106 (fn_reservation_list hoist) -> measurement round
+# "after0106" -> EXPLAIN (ANALYZE, BUFFERS) evidence -> volume/environment
+# capture. Data-row counts are captured before and after 0101+0106 to prove
+# the migrations preserve data. scripts/load-roomai-equivalence.sh is the
+# companion gate proving the 0106 body returns the same results as 0040.
 # =====================================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -38,7 +40,7 @@ bootstrap_db "$DB" >"$OUT/bootstrap.log" 2>&1
 echo "== applying migrations"
 for f in supabase/migrations/*.sql; do
   case "$f" in
-    *_0101_load_indexes.sql) : ;;  # 0101 is applied later, between the before/after rounds
+    *_0101_load_indexes.sql | *_0106_reservation_list_hoist.sql) : ;;  # 0101+0106 are applied later, between the before/after rounds
     *) psql -X -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >>"$OUT/migrations.log" 2>&1 ;;
   esac
 done
@@ -100,15 +102,18 @@ $PSQL -tA -c "
   > "$OUT/rowcounts-before-0101.txt"
 cp "$OUT/rowcounts-before-0101.txt" "$OUT/rowcounts-before-0101.txt.orig"
 
-# ---- measurement round A (before index migration) ----
+# ---- measurement setup + round A (before 0101/0106) ----
 echo "== measurement round: before"
+$PSQL -f tests/load/20-measure.sql > /dev/null 2>&1   # harness: contexts, variants, load_run_cell
 date -Is > "$OUT/measure-before-started.txt"
-$PSQL -v round=before -f tests/load/20-measure.sql > "$OUT/results-before.txt" 2>&1
+$PSQL -v round=before -f tests/load/22-measure-all.sql > "$OUT/measure-before.log" 2>&1
 date -Is > "$OUT/measure-before-finished.txt"
+$PSQL -v round=before -f tests/load/23-measure-summary.sql > "$OUT/results-before.txt" 2>&1
 
-# ---- migration 0101: load-driven indexes ----
-echo "== applying migration 0101"
+# ---- migrations 0101 (load-driven indexes) + 0106 (fn_reservation_list hoist) ----
+echo "== applying migrations 0101 and 0106"
 $PSQL -f supabase/migrations/20261124170000_0101_load_indexes.sql > "$OUT/migration-0101.log" 2>&1
+$PSQL -f supabase/migrations/20261124180000_0106_reservation_list_hoist.sql > "$OUT/migration-0106.log" 2>&1
 $PSQL -tA -c "
   select string_agg(t||'='||c, ' ' order by t) from (
     select 'organizations' t, count(*) c from organizations union all
@@ -122,16 +127,17 @@ $PSQL -tA -c "
     select 'guest_profiles', count(*) from guest_profiles) s;" \
   > "$OUT/rowcounts-after-0101.txt"
 if diff -q "$OUT/rowcounts-before-0101.txt" "$OUT/rowcounts-after-0101.txt" >/dev/null; then
-  echo "0101 data preservation: IDENTICAL row counts" | tee "$OUT/0101-preservation.txt"
+  echo "0101+0106 data preservation: IDENTICAL row counts" | tee "$OUT/0101-preservation.txt"
 else
-  echo "0101 data preservation: ROW COUNTS CHANGED (investigate)" | tee "$OUT/0101-preservation.txt"
+  echo "0101+0106 data preservation: ROW COUNTS CHANGED (investigate)" | tee "$OUT/0101-preservation.txt"
 fi
 
-# ---- measurement round B (after index migration) ----
-echo "== measurement round: after"
-date -Is > "$OUT/measure-after-started.txt"
-$PSQL -v round=after -f tests/load/20-measure.sql > "$OUT/results-after.txt" 2>&1
-date -Is > "$OUT/measure-after-finished.txt"
+# ---- measurement round B (after 0101+0106) ----
+echo "== measurement round: after0106"
+date -Is > "$OUT/measure-after0106-started.txt"
+$PSQL -v round=after0106 -f tests/load/22-measure-all.sql > "$OUT/measure-after0106.log" 2>&1
+date -Is > "$OUT/measure-after0106-finished.txt"
+$PSQL -v round=after0106 -f tests/load/23-measure-summary.sql > "$OUT/results-after0106.txt" 2>&1
 
 # ---- EXPLAIN evidence ----
 echo "== explain evidence"
