@@ -67,7 +67,7 @@ describe("approved RoomAI token pairs (plan 3.2 gate)", () => {
   });
 
   it("the exceptions stay visible at their measured ratios — never claimed as AA, pending a design decision", () => {
-    expect(knownContrastExceptions.length).toBeGreaterThanOrEqual(4);
+    expect(knownContrastExceptions.length).toBe(1);
     for (const e of knownContrastExceptions) {
       const pair = declaredPairs.find((p) => p.label === e.label);
       expect(pair, `exception without its pair: ${e.label}`).toBeDefined();

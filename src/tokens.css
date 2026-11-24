@@ -9,6 +9,8 @@
   --line: #e2d9cb;
   --line-strong: #8c8170;
   --ink: #10262d;
+  --field-fill: #ffffff;
+  --field-ink: #10262d;
   --ink-muted: #5a6a6d;
   --night: #10343f;
   --on-night: #ffffff;
@@ -41,12 +43,14 @@
   --line: #24434c;
   --line-strong: #0b1f24;
   --ink: #ecf2f1;
-  --ink-muted: #a6b8b9;
+  --field-fill: #4c7780;
+  --field-ink: #ffffff;
+  --ink-muted: #b9c9ca;
   --night: #cfe6e8;
   --on-night: #5c6061;
   --spark: #38c6d2;
   --spark-text: #4bafb7;
-  --spark-tint: #2a585f;
+  --spark-tint: #1d3b41;
   --saffron: #e8ae4c;
   --saffron-text: #f0c27a;
   --saffron-tint: #3a2a10;
@@ -85,3 +89,17 @@
   --font-sans: "IBM Plex Sans Arabic", "Noto Sans Arabic", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
+
+/* Owner decisions 2026-11-24 08:52–08:58: night fields are filled, borderless. */
+[data-theme="dark"] .input, [data-theme="dark"] .rai-field {
+ background-color: var(--field-fill); color:var(--field-ink); border-color:transparent;
+}
+[data-theme="dark"] .input::placeholder, [data-theme="dark"] .rai-field::placeholder {color:var(--field-ink);opacity:0.85;}
+[data-theme="dark"] .input:focus, [data-theme="dark"] .rai-field:focus {border-color:transparent;outline:2px solid var(--focus);outline-offset:2px;}
+[data-theme="dark"] body {background-color:var(--paper);color:var(--ink);}
+[data-theme="dark"] .card {background-color:var(--surface);color:var(--ink);}
+
+[data-theme="dark"] .owner-registration {background-color:var(--paper);color:var(--ink);}
+[data-theme="dark"] .owner-registration .text-ink-600 {color:var(--ink-muted);}
+[data-theme="dark"] .owner-registration .text-warning-700 {color:var(--warning);}
+[data-theme="dark"] .owner-registration .btn-ghost {color:var(--ink);}

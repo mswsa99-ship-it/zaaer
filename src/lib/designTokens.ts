@@ -23,13 +23,15 @@ export const colors = {
   "surface-sunken": { light: "rgba(241,235,225,0.6)", dark: "#17323a", usage: "Menus' ground (sidebar, top bar, phone tab bar), 16px backdrop blur (rai-menu). ≈ #F7F3ED over paper." },
   line: { light: "#e2d9cb", dark: "#24434c", usage: "Hairlines and dividers (decoration only, never a control border)." },
   "line-strong": { light: "#8c8170", dark: "#0b1f24", usage: "Borders of fields, check boxes and controls (3:1 on surface)." },
+  "field-fill": { light: "#ffffff", dark: "#4c7780", usage: "Owner-approved night filled fields, no visible border." },
+  "field-ink": { light: "#10262d", dark: "#ffffff", usage: "Text inside filled fields." },
   ink: { light: "#10262d", dark: "#ecf2f1", usage: "Body text and headings on paper and surface." },
-  "ink-muted": { light: "#5a6a6d", dark: "#a6b8b9", usage: "Secondary text, hints, captions (4.5:1 on paper and surface)." },
+  "ink-muted": { light: "#5a6a6d", dark: "#b9c9ca", usage: "Secondary text, hints, captions (4.5:1 on paper and surface)." },
   night: { light: "#10343f", dark: "#cfe6e8", usage: "ليل — the brand: primary buttons, the sidebar's active item, the mark's arch." },
   "on-night": { light: "#ffffff", dark: "#5c6061", usage: "Text and icons on night." },
   spark: { light: "#0fa3b1", dark: "#38c6d2", usage: "نسيم — the AI touch, for the assistant alone. Large shapes and icons only (3:1)." },
   "spark-text": { light: "#0b6f78", dark: "#4bafb7", usage: "Text in the AI touch: «اقتراح من المساعد»." },
-  "spark-tint": { light: "#e3f6f7", dark: "#2a585f", usage: "The ground of an AI suggestion card or chip." },
+  "spark-tint": { light: "#e3f6f7", dark: "#1d3b41", usage: "The ground of an AI suggestion card or chip." },
   saffron: { light: "#d9952b", dark: "#e8ae4c", usage: "زعفران — hospitality: the guest's welcome, ratings, a reserved unit. Shapes and icons only." },
   "saffron-text": { light: "#875812", dark: "#f0c27a", usage: "Text in the hospitality colour." },
   "saffron-tint": { light: "#f2f0ed", dark: "#3a2a10", usage: "The ground of a welcome note or a reserved badge." },
@@ -156,7 +158,8 @@ export const declaredPairs: DeclaredPair[] = [
   { label: "danger على danger-tint (ليل)", theme: "dark", text: colors.danger.dark, background: colors["danger-tint"].dark, minimum: 4.5 },
   { label: "sky على sky-tint (ليل)", theme: "dark", text: colors.sky.dark, background: colors["sky-tint"].dark, minimum: 4.5 },
   { label: "stone على stone-tint (ليل)", theme: "dark", text: colors.stone.dark, background: colors["stone-tint"].dark, minimum: 4.5 },
-  { label: "حدود الحقول line-strong على surface (ليل)", theme: "dark", text: colors["line-strong"].dark, background: colors.surface.dark, minimum: 3 },
+  { label: "تعبئة الحقول على surface (ليل)", theme: "dark", text: colors["field-fill"].dark, background: colors.surface.dark, minimum: 3 },
+  { label: "نص الحقول على تعبئتها (ليل)", theme: "dark", text: colors["field-ink"].dark, background: colors["field-fill"].dark, minimum: 4.5 },
   { label: "حلقة التركيز focus على paper (ليل)", theme: "dark", text: colors.focus.dark, background: colors.paper.dark, minimum: 3 },
 ];
 
@@ -166,8 +169,5 @@ export const declaredPairs: DeclaredPair[] = [
  * must surface the same warning. Each entry names its measured ratio so a silent value change fails the test.
  */
 export const knownContrastExceptions = [
-  { label: "ink-muted على paper (ليل)", ratio: 4.05, minimum: 4.5, note: "مُبلَّغ عنه مع الاعتماد: 4.0:1 — لا يُدَّعى له AA" },
-  { label: "spark-text على spark-tint (ليل)", ratio: 3.05, minimum: 4.5, note: "وجدته بوابة 3.2 عند القياس — نص الذكاء على أرضيته في الليل" },
-  { label: "شكل saffron على paper", ratio: 2.53, minimum: 3, note: "وجدته بوابة 3.2: الزعفران للأشكال بحد أدنى 3:1 ولا يحققه على paper" },
-  { label: "حدود الحقول line-strong على surface (ليل)", ratio: 1.11, minimum: 3, note: "وجدته بوابة 3.2: حدود الحقول في الليل شبه غائبة عن surface" },
+  { label: "شكل saffron على paper", ratio: 2.53, minimum: 3, note: "Owner explicitly retained day saffron 2026-11-24 08:54. Decorative shapes only, never meaningful icons or text without a separate accessible cue. Not claimed as AA." },
 ] as const;

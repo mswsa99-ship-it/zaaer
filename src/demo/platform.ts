@@ -11,6 +11,15 @@ export function platformRpcs(c:Context){
   fn_platform_operator_id:()=>operator(),
   fn_platform_hotels:()=>{requireOperator();return T('organizations').map(o=>({id:o.id,name_ar:o.name_ar,slug:o.guest_slug??o.id,status:o.platform_status??'active',branches:T('branches').filter(b=>b.organization_id===o.id).length,pending_owner_id:T('staff_profiles').find(s=>s.organization_id===o.id&&s.role==='owner'&&s.is_active&&!s.auth_user_id)?.id??null,owner_invited:T('staff_profiles').some(s=>s.organization_id===o.id&&s.role==='owner'&&!!s.auth_user_id)}));},
   fn_platform_create_hotel:()=>{throw new Error('OWNER_SELF_SIGNUP_REQUIRED');},
+  fn_owner_register_hotel:({p}:{p:Row})=>c.atomic(()=>{
+   const auth=user();if(!auth||operator())throw new Error('FORBIDDEN');const account=T('demo_auth_users').find(a=>a.id===auth&&a.confirmed);if(!account)throw new Error('EMAIL_NOT_CONFIRMED');
+   const linked=T('staff_profiles').find(s=>s.auth_user_id===auth);if(linked){if(linked.role==='owner'&&linked.is_active)return{ok:true,id:linked.organization_id,existing:true};throw new Error('ACCOUNT_ALREADY_LINKED');}
+   if(T('staff_profiles').some(s=>s.email===account.email&&s.is_active))throw new Error('ACCOUNT_PENDING_LINK');
+   const n=String(p?.name_ar??'').trim(),nm=String(p?.full_name??'').trim();if(n.length<2||n.length>120||nm.length<3||nm.length>120)throw new Error('VALIDATION: hotel_fields');
+   const id=uid(),staff=uid(),slug='hotel-'+auth.replace(/-/g,'');T('organizations').push({id,name_ar:n,guest_slug:slug,platform_status:'active'});
+   T('staff_profiles').push({id:staff,organization_id:id,auth_user_id:auth,full_name:nm,email:account.email,role:'owner',is_active:true});T('system_settings').push({organization_id:id,demo_mode:false});T('ai_settings').push({organization_id:id,enabled:false});
+   T('audit_events').push({id:uid(),organization_id:id,actor_id:staff,action:'hotel.owner_self_registered',entity_type:'organization',entity_id:id,created_at:new Date().toISOString()});for(const t of ['organizations','staff_profiles','system_settings','ai_settings','audit_events'])emit(t);return{ok:true,id,existing:false};
+  }),
   fn_owner_create_hotel:({p}:{p:Row})=>c.atomic(()=>{
    const auth=user();if(!auth||operator())throw new Error('FORBIDDEN');
    const linked=T('staff_profiles').find(s=>s.auth_user_id===auth);

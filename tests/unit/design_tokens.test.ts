@@ -13,7 +13,7 @@ describe("the single token file (plan 3.2)", () => {
     expect(colors.saffron).toMatchObject({ light: "#d9952b", dark: "#e8ae4c" });
     expect(colors.sand).toMatchObject({ light: "#f4ede2", dark: "#2a241b" });
     expect(colors.paper).toMatchObject({ light: "#fffffe", dark: "#435054" });
-    expect(Object.keys(colors)).toHaveLength(28);
+    expect(Object.keys(colors)).toHaveLength(30);
   });
 
   it("keeps the alpha of the sheer grounds (the approved tokens.css lost it; tokens.json wins)", () => {
