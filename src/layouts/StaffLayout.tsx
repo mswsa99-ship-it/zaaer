@@ -7,7 +7,7 @@ import { Outlet, NavLink, useNavigate, Link, useLocation, useNavigationType } fr
 import { useAuth } from "../lib/auth";
 import { ROLE_LABELS } from "../lib/types";
 import { cn } from "../lib/utils";
-import { staffMenu, hubTabs, pageFor, firstAdminPath } from "../lib/nav";
+import { staffMenu, hubTabs, pageFor } from "../lib/nav";
 import { LogOut, X, UserCog } from "lucide-react";
 import { BottomTabs, pickTabs } from "../components/BottomTabs";
 import { OpsCopilot } from "../components/OpsCopilot";
@@ -23,7 +23,6 @@ export default function StaffLayout() {
   const navigate = useNavigate();
   // Links come from the role table in lib/nav.ts (the route guard uses the same table): a role never sees a link it cannot open.
   const nav = staffMenu(profile?.role, allows).map((p) => ({ to: p.path, label: p.label, icon: p.icon, members: p.members }));   // 6.2: centres with tabs, at most 9 links
-  const adminHome = firstAdminPath(profile?.role, allows);
   // «الرموز»: units whose key-box code must still change after a guest left — red on every page until changed
   const codeAlerts = useKeyboxAlerts();
   // «رحلة الضيف»: the open alerts of the journey (its clock runs from here every minute)
@@ -45,7 +44,7 @@ export default function StaffLayout() {
   }
 
   return (
-    <div className={cn("flex min-h-screen bg-ink-50", location.pathname === "/staff/dashboard" && "ops-center-shell")}>
+    <div className={cn("flex min-h-screen bg-ink-50", location.pathname === "/staff/dashboard" && "ops-center-shell", location.pathname === "/staff/reservations" && "reservations-shell")}>
       <a href="#main" onClick={focusMain} className="sr-only z-50 rounded-xl bg-white px-4 py-2 text-sm font-medium text-brand-700 shadow focus:not-sr-only focus:fixed focus:right-4 focus:top-4">تخطَّ إلى المحتوى</a>
       <aside className="fixed inset-y-0 right-0 z-20 hidden w-64 flex-col border-l border-ink-100 bg-white lg:flex">
         <div className="flex items-center gap-2.5 border-b border-ink-100 px-5 py-4">
@@ -75,11 +74,6 @@ export default function StaffLayout() {
           ))}
         </nav>
         <div className="border-t border-ink-100 p-3">
-          {adminHome && (
-            <Link to={adminHome} className="block rounded-xl px-3 py-2 text-xs text-ink-400 hover:bg-ink-50 hover:text-ink-600">
-              لوحة الإدارة ↗
-            </Link>
-          )}
           <div className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
             <div className="min-w-0 leading-tight">
               <p className="truncate text-sm font-medium text-ink-700">{profile?.full_name}</p>
@@ -102,8 +96,7 @@ export default function StaffLayout() {
           <header className="flex items-center gap-2 border-b border-ink-100 bg-white/90 px-3 py-1.5 backdrop-blur lg:hidden">
             <img src={roomaiAsset("roomai-mark.svg")} alt="" className="h-8 w-8" />
             <span className="text-sm font-semibold text-ink-800">{PRODUCT_NAME}</span>
-            {adminHome && <Link to={adminHome} className="mr-auto flex min-h-[44px] items-center rounded-lg px-3 text-xs font-medium text-ink-600 hover:bg-ink-100">الإدارة ↗</Link>}
-            <Link to="/staff/account" className={cn("flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100", !adminHome && "mr-auto")} aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
+            <Link to="/staff/account" className="mr-auto flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
             <button onClick={handleSignOut} className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>

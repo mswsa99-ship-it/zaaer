@@ -313,7 +313,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await page.bringToFront();
     const link = page.getByRole("link", { name: "لوحة الوحدات" }).first();
     if (await link.isVisible().catch(() => false)) await link.click({ timeout: 3_000 }).catch(() => undefined);
-    await expect(page).toHaveURL(/#\/staff\/login/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/#\/login(?:\?|$)/, { timeout: 20_000 });
     await expect(page.getByTestId("revoked-notice")).toBeVisible();
     // a fresh sign-in works: the account is active
     await page.getByRole("button", { name: "مشرف الاستقبال" }).click();

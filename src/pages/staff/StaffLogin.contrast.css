@@ -1,0 +1,13 @@
+.login-type-midpoint .card { background: rgb(255 255 255 / 85%); color: #10262d; }
+.login-type-midpoint .card [class*="text-ink-"] { color: #354d55; }
+.login-type-midpoint .card .label { color: #10262d; }
+.login-type-midpoint .card [class*="text-brand-"], .login-type-midpoint .card .btn-outline { color: #095865; }
+.login-type-midpoint > div > .text-white p, .login-type-midpoint > div > a { color: #e1ebef; }
+[data-theme="dark"] .login-type-midpoint .card { background: rgb(17 40 48 / 85%); color: #f1f7f7; }
+[data-theme="dark"] .login-type-midpoint .card [class*="text-ink-"],
+[data-theme="dark"] .login-type-midpoint .card .label { color: #d5e3e6; }
+[data-theme="dark"] .login-type-midpoint .card [class*="text-brand-"],
+[data-theme="dark"] .login-type-midpoint .card .btn-outline { color: #b4f1f6; }
+[data-theme="dark"] .login-type-midpoint .card .bg-ink-50,
+[data-theme="dark"] .login-type-midpoint .card .bg-white { background-color: #244a54; }
+[data-theme="dark"] .login-type-midpoint .input { background: #244a54; color: #f4fafa; }

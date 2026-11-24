@@ -75,7 +75,7 @@ test.describe("user accounts", () => {
     await loginAs("supervisor");
     await go("/staff/account");
     await page.getByTestId("account-sign-out-everywhere").click();
-    await page.waitForURL(/#\/staff\/login/);
+    await page.waitForURL(/#\/login(?:\?|$)/);
     await expect(page.getByTestId("forgot-password")).toBeVisible();
   });
 

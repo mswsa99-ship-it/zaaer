@@ -10,7 +10,7 @@ import type { Page } from "@playwright/test";
 /** Sign the current user out (same control as S04), so the next loginAs() starts from the login screen. */
 async function signOut(page: Page) {
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
 }
 
 test.describe("core money (phase 1)", () => {

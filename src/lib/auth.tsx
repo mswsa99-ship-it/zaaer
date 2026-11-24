@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { readLoginIdentity, PROFILE_LOAD_ERROR } from "./loginIdentity";
 import { defaultPermissions, type Permissions } from "./permissionCatalog";
 export { defaultPermissions, type Permissions };
 
@@ -20,6 +21,7 @@ interface AuthContextValue {
   profile: StaffProfile | null;
   loading: boolean;
   isPlatformOperator: boolean;
+  identityError: string | null;
   /** the person's permissions (the owner: everything) */
   permissions: Permissions;
   /** may the person do this operation of the matrix? */
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPlatformOperator, setPlatformOperator] = useState(false);
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permissions>(defaultPermissions(null));
   /** auth user id whose profile lookup has completed (found or not) — see onAuthStateChange. */
   const profileUserRef = useRef<string | null>(null);
@@ -92,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         profileReqRef.current++; // drop any in-flight lookup
         profileUserRef.current = null;
+        setIdentityError(null);
         setPlatformOperator(false);
         setProfile(null);
         setPermissions(defaultPermissions(null));
@@ -108,35 +112,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(authUserId: string) {
     const token = ++profileReqRef.current;
-    const operator = await supabase.rpc("fn_platform_operator_id");
-    if (token !== profileReqRef.current) return;
-    setPlatformOperator(!operator.error && !!operator.data);
-    if (!operator.error && operator.data) {
-      profileUserRef.current = authUserId; setProfile(null); setPermissions(defaultPermissions(null)); setLoading(false); return;
+    setIdentityError(null);
+    try {
+      const identity = await readLoginIdentity(supabase, authUserId);
+      if (token !== profileReqRef.current) return;
+      profileUserRef.current = authUserId;
+      setPlatformOperator(identity.operator);
+      setProfile(identity.profile);
+      setPermissions(identity.permissions);
+    } catch {
+      if (token !== profileReqRef.current) return;
+      setPlatformOperator(false);
+      setProfile(null);
+      setPermissions(defaultPermissions(null));
+      setIdentityError(PROFILE_LOAD_ERROR);
+    } finally {
+      if (token === profileReqRef.current) setLoading(false);
     }
-    let { data } = await supabase
-      .from("staff_profiles")
-      .select("id, auth_user_id, organization_id, full_name, email, phone, role, is_active")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-    if (!data) {
-      // Link only a pending branch staff invitation by verified email. New owners use their own setup flow.
-      // Everything is decided server-side (fn_claim_staff_profile); the browser cannot pick its own role.
-      await supabase.rpc("fn_claim_staff_profile", { p_full_name: null });
-      ({ data } = await supabase
-        .from("staff_profiles")
-        .select("id, auth_user_id, organization_id, full_name, email, phone, role, is_active")
-        .eq("auth_user_id", authUserId)
-        .maybeSingle());
-    }
-    if (token !== profileReqRef.current) return; // a later sign-in/out superseded this lookup
-    const prof = data as StaffProfile | null;
-    const perms = prof ? await loadPermissions(prof.role) : defaultPermissions(null);
-    if (token !== profileReqRef.current) return;
-    profileUserRef.current = authUserId;
-    setPermissions(perms);
-    setProfile(prof);
-    setLoading(false);
   }
 
   /** the matrix as the server applies it to this person; the approved defaults if the server cannot say */
@@ -234,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, isPlatformOperator, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, refreshProfile: async () => { if (session) await loadProfile(session.user.id); }, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
+    <AuthContext.Provider value={{ session, profile, loading, isPlatformOperator, identityError, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, refreshProfile: async () => { if (session) { setLoading(true); await loadProfile(session.user.id); } }, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
       {children}
     </AuthContext.Provider>
   );

@@ -17,7 +17,7 @@ import { UserCog, UserPlus, Pencil, LogOut, Power, KeyRound, Mail } from "lucide
 import { ROLE_LABELS } from "../../lib/types";
 import { formatDateTime, COUNT } from "../../lib/utils";
 
-const INVITE_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"] as const;
+const INVITE_ROLES = ["manager", "supervisor", "finance", "housekeeping"] as const;
 
 export default function AdminStaff() {
   const { profile, can, canFull, requestPasswordReset } = useAuth();
@@ -25,7 +25,7 @@ export default function AdminStaff() {
   // the permissions matrix decides (decision 71): «دعوة موظف وتعديله…» and «خروج إجباري»; no one but the owner touches an owner (decision 44)
   const canManage = can("staff.manage");
   const touches = (s: StaffListRow) => isOwner || s.role !== "owner";
-  const roleChoices = INVITE_ROLES.filter((r) => isOwner || r !== "owner");
+  const roleChoices = INVITE_ROLES;
   const { branches } = useBranch();
   const [staff, setStaff] = useState<StaffListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +117,7 @@ export default function AdminStaff() {
             <div>
               <label className="label">الدور</label>
               <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-                {roleChoices.filter((r) => r !== "owner").map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
             <div>

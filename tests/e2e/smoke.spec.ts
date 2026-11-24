@@ -18,7 +18,7 @@ test("S01 guest routes render", async ({ page, go }) => {
 
 test("S02 staff routes render for the owner, and protected routes bounce anonymous users to login", async ({ page, go, loginAs }) => {
   await go("/staff/dashboard");
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
   await loginAs("owner");
   for (const path of [...STAFF, ...ADMIN]) {
     await go(path);
@@ -48,7 +48,7 @@ test("S04 each role lands where its work starts, and sees only links it may open
     await expect(page.getByRole("link", { name: /لوحة الإدارة|الإدارة ↗/ })).toHaveCount(0);
   }
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
   await loginAs("finance");
   await expect(page).toHaveURL(/#\/admin\/finance/);
 });

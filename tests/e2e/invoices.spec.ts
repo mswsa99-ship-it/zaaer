@@ -22,7 +22,7 @@ async function openByRoom(page: Page, go: (p: string) => Promise<void>, room: st
 
 async function signOut(page: Page) {
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
 }
 
 const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };

@@ -47,7 +47,7 @@ async function openGuestStatus(page: Page, go: (p: string) => Promise<void>, pho
 
 async function signOut(page: Page) {
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
 }
 
 const todayRiyadh = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });

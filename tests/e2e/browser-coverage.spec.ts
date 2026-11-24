@@ -65,15 +65,15 @@ test("cross-browser housekeeping completes a task without gaining finance action
 
 test("cross-browser protected screen redirects anonymous users and login survives reload", async ({ page, go, loginAs, errors }) => {
   await go("/staff/reservations");
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
   await loginAs("supervisor");
   await go("/staff/reservations");
   await expect(page.locator("table tbody tr").first()).toBeVisible();
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.locator("table tbody tr").first()).toBeVisible();
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
   await go("/staff/reservations");
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
   expect(errors).toEqual([]);
 });

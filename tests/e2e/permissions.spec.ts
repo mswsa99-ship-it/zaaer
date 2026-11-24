@@ -18,7 +18,7 @@ async function save(page: Page, reason: string) {
 /** the demo keeps one session per browser: sign out, then in as another role (same tab) */
 async function signInAs(page: Page, button: string) {
   const out = page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first();
-  if (await out.isVisible().catch(() => false)) { await out.click(); await page.waitForURL(/#\/staff\/login/, { timeout: 15_000 }); }
+  if (await out.isVisible().catch(() => false)) { await out.click(); await page.waitForURL(/#\/login(?:\?|$)/, { timeout: 15_000 }); }
   await page.goto("/#/staff/login", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: button }).click();
   await page.waitForURL(/#\/(staff|admin)\//, { timeout: 15_000 });

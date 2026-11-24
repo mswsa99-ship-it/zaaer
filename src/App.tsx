@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { isDemo } from "./lib/supabase";
 import { LoadingScreen } from "./components/ui";
 import { useAuth } from "./lib/auth";
@@ -95,10 +95,16 @@ const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) :
 /** demo only (plan 3.3): the component gallery — every base component and its states on one page */
 const DesignGallery = isDemo ? lazy(() => import("./pages/DesignGallery")) : null;
 
-function ProtectedStaff({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+function LegacyLogin() {
+  const location = useLocation();
+  return <Navigate to={`/login${location.search}${location.hash}`} replace />;
+}
+
+function ProtectedStaff({ children, platform = false }: { children: React.ReactNode; platform?: boolean }) {
+  const { session, loading, identityError } = useAuth();
+  const location = useLocation();
   if (loading) return null;
-  if (!session) return <Navigate to="/staff/login" replace />;
+  if (!session || identityError) return <Navigate to={`${platform ? "/platform/login" : "/login"}?returnTo=${encodeURIComponent(location.pathname)}`} replace />;
   return <>{children}</>;
 }
 
@@ -106,7 +112,7 @@ export default function App() {
   return (
     <Suspense fallback={<LoadingScreen />}>
     <Routes>
-      <Route path="/platform" element={<PlatformHotels />} />
+      <Route path="/platform" element={<ProtectedStaff platform><PlatformHotels /></ProtectedStaff>} />
       {/* Guest */}
       <Route element={<GuestLayout />}>
         <Route path="/" element={<Landing />} />
@@ -130,7 +136,9 @@ export default function App() {
       {/* Staff login (public) */}
       <Route path="/owner/register" element={<OwnerRegister />} />
           <Route path="/owner/setup" element={<OwnerSetup />} />
-      <Route path="/staff/login" element={<StaffLogin />} />
+      <Route path="/login" element={<StaffLogin />} />
+      <Route path="/platform/login" element={<StaffLogin entry="platform" />} />
+      <Route path="/staff/login" element={<LegacyLogin />} />
       {/* 0074: every e-mailed link (forgotten password, change, invitation) opens here; public — the link brings the session */}
       <Route path="/staff/reset-password" element={<ResetPassword />} />
 

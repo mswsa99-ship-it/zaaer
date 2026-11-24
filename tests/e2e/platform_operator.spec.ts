@@ -1,8 +1,8 @@
 import {test,expect} from './fixtures';
 test('owner self-registers new hotel without invitation and stays isolated',async({page,go,errors},testInfo)=>{
  await go('/staff/login');
- await page.getByRole('button',{name:'حساب جديد',exact:true}).click();
- await expect(page).toHaveURL(/#\/owner\/register$/);
+ await page.getByRole('button',{name:'تسجيل جديد',exact:true}).click();
+ await expect(page).toHaveURL(/#\/login$/);
  await page.getByLabel('البريد الإلكتروني',{exact:true}).fill('self-owner@example.test');
  await page.getByLabel('كلمة المرور',{exact:true}).fill('DemoOwner2026!');
  await page.getByLabel('تأكيد كلمة المرور',{exact:true}).fill('DemoOwner2026!');
@@ -37,7 +37,7 @@ test('hotel staff cannot turn a platform URL into operator access',async({page,l
  await expect(page.getByRole('button',{name:'إنشاء الفندق',exact:true})).toHaveCount(0);expect(errors).toEqual([]);
 });
 test('operator suspension requires an in-app reason and hides the public hotel',async({page,go,errors})=>{
- await go('/staff/login');await page.getByRole('button',{name:'مشغّل المنصة (عرض تجريبي)'}).click();await expect(page).toHaveURL(/#\/platform$/);
+ await go('/platform/login');await page.getByRole('button',{name:'مشغّل المنصة (عرض تجريبي)'}).click();await expect(page).toHaveURL(/#\/platform$/);
  await page.getByRole('button',{name:'إيقاف',exact:true}).first().click();
  const modal=page.getByRole('dialog');await expect(modal.getByRole('button',{name:'تأكيد تغيير الحالة'})).toBeDisabled();
  await modal.getByLabel('سبب التغيير').fill('اختبار إيقاف الفندق فقط');

@@ -20,7 +20,7 @@ test.describe("guest reception", () => {
     await expect(page.getByText("+966500000001")).toBeVisible();
     await expect(page.getByTestId("wa-qr")).toHaveCount(0);
     await page.getByRole("link", { name: "بوابة الموظفين والإدارة" }).first().click();   // GUEST-22: the staff link is in the footer only
-    await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "تسجيل الدخول", exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 

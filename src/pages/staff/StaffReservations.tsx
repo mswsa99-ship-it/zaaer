@@ -1,3 +1,4 @@
+import "./StaffReservations.contrast.css";
 import { latinDigits } from "../../lib/validation";
 /**
  * The reservations list (decision 14, 10.1): every filter of the reference (arrival, departure and creation dates,
@@ -190,7 +191,7 @@ export default function StaffReservations() {
   );
 
   return (
-    <div>
+    <div className="reservations-contrast">
       <SectionTitle title="الحجوزات" subtitle={`${data.total ? `الحجوزات المطابقة: ${data.total}` : list.error ? "تعذّر تحميل القائمة" : "لا حجوزات مطابقة"}${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
         <div className="flex flex-wrap items-center gap-2">
           <BranchPicker />
