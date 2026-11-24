@@ -103,3 +103,7 @@
 [data-theme="dark"] .owner-registration .text-ink-600 {color:var(--ink-muted);}
 [data-theme="dark"] .owner-registration .text-warning-700 {color:var(--warning);}
 [data-theme="dark"] .owner-registration .btn-ghost {color:var(--ink);}
+
+.owner-logo-night {display:none;}
+[data-theme="dark"] .owner-logo-day {display:none;}
+[data-theme="dark"] .owner-logo-night {display:block;}
