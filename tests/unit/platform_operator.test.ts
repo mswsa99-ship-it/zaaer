@@ -13,6 +13,13 @@ describe('platform identity and narrow onboarding demo parity',()=>{
   expect((await client.rpc('fn_platform_create_hotel',{p:{}})).error).not.toBeNull();
   expect((await client.functions.invoke('platform-invite',{body:{}})).data.ok).toBe(false);
   await client.auth.signUp({email:'new-owner@example.test',password:'demo12345'});
+  const captured=JSON.parse(sessionStorage.getItem('roomai.demo.mail-capture')!);
+  expect((await client.auth.signInWithPassword({email:captured.email,password:'demo12345'})).error).not.toBeNull();
+  expect((await client.auth.verifyOtp({email:captured.email,token:'invalid',type:'signup'})).error).not.toBeNull();
+  await client.auth.verifyOtp({email:captured.email,token:captured.code,type:'signup'});
+  expect((await client.auth.verifyOtp({email:captured.email,token:captured.code,type:'signup'})).error).not.toBeNull();
+  expect((await client.auth.signInWithPassword({email:captured.email,password:'wrong'})).error).not.toBeNull();
+  expect((await client.auth.signInWithPassword({email:captured.email,password:'demo12345'})).error).toBeNull();
   const created=await client.rpc('fn_owner_create_hotel',{p:{name_ar:'فندق جديد اختباري',branch_name:'فرع جديد',full_name:'مالك اختباري جديد',slug:'new-platform-hotel',organization_id:'forged',email:'forged@example.test'}});
   expect(created.error).toBeNull();
   expect((await client.rpc('fn_owner_create_hotel',{p:{}})).data).toMatchObject({id:created.data.id,existing:true});

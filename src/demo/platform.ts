@@ -18,12 +18,15 @@ export function platformRpcs(c:Context){
    const account=T('demo_auth_users').find(s=>s.id===auth);if(!account?.confirmed)throw new Error('EMAIL_NOT_CONFIRMED');
    const em=account.email;
    if(T('staff_profiles').some(s=>s.email===em&&s.is_active))throw new Error('ACCOUNT_PENDING_LINK');
+   const branchRows=p?.branches as Row[]|undefined;if(branchRows&&(!Array.isArray(branchRows)||branchRows.length<1||branchRows.length>20||branchRows.some(b=>!b.name_ar?.trim()||!b.city?.trim()||!b.address?.trim()||(b.map_url&&!/^https:\/\//.test(b.map_url)))))throw new Error("VALIDATION: branch_location");
    const n=String(p?.name_ar??'').trim(),bn=String(p?.branch_name??'').trim(),nm=String(p?.full_name??'').trim(),slug=String(p?.slug??'').trim().toLowerCase();
-   if(n.length<2||n.length>120||bn.length<2||bn.length>120||nm.length<3||nm.length>120||! /^[a-z0-9][a-z0-9-]{2,62}$/.test(slug))throw new Error('VALIDATION: hotel_fields');
+   if(n.length<2||n.length>120||(!branchRows&&(bn.length<2||bn.length>120))||nm.length<3||nm.length>120||! /^[a-z0-9][a-z0-9-]{2,62}$/.test(slug))throw new Error('VALIDATION: hotel_fields');
    if(T('organizations').some(o=>o.guest_slug===slug))throw new Error('VALIDATION: slug_unavailable');
    const id=uid(),branch_id=uid(),owner_profile_id=uid();T('organizations').push({id,name_ar:n,guest_slug:slug,platform_status:'active'});
    T('branches').push({id:branch_id,organization_id:id,name_ar:bn,is_active:true,archived_at:null,timezone:'Asia/Riyadh',country_code:'SA',default_language:'ar',tax_rate_bp:0,prices_include_tax:true});
+   if(branchRows){const safe=branchRows.map(br=>({name_ar:br.name_ar.trim(),city:br.city.trim(),address:br.address.trim(),map_url:br.map_url||null}));const first=T('branches').find(b=>b.id===branch_id)!;Object.assign(first,safe[0]);for(const br of safe.slice(1))T('branches').push({...first,...br,id:uid()});}
    T('staff_profiles').push({id:owner_profile_id,organization_id:id,auth_user_id:auth,full_name:nm,email:em,role:'owner',is_active:true});T('branch_memberships').push({id:uid(),staff_id:owner_profile_id,branch_id,organization_id:id,removed_at:null});
+   for(const br of T('branches').filter(b=>b.organization_id===id&&b.id!==branch_id))T('branch_memberships').push({id:uid(),staff_id:owner_profile_id,branch_id:br.id,organization_id:id,removed_at:null});
    T('system_settings').push({organization_id:id,demo_mode:false,primary_country:'SA',primary_language:'ar'});T('ai_settings').push({organization_id:id,enabled:false,guest_otp_after_messages:10,guest_device_daily_message_limit:30,guest_branch_daily_message_limit:500,guest_otp_device_hourly_limit:3,guest_otp_phone_hourly_limit:6,guest_otp_cooldown_seconds:60});
    T('audit_events').push({id:uid(),organization_id:id,branch_id,actor_id:owner_profile_id,action:'hotel.owner_self_registered',entity_type:'organization',entity_id:id,details:{branch_id},created_at:new Date().toISOString()});
    for(const t of ['organizations','branches','staff_profiles','branch_memberships','system_settings','ai_settings','audit_events'])emit(t);

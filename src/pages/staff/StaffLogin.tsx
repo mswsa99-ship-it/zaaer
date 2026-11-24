@@ -85,7 +85,7 @@ export default function StaffLogin() {
             <button onClick={() => setMode("login")} className={`flex-1 rounded-lg py-2 text-sm font-medium ${mode !== "signup" ? "bg-white text-brand-700 shadow-sm" : "text-ink-500"}`}>
               تسجيل الدخول
             </button>
-            <button onClick={() => setMode("signup")} className={`flex-1 rounded-lg py-2 text-sm font-medium ${mode === "signup" ? "bg-white text-brand-700 shadow-sm" : "text-ink-500"}`}>
+            <button onClick={() => navigate("/owner/register")} className={`flex-1 rounded-lg py-2 text-sm font-medium ${mode === "signup" ? "bg-white text-brand-700 shadow-sm" : "text-ink-500"}`}>
               حساب جديد
             </button>
           </div>
