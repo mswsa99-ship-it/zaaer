@@ -1,18 +1,18 @@
 -- =====================================================================
--- Load measurement (item 2.10): warmup + repeated timed calls of the main
--- read functions under real session contexts (staff JWT claims of the
--- hotel's owner, exactly as the app sets them per request).
---   psql -d $DB -v round=before -f tests/load/20-measure.sql
--- Results land in table load_results (kept in the test database only).
+-- Load measurement setup (item 2.10): contexts, variants, harness. Safe to
+-- re-run. Then either:
+--   * run everything:      psql -v round=before -f tests/load/22-measure-all.sql
+--   * run one cell:        psql -v round=before -v ctx=ctx1 -v key=list_default -f tests/load/21-measure-one.sql
+--   * summary:             psql -v round=before -f tests/load/23-measure-summary.sql
+-- Each cell commits on its own, so an interrupted sweep keeps finished cells.
 -- =====================================================================
 \set ON_ERROR_STOP on
-select set_config('load.round', :'round', false);
 
 create table if not exists load_results(
   round text, context text, fn text, variant text, iter int, ms numeric,
   measured_at timestamptz default now());
 
--- measurement contexts: five branches in five different hotels, the owner
+-- measurement contexts: three branches in three different hotels, the owner
 -- account of each hotel (sees money, every branch of the hotel)
 create table if not exists load_contexts as
 with picked as (
@@ -25,6 +25,22 @@ select 'ctx'||ctx as context,
        md5('auth:'||h||':owner')::uuid as auth_uid,
        md5('staff:'||h||':owner')::uuid as staff_id
 from picked;
+
+-- the measured workload: the main read functions the app calls, with
+-- production-shaped arguments. %branch% / %account% are filled per context.
+create table if not exists load_variants as
+select * from (values
+  ('summary_today',  'fn_ops_daily_summary',   'today',              'select fn_ops_daily_summary(%branch%, current_date)'),
+  ('calendar_month', 'fn_reservation_calendar','month_around_today', 'select fn_reservation_calendar(%branch%, current_date - 7, current_date + 21)'),
+  ('units_board',    'fn_ops_units_board',     'branch',             'select fn_ops_units_board(%branch%)'),
+  ('list_default',   'fn_reservation_list',    'default_page',       'select fn_reservation_list(%branch%, ''{}''::jsonb, 50, 0)'),
+  ('list_dates',     'fn_reservation_list',    'date_range_sorted',  'select fn_reservation_list(%branch%, jsonb_build_object(''check_in_from'', (current_date - 30)::text, ''check_in_to'', (current_date + 30)::text, ''sort'', ''check_in_asc''), 50, 0)'),
+  ('list_inhouse',   'fn_reservation_list',    'in_house_today',     'select fn_reservation_list(%branch%, jsonb_build_object(''stay_on'', current_date::text), 50, 0)'),
+  ('platform_today', 'fn_platform_check_list', 'today',              'select fn_platform_check_list(%branch%, current_date)'),
+  ('finance_30d',    'fn_reports_finance',     'last_30_days',       'select fn_reports_finance(%branch%, current_date - 29, current_date, ''{}''::jsonb)'),
+  ('finance_year',   'fn_reports_finance',     'full_year',          'select fn_reports_finance(%branch%, current_date - 364, current_date, ''{}''::jsonb)'),
+  ('ledger_30d',     'fn_account_ledger',      'last_30_days',       'select fn_account_ledger(%account%, current_date - 29, current_date)')
+) as v(key, fn, variant, sql_template);
 
 -- harness: run p_sql 2 times as warmup, then 15 measured times, under the
 -- session context (JWT claims) of the context's staff account
@@ -49,45 +65,17 @@ begin
 end
 $harness$;
 
-do $$
-declare
-  c record;
+-- one measurement cell: context x variant, one transaction
+create or replace function load_run_cell(p_round text, p_ctx text, p_key text)
+returns void language plpgsql as $cell$
+declare c record; v record;
 begin
-  for c in select * from load_contexts order by context loop
-    -- occupancy
-    perform load_call(c.context, 'fn_ops_daily_summary', 'today', c.auth_uid,
-      format('select fn_ops_daily_summary(%L, current_date)', c.branch_id));
-    perform load_call(c.context, 'fn_reservation_calendar', 'month_around_today', c.auth_uid,
-      format('select fn_reservation_calendar(%L, current_date - 7, current_date + 21)', c.branch_id));
-    perform load_call(c.context, 'fn_ops_units_board', 'branch', c.auth_uid,
-      format('select fn_ops_units_board(%L)', c.branch_id));
-    -- booking lists
-    perform load_call(c.context, 'fn_reservation_list', 'default_page', c.auth_uid,
-      format('select fn_reservation_list(%L, ''{}''::jsonb, 50, 0)', c.branch_id));
-    perform load_call(c.context, 'fn_reservation_list', 'date_range_sorted', c.auth_uid,
-      format('select fn_reservation_list(%L, jsonb_build_object(''check_in_from'', (current_date - 30)::text, ''check_in_to'', (current_date + 30)::text, ''sort'', ''check_in_asc''), 50, 0)', c.branch_id));
-    -- arrival
-    perform load_call(c.context, 'fn_reservation_list', 'in_house_today', c.auth_uid,
-      format('select fn_reservation_list(%L, jsonb_build_object(''stay_on'', current_date::text), 50, 0)', c.branch_id));
-    perform load_call(c.context, 'fn_platform_check_list', 'today', c.auth_uid,
-      format('select fn_platform_check_list(%L, current_date)', c.branch_id));
-    -- finance
-    perform load_call(c.context, 'fn_reports_finance', 'last_30_days', c.auth_uid,
-      format('select fn_reports_finance(%L, current_date - 29, current_date, ''{}''::jsonb)', c.branch_id));
-    perform load_call(c.context, 'fn_reports_finance', 'full_year', c.auth_uid,
-      format('select fn_reports_finance(%L, current_date - 364, current_date, ''{}''::jsonb)', c.branch_id));
-    perform load_call(c.context, 'fn_account_ledger', 'last_30_days', c.auth_uid,
-      format('select fn_account_ledger(%L, current_date - 29, current_date)', c.account_id));
-  end loop;
-end $$;
-
--- per-variant summary for this round
-select round, fn, variant, count(*) as samples,
-       round(percentile_cont(0.50) within group (order by ms)::numeric, 1) as p50_ms,
-       round(percentile_cont(0.95) within group (order by ms)::numeric, 1) as p95_ms,
-       round(max(ms), 1) as max_ms,
-       case when percentile_cont(0.95) within group (order by ms) < 500 then 'PASS' else 'FAIL' end as criterion_p95_under_500ms
-from load_results
-where round = current_setting('load.round')
-group by round, fn, variant
-order by fn, variant;
+  perform set_config('load.round', p_round, true);
+  select * into c from load_contexts where context = p_ctx;
+  select * into v from load_variants where key = p_key;
+  if not found then raise exception 'unknown cell % %', p_ctx, p_key; end if;
+  perform load_call(c.context, v.fn, v.variant, c.auth_uid,
+                    replace(replace(v.sql_template, '%branch%', quote_literal(c.branch_id)),
+                            '%account%', quote_literal(c.account_id)));
+end
+$cell$;

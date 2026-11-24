@@ -11,3 +11,12 @@
 -- scripts/load-roomai.sh (out/0101-preservation.txt).
 
 create index if not exists idx_branches_organization on public.branches (organization_id);
+
+-- fn_reservation_calendar's segments subquery filters reservation_allocations by one branch and a
+-- from_date/to_date window. The table only had indexes on (id), (reservation_id, status), (room_id, from_date,
+-- to_date) for active rows, and (organization_id); nothing leads with branch_id, so the planner fell back to a
+-- parallel sequential scan of the whole table and discarded ~1.05M rows per worker to keep ~60. Measured at the
+-- 2.10 fixture (3,142,230 allocations): segments scan ~361 ms, whole call p95 800 ms before this index; with the
+-- index the call drops under the criterion (evidence in acceptance/load-report.md, fn_reservation_calendar row).
+
+create index if not exists idx_alloc_branch_dates on public.reservation_allocations (branch_id, from_date, to_date);
