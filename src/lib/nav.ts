@@ -146,6 +146,7 @@ export const PAGES: readonly NavPage[] = [
   // 0070–0071: the journey's numbers per branch, the responsible and the fallback, the alert rules, the units' photos
   { path: "/admin/journey", label: "رحلة الضيف", icon: Route, area: "admin", group: "الإدارة", roles: ADMIN_ROLES, cap: ["branch.settings"] },
 
+  { path: "/admin/finance-controls", label: "الضبط المالي", icon: ShieldCheck, area: "admin", group: "الإدارة", roles: ["owner"], scope: "org" },
   { path: "/admin/ai-settings", label: "إعدادات الذكاء الاصطناعي", icon: Bot, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
   { path: "/admin/whatsapp", label: "واتساب الفروع", icon: MessageCircle, area: "admin", group: "التكاملات", roles: ["owner"], scope: "org", cap: ["security"] },
   { path: "/admin/assistant", label: "تجربة المساعد", icon: MessagesSquare, area: "admin", group: "التكاملات", roles: ["owner", "manager", "supervisor"] },

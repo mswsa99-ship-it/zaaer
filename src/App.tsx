@@ -56,6 +56,7 @@ const AdminFinance = lazy(() => import("./pages/admin/AdminFinance"));
 const AdminStaff = lazy(() => import("./pages/admin/AdminStaff"));
 const AdminRoles = lazy(() => import("./pages/admin/AdminRoles"));
 const AdminBookingSources = lazy(() => import("./pages/admin/AdminBookingSources"));
+const AdminFinanceControls = lazy(() => import("./pages/admin/AdminFinanceControls"));
 const AdminAiSettings = lazy(() => import("./pages/admin/AdminAiSettings"));
 const AdminOrganization = lazy(() => import("./pages/admin/AdminOrganization"));
 const AdminWhatsapp = lazy(() => import("./pages/admin/AdminWhatsapp"));
@@ -192,6 +193,7 @@ export default function App() {
           <Route path="/admin/staff" element={<AdminStaff />} />
           <Route path="/admin/roles" element={<AdminRoles />} />
           <Route path="/admin/booking-sources" element={<AdminBookingSources />} />
+          <Route path="/admin/finance-controls" element={<AdminFinanceControls />} />
           <Route path="/admin/ai-settings" element={<AdminAiSettings />} />
           <Route path="/admin/whatsapp" element={<AdminWhatsapp />} />
           <Route path="/admin/assistant" element={<AdminAssistant />} />
