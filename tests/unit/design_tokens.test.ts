@@ -4,6 +4,7 @@
  * names, no test codes: prefix registration is left to the integrator.
  */
 import { describe, it, expect } from "vitest";
+import {readFileSync} from "node:fs";
 import { colors, textStyles, spacing, radii, shadows, sizes, fontFamilies, declaredPairs, PRODUCT_NAME, POWERED_BY } from "../../src/lib/designTokens";
 
 describe("the single token file (plan 3.2)", () => {
@@ -45,5 +46,15 @@ describe("the single token file (plan 3.2)", () => {
       expect(all.has(p.text), `${p.label}: text`).toBe(true);
       expect(all.has(p.background) || composite, `${p.label}: background`).toBe(true);
     }
+  });
+});
+
+
+describe("borderless shared cards", () => {
+  it("does not restore a light decorative outline in either theme", () => {
+    const css=readFileSync("src/index.css","utf8");
+    const card=css.match(/\.card\s*\{([^}]+)\}/)?.[1];
+    expect(card).toBeDefined();
+    expect(card).not.toMatch(/\bborder\b/);
   });
 });

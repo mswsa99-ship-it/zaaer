@@ -78,6 +78,7 @@ export default tseslint.config(
     // Node tooling: scripts, root configs, this file.
     files: [
       'scripts/**/*.mjs',
+      'tests/**/*.mjs',
       'eslint.config.js',
       '*.config.{js,ts}',
       'vite.config.ts',

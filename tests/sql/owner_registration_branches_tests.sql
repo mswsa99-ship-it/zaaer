@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP on
 begin;
+-- Retired compatibility factory, inaccessible to browser roles after0104.
+do $$begin if has_function_privilege('authenticated','fn_owner_create_hotel(jsonb)','execute') then raise exception 'retired factory still callable';end if;end$$;
 insert into auth.users(id,email,email_confirmed_at) values('98000000-0000-0000-0000-000000000100','branch-owner@example.test',now());
 select t_login('98000000-0000-0000-0000-000000000100','branch-owner@example.test');
 do $$declare r jsonb;bad boolean;v uuid;begin

@@ -143,7 +143,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
             <button onClick={resetConversation} className="font-medium underline-offset-2 hover:underline">بدء محادثة جديدة</button>
           </div>
         )}
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-ink-100 bg-white p-4 scrollbar-thin" aria-live="polite">
+        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-2xl bg-white p-4 scrollbar-thin" aria-live="polite">
           {messages.map((m) => (
             <div key={m.id} className={cn("flex flex-col gap-2", m.sender === "guest" ? "items-start" : "items-end")}>
               <div className={cn("max-w-[88%] whitespace-pre-line rounded-2xl px-4 py-2.5 leading-relaxed", kiosk ? "text-base" : "text-sm", m.sender === "guest" ? "bg-brand-600 text-white" : "bg-ink-50 text-ink-800")}>{m.content}</div>

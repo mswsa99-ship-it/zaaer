@@ -4,7 +4,7 @@ import { currentGuestScope } from "../lib/guestScope";
 import { cn } from "../lib/utils";
 import { useOrganizationName } from "../lib/organization";
 
-/** A white card; other attributes (data-testid, role…) reach the element. */
+/** A borderless surface card; other attributes (data-testid, role…) reach the element. */
 export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, "className" | "children">) {
   return <div className={cn("card p-5", className)} {...rest}>{children}</div>;
 }
@@ -102,7 +102,7 @@ export function ErrorBanner({ message }: { message: string }) {
  */
 export function AmountBox({ label, value, tone = "text-ink-900", testId }: { label: string; value: ReactNode; tone?: string; testId?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-ink-100 bg-white px-3 py-2.5" data-testid={testId}>
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-white px-3 py-2.5" data-testid={testId}>
       <span className="text-[13px] font-medium leading-5 text-ink-500">{label}</span>
       <span className={`whitespace-nowrap text-lg font-bold leading-7 tabular-nums ${tone}`} dir="ltr">{value}</span>
     </div>

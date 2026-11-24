@@ -107,7 +107,7 @@ export function OwnerOverview() {
         {/* OWNER-11: on a phone each branch is a card with the day's decision */}
         <ul className="space-y-3 sm:hidden" data-testid="branch-cards">
           {rows.map((r) => (
-            <li key={r.id} className="rounded-xl border border-ink-100 p-3" data-testid="branch-card" data-branch={r.name}>
+            <li key={r.id} className="rounded-xl p-3" data-testid="branch-card" data-branch={r.name}>
               <p className="mb-2 font-semibold text-ink-800">{r.name}</p>
               {r.summary ? (
                 <dl className="grid grid-cols-2 gap-2 text-sm">

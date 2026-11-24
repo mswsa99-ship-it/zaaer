@@ -58,7 +58,7 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
         <>
           <h1 className={`${large ? "text-4xl" : "text-3xl"} font-bold text-ink-800`}>امسح الرمز للمحادثة عبر واتساب</h1>
           <p className="mt-3 text-ink-500">الاستقبال كله في محادثة واحدة: حجوزاتك، تسجيل النزلاء، السداد، الوصول ورمز الدخول.</p>
-          <div className="mx-auto mt-8 w-fit rounded-3xl border border-ink-100 bg-white p-4 shadow-sm">
+          <div className="mx-auto mt-8 w-fit rounded-3xl bg-white p-4 shadow-sm">
             {qr ? <img src={qr} alt="رمز QR لمحادثة واتساب الاستقبال" className={large ? "h-80 w-80" : "h-64 w-64"} data-testid="wa-qr" /> : <Spinner className="m-24 h-6 w-6" />}
           </div>
           <a href={waLink(info.wa_phone)} target="_blank" rel="noopener noreferrer" className="btn-primary mx-auto mt-6 inline-flex w-full max-w-xs justify-center bg-[#25D366] text-[#0b141a] hover:bg-[#1ebe5b]" data-testid="wa-open">
@@ -77,7 +77,7 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
           <h1 className="text-2xl font-bold text-ink-800" data-testid="wa-soon">خدمة الاستقبال عبر واتساب قريبًا</h1>
           <p className="mt-3 text-ink-500">نجهّز رقم واتساب الاستقبال لهذا الفرع. للتواصل الآن اتصل بنا:</p>
           {phone && (
-            <p className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-ink-100 bg-white px-5 py-3 text-lg font-semibold text-ink-800 shadow-sm" dir="ltr">
+            <p className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-lg font-semibold text-ink-800 shadow-sm" dir="ltr">
               <Phone className="h-5 w-5 text-brand-600" /> {phone}
             </p>
           )}

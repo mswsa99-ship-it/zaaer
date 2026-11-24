@@ -57,7 +57,7 @@ textarea {
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-ink-100 bg-white shadow-sm;
+    @apply rounded-2xl bg-white shadow-sm;
     overflow-wrap: anywhere; /* SETUP-22: a long unbroken name never widens the page on a phone */
   }
   .btn {
