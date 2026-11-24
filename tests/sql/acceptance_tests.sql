@@ -17,6 +17,7 @@
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
 grant all on test_results to public;
+insert into auth.users(id,email,email_confirmed_at) values('a0000000-0000-0000-0000-0000000000c1','at-invite@test.local',now()) on conflict(id) do update set email=excluded.email,email_confirmed_at=excluded.email_confirmed_at;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
 create or replace function t_login(p_uid uuid, p_email text) returns void language plpgsql as $$

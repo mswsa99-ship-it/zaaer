@@ -5,10 +5,10 @@ begin;
 create temp table operator_test_results(name text,ok boolean,detail text);
 insert into operator_test_results values
  ('operator identity is separate from staff_profiles',to_regclass('public.platform_operators') is not null,null),
- ('hotel creation is an explicit operator RPC',to_regprocedure('public.fn_platform_create_hotel(jsonb)') is not null,null),
+ ('operator hotel creation is retired',not has_function_privilege('authenticated','fn_platform_create_hotel(jsonb)','execute'),null),
  ('hotel status change is an explicit operator RPC',to_regprocedure('public.fn_platform_set_hotel_status(uuid,text,text)') is not null,null),
  ('registry listing is an explicit operator RPC',to_regprocedure('public.fn_platform_hotels()') is not null,null),
- ('first owner invitation has a narrow target resolver',to_regprocedure('public.fn_platform_owner_invite_target(uuid)') is not null,null),
+ ('owner invitation is retired',not has_function_privilege('service_role','fn_platform_owner_invite_target(uuid)','execute'),null),
  ('operator events have a separate immutable audit table',to_regclass('public.platform_events') is not null,null),
  ('guest access grants have explicit expiry and owner approval',to_regclass('public.platform_support_grants') is not null,null);
 select case when ok then 'PASS' else 'FAIL' end as result,name,detail from operator_test_results;
@@ -29,15 +29,9 @@ reset role;
 select t_login('82000000-0000-0000-0000-000000000001','operator@example.test');
 set local role authenticated;
 do $$ declare r jsonb;ok boolean;begin
-r:=fn_platform_create_hotel('{"name_ar":"فندق تجريبي للمشغل","branch_name":"أول فرع","owner_name":"مالك جديد","owner_email":"platform-owner-new@example.test","slug":"platform-operator-test"}');
-insert into operator_behavior_results values('operator creates hotel first branch and pending owner atomically',r?'id' and r?'branch_id' and r?'owner_profile_id',null);
+begin perform fn_platform_create_hotel('{}');ok:=false;exception when insufficient_privilege then ok:=true;end;
+insert into operator_behavior_results values('operator cannot create hotel or invite owner',ok and not has_function_privilege('authenticated','fn_platform_owner_invite_target(uuid)','execute'),null);
 insert into operator_behavior_results values('operator registry is metadata only',not(fn_platform_hotels()::text like '%guest_name%'),null);
-begin perform fn_platform_create_hotel('{"name_ar":"فندق ثان","branch_name":"فرع ثان","owner_name":"مالك ثان","owner_email":"platform-owner-new@example.test","slug":"platform-duplicate"}');ok:=false;exception when others then ok:=sqlerrm='VALIDATION: email_unavailable';end;
-insert into operator_behavior_results values('an existing hotel email is rejected without revealing hotel',ok,null);
-perform fn_platform_set_hotel_status((r->>'id')::uuid,'suspended','اختبار تعليق الفندق');
-insert into operator_behavior_results values('operator may suspend the new hotel',fn_platform_hotels()::text like '%suspended%',null);
-begin perform fn_platform_owner_invite_target((r->>'owner_profile_id')::uuid);ok:=false;exception when others then ok:=sqlerrm='NOT_FOUND';end;
-insert into operator_behavior_results values('suspended hotel cannot send first owner invitation',ok,null);
 -- The operator has no hotel staff role: ordinary RLS cannot read hotel guest data.
 insert into operator_behavior_results values('operator without staff profile has no hotel scope',fn_user_org_id() is null and fn_staff_id() is null,null);
 begin insert into public.platform_operators(auth_user_id,full_name) values('82000000-0000-0000-0000-000000000003','تصعيد');ok:=false;exception when insufficient_privilege then ok:=true;end;
@@ -139,33 +133,4 @@ insert into suspension_capabilities values('trusted service cannot mint phone ca
 end $$;
 select case when ok then 'PASS' else 'FAIL' end as result,name from suspension_capabilities;
 do $$ begin if exists(select 1 from suspension_capabilities where ok is not true) then raise exception 'SUSPENSION CAPABILITIES FAILED';end if;end $$;
-rollback;
-
-begin;
-create temp table onboarding_results(name text,ok boolean);
-grant all on onboarding_results to authenticated;
-insert into platform_operators(auth_user_id,full_name) values('82000000-0000-0000-0000-000000000001','مشغّل تجريبي');
-select t_login('82000000-0000-0000-0000-000000000001','operator@example.test');
-set local role authenticated;
-do $$ declare r jsonb;begin
-r:=fn_platform_create_hotel('{"name_ar":"فندق مسار المالك","branch_name":"أول فرع جديد","owner_name":"مالك اختباري","owner_email":"sql-onboarding@example.test","slug":"sql-onboarding-hotel"}');
-perform set_config('test.new_hotel',r->>'id',true);
-insert into onboarding_results values('platform identity cannot claim hotel invitation',fn_claim_staff_profile()->>'error'='PLATFORM_ACCOUNT');
-end $$;
-reset role;
-select t_login('82000000-0000-0000-0000-000000000009','sql-onboarding@example.test');
-set local role authenticated;
-do $$ declare a jsonb;n int;begin
-a:=fn_claim_staff_profile();
-insert into onboarding_results values('new invited owner links to prepared hotel profile',a->>'claimed'='true' and fn_user_org_id()=current_setting('test.new_hotel')::uuid and fn_current_role()='owner');
-select count(*) into n from branches;
-insert into onboarding_results values('new owner sees its first branch only',n=1 and not exists(select 1 from branches where organization_id<>current_setting('test.new_hotel')::uuid));
-end $$;
-reset role;
-select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
-set local role authenticated;
-insert into onboarding_results select 'existing hotel owner cannot read new hotels branch',not exists(select 1 from branches where organization_id=current_setting('test.new_hotel')::uuid);
-reset role;
-select case when ok then 'PASS' else 'FAIL' end as result,name from onboarding_results;
-do $$ begin if exists(select 1 from onboarding_results where ok is not true) then raise exception 'ONBOARDING SQL FAILED';end if;end $$;
 rollback;

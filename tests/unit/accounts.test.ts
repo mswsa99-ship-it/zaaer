@@ -110,7 +110,7 @@ describe("AU — the demo keeps the same rules", () => {
   it("AU27 the invitation goes only to an active person without an account; the password calls keep the rule and «others» keeps this device signed in", async () => {
     const linked = await staffId("manager@demo.sa");
     expect((await client.functions.invoke("staff-invite", { body: { staff_id: linked } })).data).toEqual({ ok: false, error: "already_linked" });
-    const inv = await rpc<{ ok: boolean; staff_id: string }>("fn_admin_invite_staff", { p: { email: "new.person@demo.sa", full_name: "موظف جديد", role: "owner", branch_ids: [] } });
+    const inv = await rpc<{ ok: boolean; staff_id: string }>("fn_admin_invite_staff", { p: { email: "new.person@demo.sa", full_name: "موظف جديد", role: "supervisor", branch_ids: [(await client.from("branches").select("id")).data[0].id] } });
     expect(inv.error).toBeNull();
     expect((await client.functions.invoke("staff-invite", { body: { staff_id: inv.data.staff_id } })).data).toEqual({ ok: true });
     const log = (await client.from("audit_events").select("action, entity_id")).data as any[];

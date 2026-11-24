@@ -29,6 +29,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   /** needsConfirmation: the account exists but the email must be confirmed (link sent) before the first sign-in */
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation?: boolean }>;
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   /** 0074: e-mails a link to «تعيين كلمة المرور» (the forgotten password, a change of password, a colleague's reset) */
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
@@ -119,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("auth_user_id", authUserId)
       .maybeSingle();
     if (!data) {
-      // Link a pending invitation (by email) or, in demo mode with no staff yet, bootstrap the first owner.
+      // Link only a pending branch staff invitation by verified email. New owners use their own setup flow.
       // Everything is decided server-side (fn_claim_staff_profile); the browser cannot pick its own role.
       await supabase.rpc("fn_claim_staff_profile", { p_full_name: null });
       ({ data } = await supabase
@@ -218,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.session) {
       const { data: claim } = await supabase.rpc("fn_claim_staff_profile", { p_full_name: fullName });
       const c = claim as { ok?: boolean; error?: string } | null;
-      if (!c?.ok) return { error: c?.error === "NO_INVITATION" ? "لا توجد دعوة لهذا البريد. اطلب من مالك المنشأة إضافتك من صفحة الموظفين." : "تعذّر ربط الحساب بملف موظف." };
+      if (!c?.ok && c?.error !== "NO_INVITATION") return { error: "تعذّر ربط الحساب بملف موظف." };
       return { error: null };
     }
     // email confirmation is on: no session until the link is opened; the invitation is linked at the first sign-in
@@ -233,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, isPlatformOperator, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
+    <AuthContext.Provider value={{ session, profile, loading, isPlatformOperator, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, refreshProfile: async () => { if (session) await loadProfile(session.user.id); }, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
       {children}
     </AuthContext.Provider>
   );

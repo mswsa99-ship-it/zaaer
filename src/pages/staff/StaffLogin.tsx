@@ -25,7 +25,7 @@ export default function StaffLogin() {
 
   useEffect(() => {
     // each role lands where its work starts (housekeeping → tasks, finance → ledger, others → operations board)
-    if (!authLoading && session) navigate(isPlatformOperator ? "/platform" : homeFor(profile?.role), { replace: true });
+    if (!authLoading && session) navigate(isPlatformOperator ? "/platform" : profile ? homeFor(profile.role) : "/owner/setup", { replace: true });
   }, [session, profile, isPlatformOperator, authLoading, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -131,7 +131,7 @@ export default function StaffLogin() {
           </form>
 
           {mode === "signup" && (
-            <p className="mt-3 text-center text-xs text-ink-400">سجّل بالبريد الذي دعاك به المالك؛ يُربط حسابك بدورك وفروعك تلقائيًا عند أول دخول بعد تأكيد البريد.</p>
+            <p className="mt-3 text-center text-xs text-ink-400">المالك يسجّل بنفسه، ثم يؤكد بريده وينشئ فندقه وأول فرع. الموظف المدعو يسجّل ببريد الدعوة ليرتبط بفندقه.</p>
           )}
         </div>
 

@@ -129,3 +129,5 @@ bash tests/sql/guest_quota_race.sh "$DB"
 run_tests tests/sql/free_text_limits_tests.sql
 run_tests tests/sql/lookup_limits_tests.sql
 run_tests tests/sql/purge_trial_tests.sql
+
+run_tests tests/sql/owner_self_signup_tests.sql

@@ -19,6 +19,7 @@ import Kiosk from "./pages/guest/Kiosk";
 import Privacy from "./pages/guest/Privacy";
 import Terms from "./pages/guest/Terms";
 
+import OwnerSetup from "./pages/staff/OwnerSetup";
 import StaffLogin from "./pages/staff/StaffLogin";
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import Arrivals from "./pages/staff/Arrivals";
@@ -124,6 +125,7 @@ export default function App() {
       {DesignGallery && <Route path="/design-gallery" element={<Suspense fallback={<LoadingScreen />}><DesignGallery /></Suspense>} />}
 
       {/* Staff login (public) */}
+      <Route path="/owner/setup" element={<OwnerSetup />} />
       <Route path="/staff/login" element={<StaffLogin />} />
       {/* 0074: every e-mailed link (forgotten password, change, invitation) opens here; public — the link brings the session */}
       <Route path="/staff/reset-password" element={<ResetPassword />} />

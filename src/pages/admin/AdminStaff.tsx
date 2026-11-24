@@ -117,7 +117,7 @@ export default function AdminStaff() {
             <div>
               <label className="label">الدور</label>
               <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-                {roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {roleChoices.filter((r) => r !== "owner").map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
             <div>

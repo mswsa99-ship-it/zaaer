@@ -566,7 +566,7 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_user_branch_ids: () => myBranches(),
   fn_claim_staff_profile: () => {
     if(T("platform_operators").some(o=>o.auth_user_id===session?.user.id))return{ok:false,error:"PLATFORM_ACCOUNT"};
-    const pending=T("staff_profiles").find(s=>!s.auth_user_id&&s.is_active&&String(s.email).toLowerCase()===session?.user.email.toLowerCase()&&byId("organizations",s.organization_id)?.platform_status!=="suspended");
+    const pending=T("staff_profiles").find(s=>!s.auth_user_id&&s.is_active&&s.role!=="owner"&&String(s.email).toLowerCase()===session?.user.email.toLowerCase()&&byId("organizations",s.organization_id)?.platform_status!=="suspended");
     if(pending){pending.auth_user_id=session!.user.id;emit("staff_profiles");return{ok:true,claimed:true,role:pending.role};}
     return me()?{ok:true,claimed:false}:{ok:false,error:"NO_INVITATION"};
   },
@@ -575,6 +575,7 @@ const rpcs: Record<string, (a: any) => any> = {
   // 0055 (SETUP-08): the email checked, a branch for every role but the owner, the phone checked and kept normalised
   fn_admin_invite_staff: ({ p }) => { requireCap("staff.manage"); const q: Row = p ?? {}; const role = String(q.role ?? ""); if (role === "guest" || !["owner", "manager", "supervisor", "finance", "housekeeping"].includes(role)) throw new Error("INVALID_ROLE");
     if (role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
+    if (role === "owner") throw new Error("OWNER_SELF_SIGNUP_REQUIRED");
     if (!perm.roleWithinMine(role)) throw new Error("FORBIDDEN: a role beyond your own");                       // 0046
     const email = String(q.email ?? "").trim().toLowerCase(), name = String(q.full_name ?? "").trim(); if (!email || !name) throw new Error("VALIDATION: email_and_name");
     if (!validEmail(email)) throw new Error("VALIDATION: email"); if (name.length > 120) throw new Error("VALIDATION: full_name");
@@ -589,8 +590,8 @@ const rpcs: Record<string, (a: any) => any> = {
     // 0052 (SEC-02): the guard's four numbers keep their ranges
     const rng: Record<string, [number, number]> = { guest_otp_after_messages: [1, 100], guest_device_daily_message_limit: [1, 1000], guest_branch_daily_message_limit: [1, 100000], guest_otp_device_hourly_limit: [1, 100], guest_otp_phone_hourly_limit: [1, 200], guest_otp_cooldown_seconds: [10, 3600], guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
     for (const [k, [lo, hi]] of Object.entries(rng)) if (p?.[k] != null && !(Number.isInteger(Number(p[k])) && Number(p[k]) >= lo && Number(p[k]) <= hi)) throw new Error("VALIDATION: ai_guard");
-    const setting = T("ai_settings").find((x) => x.organization_id === ORG);
-    const before = { ...setting }; Object.assign(setting!, p, { updated_at: nowISO() }); emit("ai_settings"); audit(null, "ai_settings_updated", "ai_settings", ORG, { before, after: p }); return { ok: true }; },
+    const currentOrg=me()?.organization_id; const setting = T("ai_settings").find((x) => x.organization_id === currentOrg);
+    const before = { ...setting }; Object.assign(setting!, p, { updated_at: nowISO() }); emit("ai_settings"); audit(null, "ai_settings_updated", "ai_settings", currentOrg, { before, after: p }); return { ok: true }; },
   fn_definition_dependencies: ({ p_entity, p_id }) => { requireCap("definitions"); return deps(p_entity, p_id); },
 
   // ---- definitions ----
@@ -2144,7 +2145,7 @@ Object.assign(rpcs, {
   },
   fn_admin_staff_invite_target: ({ p_staff }: { p_staff: string }) => {
     requireRole("owner");
-    const x = byId("staff_profiles", p_staff); if (!x) throw new Error("NOT_FOUND");
+    const x = byId("staff_profiles", p_staff); if (!x || x.role === "owner" || x.organization_id!==me()?.organization_id) throw new Error("NOT_FOUND");
     return { staff_id: x.id, email: x.email, full_name: x.full_name, is_active: x.is_active !== false, linked: !!x.auth_user_id };
   },
   // 0075 (plan item 1.8): the unit's licence number — the owner, the manager and the supervisor read it; with
@@ -2673,7 +2674,7 @@ rpcs.fn_guest_session=(a:any)=>{const x=T("registration_sessions").find(s=>s.tok
 Object.assign(rpcs,platformRpcs({T,uid,user:()=>session?.user.id??null,owner:me,emit,atomic:atomically}));
 
 function invoke(name: string, opts: any, trustedService = false) {
-  if(name === "platform-invite"){try{rpcs.fn_platform_owner_invite_target({p_staff:opts?.body?.staff_id});return{data:{ok:true,simulated:true},error:null};}catch{return{data:null,error:{message:"forbidden_or_unavailable"}};}}
+  if(name === "platform-invite")return{data:{ok:false,error:"owner_self_signup_required"},error:{message:"owner_self_signup_required"}};
   const body = opts?.body ?? {};
   if (name === "guest-otp") return { data: { status: "channel_unavailable" }, error: null };
   // WhatsApp (demo): the connection test answers from the demo row; a supervisor's reply is stored but nothing is sent
@@ -2726,8 +2727,8 @@ export function createDemoClient() {
       getSession: async () => ({ data: { session }, error: null }),
       onAuthStateChange: (cb: (e: string, s: Session) => void) => { authListeners.add(cb); return { data: { subscription: { unsubscribe: () => authListeners.delete(cb) } } }; },
       // a fresh sign-in is a new session (0040): it opens after any forced end of the person's sessions, so it is not refused by it
-      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const pending = T("staff_profiles").find(s=>String(s.email).toLowerCase()===String(email).trim().toLowerCase()); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? (pending ? {auth:pending.auth_user_id??("demo-invited-"+pending.id),email:pending.email} : DEMO_ACCOUNTS[0]); setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
-      signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const pending = T("staff_profiles").find(s=>String(s.email).toLowerCase()===String(email).trim().toLowerCase()); const registered=T("demo_auth_users").find(a=>a.email===String(email).trim().toLowerCase()); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? (registered ? {auth:registered.id,email:registered.email} : null) ?? (pending ? {auth:pending.auth_user_id??("demo-invited-"+pending.id),email:pending.email} : DEMO_ACCOUNTS[0]); setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      signUp: async ({ email }: { email: string; password: string }) => { const em=email.trim().toLowerCase();if(T("demo_auth_users").some(a=>a.email===em))return{data:{session:null},error:{message:"already registered"}};const id=uid();T("demo_auth_users").push({id,email:em,confirmed:true});emit("demo_auth_users");setSession({user:{id,email:em},access_token:"demo",signed_in_at:nowISO()});return{data:{session},error:null}; },
       /** a token put back in hand (supabase.auth.setSession): the same session as before, refused if it was ended since */
       setSession: async (s: Session) => { if (!s?.user?.id) return { data: { session: null }, error: { message: "invalid session" } }; setSession({ user: { id: s.user.id, email: s.user.email }, access_token: s.access_token ?? "demo", signed_in_at: s.signed_in_at }); return { data: { session }, error: null }; },
       signOut: async (opts?: { scope?: "global" | "local" | "others" }) => { if (opts?.scope !== "others") setSession(null); return { error: null }; },
