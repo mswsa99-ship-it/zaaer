@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi, ratesApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput} from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput, useFormDraft, DraftRestoreBanner} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, COUNT } from "../../lib/utils";
 
@@ -33,6 +33,13 @@ export default function AdminRoomCategories() {
     return (must(c) as Cat[]).map((x) => ({ ...x, rooms: count.get(x.id) ?? 0 }));
   }, [], NO_CATS);
   const cats = q.data; const load = q.reload; const branchId = q.branchId;
+
+  // 6.5 (U4): a new category's long form survives a reload — the draft is offered back, never applied silently
+  const catPristine = (d: Partial<Cat>) => !d.name_ar?.trim() && !d.name_en?.trim() && !d.description?.trim()
+    && d.base_price_halalas == null && d.weekly_price_halalas == null && d.monthly_price_halalas == null && d.min_nightly_halalas == null && !(d.amenities ?? []).length && d.base_capacity === 2 && d.max_capacity === 4
+    && d.price_mode === "unified" && d.is_public === true && d.sort_order === cats.length + 1;
+  const isNew = !!draft && !draft.id;
+  const fd = useFormDraft<Partial<Cat>>({ storageKey: isNew && branchId ? `zaaer:room-category-draft:${branchId}` : null, open: isNew, value: draft ?? {}, pristine: catPristine, apply: (v) => setDraft(v) });
 
   if (q.loading) return <LoadingScreen />;
   const visible = cats.filter((c) => showArchived || !c.archived_at);
@@ -72,8 +79,9 @@ export default function AdminRoomCategories() {
             await opsApi.upsertRoomCategory({ id: draft.id, branch_id: branchId, name_ar: draft.name_ar, name_en: draft.name_en, description: draft.description, base_capacity: draft.base_capacity, max_capacity: draft.max_capacity,
               base_price_halalas: draft.base_price_halalas, weekly_price_halalas: draft.weekly_price_halalas ?? null, monthly_price_halalas: draft.monthly_price_halalas ?? null, min_nightly_halalas: draft.min_nightly_halalas ?? null,
               price_mode: draft.price_mode ?? "unified", amenities: draft.amenities ?? [], is_public: draft.is_public, is_active: draft.is_active, sort_order: draft.sort_order, version: draft.version });
-            setDraft(null); await load();
+            fd.clearSaved(); setDraft(null); await load();
           }}>
+            {fd.saved && <DraftRestoreBanner label="مسودة نوع لم تُحفظ" summary={fd.saved.name_ar?.trim() || null} onRestore={fd.restoreSaved} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} /></Field>
