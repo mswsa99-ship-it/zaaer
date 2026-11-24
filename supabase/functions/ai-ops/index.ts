@@ -59,6 +59,9 @@ Deno.serve(async (req) => {
   const { data: staff } = await user.from("staff_profiles").select("id, full_name, role, organization_id").eq("id", staffId).maybeSingle();
   const { data: branch } = await user.from("branches").select("id, name_ar, timezone").eq("id", branchId).maybeSingle();
   if (!staff || !branch) return json({ error: "forbidden" }, 403);
+  // page guard (0109/0110): the assistant lives on the staff dashboard; an individual account needs that page, fail closed on any error
+  { const { data: pageOk, error: pageErr } = await user.rpc("fn_user_page_can", { p_page: "/staff/dashboard", p_action: "view" });
+    if (pageErr || pageOk !== true) return json({ error: "forbidden" }, 403); }
   const { data: org } = await admin.from("organizations").select("name_ar").eq("id", staff.organization_id).maybeSingle();
   const today = localDay(branch.timezone);
 

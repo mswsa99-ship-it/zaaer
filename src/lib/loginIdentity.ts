@@ -1,3 +1,4 @@
+import { parseIndividualPermissions } from "./individualPermissions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StaffProfile } from "./auth";
 import { defaultPermissions, type Permissions } from "./permissionCatalog";
@@ -21,7 +22,7 @@ export async function readLoginIdentity(client: SupabaseClient, uid: string): Pr
   const profile = result.data as StaffProfile | null;
   if (!profile || !profile.is_active) return { operator: false, profile, permissions: defaultPermissions(null) };
   const permissions = await client.rpc("fn_my_permissions", {});
-  const p = permissions.data as { allowed?: unknown; full?: unknown; sees_money?: boolean } | null;
+  const p = permissions.data as { allowed?: unknown; full?: unknown; sees_money?: boolean; page_access?: unknown } | null;
   if (permissions.error || !p || !Array.isArray(p.allowed) || !p.allowed.every(c => typeof c === "string") || !Array.isArray(p.full) || !p.full.every(c => typeof c === "string")) throw new Error(PROFILE_LOAD_ERROR);
-  return { operator: false, profile, permissions: { allowed: new Set(p.allowed), full: new Set(p.full), seesMoney: !!p.sees_money } };
+  return { operator: false, profile, permissions: { pageAccess: parseIndividualPermissions(p.page_access), allowed: new Set(p.allowed), full: new Set(p.full), seesMoney: !!p.sees_money } };
 }

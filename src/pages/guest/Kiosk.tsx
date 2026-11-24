@@ -39,23 +39,23 @@ export default function Kiosk() {
 
   if (idle) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-ink-900 text-center text-white">
-        <Hotel className="mb-6 h-16 w-16 text-accent-500" />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-rai-canvas text-center text-rai-ink">
+        <Hotel className="mb-6 h-16 w-16 text-rai-spark-text" />
         <h1 className="text-3xl font-bold">{orgName}</h1>
-        <p className="mt-3 text-white/70">المس الشاشة للبدء من جديد</p>
-        <button onClick={() => { setIdle(false); navigate("/kiosk"); window.location.reload(); }} className="mt-8 flex items-center gap-2 rounded-2xl bg-accent-500 px-8 py-4 text-lg font-medium hover:bg-accent-600">
+        <p className="mt-3 text-rai-action-ink">المس الشاشة للبدء من جديد</p>
+        <button onClick={() => { setIdle(false); navigate("/kiosk"); window.location.reload(); }} className="mt-8 flex items-center gap-2 rounded-2xl bg-rai-spark-tint px-8 py-4 text-lg font-medium hover:bg-rai-spark-tint">
           <RotateCcw className="h-5 w-5" /> ابدأ
         </button>
-        <p className="mt-6 text-xs text-white/40">تم مسح بيانات الجلسة السابقة لأسباب الخصوصية.</p>
+        <p className="mt-6 text-xs text-rai-action-ink">تم مسح بيانات الجلسة السابقة لأسباب الخصوصية.</p>
       </div>
     );
   }
 
   // the lobby screen shows the branch's WhatsApp QR: guests continue on their own phone (nothing typed on a shared screen)
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-brand-50 to-white">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-rai-canvas text-rai-ink">
       <WhatsAppEntry large />
-      <p className="mt-2 text-xs text-ink-400">تعود الشاشة للبداية تلقائيًا بعد {Math.round(IDLE_LIMIT_MS / 1000)} ثانية من الخمول.</p>
+      <p className="mt-2 text-xs text-rai-ink-muted">تعود الشاشة للبداية تلقائيًا بعد {Math.round(IDLE_LIMIT_MS / 1000)} ثانية من الخمول.</p>
     </div>
   );
 }

@@ -38,7 +38,9 @@ Deno.serve(async (req) => {
 
   const url = Deno.env.get("SUPABASE_URL")!, secret = projectKey("secret");
   const auth = req.headers.get("authorization") ?? "";
-  const trustedService = req.headers.get("apikey") === secret || auth === `Bearer ${secret}`;
+  // constant-time comparison: the service key must not be guessable byte by byte through response timing
+  const sameSecret = (a: string, b: string) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
+  const trustedService = sameSecret(req.headers.get("apikey") ?? "", secret) || sameSecret(auth, `Bearer ${secret}`);
   const scopeHeaders = { "x-hotel-slug": req.headers.get("x-hotel-slug") ?? "", "x-guest-token": req.headers.get("x-guest-token") ?? "" };
   const db = createClient(url, secret, { global: { headers: scopeHeaders }, auth: { persistSession: false } });
   const user = createClient(url, projectKey("publishable"), { global: { headers: { Authorization: auth, ...scopeHeaders } }, auth: { persistSession: false } });
@@ -61,6 +63,12 @@ Deno.serve(async (req) => {
   let branchId = typeof body.branch_id === "string" ? body.branch_id : null;
   let organizationId: string | null = null;
   const { data: staffId } = trustedService ? { data: null } : await user.rpc("fn_staff_id");
+  // page guard (0109/0110): a signed-in staff member talking to the reception assistant needs the assistant page.
+  // Guests (hotel-slug / guest-token path) and the trusted service are not staff and are unaffected.
+  if (staffId && !trustedService && !scopeHeaders["x-hotel-slug"]) {
+    const { data: pageOk, error: pageErr } = await user.rpc("fn_user_page_can", { p_page: "/admin/assistant", p_action: "view" });
+    if (pageErr || pageOk !== true) return json({ error: "forbidden" }, 403);
+  }
   if (trustedService) {
     if (!branchId) return json({ error: "branch_required" }, 400);
     const { data: b } = await db.from("branches").select("organization_id").eq("id", branchId).eq("is_active", true).is("archived_at", null).maybeSingle();

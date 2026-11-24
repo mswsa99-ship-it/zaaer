@@ -30,8 +30,8 @@ export default function BookingNew() {
 
   return (
     <div className="mx-auto max-w-xl px-4 py-8 lg:py-12">
-      <Link to="/reception" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> رجوع</Link>
-      <h1 className="mb-5 text-2xl font-bold text-ink-800">احجز إقامتك</h1>
+      <Link to="/reception" className="mb-4 inline-flex items-center gap-1.5 text-sm text-rai-ink-muted hover:text-rai-ink-muted"><ArrowLeft className="h-4 w-4" /> رجوع</Link>
+      <h1 className="mb-5 text-2xl font-bold text-rai-ink">احجز إقامتك</h1>
       {branches.length > 1 && (
         <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} className="input mb-4" aria-label="الفرع">
           {branches.map((x) => <option key={x.id} value={x.id}>{x.name_ar}</option>)}
@@ -41,15 +41,15 @@ export default function BookingNew() {
         <Card className="space-y-4" data-testid="booking-platform-card">
           {image && <img src={image} alt="" className="max-h-56 w-full rounded-xl object-cover" />}
           <div>
-            <h2 className="text-lg font-semibold text-ink-800">{b?.name_ar}</h2>
-            {b?.address && <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-500"><MapPin className="h-4 w-4 shrink-0" /> {b.city ? `${b.city} — ` : ""}{b.address}</p>}
+            <h2 className="text-lg font-semibold text-rai-ink">{b?.name_ar}</h2>
+            {b?.address && <p className="mt-1 flex items-center gap-1.5 text-sm text-rai-ink-muted"><MapPin className="h-4 w-4 shrink-0" /> {b.city ? `${b.city} — ` : ""}{b.address}</p>}
           </div>
-          <p className="text-sm text-ink-600">الحجوزات الجديدة والأسعار والتوفر عبر منصة الحجز المعتمدة فقط. بعد الحجز تجد حجزك في «حجوزاتي» برقم جوالك لإكمال إجراءات الوصول.</p>
+          <p className="text-sm text-rai-ink-muted">الحجوزات الجديدة والأسعار والتوفر عبر منصة الحجز المعتمدة فقط. بعد الحجز تجد حجزك في «حجوزاتي» برقم جوالك لإكمال إجراءات الوصول.</p>
           {b?.booking_platform_url ? (
             <a href={b.booking_platform_url} target="_blank" rel="noopener noreferrer" className="btn-primary w-full" data-testid="platform-link">احجز عبر المنصة <ExternalLink className="h-4 w-4" /></a>
           ) : (
-            <div className="rounded-xl bg-ink-50 px-4 py-3 text-sm text-ink-600" data-testid="platform-missing">
-              لم يُضبط رابط منصة الحجز لهذا الفرع بعد. تواصل مع الاستقبال ليوجّهك إلى الحجز{b?.phone ? <>: <a href={`tel:${b.phone}`} className="font-medium text-brand-700" dir="ltr">{b.phone}</a></> : "."}
+            <div className="rounded-xl bg-rai-canvas px-4 py-3 text-sm text-rai-ink-muted" data-testid="platform-missing">
+              لم يُضبط رابط منصة الحجز لهذا الفرع بعد. تواصل مع الاستقبال ليوجّهك إلى الحجز{b?.phone ? <>: <a href={`tel:${b.phone}`} className="font-medium text-rai-action-ink" dir="ltr">{b.phone}</a></> : "."}
             </div>
           )}
           <div className="flex flex-wrap gap-2 text-sm">

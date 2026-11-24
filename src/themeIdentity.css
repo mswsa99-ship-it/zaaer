@@ -137,13 +137,13 @@ body, #root {background:var(--paper);color:var(--ink);}
 :root button:disabled, :root input:disabled, :root select:disabled, :root textarea:disabled {opacity:1;cursor:not-allowed;box-shadow:inset 0 0 0 1px var(--line-strong);border-style:dashed;}
 :root :is(button,a,input,select,textarea):focus-visible {outline:2px solid var(--focus);outline-offset:2px;--tw-ring-color:var(--focus);}
 [data-theme="dark"] :is(.input,.rai-input,.rfo-in,select,textarea) {border-color:transparent;}
-:root [data-testid="keybox-alert"], :root [data-testid="keybox-alert"]:hover {--alert-opacity:0.5;background:rgb(140 33 27 / var(--alert-opacity));color:var(--alert-ink);}
+:root [data-testid="keybox-alert"], :root [data-testid="keybox-alert"]:hover {--alert-opacity:0.5;background:var(--alert-background);color:var(--alert-ink);}
 :root [data-testid="keybox-alert"] * {color:var(--alert-ink);opacity:1;}
 :root [data-testid="keybox-alert"] > span:last-child {background:transparent;box-shadow:inset 0 0 0 1px currentColor;}
 :root [data-testid="keybox-alert"] [aria-hidden="true"] span {background:currentColor;}
 :root [data-testid="keybox-alert"] [class*="animate-ping"] {display:none;}
 :root [data-testid="occupancy-strip"] > * {background:var(--card);}
-[data-theme="dark"] :is(aside,header) img[src$="roomai-mark.svg"] {background:#e7f1f2;border-radius:8px;padding:3px;}
+[data-theme="dark"] :is(aside,header) img[src$="roomai-mark.svg"] {background:var(--logo-backing);border-radius:8px;padding:3px;}
 :root .recharts-default-tooltip {background:var(--surface)!important;color:var(--ink)!important;border-color:var(--line-strong)!important;}
 :root .recharts-cartesian-axis-tick-value, :root .recharts-legend-item-text {fill:var(--ink-muted);color:var(--ink-muted)!important;}
 
@@ -227,11 +227,19 @@ body, #root {background:var(--paper);color:var(--ink);}
 :root .rfo-step[aria-pressed="true"] {background:var(--spark-tint);color:var(--spark-text);box-shadow:inset 0 0 0 1px var(--spark-text);}
 :root .rfo-step:hover:not(:disabled) {background:var(--action-hover);color:var(--action-ink);}
 
-/* The sign-in cover keeps its dark gradient in both themes. Its heading is
-   inverse text, not an action label, so do not remap it to day action ink. */
-:root .login-type-midpoint > div > .text-white h1 {color:#f8fbfb;}
-/* The legacy guest layout has a fixed pale gradient. Use the shared canvas
-   so night foreground colours are never painted on that day-only ground. */
-[data-theme="dark"] #root > [lang] {background:var(--paper);}
-[data-theme="dark"] #root .bg-gradient-to-b {background-image:none;background-color:var(--paper);}
-[data-theme="dark"] #root > [lang] > footer {background:var(--surface);color:var(--ink-muted);}
+/* Very subtle night field edge. This does not claim a 3:1 boundary. */
+[data-theme="dark"] :is(.input,.rai-input,.rfo-in,select,textarea) {box-shadow:inset 0 0 0 1px var(--field-border);}
+
+
+/* Semantic controls and QR media. QR pixels intentionally stay dark-on-white. */
+:root .qr-paper {background:var(--qr-paper);}
+:root .bg-rai-action {background-color:var(--action-fill);}
+:root .hover\:bg-rai-action-hover:hover {background-color:var(--action-hover);}
+:root .text-rai-action-ink {color:var(--action-ink);}
+:root .bg-rai-card {background-color:var(--card);}
+:root .text-rai-ink {color:var(--ink);}
+:root .text-rai-ink-muted {color:var(--ink-muted);}
+
+/* Remaining legacy surface spelling used by the permission editor, logic-owned elsewhere. */
+:root .bg-white\/95 {background-color:var(--surface);}
+:root .bg-red-50\/60 {background-color:var(--danger-tint);}

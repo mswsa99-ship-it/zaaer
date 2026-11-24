@@ -7,6 +7,10 @@
   --line-strong: #607c86;
   --ink: #10262d;
   --ink-muted: #354d55;
+  --qr-paper: #ffffff;
+  --alert-background: rgb(140 33 27 / var(--alert-opacity));
+  --logo-backing: #e7f1f2;
+  --field-border: #607c86;
   --field-fill: #ffffff;
   --field-ink: #10262d;
   --night: #e5edf0;
@@ -45,6 +49,10 @@
   --line-strong: #8babb6;
   --ink: #f8fbfb;
   --ink-muted: #eaf1f2;
+  --qr-paper: #ffffff;
+  --alert-background: rgb(140 33 27 / var(--alert-opacity));
+  --logo-backing: #e7f1f2;
+  --field-border: #274d57;
   --field-fill: #244a54;
   --field-ink: #f8fbfb;
   --night: #183b47;

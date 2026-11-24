@@ -144,3 +144,6 @@ run_tests acceptance/backup-state-tests.sql
 
 run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
 run_tests tests/release-proof/finance_role_scenarios_tests.sql
+
+run_tests tests/sql/individual_permission_drafts_tests.sql
+run_tests tests/sql/page_rls_tests.sql

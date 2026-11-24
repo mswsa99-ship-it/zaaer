@@ -1,369 +1,380 @@
 {
- "rule": "Plan item 2.1 (owner's decisions of 23 Nov 2026: many hotels, many branches in each; one account belongs to one hotel). Every table in public is classified once: platform (the hotels' registry, read by the platform operator), hotel (one hotel's rows: organization_id) or branch (one branch's rows: organization_id and branch_id). «via» names the parent a row's hotel and branch come from today; Since 0076 (item 2.2) every hotel row carries organization_id and every branch row branch_id too; for a table with «via», fn_tenant_fill fills both from that parent and refuses a row that names another. tests/unit/tenancy.test.ts refuses a table created in a migration that is not here.",
- "tables": {
-  "access_delivery_events": {
-   "scope": "branch",
-   "via": "reservations"
-  },
-  "access_release_requests": {
-   "scope": "branch",
-   "via": "reservations"
-  },
-  "accounting_periods": {
-   "scope": "hotel"
-  },
-  "ai_action_proposals": {
-   "scope": "branch"
-  },
-  "ai_branch_usage_daily": {
-   "scope": "branch"
-  },
-  "ai_guest_usage_daily": {
-   "scope": "branch"
-  },
-  "ai_guest_session_usage": {
-   "scope": "branch"
-  },
-  "ai_guardrail_events": {
-   "scope": "branch",
-   "via": "conversations"
-  },
-  "ai_ops_conversations": {
-   "scope": "branch"
-  },
-  "ai_ops_messages": {
-   "scope": "branch",
-   "via": "ai_ops_conversations"
-  },
-  "ai_settings": {
-   "scope": "hotel"
-  },
-  "ai_tool_executions": {
-   "scope": "branch",
-   "via": "conversations"
-  },
-  "ai_usage_daily": {
-   "scope": "hotel"
-  },
-  "alert_events": {
-   "scope": "branch"
-  },
-  "alert_rules": {
-   "scope": "hotel"
-  },
-  "audit_events": {
-   "scope": "branch"
-  },
-  "bank_mail_settings": {
-   "scope": "hotel"
-  },
-  "bank_match_items": {
-   "scope": "hotel"
-  },
-  "bank_matches": {
-   "scope": "hotel"
-  },
-  "bank_messages": {
-   "scope": "hotel"
-  },
-  "bank_movements": {
-   "scope": "branch"
-  },
-  "bank_parse_rules": {
-   "scope": "hotel"
-  },
-  "blocks": {
-   "scope": "branch"
-  },
-  "booking_sources": {
-   "scope": "hotel"
-  },
-  "branch_journey_settings": {
-   "scope": "branch"
-  },
-  "branch_media": {
-   "scope": "branch",
-   "via": "branches"
-  },
-  "branch_media_items": {
-   "scope": "branch"
-  },
-  "branch_memberships": {
-   "scope": "branch",
-   "via": "branches"
-  },
-  "branch_payment_settings": {
-   "scope": "branch"
-  },
-  "branch_whatsapp_channels": {
-   "scope": "branch"
-  },
-  "branches": {
-   "scope": "hotel"
-  },
-  "cash_accounts": {
-   "scope": "branch"
-  },
-  "checkout_inspections": {
-   "scope": "branch"
-  },
-  "client_errors": {
-   "scope": "hotel"
-  },
-  "code_rotation_events": {
-   "scope": "branch",
-   "via": "keyboxes"
-  },
-  "conversation_messages": {
-   "scope": "branch",
-   "via": "conversations"
-  },
-  "conversations": {
-   "scope": "branch"
-  },
-  "data_purge_requests": {
-   "scope": "branch"
-  },
-  "day_closing_lines": {
-   "scope": "branch",
-   "via": "day_closings"
-  },
-  "day_closing_requests": {
-   "scope": "branch"
-  },
-  "day_closings": {
-   "scope": "branch"
-  },
-  "document_sequences": {
-   "scope": "hotel"
-  },
-  "expense_attachments": {
-   "scope": "branch"
-  },
-  "expense_categories": {
-   "scope": "hotel"
-  },
-  "expense_vouchers": {
-   "scope": "branch"
-  },
-  "facilities": {
-   "scope": "branch"
-  },
-  "financial_vouchers": {
-   "scope": "branch"
-  },
-  "floors": {
-   "scope": "branch"
-  },
-  "gl_accounts": {
-   "scope": "branch"
-  },
-  "guest_bans": {
-   "scope": "hotel"
-  },
-  "guest_lookup_attempts": {
-   "scope": "branch",
-   "note": "the guest's attempts to find a booking by its number — keyed by phone and device; scoped to the hotel whose site was opened (2.6)"
-  },
-  "guest_phone_challenges": {
-   "scope": "branch",
-   "note": "the WhatsApp code sent to a guest's phone — sent from the branch's own channel and scoped to that hotel (2.6, S3)"
-  },
-  "guest_phone_sessions": {
-   "scope": "branch",
-   "note": "a guest's verified phone session — valid on the hotel whose site issued it only (2.6)"
-  },
-  "guest_phone_optouts": {
-   "scope": "hotel"
-  },
-  "guest_profiles": {
-   "scope": "hotel"
-  },
-  "guest_reviews": {
-   "scope": "branch"
-  },
-  "housekeeping_tasks": {
-   "scope": "branch"
-  },
-  "human_handoff_tickets": {
-   "scope": "branch"
-  },
-  "integration_events": {
-   "scope": "hotel"
-  },
-  "inventory_periods": {
-   "scope": "branch"
-  },
-  "invoices": {
-   "scope": "branch"
-  },
-  "journal_entries": {
-   "scope": "branch"
-  },
-  "journal_lines": {
-   "scope": "branch",
-   "via": "journal_entries"
-  },
-  "journey_messages": {
-   "scope": "branch"
-  },
-  "journey_ticks": {
-   "scope": "branch"
-  },
-  "keyboxes": {
-   "scope": "branch"
-  },
-  "knowledge_entries": {
-   "scope": "branch"
-  },
-  "maintenance_tickets": {
-   "scope": "branch"
-  },
-  "monitor_runs": {
-   "scope": "branch"
-  },
-  "notifications": {
-   "scope": "branch"
-  },
-  "organizations": {
-   "scope": "platform",
-   "note": "the hotels themselves: the platform operator's registry (2.8)"
-  },
-  "payment_transactions": {
-   "scope": "branch",
-   "via": "reservations"
-  },
-  "platform_payouts": {
-   "scope": "branch"
-  },
-  "pos_settlements": {
-   "scope": "branch"
-  },
-  "product_branches": {
-   "scope": "branch"
-  },
-  "product_categories": {
-   "scope": "hotel"
-  },
-  "product_order_lines": {
-   "scope": "hotel"
-  },
-  "product_orders": {
-   "scope": "branch"
-  },
-  "products": {
-   "scope": "hotel"
-  },
-  "property_policies": {
-   "scope": "branch"
-  },
-  "rate_calendar": {
-   "scope": "branch"
-  },
-  "registration_sessions": {
-   "scope": "branch",
-   "via": "reservations"
-  },
-  "release_rules": {
-   "scope": "branch"
-  },
-  "released_slots": {
-   "scope": "branch"
-  },
-  "reservation_allocations": {
-   "scope": "branch"
-  },
-  "reservation_charges": {
-   "scope": "branch"
-  },
-  "reservation_guests": {
-   "scope": "branch",
-   "via": "reservations"
-  },
-  "reservation_nights": {
-   "scope": "branch"
-  },
-  "reservations": {
-   "scope": "branch"
-  },
-  "review_items": {
-   "scope": "branch"
-  },
-  "role_permissions": {
-   "scope": "hotel"
-  },
-  "room_categories": {
-   "scope": "branch"
-  },
-  "room_licenses": {
-   "scope": "branch"
-  },
-  "rooms": {
-   "scope": "branch"
-  },
-  "service_definitions": {
-   "scope": "branch"
-  },
-  "staff_profiles": {
-   "scope": "hotel"
-  },
-  "staff_saved_views": {
-   "scope": "hotel"
-  },
-  "stay_acknowledgements": {
-   "scope": "branch"
-  },
-  "stay_extension_requests": {
-   "scope": "branch"
-  },
-  "stay_payment_exceptions": {
-   "scope": "branch"
-  },
-  "system_settings": {
-   "scope": "hotel"
-  },
-  "task_types": {
-   "scope": "branch"
-  },
-  "unanswered_questions": {
-   "scope": "branch"
-  },
-  "whatsapp_inbound_messages": {
-   "scope": "branch"
-  },
-  "whatsapp_outbox": {
-   "scope": "branch"
-  },
-  "platform_operators": {
-   "scope": "platform",
-   "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
-  },
-  "platform_events": {
-   "scope": "platform",
-   "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
-  },
-  "platform_support_grants": {
-   "scope": "platform",
-   "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
-  },
-  "finance_control_settings": {
-   "scope": "hotel"
-  },
-  "discount_approvals": {
-   "scope": "branch"
-  },
-  "finance_refund_approvals": {
-   "scope": "branch"
-  },
-  "backup_runs": {
-   "scope": "platform",
-   "note": "Explicit organization-scoped owner status through fn_backup_status only; no direct tenant table access"
-  },
-  "hotel_exit_archives": {
-   "scope": "hotel"
-  },
-  "hotel_exit_rows": {
-   "scope": "hotel"
+  "rule": "Plan item 2.1 (owner's decisions of 23 Nov 2026: many hotels, many branches in each; one account belongs to one hotel). Every table in public is classified once: platform (the hotels' registry, read by the platform operator), hotel (one hotel's rows: organization_id) or branch (one branch's rows: organization_id and branch_id). «via» names the parent a row's hotel and branch come from today; Since 0076 (item 2.2) every hotel row carries organization_id and every branch row branch_id too; for a table with «via», fn_tenant_fill fills both from that parent and refuses a row that names another. tests/unit/tenancy.test.ts refuses a table created in a migration that is not here.",
+  "tables": {
+    "access_delivery_events": {
+      "scope": "branch",
+      "via": "reservations"
+    },
+    "access_release_requests": {
+      "scope": "branch",
+      "via": "reservations"
+    },
+    "accounting_periods": {
+      "scope": "hotel"
+    },
+    "ai_action_proposals": {
+      "scope": "branch"
+    },
+    "ai_branch_usage_daily": {
+      "scope": "branch"
+    },
+    "ai_guest_usage_daily": {
+      "scope": "branch"
+    },
+    "ai_guest_session_usage": {
+      "scope": "branch"
+    },
+    "ai_guardrail_events": {
+      "scope": "branch",
+      "via": "conversations"
+    },
+    "ai_ops_conversations": {
+      "scope": "branch"
+    },
+    "ai_ops_messages": {
+      "scope": "branch",
+      "via": "ai_ops_conversations"
+    },
+    "ai_settings": {
+      "scope": "hotel"
+    },
+    "ai_tool_executions": {
+      "scope": "branch",
+      "via": "conversations"
+    },
+    "ai_usage_daily": {
+      "scope": "hotel"
+    },
+    "alert_events": {
+      "scope": "branch"
+    },
+    "alert_rules": {
+      "scope": "hotel"
+    },
+    "audit_events": {
+      "scope": "branch"
+    },
+    "bank_mail_settings": {
+      "scope": "hotel"
+    },
+    "bank_match_items": {
+      "scope": "hotel"
+    },
+    "bank_matches": {
+      "scope": "hotel"
+    },
+    "bank_messages": {
+      "scope": "hotel"
+    },
+    "bank_movements": {
+      "scope": "branch"
+    },
+    "bank_parse_rules": {
+      "scope": "hotel"
+    },
+    "blocks": {
+      "scope": "branch"
+    },
+    "booking_sources": {
+      "scope": "hotel"
+    },
+    "branch_journey_settings": {
+      "scope": "branch"
+    },
+    "branch_media": {
+      "scope": "branch",
+      "via": "branches"
+    },
+    "branch_media_items": {
+      "scope": "branch"
+    },
+    "branch_memberships": {
+      "scope": "branch",
+      "via": "branches"
+    },
+    "branch_payment_settings": {
+      "scope": "branch"
+    },
+    "branch_whatsapp_channels": {
+      "scope": "branch"
+    },
+    "branches": {
+      "scope": "hotel"
+    },
+    "cash_accounts": {
+      "scope": "branch"
+    },
+    "checkout_inspections": {
+      "scope": "branch"
+    },
+    "client_errors": {
+      "scope": "hotel"
+    },
+    "code_rotation_events": {
+      "scope": "branch",
+      "via": "keyboxes"
+    },
+    "conversation_messages": {
+      "scope": "branch",
+      "via": "conversations"
+    },
+    "conversations": {
+      "scope": "branch"
+    },
+    "data_purge_requests": {
+      "scope": "branch"
+    },
+    "day_closing_lines": {
+      "scope": "branch",
+      "via": "day_closings"
+    },
+    "day_closing_requests": {
+      "scope": "branch"
+    },
+    "day_closings": {
+      "scope": "branch"
+    },
+    "document_sequences": {
+      "scope": "hotel"
+    },
+    "expense_attachments": {
+      "scope": "branch"
+    },
+    "expense_categories": {
+      "scope": "hotel"
+    },
+    "expense_vouchers": {
+      "scope": "branch"
+    },
+    "facilities": {
+      "scope": "branch"
+    },
+    "financial_vouchers": {
+      "scope": "branch"
+    },
+    "floors": {
+      "scope": "branch"
+    },
+    "gl_accounts": {
+      "scope": "branch"
+    },
+    "guest_bans": {
+      "scope": "hotel"
+    },
+    "guest_lookup_attempts": {
+      "scope": "branch",
+      "note": "the guest's attempts to find a booking by its number — keyed by phone and device; scoped to the hotel whose site was opened (2.6)"
+    },
+    "guest_phone_challenges": {
+      "scope": "branch",
+      "note": "the WhatsApp code sent to a guest's phone — sent from the branch's own channel and scoped to that hotel (2.6, S3)"
+    },
+    "guest_phone_sessions": {
+      "scope": "branch",
+      "note": "a guest's verified phone session — valid on the hotel whose site issued it only (2.6)"
+    },
+    "guest_phone_optouts": {
+      "scope": "hotel"
+    },
+    "guest_profiles": {
+      "scope": "hotel"
+    },
+    "guest_reviews": {
+      "scope": "branch"
+    },
+    "housekeeping_tasks": {
+      "scope": "branch"
+    },
+    "human_handoff_tickets": {
+      "scope": "branch"
+    },
+    "integration_events": {
+      "scope": "hotel"
+    },
+    "inventory_periods": {
+      "scope": "branch"
+    },
+    "invoices": {
+      "scope": "branch"
+    },
+    "journal_entries": {
+      "scope": "branch"
+    },
+    "journal_lines": {
+      "scope": "branch",
+      "via": "journal_entries"
+    },
+    "journey_messages": {
+      "scope": "branch"
+    },
+    "journey_ticks": {
+      "scope": "branch"
+    },
+    "keyboxes": {
+      "scope": "branch"
+    },
+    "knowledge_entries": {
+      "scope": "branch"
+    },
+    "maintenance_tickets": {
+      "scope": "branch"
+    },
+    "monitor_runs": {
+      "scope": "branch"
+    },
+    "notifications": {
+      "scope": "branch"
+    },
+    "organizations": {
+      "scope": "platform",
+      "note": "the hotels themselves: the platform operator's registry (2.8)"
+    },
+    "payment_transactions": {
+      "scope": "branch",
+      "via": "reservations"
+    },
+    "platform_payouts": {
+      "scope": "branch"
+    },
+    "pos_settlements": {
+      "scope": "branch"
+    },
+    "product_branches": {
+      "scope": "branch"
+    },
+    "product_categories": {
+      "scope": "hotel"
+    },
+    "product_order_lines": {
+      "scope": "hotel"
+    },
+    "product_orders": {
+      "scope": "branch"
+    },
+    "products": {
+      "scope": "hotel"
+    },
+    "property_policies": {
+      "scope": "branch"
+    },
+    "rate_calendar": {
+      "scope": "branch"
+    },
+    "registration_sessions": {
+      "scope": "branch",
+      "via": "reservations"
+    },
+    "release_rules": {
+      "scope": "branch"
+    },
+    "released_slots": {
+      "scope": "branch"
+    },
+    "reservation_allocations": {
+      "scope": "branch"
+    },
+    "reservation_charges": {
+      "scope": "branch"
+    },
+    "reservation_guests": {
+      "scope": "branch",
+      "via": "reservations"
+    },
+    "reservation_nights": {
+      "scope": "branch"
+    },
+    "reservations": {
+      "scope": "branch"
+    },
+    "review_items": {
+      "scope": "branch"
+    },
+    "role_permissions": {
+      "scope": "hotel"
+    },
+    "room_categories": {
+      "scope": "branch"
+    },
+    "room_licenses": {
+      "scope": "branch"
+    },
+    "rooms": {
+      "scope": "branch"
+    },
+    "service_definitions": {
+      "scope": "branch"
+    },
+    "staff_profiles": {
+      "scope": "hotel"
+    },
+    "staff_saved_views": {
+      "scope": "hotel"
+    },
+    "stay_acknowledgements": {
+      "scope": "branch"
+    },
+    "stay_extension_requests": {
+      "scope": "branch"
+    },
+    "stay_payment_exceptions": {
+      "scope": "branch"
+    },
+    "system_settings": {
+      "scope": "hotel"
+    },
+    "task_types": {
+      "scope": "branch"
+    },
+    "unanswered_questions": {
+      "scope": "branch"
+    },
+    "whatsapp_inbound_messages": {
+      "scope": "branch"
+    },
+    "whatsapp_outbox": {
+      "scope": "branch"
+    },
+    "platform_operators": {
+      "scope": "platform",
+      "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
+    },
+    "platform_events": {
+      "scope": "platform",
+      "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
+    },
+    "platform_support_grants": {
+      "scope": "platform",
+      "note": "Plan2.8 operator registry/audit/scoped support grants; never broad tenant access"
+    },
+    "finance_control_settings": {
+      "scope": "hotel"
+    },
+    "discount_approvals": {
+      "scope": "branch"
+    },
+    "finance_refund_approvals": {
+      "scope": "branch"
+    },
+    "backup_runs": {
+      "scope": "platform",
+      "note": "Explicit organization-scoped owner status through fn_backup_status only; no direct tenant table access"
+    },
+    "hotel_exit_archives": {
+      "scope": "hotel"
+    },
+    "hotel_exit_rows": {
+      "scope": "hotel"
+    },
+    "staff_permission_drafts": {
+      "scope": "hotel",
+      "note": "Owner-only draft grants, inactive until complete enforcement rollout."
+    },
+    "staff_page_access": {
+      "scope": "hotel",
+      "note": "Disabled by default individual page grants, no activation endpoint."
+    },
+    "permission_page_map": {
+      "scope": "platform"
+    }
   }
- }
 }

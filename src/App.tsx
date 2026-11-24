@@ -5,7 +5,6 @@ import { LoadingScreen } from "./components/ui";
 import { useAuth } from "./lib/auth";
 import GuestLayout from "./layouts/GuestLayout";
 import StaffLayout from "./layouts/StaffLayout";
-import AdminLayout from "./layouts/AdminLayout";
 import { RequireRole } from "./components/RequireRole";
 
 import Landing from "./pages/guest/Landing";
@@ -175,7 +174,7 @@ export default function App() {
       </Route>
 
       {/* Admin */}
-      <Route element={<ProtectedStaff><AdminLayout /></ProtectedStaff>}>
+      <Route element={<ProtectedStaff><StaffLayout /></ProtectedStaff>}>
         <Route element={<RequireRole />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/organization" element={<AdminOrganization />} />

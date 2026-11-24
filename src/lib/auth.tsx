@@ -1,3 +1,4 @@
+import { parseIndividualPermissions } from "./individualPermissions";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
@@ -107,7 +108,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadProfile(authUserId: string) {
@@ -132,13 +132,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   /** the matrix as the server applies it to this person; the approved defaults if the server cannot say */
-  async function loadPermissions(role: string): Promise<Permissions> {
-    try {
-      const { data, error } = await supabase.rpc("fn_my_permissions", {});
-      const d = data as { allowed?: string[]; full?: string[]; sees_money?: boolean } | null;
-      if (error || !d || !Array.isArray(d.allowed)) return defaultPermissions(role);
-      return { allowed: new Set(d.allowed), full: new Set(d.full ?? []), seesMoney: !!d.sees_money };
-    } catch { return defaultPermissions(role); }
+  async function loadPermissions(): Promise<Permissions> {
+    const { data, error } = await supabase.rpc("fn_my_permissions", {});
+    const d = data as { allowed?: string[]; full?: string[]; sees_money?: boolean; page_access?: unknown } | null;
+    if (error || !d || !Array.isArray(d.allowed) || !Array.isArray(d.full)) throw new Error("Permission verification failed");
+    return { pageAccess: parseIndividualPermissions(d.page_access), allowed: new Set(d.allowed), full: new Set(d.full), seesMoney: !!d.sees_money };
   }
 
   // decision 34: a session the owner or a manager ended (or an account deactivated) is refused by the server on its next
@@ -163,10 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // the owner may have changed the matrix: the screens follow on the next check (the server already does)
           const role = profileRoleRef.current;
           if (role) {
-            const next = await loadPermissions(role);
+            const next = await loadPermissions();
             setPermissions((cur) => (samePermissions(cur, next) ? cur : next));
           }
         }
+      } catch {
+        setIdentityError("تعذّر التحقق من صلاحيات الحساب. أعد المحاولة.");
+        setPermissions(defaultPermissions(null));
       } finally { checking = false; }
     };
     const onVisible = () => { if (document.visibilityState === "visible") void recheck(); };
@@ -249,7 +250,7 @@ export function authErrorAr(msg: string): string {
 }
 
 function samePermissions(a: Permissions, b: Permissions) {
-  return a.seesMoney === b.seesMoney && a.allowed.size === b.allowed.size && a.full.size === b.full.size
+  return JSON.stringify(a.pageAccess) === JSON.stringify(b.pageAccess) && a.seesMoney === b.seesMoney && a.allowed.size === b.allowed.size && a.full.size === b.full.size
     && [...a.allowed].every((c) => b.allowed.has(c)) && [...a.full].every((c) => b.full.has(c));
 }
 

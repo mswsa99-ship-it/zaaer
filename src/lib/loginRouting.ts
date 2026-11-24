@@ -20,6 +20,8 @@ export function loginDestination(input: {
   if (!input.profile.is_active || input.profile.role === "guest") return null;
   const allowed = (path: string) => { const page = pageFor(path); return !!page && pageAllowed(page, input.profile!.role, input.allows); };
   if (wanted && allowed(wanted)) return wanted;
+  const individual = input.allows.pageAccess;
+  if (individual?.mode === "individual" && individual.homePage && allowed(individual.homePage)) return individual.homePage;
   const preferred = homeFor(input.profile.role);
   return allowed(preferred) ? preferred : PAGES.find(p => !p.hidden && !p.path.includes(":") && allowed(p.path))?.path ?? null;
 }

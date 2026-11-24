@@ -1,3 +1,4 @@
+import { IndividualPermissionDraft } from "../../components/IndividualPermissionDraft";
 /**
  * «الموظفون» (decisions 34, 35): the list from fn_admin_staff_list; «تعديل موظف» for the owner only — name, phone, role
  * and branches, with a reason, before and after in the log (the email is the login identity: corrected only until the
@@ -27,6 +28,7 @@ export default function AdminStaff() {
   const touches = (s: StaffListRow) => isOwner || s.role !== "owner";
   const roleChoices = INVITE_ROLES;
   const { branches } = useBranch();
+  const [grantTarget, setGrantTarget] = useState<{id:string;name:string}|null>(null);
   const [staff, setStaff] = useState<StaffListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +142,7 @@ export default function AdminStaff() {
         </Card>
       )}
 
+      {isOwner && grantTarget && <IndividualPermissionDraft key={grantTarget.id} staffId={grantTarget.id} name={grantTarget.name} />}
       {staff.length === 0 ? (
         <EmptyState icon={<UserCog className="h-10 w-10" />} title="لا يوجد موظفون" />
       ) : (
@@ -148,6 +151,7 @@ export default function AdminStaff() {
             <Card key={s.id} className={`flex flex-col gap-2 ${s.is_active ? "" : "opacity-70"}`} data-testid="staff-card" data-email={s.email}>
               <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
+                {isOwner && s.role !== "owner" && <button type="button" className="btn-outline mb-2 text-xs" onClick={() => setGrantTarget({id:s.id,name:s.full_name})}>مسودة صلاحيات فردية</button>}
                 <p className="text-sm font-semibold text-ink-800">{s.full_name}{s.is_me && <span className="mr-1 text-xs font-normal text-ink-400">(أنا)</span>}</p>
                 <p className="truncate text-xs text-ink-400" dir="ltr">{s.email}</p>
                 {s.phone && <p className="text-xs text-ink-500" dir="ltr">{s.phone}</p>}

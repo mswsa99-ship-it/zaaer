@@ -29,7 +29,10 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "POST") return new Response("method", { status: 405 });
 
+  // size cap before reading: Meta's payloads are a few KB; refuse anything large without parsing it
+  if (Number(req.headers.get("content-length") ?? "0") > 262144) return new Response("too large", { status: 413 });
   const raw = await req.text();
+  if (raw.length > 262144) return new Response("too large", { status: 413 });
   let body: unknown;
   try { body = JSON.parse(raw); } catch { return new Response("bad json", { status: 400 }); }
   const phoneNumberId = String((body as any)?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id ?? ""); // deno-lint-ignore no-explicit-any

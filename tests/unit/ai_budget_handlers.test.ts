@@ -7,12 +7,12 @@ import { reserveApplies, mapReserveStatus, countedRequests } from "../../supabas
 import { aiBudgetAvailable } from "../../supabase/functions/_shared/reception_scope";
 
 // Execute the actual entry points with invented local database/provider responses, not a live backend.
-function handler(entry: string, failed: "session" | "daily" | null, mode = "chat") {
+function handler(entry: string, failed: "session" | "daily" | "page-denied" | "page-error" | null, mode = "chat") {
   let serve!: (request: Request) => Promise<Response>;
   const generate = vi.fn(async () => { throw new Error("paid provider must not be reached"); });
   const writes: string[] = [];
   const db = {
-    rpc: vi.fn(async (name: string) => ({ data: name === "fn_staff_id" ? "staff-a" : name === "fn_ai_ops_context" ? {} : null, error: null })),
+    rpc: vi.fn(async (name: string) => ({ data: name === "fn_user_page_can" ? failed !== "page-denied" && failed !== "page-error" : name === "fn_staff_id" ? "staff-a" : name === "fn_ai_ops_context" ? {} : null, error: name === "fn_user_page_can" && failed === "page-error" ? {message:"synthetic guard error"} : null })),
     from(table: string) {
       let head = false;
       let write = false;
@@ -92,4 +92,11 @@ describe("plan 5.1 actual handler budget-read failures", () => {
       expect(await response.json()).toHaveProperty("ai_status", "provider_error:http");
     });
   }
+});
+
+describe("ops page guard",()=>{
+ for(const denied of ["page-denied","page-error"] as const) it(`fails closed on ${denied} before model or writes`,async()=>{
+  const h=handler("ai-ops",denied);const response=await h.run();
+  expect(response.status).toBe(403);expect(h.generate).not.toHaveBeenCalled();expect(h.writes).toEqual([]);
+ });
 });

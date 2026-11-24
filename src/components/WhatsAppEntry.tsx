@@ -56,15 +56,15 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
         <Spinner className="mx-auto h-8 w-8" />
       ) : info?.active && info.wa_phone ? (
         <>
-          <h1 className={`${large ? "text-4xl" : "text-3xl"} font-bold text-ink-800`}>امسح الرمز للمحادثة عبر واتساب</h1>
-          <p className="mt-3 text-ink-500">الاستقبال كله في محادثة واحدة: حجوزاتك، تسجيل النزلاء، السداد، الوصول ورمز الدخول.</p>
-          <div className="mx-auto mt-8 w-fit rounded-3xl bg-white p-4 shadow-sm">
+          <h1 className={`${large ? "text-4xl" : "text-3xl"} font-bold text-rai-ink`}>امسح الرمز للمحادثة عبر واتساب</h1>
+          <p className="mt-3 text-rai-ink-muted">الاستقبال كله في محادثة واحدة: حجوزاتك، تسجيل النزلاء، السداد، الوصول ورمز الدخول.</p>
+          <div className="mx-auto mt-8 w-fit rounded-3xl qr-paper p-4 shadow-sm">
             {qr ? <img src={qr} alt="رمز QR لمحادثة واتساب الاستقبال" className={large ? "h-80 w-80" : "h-64 w-64"} data-testid="wa-qr" /> : <Spinner className="m-24 h-6 w-6" />}
           </div>
-          <a href={waLink(info.wa_phone)} target="_blank" rel="noopener noreferrer" className="btn-primary mx-auto mt-6 inline-flex w-full max-w-xs justify-center bg-[#25D366] text-[#0b141a] hover:bg-[#1ebe5b]" data-testid="wa-open">
+          <a href={waLink(info.wa_phone)} target="_blank" rel="noopener noreferrer" className="btn-primary mx-auto mt-6 inline-flex w-full max-w-xs justify-center bg-rai-action text-rai-action-ink hover:bg-rai-action-hover" data-testid="wa-open">
             <MessageCircle className="h-5 w-5" /> افتح واتساب
           </a>
-          <p className="mt-3 text-sm text-ink-400" dir="ltr">+{info.wa_phone}</p>
+          <p className="mt-3 text-sm text-rai-ink-muted" dir="ltr">+{info.wa_phone}</p>
           {isDemo && (
             <Link to="/whatsapp-demo" className="btn-outline mx-auto mt-4 inline-flex w-full max-w-xs justify-center text-sm" data-testid="wa-sim-link">
               <PlayCircle className="h-4 w-4" /> جرّب المحادثة هنا (محاكاة العرض)
@@ -73,18 +73,18 @@ export default function WhatsAppEntry({ large = false }: { large?: boolean }) {
         </>
       ) : (
         <>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600"><Clock className="h-7 w-7" /></div>
-          <h1 className="text-2xl font-bold text-ink-800" data-testid="wa-soon">خدمة الاستقبال عبر واتساب قريبًا</h1>
-          <p className="mt-3 text-ink-500">نجهّز رقم واتساب الاستقبال لهذا الفرع. للتواصل الآن اتصل بنا:</p>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rai-action text-rai-action-ink"><Clock className="h-7 w-7" /></div>
+          <h1 className="text-2xl font-bold text-rai-ink" data-testid="wa-soon">خدمة الاستقبال عبر واتساب قريبًا</h1>
+          <p className="mt-3 text-rai-ink-muted">نجهّز رقم واتساب الاستقبال لهذا الفرع. للتواصل الآن اتصل بنا:</p>
           {phone && (
-            <p className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-lg font-semibold text-ink-800 shadow-sm" dir="ltr">
-              <Phone className="h-5 w-5 text-brand-600" /> {phone}
+            <p className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-rai-shell px-5 py-3 text-lg font-semibold text-rai-ink shadow-sm" dir="ltr">
+              <Phone className="h-5 w-5 text-rai-action-ink" /> {phone}
             </p>
           )}
         </>
       )}
 
-      {name && <p className="mt-8 inline-flex items-center gap-1 text-xs text-ink-400"><MapPin className="h-3.5 w-3.5" /> {name}</p>}
+      {name && <p className="mt-8 inline-flex items-center gap-1 text-xs text-rai-ink-muted"><MapPin className="h-3.5 w-3.5" /> {name}</p>}
     </div>
   );
 }

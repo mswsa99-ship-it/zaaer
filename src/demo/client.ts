@@ -564,6 +564,8 @@ const guestCtx = {
   atomically: <V,>(fn: () => V): V => atomically(fn),
 };
 const rpcs: Record<string, (a: any) => any> = {
+  fn_authorize_export: () => undefined,
+  fn_owner_save_permission_draft: () => { throw new Error("Draft-only preview: no server persistence in demo"); },
   // 7.1: no synthetic success dates. Demo mirrors owner-only empty recorded state.
   fn_backup_status: () => { requireRole("owner"); return { last_success: null, last_run: null, last_restore_drill: null, failures_since_last_success: 0 }; },
   fn_staff_id: () => staffId(),

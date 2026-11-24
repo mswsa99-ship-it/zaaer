@@ -139,8 +139,9 @@ do $$ declare e text; begin
   perform ul_record('UL11 even the owner cannot select the table directly; only fn_room_licenses, fn_admin_set_room_license and the hotel-exit catalogue fn_hotel_exit_tables (2.12, it names every tenancy table but reads them only through the owner-run export) mention it',
     e like '%permission denied%'
     and not has_table_privilege('authenticated', 'public.room_licenses', 'select') and not has_table_privilege('anon', 'public.room_licenses', 'select')
-    and (select string_agg(p.proname, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosrc like '%room_licenses%' and p.proname !~ '^ul_')
-        = 'fn_admin_set_room_license,fn_hotel_exit_tables,fn_room_licenses',
+    and (select string_agg(p.proname, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosrc like '%room_licenses%' and p.proname !~ '^ul_' and p.proname !~ '__impl$')
+        = 'fn_admin_set_room_license,fn_hotel_exit_tables,fn_room_licenses'
+    and not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('fn_room_licenses__impl','fn_hotel_exit_tables__impl') and (has_function_privilege('authenticated',p.oid,'EXECUTE') or has_function_privilege('anon',p.oid,'EXECUTE'))),
     e);
 end $$;
 reset role;

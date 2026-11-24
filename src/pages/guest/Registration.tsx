@@ -53,45 +53,45 @@ export default function Registration() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 lg:py-12">
-      <Link to={`/booking/status/${token}`} className="mb-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-ink-500 hover:text-ink-700">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("حالة الحجز", "Booking status")}</Link>
+      <Link to={`/booking/status/${token}`} className="mb-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-rai-ink-muted hover:text-rai-ink">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("حالة الحجز", "Booking status")}</Link>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-ink-800">{t("تسجيل بيانات النزلاء", "Guests' details")}</h1>
-        <p className="mt-2 text-sm text-ink-500">{t("الحجز", "Booking")} <span dir="ltr">{r.internal_ref}</span> — {r.branch_name}</p>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-500">
-          <span className="rounded-lg bg-ink-50 px-3 py-1">{t("الوصول:", "Arrival:")} {r.check_in}</span>
-          <span className="rounded-lg bg-ink-50 px-3 py-1">{t("المغادرة:", "Departure:")} {r.check_out}</span>
-          <span className="rounded-lg bg-ink-50 px-3 py-1">{en ? `${countEn(r.adults + r.companions, "guest")}${children.length ? `, of whom ${countEn(children.length, "child", "children")} under 15` : ""}` : `${COUNT.guest(r.adults + r.companions)}${children.length ? `، منهم ${COUNT.child(children.length)} دون 15 سنة` : ""}`}</span>
+        <h1 className="text-2xl font-bold text-rai-ink">{t("تسجيل بيانات النزلاء", "Guests' details")}</h1>
+        <p className="mt-2 text-sm text-rai-ink-muted">{t("الحجز", "Booking")} <span dir="ltr">{r.internal_ref}</span> — {r.branch_name}</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-rai-ink-muted">
+          <span className="rounded-lg bg-rai-canvas px-3 py-1">{t("الوصول:", "Arrival:")} {r.check_in}</span>
+          <span className="rounded-lg bg-rai-canvas px-3 py-1">{t("المغادرة:", "Departure:")} {r.check_out}</span>
+          <span className="rounded-lg bg-rai-canvas px-3 py-1">{en ? `${countEn(r.adults + r.companions, "guest")}${children.length ? `, of whom ${countEn(children.length, "child", "children")} under 15` : ""}` : `${COUNT.guest(r.adults + r.companions)}${children.length ? `، منهم ${COUNT.child(children.length)} دون 15 سنة` : ""}`}</span>
         </div>
       </div>
 
       <Card className="mb-6">
         <div className="flex items-center justify-between">
-          <div><p className="text-sm font-medium text-ink-700">{t("تقدّم التسجيل", "Progress")}</p><p className="mt-1 text-xs text-ink-500">{en ? `${submittedCount} of ${countEn(target, "guest")} registered` : `سُجّلت بيانات ${submittedCount} من ${COUNT.guest(target)}`}</p></div>
-          <div className="text-2xl font-bold text-brand-600">{Math.round((submittedCount / Math.max(target, 1)) * 100)}%</div>
+          <div><p className="text-sm font-medium text-rai-ink">{t("تقدّم التسجيل", "Progress")}</p><p className="mt-1 text-xs text-rai-ink-muted">{en ? `${submittedCount} of ${countEn(target, "guest")} registered` : `سُجّلت بيانات ${submittedCount} من ${COUNT.guest(target)}`}</p></div>
+          <div className="text-2xl font-bold text-rai-action-ink">{Math.round((submittedCount / Math.max(target, 1)) * 100)}%</div>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${Math.min(100, (submittedCount / Math.max(target, 1)) * 100)}%` }} /></div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-rai-surface-sunken"><div className="h-full rounded-full bg-rai-action transition-all" style={{ width: `${Math.min(100, (submittedCount / Math.max(target, 1)) * 100)}%` }} /></div>
       </Card>
 
       <div className="space-y-3">
         {data.guests.map((g) => (
           <Card key={g.id} className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-500"><IdCard className="h-5 w-5" /></div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rai-surface-sunken text-rai-ink-muted"><IdCard className="h-5 w-5" /></div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-ink-800">{g.full_name || t("لم يُسجّل بعد", "Not registered yet")}</p>
-                  {g.is_primary && <span className="badge bg-brand-50 text-brand-700">{t("رئيسي", "Main guest")}</span>}
+                  <p className="text-sm font-semibold text-rai-ink">{g.full_name || t("لم يُسجّل بعد", "Not registered yet")}</p>
+                  {g.is_primary && <span className="badge bg-rai-action text-rai-action-ink">{t("رئيسي", "Main guest")}</span>}
                 </div>
-                <p className="mt-0.5 text-xs text-ink-500">
+                <p className="mt-0.5 text-xs text-rai-ink-muted">
                   {g.identity_type ? (en ? IDENTITY_TYPE_EN[g.identity_type] : IDENTITY_TYPE_LABELS[g.identity_type as IdentityType]) : "—"} · {g.identity_number_last4 ? <span dir="ltr">{maskId(g.identity_number_last4)}</span> : t("بدون رقم", "No number")} · {en ? VERIFICATION_EN[g.verification_status] ?? g.verification_status : GUEST_VERIFICATION_LABELS[g.verification_status as GuestVerificationStatus]}
                 </p>
               </div>
             </div>
             {g.verification_status === "verified" ? (
-              <span className="badge bg-success-500/10 text-success-600"><CheckCircle2 className="h-3 w-3" /> {t("معتمد", "Verified")}</span>
+              <span className="badge bg-rai-success-tint text-rai-success"><CheckCircle2 className="h-3 w-3" /> {t("معتمد", "Verified")}</span>
             ) : g.data_submitted ? (
-              <button onClick={() => setEditing({ guest: g, open: true })} className="btn-ghost min-h-[44px] text-xs text-brand-600">{t("تعديل", "Edit")}</button>
+              <button onClick={() => setEditing({ guest: g, open: true })} className="btn-ghost min-h-[44px] text-xs text-rai-action-ink">{t("تعديل", "Edit")}</button>
             ) : (
               <button onClick={() => setEditing({ guest: g, open: true })} className="btn-outline text-xs"><UserPlus className="h-3.5 w-3.5" /> {t("استكمال البيانات", "Add details")}</button>
             )}
@@ -100,7 +100,7 @@ export default function Registration() {
 
         {canAdd && (
           <Card className="flex flex-wrap items-center justify-between gap-2 border-dashed">
-            <p className="text-sm text-ink-500">{en ? `${countEn(target - data.guests.length, "guest")} (15 or older) still to add` : `${target - data.guests.length === 1 ? "بقي نزيل واحد لم تُضف بياناته" : `بقي ${COUNT.guest(target - data.guests.length)} لم تُضف بياناتهم`} (15 سنة فأكثر)`}</p>
+            <p className="text-sm text-rai-ink-muted">{en ? `${countEn(target - data.guests.length, "guest")} (15 or older) still to add` : `${target - data.guests.length === 1 ? "بقي نزيل واحد لم تُضف بياناته" : `بقي ${COUNT.guest(target - data.guests.length)} لم تُضف بياناتهم`} (15 سنة فأكثر)`}</p>
             <button onClick={() => setEditing({ guest: null, open: true })} className="btn-outline text-xs"><UserPlus className="h-3.5 w-3.5" /> {t("إضافة نزيل", "Add a guest")}</button>
           </Card>
         )}
@@ -109,14 +109,14 @@ export default function Registration() {
       </div>
 
       {allSubmitted ? (
-        <div className="mt-8 rounded-2xl bg-success-500/10 p-5 text-center">
-          <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-success-600" />
-          <p className="text-sm font-medium text-success-600">{t("تم إكمال تسجيل بيانات جميع النزلاء", "All guests' details are complete")}</p>
-          <p className="mt-1 text-xs text-ink-500">{t("سيطابق المشرف البيانات مع الوثائق الأصلية عند الوصول.", "The reception will check the details against the original documents when you arrive.")}</p>
+        <div className="mt-8 rounded-2xl bg-rai-success-tint p-5 text-center">
+          <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-rai-success" />
+          <p className="text-sm font-medium text-rai-success">{t("تم إكمال تسجيل بيانات جميع النزلاء", "All guests' details are complete")}</p>
+          <p className="mt-1 text-xs text-rai-ink-muted">{t("سيطابق المشرف البيانات مع الوثائق الأصلية عند الوصول.", "The reception will check the details against the original documents when you arrive.")}</p>
           <button onClick={() => navigate(`/booking/status/${token}`)} className="btn-primary mt-4">{t("متابعة حالة الحجز", "Go to booking status")}</button>
         </div>
       ) : (
-        <div className="mt-6 rounded-xl bg-warning-500/10 p-4 text-sm text-warning-700">
+        <div className="mt-6 rounded-xl bg-rai-warning-tint p-4 text-sm text-rai-warning">
           <div className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><p>{t("يجب إكمال بيانات جميع النزلاء (15 سنة فأكثر) قبل تسجيل الوصول. إدخال البيانات لا يعني مطابقة الهوية — سيراجعها المشرف مع الوثيقة الأصلية.", "Every guest aged 15 or older needs their details before check-in. Submitting them is not the ID check — the reception checks them against the original document.")}</p></div>
         </div>
       )}
@@ -148,17 +148,17 @@ function ChildrenCard({ token, ages, editable, onSaved }: { token: string; ages:
   return (
     <Card className="space-y-3" data-testid="children">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-500/10 text-accent-700"><Baby className="h-5 w-5" /></div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rai-spark-tint text-rai-spark-text"><Baby className="h-5 w-5" /></div>
         <div>
-          <p className="text-sm font-semibold text-ink-800">{t("أطفال دون 15 سنة", "Children under 15")}</p>
-          <p className="mt-0.5 text-xs leading-5 text-ink-500">{t("لا يُسجَّل الأطفال دون 15 سنة بوثيقة. اذكر أعمارهم هنا: يُحسبون في عدد نزلاء الحجز ويراهم المشرف، ويُعرَّف بهم عند الوصول.", "Children under 15 are not registered with a document. Give their ages here: they count among the booking's guests, the reception sees them, and they are introduced on arrival.")}</p>
+          <p className="text-sm font-semibold text-rai-ink">{t("أطفال دون 15 سنة", "Children under 15")}</p>
+          <p className="mt-0.5 text-xs leading-5 text-rai-ink-muted">{t("لا يُسجَّل الأطفال دون 15 سنة بوثيقة. اذكر أعمارهم هنا: يُحسبون في عدد نزلاء الحجز ويراهم المشرف، ويُعرَّف بهم عند الوصول.", "Children under 15 are not registered with a document. Give their ages here: they count among the booking's guests, the reception sees them, and they are introduced on arrival.")}</p>
         </div>
       </div>
       {list.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {list.map((a, i) => (
-            <li key={i} className="flex items-center gap-1 rounded-xl bg-ink-50 px-2 py-1">
-              <label className="text-xs text-ink-600" htmlFor={`child-${i}`}>{t(`الطفل ${i + 1}: العمر`, `Child ${i + 1}: age`)}</label>
+            <li key={i} className="flex items-center gap-1 rounded-xl bg-rai-canvas px-2 py-1">
+              <label className="text-xs text-rai-ink-muted" htmlFor={`child-${i}`}>{t(`الطفل ${i + 1}: العمر`, `Child ${i + 1}: age`)}</label>
               <input id={`child-${i}`} className="input w-16 py-1 text-center" dir="ltr" inputMode="numeric" maxLength={2} value={a} disabled={!editable}
                 onChange={(e) => setList(list.map((x, j) => (j === i ? e.target.value : x)))} />
               {editable && <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] p-1" aria-label={t(`حذف الطفل ${i + 1}`, `Remove child ${i + 1}`)} onClick={() => setList(list.filter((_, j) => j !== i))}><X className="h-4 w-4" /></button>}
@@ -167,7 +167,7 @@ function ChildrenCard({ token, ages, editable, onSaved }: { token: string; ages:
         </ul>
       )}
       {err && <ErrorBanner message={err} />}
-      {saved && !dirty && <p className="text-xs text-success-600" role="status">{t("حُفظت أعمار الأطفال.", "The children's ages are saved.")}</p>}
+      {saved && !dirty && <p className="text-xs text-rai-success" role="status">{t("حُفظت أعمار الأطفال.", "The children's ages are saved.")}</p>}
       {editable && (
         <div className="flex flex-wrap gap-2">
           {list.length < 10 && <button type="button" className="btn-outline text-xs" onClick={() => setList([...list, ""])}><Plus className="h-3.5 w-3.5" /> {t("إضافة طفل", "Add a child")}</button>}
@@ -307,7 +307,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
             <div className="flex gap-1 text-xs" role="radiogroup" onKeyDown={radioGroupKeys} aria-label={t("التقويم", "Calendar")}>
               {(["gregorian", "hijri"] as const).map((c) => (
                 <button key={c} type="button" role="radio" aria-checked={birthCalendar === c} tabIndex={birthCalendar === c ? 0 : -1} onClick={() => switchCalendar(c)}
-                  className={`min-h-[36px] rounded-lg px-3 ${birthCalendar === c ? "bg-brand-100 text-brand-700" : "text-ink-500"}`}>{c === "gregorian" ? t("ميلادي", "Gregorian") : t("هجري", "Hijri")}</button>
+                  className={`min-h-[36px] rounded-lg px-3 ${birthCalendar === c ? "bg-rai-action text-rai-action-ink" : "text-rai-ink-muted"}`}>{c === "gregorian" ? t("ميلادي", "Gregorian") : t("هجري", "Hijri")}</button>
               ))}
             </div>
           </div>
@@ -320,7 +320,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
               <input className="input" dir="ltr" inputMode="numeric" maxLength={4} placeholder={t("السنة", "Year")} value={hijri.y} onChange={(e) => setHijri({ ...hijri, y: e.target.value })} aria-label={t("السنة الهجرية", "Hijri year")} />
             </div>
           )}
-          {hijriErr ? <p className="mt-1 text-xs text-danger-600" role="alert">{hijriErr}</p> : otherCalendar && <p className="mt-1 text-xs text-ink-500">{otherCalendar}</p>}
+          {hijriErr ? <p className="mt-1 text-xs text-rai-danger" role="alert">{hijriErr}</p> : otherCalendar && <p className="mt-1 text-xs text-rai-ink-muted">{otherCalendar}</p>}
         </fieldset>
         <Field label={t("رقم الجوال (اختياري)", "Mobile number (optional)")} hint={isPrimary ? t("الرقم الذي حُجز به يبقى كما هو؛ لتغييره تواصل مع الاستقبال.", "The number the booking was made with stays as it is; to change it, contact the reception.") : undefined} error={phoneErr}>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder="05XXXXXXXX" />
@@ -328,28 +328,28 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
 
         {formError && <ErrorBanner message={formError} />}
 
-        <label className="flex items-start gap-2 text-xs text-ink-600">
+        <label className="flex items-start gap-2 text-xs text-rai-ink-muted">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4" />
           {en
-            ? <span>I confirm these details are correct, and I have read the <Link to="/privacy" target="_blank" className="text-brand-600 underline">privacy policy</Link> and the <Link to="/terms" target="_blank" className="text-brand-600 underline">terms of use</Link> (in Arabic).</span>
-            : <span>أُقر بصحة البيانات المُدخلة، واطلعت على <Link to="/privacy" target="_blank" className="text-brand-600 underline">سياسة الخصوصية</Link> و<Link to="/terms" target="_blank" className="text-brand-600 underline">شروط الاستخدام</Link>.</span>}
+            ? <span>I confirm these details are correct, and I have read the <Link to="/privacy" target="_blank" className="text-rai-action-ink underline">privacy policy</Link> and the <Link to="/terms" target="_blank" className="text-rai-action-ink underline">terms of use</Link> (in Arabic).</span>
+            : <span>أُقر بصحة البيانات المُدخلة، واطلعت على <Link to="/privacy" target="_blank" className="text-rai-action-ink underline">سياسة الخصوصية</Link> و<Link to="/terms" target="_blank" className="text-rai-action-ink underline">شروط الاستخدام</Link>.</span>}
         </label>
         {needsAck && (
-          <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-3" data-testid="summary-ack">
-            <button type="button" onClick={() => setAckOpen((v) => !v)} className="text-xs font-medium text-brand-700 underline-offset-2 hover:underline">{ackOpen ? t("إخفاء ملخص الإقامة", "Hide the stay summary") : t("عرض ملخص الإقامة (الحجز، الوحدة، المدة، السعر، المدفوع، التأمين، سياسات الفرع)", "Show the stay summary (booking, unit, dates, price, paid, deposit, property rules)")}</button>
-            {ackOpen && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-ink-600" dir={summary!.language === "en" ? "ltr" : "rtl"}>{summary!.text}</pre>}
-            <label className="mt-2 flex items-start gap-2 text-xs text-ink-600">
+          <div className="rounded-xl border border-rai-line bg-rai-action p-3" data-testid="summary-ack">
+            <button type="button" onClick={() => setAckOpen((v) => !v)} className="text-xs font-medium text-rai-action-ink underline-offset-2 hover:underline">{ackOpen ? t("إخفاء ملخص الإقامة", "Hide the stay summary") : t("عرض ملخص الإقامة (الحجز، الوحدة، المدة، السعر، المدفوع، التأمين، سياسات الفرع)", "Show the stay summary (booking, unit, dates, price, paid, deposit, property rules)")}</button>
+            {ackOpen && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-rai-ink-muted" dir={summary!.language === "en" ? "ltr" : "rtl"}>{summary!.text}</pre>}
+            <label className="mt-2 flex items-start gap-2 text-xs text-rai-ink-muted">
               <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 h-4 w-4" aria-label={t("أقرّ بملخص الإقامة", "I accept the stay summary")} />
               <span>{t("قرأت ملخص الإقامة وأقرّ به (يُحفظ نص الملخص ووقت الإقرار).", "I have read and accept the stay summary (its text and the time are kept).")}</span>
             </label>
           </div>
         )}
 
-        <div className="sticky bottom-0 -mx-5 bg-white px-5 pb-1 pt-2 sm:-mx-6 sm:px-6">
+        <div className="sticky bottom-0 -mx-5 bg-rai-shell px-5 pb-1 pt-2 sm:-mx-6 sm:px-6">
           <button type="submit" className="btn-primary w-full" disabled={saving}>{saving ? <Spinner /> : t("حفظ البيانات", "Save details")}</button>
         </div>
       </form>
-      <p className="mt-3 text-center text-xs text-ink-500">{t("يُشفَّر رقم الوثيقة على الخادم فور الحفظ ولا يُعرض كاملًا لأحد بعد ذلك.", "The document number is encrypted on the server when saved and is never shown in full again.")}</p>
+      <p className="mt-3 text-center text-xs text-rai-ink-muted">{t("يُشفَّر رقم الوثيقة على الخادم فور الحفظ ولا يُعرض كاملًا لأحد بعد ذلك.", "The document number is encrypted on the server when saved and is never shown in full again.")}</p>
     </Modal>
   );
 }

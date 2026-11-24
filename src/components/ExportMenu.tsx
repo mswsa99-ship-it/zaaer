@@ -1,3 +1,8 @@
+import { useLocation } from "react-router-dom";
+import { useAuth } from "../lib/auth";
+import { pageFor } from "../lib/nav";
+import { canonicalPermissionPage } from "../lib/permissionPageIds";
+import { supabase, isDemo } from "../lib/supabase";
 import { useEffect, useRef, useState } from "react";
 import { Download, Printer, ChevronDown } from "lucide-react";
 import { toArabicError } from "../lib/api";
@@ -19,6 +24,9 @@ export interface ExportSource {
  * «كل النتائج» (every page of the same filters) or «هذه الصفحة», and the file's first lines repeat the choice.
  */
 export function ExportMenu({ source, disabled, allOnly }: { source: ExportSource; disabled?: boolean; /** a report has no pages: export its whole result at once */ allOnly?: boolean }) {
+  const { pathname } = useLocation();
+  const { permissions } = useAuth();
+  const page = canonicalPermissionPage(pageFor(pathname)?.path ?? pathname);
   const [open, setOpen] = useState<null | "xlsx" | "print">(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -39,6 +47,8 @@ export function ExportMenu({ source, disabled, allOnly }: { source: ExportSource
   async function run(kind: "xlsx" | "print", scope: ExportScope) {
     setOpen(null); setMenuOpen(false); setError(null); setProgress(null); setBusy(`${kind}:${scope.kind}`);
     try {
+      if (permissions.pageAccess?.mode === "individual" && (permissions.pageAccess.pages[page]?.view !== true || permissions.pageAccess.pages[page]?.export !== true)) throw new Error("FORBIDDEN: export");
+      if (!isDemo) { const auth = await supabase.rpc("fn_authorize_export", { p_page: page }); if (auth.error) throw auth.error; }
       const table = await source.table(scope);
       // the statement counts what the file really holds (the set may have changed between the screen and the export)
       const n = table.count ?? table.rows.length;
@@ -51,14 +61,15 @@ export function ExportMenu({ source, disabled, allOnly }: { source: ExportSource
     } catch (e) { setError(toArabicError(e)); } finally { setBusy(null); setProgress(null); }
   }
 
-  const empty = disabled || source.total === 0;
+  const denied = permissions.pageAccess?.mode === "individual" && permissions.pageAccess.pages[page]?.export !== true;
+  const empty = disabled || source.total === 0 || denied;
   const pending = !!busy;
   // 6.9 (U8): one named «تصدير ▾» button; its menu names the two formats, then the scope (unless a report has only one)
   const toggle = () => { setMenuOpen((o) => !o); setOpen(null); };
   return (
     <div className="relative" ref={ref} data-testid="export-menu">
       <button type="button" onClick={toggle} disabled={empty || pending} className="btn-outline text-sm" data-testid="export-trigger" aria-haspopup="menu" aria-expanded={menuOpen}
-        title={empty ? "لا توجد صفوف للتصدير" : undefined}>
+        title={denied ? "لا تملك صلاحية التصدير لهذه الصفحة" : empty ? "لا توجد صفوف للتصدير" : undefined}>
         {pending ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />} تصدير <ChevronDown className="h-4 w-4" aria-hidden="true" />
       </button>
       {menuOpen && !open && (

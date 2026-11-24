@@ -51,6 +51,9 @@ export default {
         // its CSS variables (bg-rai-night, text-rai-ink-muted, border-rai-line-strong …) so a token edit
         // re-skins every consumer. Legacy scales above stay until the screens are rebuilt (phase 6).
         rai: {
+          canvas: "var(--paper)", shell: "var(--surface)", card: "var(--card)",
+          action: "var(--action-fill)", "action-hover": "var(--action-hover)", "action-ink": "var(--action-ink)",
+          field: "var(--field-fill)", "field-ink": "var(--field-ink)",
           paper: "var(--paper)",
           surface: "var(--surface)",
           "surface-sunken": "var(--surface-sunken)",

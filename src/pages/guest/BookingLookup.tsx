@@ -112,14 +112,14 @@ export default function BookingLookup() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-8 lg:py-12">
-      <Link to="/reception" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("رجوع", "Back")}</Link>
+      <Link to="/reception" className="mb-4 inline-flex items-center gap-1.5 text-sm text-rai-ink-muted hover:text-rai-ink-muted">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("رجوع", "Back")}</Link>
 
       <div className="mb-6 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-rai-action text-rai-action-ink">
           {step === "list" ? <CalendarDays className="h-6 w-6" /> : step === "code" ? <MessageCircle className="h-6 w-6" /> : <Smartphone className="h-6 w-6" />}
         </div>
-        <h1 className="text-2xl font-bold text-ink-800">{t("حجوزاتي", "My bookings")}</h1>
-        <p className="mt-2 text-sm text-ink-500">
+        <h1 className="text-2xl font-bold text-rai-ink">{t("حجوزاتي", "My bookings")}</h1>
+        <p className="mt-2 text-sm text-rai-ink-muted">
           {step === "phone" && t("رقم الجوال الذي حُجز به.", "Enter the mobile number you booked with.")}
           {step === "code" && notice}
           {step === "ref" && t("للتأكد أن الجوال لك: اكتب رقم أي حجز لديك (من رسالة التأكيد).", "To confirm the mobile is yours, enter the number of any booking you have (from the confirmation message).")}
@@ -144,8 +144,8 @@ export default function BookingLookup() {
             <input value={code} onChange={(e) => setCode(toLatin(e.target.value).replace(/\D/g, "").slice(0, 6))} placeholder="••••••" className="input text-center text-2xl tracking-[0.5em]" dir="ltr" inputMode="numeric" autoComplete="one-time-code" autoFocus aria-label={t("رمز التحقق", "Verification code")} />
             <button type="submit" className="btn-primary w-full" disabled={loading}>{loading ? <Spinner /> : t("عرض حجوزاتي", "Show my bookings")}</button>
             <div className="flex justify-between text-xs">
-              <button type="button" onClick={restart} className="text-ink-400 hover:text-ink-600">{t("تغيير الرقم", "Change number")}</button>
-              <button type="button" onClick={() => setStep("ref")} className="text-brand-600">{t("لم يصلني الرمز", "I did not get the code")}</button>
+              <button type="button" onClick={restart} className="text-rai-ink-muted hover:text-rai-ink-muted">{t("تغيير الرقم", "Change number")}</button>
+              <button type="button" onClick={() => setStep("ref")} className="text-rai-action-ink">{t("لم يصلني الرمز", "I did not get the code")}</button>
             </div>
           </form>
         </Card>
@@ -155,11 +155,11 @@ export default function BookingLookup() {
         <Card>
           <form onSubmit={submitRef} className="space-y-4">
             <div className="relative">
-              <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+              <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rai-ink-muted" />
               <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder={t("رقم الحجز (مثال: R-26A0008) أو رقم المنصة", "Booking number (e.g. R-26A0008) or the platform's number")} className="input text-center" dir="ltr" autoComplete="off" autoFocus aria-label={t("رقم الحجز", "Booking number")} />
             </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>{loading ? <Spinner /> : t("عرض حجوزاتي", "Show my bookings")}</button>
-            <button type="button" onClick={restart} className="w-full text-xs text-ink-400 hover:text-ink-600">{t("تغيير الرقم", "Change number")}</button>
+            <button type="button" onClick={restart} className="w-full text-xs text-rai-ink-muted hover:text-rai-ink-muted">{t("تغيير الرقم", "Change number")}</button>
           </form>
         </Card>
       )}
@@ -168,20 +168,20 @@ export default function BookingLookup() {
         <div className="space-y-3">
           {list.map((r) => (
             <button key={r.internal_ref} onClick={() => { let t: string | null = null; try { t = sessionStorage.getItem(SESSION_KEY); } catch { /* ignore */ } if (t) open(t, r.internal_ref); }} disabled={loading}
-              className="flex w-full items-center gap-3 rounded-2xl border border-ink-100 bg-white p-4 text-start shadow-sm transition hover:border-brand-200 hover:bg-brand-50/40">
+              className="flex w-full items-center gap-3 rounded-2xl border border-rai-line bg-rai-shell p-4 text-start shadow-sm transition hover:border-rai-line hover:bg-rai-action">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-ink-800">{r.category_name ?? r.branch_name ?? t("حجز", "Booking")}</span>
-                  <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700">{en ? STATUS_EN[r.status] ?? r.status : RESERVATION_STATUS_LABELS[r.status as ReservationStatus] ?? r.status}</span>
+                  <span className="font-semibold text-rai-ink">{r.category_name ?? r.branch_name ?? t("حجز", "Booking")}</span>
+                  <span className="rounded-full bg-rai-action px-2 py-0.5 text-xs text-rai-action-ink">{en ? STATUS_EN[r.status] ?? r.status : RESERVATION_STATUS_LABELS[r.status as ReservationStatus] ?? r.status}</span>
                 </div>
-                <p className="mt-1 text-sm text-ink-500" dir="ltr">{r.check_in} → {r.check_out}</p>
-                <p className="mt-0.5 text-xs text-ink-400">{en ? countEn(r.nights, "night") : COUNT.night(r.nights)}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span dir="ltr">{r.ref}</span></p>
+                <p className="mt-1 text-sm text-rai-ink-muted" dir="ltr">{r.check_in} → {r.check_out}</p>
+                <p className="mt-0.5 text-xs text-rai-ink-muted">{en ? countEn(r.nights, "night") : COUNT.night(r.nights)}{r.branch_name ? ` · ${r.branch_name}` : ""} · <span dir="ltr">{r.ref}</span></p>
               </div>
-              {en ? <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" /> : <ChevronLeft className="h-5 w-5 shrink-0 text-ink-400" />}
+              {en ? <ChevronRight className="h-5 w-5 shrink-0 text-rai-ink-muted" /> : <ChevronLeft className="h-5 w-5 shrink-0 text-rai-ink-muted" />}
             </button>
           ))}
           {list.length === 0 && <Link to="/booking/new" className="btn-primary w-full">{t("احجز الآن", "Book now")}</Link>}
-          <button onClick={restart} className="w-full py-2 text-xs text-ink-400 hover:text-ink-600">{t("خروج", "Sign out")}</button>
+          <button onClick={restart} className="w-full py-2 text-xs text-rai-ink-muted hover:text-rai-ink-muted">{t("خروج", "Sign out")}</button>
         </div>
       )}
     </div>

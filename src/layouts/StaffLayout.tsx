@@ -7,7 +7,7 @@ import { Outlet, NavLink, useNavigate, Link, useLocation, useNavigationType } fr
 import { useAuth } from "../lib/auth";
 import { ROLE_LABELS } from "../lib/types";
 import { cn } from "../lib/utils";
-import { staffMenu, hubTabs, pageFor } from "../lib/nav";
+import { unifiedMenu, hubTabs, pageFor } from "../lib/nav";
 import { LogOut, X, UserCog } from "lucide-react";
 import { BottomTabs, pickTabs } from "../components/BottomTabs";
 import { OpsCopilot } from "../components/OpsCopilot";
@@ -18,11 +18,11 @@ import { useJourneyAlerts } from "../lib/journeyAlerts";
 
 export default function StaffLayout() {
   const orgName = useOrganizationName();
-  const { profile, signOut, can, canFull } = useAuth();
-  const allows = { can, canFull };
+  const { profile, signOut, can, canFull, permissions } = useAuth();
+  const allows = { can, canFull, pageAccess: permissions.pageAccess };
   const navigate = useNavigate();
   // Links come from the role table in lib/nav.ts (the route guard uses the same table): a role never sees a link it cannot open.
-  const nav = staffMenu(profile?.role, allows).map((p) => ({ to: p.path, label: p.label, icon: p.icon, members: p.members }));   // 6.2: centres with tabs, at most 9 links
+  const nav = unifiedMenu(profile?.role, allows).map((p) => ({ to: p.path, label: p.label, icon: p.icon, members: p.members }));   // 6.2: centres with tabs, at most 9 links
   // «الرموز»: units whose key-box code must still change after a guest left — red on every page until changed
   const codeAlerts = useKeyboxAlerts();
   // «رحلة الضيف»: the open alerts of the journey (its clock runs from here every minute)
@@ -51,7 +51,7 @@ export default function StaffLayout() {
           <img src={roomaiAsset("roomai-mark.svg")} alt="RoomAI" className="h-9 w-9" />
           <div className="leading-tight">
             <p className="text-sm font-semibold text-ink-800">{PRODUCT_NAME}</p>
-            <p className="text-[11px] text-ink-400">{orgName || "مركز العمليات"}</p>
+            <p className="text-[11px] text-ink-400">{orgName || "مساحة العمل"}</p>
           </div>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4 scrollbar-thin">

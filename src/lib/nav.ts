@@ -1,3 +1,5 @@
+import { canonicalPermissionPage } from "./permissionPageIds";
+import type { IndividualPermissions } from "./individualPermissions";
 /**
  * Single source of truth for which staff role may open which page (GAP08).
  *
@@ -179,16 +181,19 @@ const countParams = (pattern: string) => pattern.split("/").filter((s) => s.star
 const includes = (list: readonly StaffRole[], role: string | null | undefined) => !!role && (list as readonly string[]).includes(role);
 
 /** What the matrix allows the person (useAuth().can / canFull); without it, the role alone decides. */
-export interface Allows { can: (code: string) => boolean; canFull: (code: string) => boolean }
+export interface Allows { pageAccess?: IndividualPermissions; can: (code: string) => boolean; canFull: (code: string) => boolean }
 
 /** May this person open this page? The owner: the role table; others: the matrix where the page names operations. */
 export function pageAllowed(page: NavPage, role: string | null | undefined, allows?: Allows): boolean {
   if (!role) return false;
+  if (role === "owner") return true;
+  if (allows?.pageAccess?.mode === "individual") return allows.pageAccess.pages[canonicalPermissionPage(page.path)]?.view === true;
   if (page.cap && allows && role !== "owner") return page.cap.some((c) => (page.capFull ? allows.canFull(c) : allows.can(c)));
   return includes(page.roles, role);
 }
 /** Does this person see the page's link? (a page can be reachable but not advertised: `navRoles`) */
 function pageListed(page: NavPage, role: string | null | undefined, allows?: Allows): boolean {
+  if (allows?.pageAccess?.mode === "individual") return pageAllowed(page, role, allows);
   if (page.cap && allows && role !== "owner") return pageAllowed(page, role, allows);
   return includes(page.navRoles ?? page.roles, role);
 }
@@ -252,4 +257,12 @@ export function homeFor(role: string | null | undefined): string {
   if (role === "finance") return "/admin/finance";
   if (role === "supervisor") return "/staff/rooms";
   return "/staff/dashboard";
+}
+
+/** One application menu. Existing route guards and capabilities remain authoritative. */
+export function unifiedMenu(role: string | null | undefined, allows?: Allows): Array<NavPage & { members?: string[] }> {
+ const primary = staffMenu(role, allows);
+ const paths = new Set(primary.map(p => p.path));
+ const admin = PAGES.filter(p => p.area === "admin" && !p.hidden && pageListed(p, role, allows) && !paths.has(p.path));
+ return [...primary, ...admin];
 }

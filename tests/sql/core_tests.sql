@@ -514,8 +514,15 @@ do $$ begin
   perform fn_admin_upsert_block('{"branch_id":"00000000-0000-0000-0000-000000000010","name":"x"}');
   perform t_record('A11 authenticated non-staff cannot administer', false, 'accepted');
 exception when others then perform t_record('A11 authenticated non-staff cannot administer', sqlerrm like '%FORBIDDEN%', sqlerrm); end $$;
-do $$ begin
-  perform t_record('A11b authenticated non-staff sees no reservations', (select count(*) from reservations) = 0 and fn_ops_daily_summary('00000000-0000-0000-0000-000000000010') is null);
+do $$ declare denied boolean := false; begin
+  begin
+    perform fn_ops_daily_summary('00000000-0000-0000-0000-000000000010');
+  exception when others then
+    if sqlerrm not like '%FORBIDDEN%' then raise; end if;
+    denied := true;
+  end;
+  perform t_record('A11b authenticated non-staff sees no reservations',
+    (select count(*) from reservations) = 0 and denied);
 end $$;
 -- deactivated staff
 select t_login('a0000000-0000-0000-0000-000000000007','off@test.local');

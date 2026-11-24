@@ -1,3 +1,4 @@
+import type { IndividualPermissions } from "./individualPermissions";
 /**
  * The permissions matrix the owner approved (decision 71) — a copy of fn_permission_catalog() in migration 0043, kept
  * identical by tests/unit/permissions.test.ts. The server decides every operation (fn_can); the screens and the demo
@@ -87,7 +88,7 @@ export const MONEY_PERMISSIONS: readonly string[] = ["voucher.receipt", "voucher
 export const permissionRow = (code: string) => PERMISSION_CATALOG.find((r) => r.code === code);
 
 /** What the person may do (decision 71): the server's fn_my_permissions(); the server decides every operation anyway. */
-export interface Permissions { allowed: ReadonlySet<string>; full: ReadonlySet<string>; seesMoney: boolean }
+export interface Permissions { pageAccess?: IndividualPermissions; allowed: ReadonlySet<string>; full: ReadonlySet<string>; seesMoney: boolean }
 
 /** The approved matrix for a role — used until the server has answered, or when it cannot (an older server). */
 export function defaultPermissions(role: string | null | undefined): Permissions {

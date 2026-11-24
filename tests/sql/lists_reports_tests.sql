@@ -634,7 +634,9 @@ select t_login_session('a0000000-0000-0000-0000-000000000002', 'sup@test.local',
 do $$ declare n int; no_id boolean; no_role boolean; total int; op text; again uuid; begin
   no_id := fn_staff_id() is null; no_role := fn_current_role() is null;
   select count(*) into n from reservations;
-  total := (fn_reservation_list('00000000-0000-0000-0000-000000000010', '{}'::jsonb, 1, 0)->>'total')::int;
+  -- The page guard now explicitly refuses revoked sessions, rather than
+  -- returning an empty page. No rows and no operation remain mandatory.
+  total := case when t_fails('select fn_reservation_list(''00000000-0000-0000-0000-000000000010'', ''{}''::jsonb, 1, 0)', 'FORBIDDEN%') = 'ok' then 0 else -1 end;
   op := t_fails(format('select fn_hk_create_task(%L::jsonb)', jsonb_build_object('room_id', '00000000-0000-0000-0000-000000000102', 'task_type_id', '00000000-0000-0000-0000-000000000420')), 'FORBIDDEN%');
   perform t_login_session('a0000000-0000-0000-0000-000000000002', 'sup@test.local', t_session_open('a0000000-0000-0000-0000-000000000002'));
   again := fn_staff_id();

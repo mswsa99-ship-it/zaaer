@@ -157,5 +157,5 @@ export const declaredPairs: DeclaredPair[] = [
 
 /** Measured non-text boundary exception. This is not a passing AA boundary claim. */
 export const knownContrastExceptions = [
-  { label: "تعبئة الحقول على surface (ليل)", ratio: 1.54, minimum: 3, note: "The selected night field fill is only 1.54:1 against the shell. Text contrast is separate. Borderless field identification is not claimed to pass SC 1.4.11." },
+  { label: "تعبئة الحقول على surface (ليل)", ratio: 1.54, minimum: 3, note: "The night fill is 1.54:1 against the shell. The subtle CSS field-border token is #274d57, a rounded 50% blend from field fill toward the V3 edge (1.047:1 against field fill). This owner-selected subtle edge does not claim SC 1.4.11 compliance." },
 ] as const;
