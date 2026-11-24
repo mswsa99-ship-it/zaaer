@@ -53,5 +53,7 @@ export default defineConfig({
     // Playwright WebKit is Safari-engine coverage, not a physical iPhone/Safari run.
     { name: "firefox", use: { ...devices["Desktop Firefox"] }, testMatch: crossBrowserScreens },
     { name: "webkit", use: { ...devices["Desktop Safari"] }, testMatch: crossBrowserScreens },
+    // Safari-engine run of the assistant-dock specs, with an end-of-test screenshot kept as pixel evidence (decision: dock qualification).
+    { name: "webkit-dock", use: { ...devices["Desktop Safari"], screenshot: "on" }, testMatch: /(assistant_dock|mobile_assistant_motion)\.spec\.ts/ },
   ],
 });
