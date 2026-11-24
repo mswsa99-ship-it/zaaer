@@ -6,7 +6,7 @@ This directory holds an operator CLI plus the SQL test suite. **Nothing here is 
 
 ## The procedure
 
-1. **Export** — `fn_hotel_exit_export(p_org)` copies every row of the hotel from all 106 tenancy tables (plus the registry row) into `hotel_exit_archives` + `hotel_exit_rows`, and writes a manifest: per-table row counts and SHA-256 hashes, an overall hash, and the list of file-bearing tables (`branch_media`, `branch_media_items`, `expense_attachments`, organization logo) whose bytes are inside the archive. The hotel keeps running after export; a later re-export supersedes the earlier one.
+1. **Export** — `fn_hotel_exit_export(p_org)` copies every row of the hotel from all current hotel-linked tables discovered by `fn_hotel_exit_tables()` (plus the registry row) into `hotel_exit_archives` + `hotel_exit_rows`, and writes a manifest: per-table row counts and SHA-256 hashes, an overall hash, and the list of file-bearing tables (`branch_media`, `branch_media_items`, `expense_attachments`, organization logo) whose bytes are inside the archive. The hotel keeps running after export; a later re-export supersedes the earlier one.
 2. **Verify** — `fn_hotel_exit_verify(p_archive)` re-counts and re-hashes the live tables against the manifest. Delete refuses a stale or corrupted export (`EXIT: export_stale`).
 3. **Suspend** — `fn_hotel_exit_suspend(p_org)` sets `platform_status = 'suspended'`, ends every staff session, and the guest site stops answering. Suspension requires a completed export.
 4. **Delete** — `fn_hotel_exit_delete(p_org, p_confirm_name, p_confirm_id)` requires suspension, the hotel's **exact Arabic name** and its **id** (never an email address), and a verified fresh export. It removes the hotel's rows children-first across the tenancy tables, removes the staff's auth accounts, and leaves the registry row as a scrubbed tombstone (`license_status = 'exited'`, `exited_at` set, name kept for the record, logo/license fields nulled). The archive stays behind as the restorable copy.
@@ -46,3 +46,26 @@ The CLI needs a database role allowed to set `request.jwt.claim.sub` — i.e. a 
 ## Proof
 
 `tests/hotel-exit/hotel_exit_tests.sql` (59 checks, wired into `tests/sql/run.sh` via the delivered `wiring.diff`) runs the whole lifecycle on a throwaway database with two hotels: every refusal, the order enforcement, the name/id confirmation, the stale/corrupt-export blocks, the other hotel's byte-for-byte isolation, the tombstone, and a full restore with per-table count and content matches.
+
+## Catalog changes (0107)
+
+Migration `20261125070000_0107_hotel_exit_catalog.sql` replaces the fixed table
+list with real public tables that have `organization_id`, ordered children-first
+using their foreign keys. It includes finance refund approvals and hotel-scoped
+backup runs. Global backup runs (`organization_id IS NULL`) do not belong to a
+hotel and stay untouched. Audit rows stay retained as before.
+
+An FK cycle refuses the operation rather than dropping constraints or skipping
+tables. Export again after the set of tables changes: verify/delete/restore reject
+an archive with a different table set (`EXIT: archive_catalog_outdated`). An
+already-deleted archive with an old catalog needs an operator-reviewed schema
+compatibility plan, not a forced restore. Restores preserve identity column
+values, including `backup_runs.seq`, with `OVERRIDING SYSTEM VALUE`.
+
+The independent all-tables completeness assertion remains in the SQL suite.
+Expected manifest totals use catalog count plus registry/support, not a frozen
+number. Run with nonempty refund and backup fixtures:
+
+```bash
+psql -X -v ON_ERROR_STOP=1 -f tests/hotel-exit/hotel_exit_tests.sql
+```

@@ -81,6 +81,17 @@ insert into auth.sessions(id, user_id, not_after) values
   ('b2000000-0000-0000-0000-00000000000a', 'a2000000-0000-0000-0000-00000000000a', now() + interval '1 hour');
 insert into auth.refresh_tokens(token, user_id, revoked, session_id) values
   ('xe-rt', 'a2000000-0000-0000-0000-00000000000a', false, 'b2000000-0000-0000-0000-00000000000a');
+-- Nonempty D/H fixtures catch missing tables, CASCADE count drift, and identity restore.
+insert into finance_refund_approvals(organization_id,branch_id,reservation_id,amount_halalas,reason,approved_by)
+values ('12000000-0000-0000-0000-00000000000a','12000000-0000-0000-0000-0000000000a1',
+        '12000000-0000-0000-0000-0000000000f1',1234,'xe-refund-synthetic','12000000-0000-0000-0000-0000000000aa');
+insert into backup_runs(organization_id,kind,reason,status,run_ref,verification) values
+ ('12000000-0000-0000-0000-00000000000a','restore_drill','drill','success','xe-backup-a','synthetic-local'),
+ ('12000000-0000-0000-0000-00000000000b','restore_drill','drill','success','xe-backup-b','synthetic-local'),
+ (null,'restore_drill','drill','success','xe-backup-global','synthetic-local');
+create temp table xe_dh_before as
+ select 'finance_refund_approvals'::text t,to_jsonb(r) row_data from finance_refund_approvals r where organization_id='12000000-0000-0000-0000-00000000000a'
+ union all select 'backup_runs',to_jsonb(r) from backup_runs r where organization_id='12000000-0000-0000-0000-00000000000a';
 select xe_snap('B0', '12000000-0000-0000-0000-00000000000b');
 
 -- ---------------------------------------------------------------- 1. shape and privileges
@@ -124,9 +135,11 @@ begin
         join fn_hotel_exit_tables() x2 on x2.table_name = pc.relname
        where fk.contype = 'f' and cn.nspname = 'public' and pn.nspname = 'public'
          and cc.relname <> pc.relname and x1.seq > x2.seq));
-  perform xe_record('X1.5 the audit log is listed and marked retained; the list is the 106 tenancy tables',
+  perform xe_record('X1.5 audit retained; unique names, unique dense ordering, D/H included',
     exists (select 1 from fn_hotel_exit_tables() where table_name = 'audit_events' and retained)
-    and (select count(*) from fn_hotel_exit_tables()) = 106);
+    and (select count(*) = count(distinct table_name) and count(*) = count(distinct seq)
+           and min(seq) = 1 and max(seq) = count(*) from fn_hotel_exit_tables())
+    and (select count(*) = 2 from fn_hotel_exit_tables() where table_name in ('finance_refund_approvals','backup_runs') and not retained));
 end $$;
 
 -- ---------------------------------------------------------------- 2. refusals before anything exists
@@ -182,8 +195,8 @@ set local role authenticated;
 do $$ declare r jsonb; begin
   r := fn_hotel_exit_export('12000000-0000-0000-0000-00000000000a');
   insert into xe_ctx values ('archive1', r->>'archive_id');
-  perform xe_record('X3.1 the owner exports: 108 manifest tables, rows copied, one overall hash',
-    (r->>'tables')::int = 108 and (r->>'rows')::bigint > 0 and length(r->>'sha256') = 64, r::text);
+  perform xe_record('X3.1 the owner exports: current catalog plus registry/support, rows, SHA-256',
+    (r->>'tables')::int = (select count(*) + 2 from fn_hotel_exit_tables()) and (r->>'rows')::bigint > 0 and length(r->>'sha256') = 64, r::text);
 end $$;
 reset role;
 select xe_login(null);
@@ -259,6 +272,12 @@ begin
   perform xe_record('X5.6 the other hotel''s site is untouched', fn_guest_site('hotel-stays-b') is not null, null);
 end $$;
 
+do $$ begin
+ perform xe_record('X5.DH suspension preserves populated D/H rows',
+   exists(select from backup_runs where run_ref='xe-backup-a')
+   and exists(select from finance_refund_approvals where reason='xe-refund-synthetic'));
+end $$;
+
 -- ---------------------------------------------------------------- 6. confirmation, and a failed/stale export blocks the deletion
 select xe_login('a2000000-0000-0000-0000-00000000000a');
 set local role authenticated;
@@ -306,6 +325,41 @@ end $$;
 reset role;
 select xe_login(null);
 
+-- Both newly integrated tables participate in stale-export protection.
+select xe_login('a2000000-0000-0000-0000-00000000000a');
+do $$ declare a uuid := (select v::uuid from xe_ctx where k='archive4'); r jsonb; begin
+ update finance_refund_approvals set reason='xe-refund-changed' where reason='xe-refund-synthetic';
+ r := fn_hotel_exit_verify(a);
+ perform xe_record('X6.D1 finance row drift fails verification',not (r->>'ok')::boolean and r->'mismatches' @> '[{"finance_refund_approvals":{}}]'::jsonb,r::text);
+ update finance_refund_approvals set reason='xe-refund-synthetic' where reason='xe-refund-changed';
+ update backup_runs set verification='xe-backup-changed' where run_ref='xe-backup-a';
+ r := fn_hotel_exit_verify(a);
+ perform xe_record('X6.H1 backup row drift fails verification',not (r->>'ok')::boolean and r->'mismatches' @> '[{"backup_runs":{}}]'::jsonb,r::text);
+ update backup_runs set verification='synthetic-local' where run_ref='xe-backup-a';
+end $$;
+
+-- An export cannot silently omit a table introduced after it was taken.
+create table xe_catalog_probe(id uuid primary key, organization_id uuid references organizations);
+select xe_login('a2000000-0000-0000-0000-00000000000a');
+set local role authenticated;
+do $$ declare e text; begin
+ begin perform fn_hotel_exit_delete('12000000-0000-0000-0000-00000000000a','فندق الخروج','12000000-0000-0000-0000-00000000000a'); exception when others then e := sqlerrm; end;
+ perform xe_record('X6.8 catalog growth rejects old export before deletion', e = 'EXIT: archive_catalog_outdated', e);
+end $$;
+reset role;
+drop table xe_catalog_probe;
+do $$ declare a uuid := (select v::uuid from xe_ctx where k='archive4'); m jsonb; e text; begin
+ select manifest into m from hotel_exit_archives where id=a;
+ update hotel_exit_archives set manifest=jsonb_set(manifest,'{tables,xe_removed_table}','{"rows":0,"sha256":"","columns":[]}'::jsonb) where id=a;
+ begin perform fn_hotel_exit_verify(a); exception when others then e:=sqlerrm; end;
+ perform xe_record('X6.9 obsolete archive table rejected', e = 'EXIT: archive_catalog_outdated', e);
+ update hotel_exit_archives set manifest=m where id=a;
+ perform xe_record('X6.10 failed delete leaves populated D/H rows',
+   exists(select from backup_runs where run_ref='xe-backup-a')
+   and exists(select from finance_refund_approvals where reason='xe-refund-synthetic'));
+end $$;
+select xe_login(null);
+
 -- ---------------------------------------------------------------- 7. the deliberate delete
 select xe_snap('B1_pre', '12000000-0000-0000-0000-00000000000b');
 select xe_login('a2000000-0000-0000-0000-00000000000a');
@@ -324,6 +378,9 @@ begin
     if n > 0 then leftover := leftover || t.table_name || ':' || n || ' '; end if;
   end loop;
   perform xe_record('X7.2 every tenancy table is empty of the hotel (the audit log is retained by design)', leftover = '', leftover);
+  perform xe_record('X7.DH explicit new-table deletion',
+    not exists(select from backup_runs where run_ref='xe-backup-a')
+    and not exists(select from finance_refund_approvals where reason='xe-refund-synthetic'));
   perform xe_record('X7.3 the registry row is a tombstone: exited, scrubbed, slug kept',
     (select exited_at is not null and license_status = 'exited' and name_en is null and guest_site_url is null
             and logo_bytes is null and guest_slug = 'hotel-exit-a' and exit_archive_id = a4
@@ -357,6 +414,17 @@ do $$ declare e text; begin
 end $$;
 reset role;
 select xe_login(null);
+
+-- A deleted archive is not silently restored into a different catalog either.
+create table xe_restore_probe(id uuid primary key, organization_id uuid references organizations);
+select xe_login('a2000000-0000-0000-0000-00000000000a');
+set local role authenticated;
+do $$ declare e text; begin
+ begin perform fn_hotel_exit_restore('12000000-0000-0000-0000-00000000000a',(select v::uuid from xe_ctx where k='archive4'),'12000000-0000-0000-0000-00000000000a'); exception when others then e:=sqlerrm; end;
+ perform xe_record('X8.3 catalog growth blocks restore of old archive',e = 'EXIT: archive_catalog_outdated',e);
+end $$;
+reset role;
+drop table xe_restore_probe;
 
 -- ---------------------------------------------------------------- 9. restore
 select xe_login('a2000000-0000-0000-0000-00000000000b');
@@ -427,6 +495,38 @@ do $$ declare e text; v jsonb; begin
 end $$;
 reset role;
 select xe_login(null);
+
+
+-- D/H row-for-row checks, including backup_runs.seq GENERATED ALWAYS AS IDENTITY.
+do $$ declare a uuid := (select v::uuid from xe_ctx where k='archive4'); begin
+ perform xe_record('X10.1 D/H rows exported with exact original JSON',
+   not exists(select t,row_data from xe_dh_before except select table_name,row_data from hotel_exit_rows where archive_id=a)
+   and (select count(*)=2 from hotel_exit_rows where archive_id=a and table_name in ('finance_refund_approvals','backup_runs')));
+ perform xe_record('X10.2 D/H original rows restored including identity sequence',
+   not exists(select t,row_data from xe_dh_before except
+     (select 'finance_refund_approvals',to_jsonb(r) from finance_refund_approvals r where organization_id='12000000-0000-0000-0000-00000000000a'
+      union all select 'backup_runs',to_jsonb(r) from backup_runs r where organization_id='12000000-0000-0000-0000-00000000000a')));
+ perform xe_record('X10.3 other-hotel and global backup rows survive',
+   exists(select from backup_runs where run_ref='xe-backup-b' and organization_id='12000000-0000-0000-0000-00000000000b')
+   and exists(select from backup_runs where run_ref='xe-backup-global' and organization_id is null));
+end $$;
+
+create table xe_cycle_a(id uuid primary key, organization_id uuid references organizations, b uuid);
+create table xe_cycle_b(id uuid primary key, organization_id uuid references organizations, a uuid references xe_cycle_a);
+alter table xe_cycle_a add foreign key(b) references xe_cycle_b;
+do $$ declare e text; begin
+ begin perform * from fn_hotel_exit_tables(); exception when others then e:=sqlerrm; end;
+ perform xe_record('X11.1 FK cycle fails closed',e like 'EXIT: catalog_fk_cycle%',e);
+end $$;
+drop table xe_cycle_b cascade;
+drop table xe_cycle_a;
+create table xe_future_table(id uuid primary key, organization_id uuid references organizations, staff_id uuid references staff_profiles);
+do $$ begin
+ perform xe_record('X11.2 future hotel table automatically included in correct FK order',
+ exists(select from fn_hotel_exit_tables() c join fn_hotel_exit_tables() p on p.table_name='staff_profiles'
+         where c.table_name='xe_future_table' and c.seq<p.seq));
+end $$;
+drop table xe_future_table;
 
 -- ---------------------------------------------------------------- result
 select case when ok then 'PASS' else 'FAIL' end as result, name, case when ok then null else detail end as detail
