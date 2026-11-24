@@ -13,7 +13,9 @@ const plus = (iso: string, n: number) => { const d = new Date(`${iso}T00:00:00Z`
 /** Fills the new-booking form up to the quote: type, dates, guest. */
 async function startBooking(page: Page, type: RegExp, from: string, to: string, guest = "ضيف الأسعار") {
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-  const typeSelect = page.locator("select").filter({ has: page.locator("option", { hasText: type }) }).first();
+  await expect(page.getByRole("heading", { name: "حجز جديد", exact: true })).toBeVisible();
+  const typeSelect = page.getByRole("combobox", { name: "نوع الوحدة", exact: true });
+  await expect(typeSelect.locator("option", { hasText: type }).first()).toBeAttached();
   const value = await typeSelect.locator("option", { hasText: type }).first().getAttribute("value");
   await typeSelect.selectOption(value!);
   await page.locator("input[type=date]").nth(0).fill(from);
