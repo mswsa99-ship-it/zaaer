@@ -9,7 +9,7 @@ import { useBranch } from "../../lib/branch";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { toArabicError } from "../../lib/api";
 import { SectionTitle, Card, LoadingScreen, Badge, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, ReasonInput, NumberInput } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, ReasonInput, NumberInput, useFormDraft, DraftRestoreBanner } from "../../components/forms";
 import { FileText, Plus, Pencil, Archive, RotateCcw, Bot } from "lucide-react";
 import { POLICY_TOPICS, policyTopic } from "../../lib/policies";
 
@@ -36,6 +36,9 @@ export default function AdminPolicies() {
   const all = q.data; const branchId = q.branchId; const load = q.reload;
   const live = all.filter((p) => !p.archived_at); const archived = all.filter((p) => p.archived_at);
   const rows = showArchived ? archived : live;
+  // 6.5 (U4): a new policy survives a reload; offered back, restored only on click
+  const polPristine = (d: Draft) => !d.title.trim() && !d.content_ar.trim() && !String(d.topic_label ?? "").trim();
+  const fd = useFormDraft<Draft>({ storageKey: !!draft && !draft.id && branchId ? `zaaer:policy-draft:${profile?.id}:${branchId}` : null, open: !!draft && !draft.id, value: draft ?? EMPTY, pristine: polPristine, apply: (v) => setDraft(v) });
 
   async function save() {
     if (!draft || !branchId || !profile) return;
@@ -45,7 +48,7 @@ export default function AdminPolicies() {
     must(draft.id
       ? await supabase.from("property_policies").update(payload).eq("id", draft.id)
       : await supabase.from("property_policies").insert({ ...payload, branch_id: branchId, organization_id: profile.organization_id }));
-    setDraft(null); load();
+    fd.clearSaved(); setDraft(null); load();
   }
 
   async function archive() {
@@ -115,6 +118,7 @@ export default function AdminPolicies() {
       <Modal open={!!draft} title={draft?.id ? "تعديل سياسة" : "سياسة جديدة"} onClose={() => setDraft(null)}>
         {draft && (
           <ActionForm onSubmit={save}>
+            {fd.saved && <DraftRestoreBanner label="مسودة سياسة لم تُحفظ" summary={fd.saved.title.trim() || null} onRestore={fd.restoreSaved} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الموضوع">
                 <select className="input" value={draft.topic} onChange={(e) => setDraft({ ...draft, topic: e.target.value })}>

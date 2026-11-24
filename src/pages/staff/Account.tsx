@@ -3,7 +3,7 @@
  * lib/password.ts; the other devices are signed out after it); a link e-mailed to their own address for changing it
  * from there; and signing out of every device. Every action is recorded in the owner's «security» log.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { KeyRound, Mail, LogOut, UserRound } from "lucide-react";
 import { useAuth, logAuthEvent } from "../../lib/auth";
@@ -20,32 +20,42 @@ export default function Account() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const actionLock = useRef(false);
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setNotice(null);
     const problem = newPasswordProblem(pw, confirm);
     if (problem) { setError(problem); return; }
-    setBusy("save");
-    const { error } = await updatePassword(pw);
-    setBusy(null);
-    if (error) { setError(error); return; }
-    setPw(""); setConfirm("");
-    setNotice("تغيّرت كلمة المرور، وخرجت أجهزتك الأخرى.");
+    if (actionLock.current) return;
+    actionLock.current = true; setBusy("save");
+    try {
+      const { error } = await updatePassword(pw);
+      if (error) { setError(error); return; }
+      setPw(""); setConfirm("");
+      setNotice("تغيّرت كلمة المرور، وخرجت أجهزتك الأخرى.");
+    } catch { setError("تعذّر تغيير كلمة المرور. حاول مرة أخرى."); }
+    finally { actionLock.current = false; setBusy(null); }
   }
 
   async function emailLink() {
-    if (!profile) return;
+    if (!profile || actionLock.current) return;
+    actionLock.current = true;
     setError(null); setNotice(null); setBusy("link");
-    const { error } = await requestPasswordReset(profile.email);
-    if (error) setError(error);
-    else { await logAuthEvent("security.password_link_sent"); setNotice(`أرسلنا إلى ${profile.email} رابطًا لتغيير كلمة المرور. افتحه واختر كلمتك الجديدة.`); }
-    setBusy(null);
+    try {
+      const { error } = await requestPasswordReset(profile.email);
+      if (error) setError(error);
+      else { await logAuthEvent("security.password_link_sent"); setNotice(`أرسلنا إلى ${profile.email} رابطًا لتغيير كلمة المرور. افتحه واختر كلمتك الجديدة.`); }
+    } catch { setError("تعذّر إرسال الرابط. حاول مرة أخرى."); }
+    finally { actionLock.current = false; setBusy(null); }
   }
 
   async function everywhere() {
-    setBusy("all");
-    await signOutEverywhere();
-    navigate("/staff/login", { replace: true });
+    if (actionLock.current) return;
+    actionLock.current = true; setBusy("all"); setError(null);
+    try { await signOutEverywhere(); navigate("/staff/login", { replace: true }); }
+    catch { setError("تعذّر تسجيل الخروج من الأجهزة. حاول مرة أخرى."); }
+    finally { actionLock.current = false; setBusy(null); }
   }
 
   return (

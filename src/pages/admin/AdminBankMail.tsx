@@ -15,6 +15,7 @@ import { SectionTitle, Card, Spinner, LoadErrorCard, Badge } from "../../compone
 import { Field, Modal, ActionForm, Submit, Toggle } from "../../components/forms";
 import { formatDateTime } from "../../lib/utils";
 import { setupText, setupProblem } from "../../lib/relaySetup";
+import { DisabledReason } from "../../components/DisabledReason";
 
 export const KIND_AR: Record<BankKind, string> = {
   deposit: "إيداع", transfer_in: "تحويل وارد", pos_settlement: "تسوية نقاط البيع", other_in: "دخل آخر",
@@ -76,7 +77,7 @@ export default function AdminBankMail() {
             <Badge className={stateTone} testId="bank-mail-state">{stateLabel}</Badge></div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-secondary min-h-[44px]" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> تعديل</button>
-            <button type="button" className="btn-secondary min-h-[44px]" disabled={busy || s.state === "not_configured"} onClick={pollNow}><RefreshCw className="h-4 w-4" /> اقرأ البريد الآن</button>
+            <button type="button" className="btn-secondary min-h-[44px]" disabled={busy || s.state === "not_configured"} aria-describedby={s.state === "not_configured" ? "dr-bankmail-poll" : undefined} onClick={pollNow}><RefreshCw className="h-4 w-4" /> اقرأ البريد الآن</button><DisabledReason id="dr-bankmail-poll" show={s.state === "not_configured"} text="اضبط قراءة البريد أولًا" />
           </div>
         </div>
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
@@ -99,7 +100,7 @@ export default function AdminBankMail() {
       <Card className="mb-4" data-testid="relay-app">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2"><Smartphone className="h-5 w-5 text-ink-500" /><span className="font-semibold">تطبيق الجوال</span></div>
-          <button type="button" className="btn-secondary min-h-[44px]" disabled={!!setupProblem(s)} onClick={() => setSetup(true)}>نص الإعداد</button>
+          <button type="button" className="btn-secondary min-h-[44px]" disabled={!!setupProblem(s)} aria-describedby={setupProblem(s) ? "dr-bankmail-setup" : undefined} onClick={() => setSetup(true)}>نص الإعداد</button>
         </div>
         <p className="mt-2 text-sm text-ink-600">ينقل رسالة البنك التي تحمل رقم أحد حسابات الفروع كما هي إلى البريد المخصّص، ولا يرسل غير ذلك، ويعيد المحاولة إذا انقطع الإنترنت.</p>
         <ol className="mt-2 list-decimal space-y-1 ps-5 text-sm text-ink-600">
@@ -109,7 +110,7 @@ export default function AdminBankMail() {
           <li>الصق نص الإعداد واكتب كلمة مرور تطبيق البريد (كلمة مرور التطبيقات، لا كلمة الحساب).</li>
           <li>للإشعارات: يُقبل التطبيق باسم حزمته (مثل com.…). إن ظهر اسمه في التطبيق تحت «لم تُسمح» فأضفه إلى «المرسلون المسموحون» هنا ثم انسخ نص الإعداد من جديد.</li>
         </ol>
-        {setupProblem(s) && <p className="mt-2 text-sm text-warning-700">{setupProblem(s) === "mailbox" ? "حدّد البريد المخصّص أولًا." : "حدّد قاعدة رقم الحساب لفرع واحد على الأقل أولًا."}</p>}
+        {setupProblem(s) && <p id="dr-bankmail-setup" className="mt-2 text-sm text-warning-700">{setupProblem(s) === "mailbox" ? "حدّد البريد المخصّص أولًا." : "حدّد قاعدة رقم الحساب لفرع واحد على الأقل أولًا."}</p>}
         <a href="https://github.com/mswsa99-ship-it/zaaer/actions/workflows/android.yml" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-brand-700 underline">ملف التثبيت (APK): آخر تشغيل ناجح في GitHub ← «fivehours-relay-apk»</a>
       </Card>
 

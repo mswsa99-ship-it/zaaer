@@ -2,6 +2,10 @@
 
 Base: `1325919`. Scope: source inventory plus local demo-browser tests. No production deployment, database, account, or outbound communication was used. This is a gap register, not an acceptance certificate. All five item-level acceptance cells remain **partial / not accepted live**.
 
+## Current supplement, 2026-11-24
+
+The tables below preserve the original worker inventory and its then-open gaps, not the final candidate state. Later implemented/tested supplements: user/org-scoped new category/service/branch drafts; version-gated edit drafts for services/categories/units (licence excluded); user/org/branch scoping of existing expense/reservation drafts; synchronous Account/AI/inventory/rule save guards; report subsection retry. See new-release-coverage.md for exact bounded counts and remaining limitations. Real Auth expiry, server concurrent-version changes, other long forms and global no-loss acceptance remain open. Staff registry metadata semantics were corrected separately in04023e1. Do not count an older gap here as evidence that its supplement is absent, or infer global acceptance from a completed family.
+
 ## What changed
 
 | Location | Change | Evidence | Still open |
@@ -25,6 +29,7 @@ A new draft is an opt-in convenience, not a silent server save. Data stays in th
 | Forms | Current evidence / next step |
 | --- | --- |
 | New category, service, branch | Implemented and tested as above. Editing existing records deliberately not persisted by this hook, so global no-loss acceptance is not met. |
+| Edit-record drafts (`useEditDraft`): service, room category, unit | Implemented locally: stored values only, tied to the record's version (a moved version drops the edit), restored on a click, cleared on save, licence number never stored. Tests: tests/e2e/edit-record-drafts.spec.ts. Still open: branch, knowledge answer, policy (no version field), cash accounts, products, structure, staff, rates, and the settings editors. Not a global no-loss claim. |
 | Expenses | Existing session draft; existing `k_draft` regression passes. Not a new implementation in this series. |
 | StaffReservationNew | Existing session draft by branch. Source inventory only here; wizard disabled reason tested. Stay-cycle ownership collision, no edits. |
 | AdminRooms, AdminKnowledge, AdminPolicies, AdminStructure, AdminCashAccounts, AdminProducts | Long/new/edit forms use component state with no useFormDraft integration found. Draft proposals, not fixed. |
@@ -191,3 +196,10 @@ The following per-file ledger records literal form, ActionForm, disabled, list-s
 | `src/pages/staff/StaffRooms.tsx` | - | - | - | 95, 96, 148 | - |
 | `src/pages/staff/StayFollowups.tsx` | - | - | - | 20, 21 | - |
 | `src/pages/staff/Tickets.tsx` | 210 | - | 192, 220, 242 | 151, 152, 166, 228 | - |
+
+### Edit-draft follow-up, local synthetic evidence
+- Service, category and unit edit drafts are user + organisation + record scoped and version gated. New branch/category/service drafts now include the user and organisation too (branch where relevant). Old one-id unscoped keys are discarded, not migrated.
+- Manual sign-out removes definition edit/new drafts plus expense/new-reservation drafts. This does not add retention. Expired-session simulation: delete only the demo session, keep draft keys, reload and log in as a different role. Service/category show no prior-user offer; manager cannot create branches, restriction retained.
+- Real auth expiry/revocation callbacks are not tested. Another login by the same user can still recover their own sessionStorage draft unless they explicitly signed out. Closing the tab ends storage.
+- Existing expense draft stores account/category, amount/date, payee, description and reference per branch. Existing reservation draft stores the form including guest name/phone, nationality, notes and external reference per branch. Both remain unscoped to user in their own files; no new retention added here. Integrator must review their privacy/lifecycle separately.
+- Stale test now correlates the same record name, proves unchanged-version offer, changes envelope version, then proves no offer and deletion for that same record. This tests version mismatch handling, not a real backend update.

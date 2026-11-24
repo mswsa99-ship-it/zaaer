@@ -1,0 +1,7 @@
+# Individual notification access closed, local0116
+
+User reply18:44:16 to main18:41notificationproposal, original runtimeconversationcontext: execute repairs. Scope individualpermissionusers cannot directlyread/update notifications untilpagepermissionmapped, ownerunaffected. This source evidence was inspected directly, not inferred from candidatefilecomment. No productionexecutionauthorityexpanded.
+
+0116preserves hotel/branch/nullvisibility predicates and adds individualmodeclosure with explicitownerexception toSELECT/UPDATEUSING/WITHCHECK. Firstcandidate omittedownerexception and failed8checks for ownerwithindividualgrantrow; fixed beforecommit. Legacyandownerremainasbefore, no notificationproducerchanges, no newpagechoice. Definerwriters retainlocalpostgresbypassbehavior.
+
+PG16RED64mismatches; GREEN162checks0fail:18staff x3states x(read,foreignzero,realcontentchangingUPDATE). Synthetic4branchnotifications, allprobeupdates nestedrollback. Existingcontentnotpersisted. SELECTgate-removalmutantfails32checks; update-onlygate removalnot independentlysensitivebecauseSELECTgatealsofiltersUPDATE, a defense-in-depthlimitation. Sourceassertions coverbothpredicates but no separate independentmutantclaim. Regressionpagegates180/guest116pass. NEWiso_candidate_notif1846allmigrationboundedbranch79/guest116/44units+engine/publicoraclepass. No liveflagchange, complete2.11P0stillINCOMPLETE.

@@ -151,10 +151,16 @@ reset role;
 do $$ declare m text; begin
   select string_agg(tablename||'.'||policyname,', ') into m from pg_policies where schemaname='public' and cmd='ALL' and tablename in ('booking_sources','inventory_periods','property_policies','release_rules');
   perform t_record('PG27 no FOR ALL policy left on the four tables whose old policy answered reads', m is null, coalesce(m,'none'));
-  select string_agg(tablename||'.'||policyname,', ') into m from pg_policies where schemaname='public' and 'authenticated'=any(roles::text[]) and cmd='SELECT'
+  select string_agg(tablename||'.'||policyname,', ') into m from pg_policies where schemaname='public' and 'authenticated'=any(roles::text[]) and cmd='SELECT' and permissive='PERMISSIVE'
     and tablename in ('access_delivery_events','ai_guardrail_events','ai_settings','ai_tool_executions','ai_usage_daily','audit_events','bank_parse_rules','blocks','booking_sources','cash_accounts','checkout_inspections','conversation_messages','conversations','expense_categories','facilities','financial_vouchers','floors','housekeeping_tasks','human_handoff_tickets','inventory_periods','keyboxes','maintenance_tickets','platform_payouts','pos_settlements','property_policies','release_rules','released_slots','reservation_guests','reservations','room_categories','rooms','service_definitions','staff_profiles','task_types')
     and qual not like '%fn_page_read_%';
-  perform t_record('PG28 every authenticated SELECT policy on the 34 gated tables calls the page check', m is null, coalesce(m,'none'));
+  perform t_record('PG28 every permissive authenticated SELECT policy on the 34 gated tables calls the page check', m is null, coalesce(m,'none'));
+  perform t_record('PG28b four exact restrictive branch read boundaries only narrow grants',
+    (select count(*) from pg_policies where schemaname='public' and permissive='RESTRICTIVE' and cmd='SELECT'
+      and roles::text[]=array['authenticated'] and (tablename,policyname) in (
+        ('ai_guardrail_events','ai_guard_branch_read_boundary'),('ai_tool_executions','ai_tool_branch_read_boundary'),
+        ('branch_memberships','branch_membership_read_boundary'),('product_branches','product_branch_read_boundary'))
+      and qual like '%organization_id%fn_user_org_id%branch_id%fn_user_branch_ids%')=4);
   perform t_record('PG29 helpers are not executable by anon', not has_function_privilege('anon','fn_page_read_gate(text[])','execute') and not has_function_privilege('anon','fn_page_write_gate(text[],text)','execute'));
 end $$;
 -- every page name used by 0110 is in the page catalog (a typo would silently fail closed)

@@ -54,17 +54,19 @@ test.describe("work lists and the units board (correction batch 4)", () => {
     await expect.poll(async () => page.evaluate(() => [...document.querySelectorAll("iframe")].map((f) => f.contentDocument?.body?.innerText ?? "").join("|"))).toContain("لا غير");
   });
 
-  test("LW04 on a phone the owner opens the administration menu and reaches every group, «تفريغ البيانات» included", async ({ page, loginAs, go }) => {
+  test("LW04 on a phone the owner opens «المزيد» → «الإدارة» and reaches every group, «تفريغ البيانات» included (listed only, never run)", async ({ page, loginAs, go }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await loginAs("owner");
     await go("/admin/dashboard");
-    await page.getByTestId("admin-menu-button").click();
-    const drawer = page.getByTestId("admin-menu-drawer");
+    await page.getByTestId("bottom-tabs-more").click();
+    const drawer = page.getByTestId("staff-menu-drawer");
     await expect(drawer).toBeVisible();
-    await expect(drawer).toContainText("الحوكمة");
-    await drawer.getByRole("link", { name: "تفريغ البيانات" }).click();
+    const admin = drawer.locator("#drawer-admin");   // the «الإدارة» entry holds the groups
+    for (const group of ["نظرة عامة", "المنشآت", "العمليات", "الإدارة", "التكاملات", "الحوكمة"]) await expect(admin.getByRole("button", { name: group, exact: true })).toBeVisible();
+    await admin.getByRole("button", { name: "الحوكمة", exact: true }).click();
+    await admin.getByRole("link", { name: "تفريغ البيانات" }).click();
     await expect(page).toHaveURL(/#\/admin\/data-purge/);
-    await expect(drawer).toBeHidden();
+    await expect(drawer).toBeHidden();   // opening the page only; the purge itself is not run
   });
 });
 

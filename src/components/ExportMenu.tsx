@@ -8,6 +8,7 @@ import { Download, Printer, ChevronDown } from "lucide-react";
 import { toArabicError } from "../lib/api";
 import { buildPrintDocumentAsync, downloadXlsx, printDocument, scopeText, type ExportScope, type ExportStatement, type ExportTable } from "../lib/exports";
 import { Spinner } from "./ui";
+import { DisabledReason } from "./DisabledReason";
 
 export interface ExportSource {
   /** the file's statement for a scope (title, branch, period, filters in words, who) */
@@ -69,9 +70,10 @@ export function ExportMenu({ source, disabled, allOnly }: { source: ExportSource
   return (
     <div className="relative" ref={ref} data-testid="export-menu">
       <button type="button" onClick={toggle} disabled={empty || pending} className="btn-outline text-sm" data-testid="export-trigger" aria-haspopup="menu" aria-expanded={menuOpen}
-        title={denied ? "لا تملك صلاحية التصدير لهذه الصفحة" : empty ? "لا توجد صفوف للتصدير" : undefined}>
+        aria-describedby={empty ? "export-disabled-reason" : undefined}>
         {pending ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />} تصدير <ChevronDown className="h-4 w-4" aria-hidden="true" />
       </button>
+      {empty && !pending && <DisabledReason id="export-disabled-reason" show text={denied ? "لا تملك صلاحية التصدير لهذه الصفحة" : "التصدير متاح عند وجود صفوف"} />}
       {menuOpen && !open && (
         <div role="menu" aria-label="تصدير" className="absolute left-0 z-20 mt-1 w-64 rounded-xl border border-ink-100 bg-white p-1 text-sm shadow-lg" data-testid="export-format-menu">
           <button role="menuitem" type="button" onClick={() => { if (allOnly) { setMenuOpen(false); run("xlsx", scopes[0]); } else pick("xlsx"); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-right hover:bg-ink-50" data-testid="export-xlsx" aria-haspopup={allOnly ? undefined : "menu"} aria-expanded={allOnly ? undefined : open === "xlsx"}>

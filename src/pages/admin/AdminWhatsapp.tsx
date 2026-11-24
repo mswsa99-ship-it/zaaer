@@ -6,6 +6,7 @@ import { isDemo } from "../../lib/supabase";
 import { SectionTitle, LoadingScreen, Card, Badge, Spinner, ErrorBanner } from "../../components/ui";
 import { formatDateTime, COUNT } from "../../lib/utils";
 import { latinDigits } from "../../lib/validation";
+import { DisabledReason } from "../../components/DisabledReason";
 
 /**
  * WhatsApp per branch (owner): each branch has its own WhatsApp number, answered one of two ways —
@@ -99,7 +100,7 @@ function BridgeSecurity({ branchId, keyTag }: { branchId: string; keyTag: string
         <span className="mt-1 block text-xs text-ink-500">إذا بدأت في ساعة واحدة محادثات واتساب جديدة أكثر من هذا العدد يظهر لك بند في «المراجعة».</span>
         <div className="mt-2 flex gap-2">
           <input className="input w-28" dir="ltr" inputMode="numeric" value={n} onChange={(e) => setN(e.target.value)} aria-label="عدد المحادثات الجديدة في الساعة" />
-          <button type="button" className="btn-outline text-xs" disabled={saving || latinDigits(n) === String(sec.alert_new_contacts_per_hour)} onClick={save}>{saving ? <Spinner /> : "حفظ"}</button>
+          <button type="button" className="btn-outline text-xs" disabled={saving || latinDigits(n) === String(sec.alert_new_contacts_per_hour)} aria-describedby={latinDigits(n) === String(sec.alert_new_contacts_per_hour) ? "dr-adminwhatsapp-4" : undefined} title={latinDigits(n) === String(sec.alert_new_contacts_per_hour) ? "لا يوجد تغيير للحفظ" : undefined} onClick={save}>{saving ? <Spinner /> : "حفظ"}</button><DisabledReason id="dr-adminwhatsapp-4" show={latinDigits(n) === String(sec.alert_new_contacts_per_hour)} text="لا يوجد تغيير للحفظ" />
         </div>
         {msg && <span className={`mt-1 block text-xs ${msg.ok ? "text-success-600" : "text-danger-600"}`}>{msg.text}</span>}
       </label>
@@ -136,7 +137,7 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block min-w-0"><span className="label">رقم واتساب الفرع (يراه النزلاء في رمز QR)</span>
           <div className="flex gap-2"><input className="input" dir="ltr" placeholder="05xxxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <button type="button" className="btn-outline shrink-0" disabled={!!busy || phone === (row.display_phone ?? "")} onClick={() => run("phone", () => whatsappApi.save(row.branch_id, { display_phone: phone }), "تم حفظ الرقم.")}>{busy === "phone" ? <Spinner /> : "حفظ"}</button></div>
+            <button type="button" className="btn-outline shrink-0" disabled={!!busy || phone === (row.display_phone ?? "")} aria-describedby={phone === (row.display_phone ?? "") ? "dr-adminwhatsapp-3" : undefined} title={phone === (row.display_phone ?? "") ? "لا يوجد تغيير للحفظ" : undefined} onClick={() => run("phone", () => whatsappApi.save(row.branch_id, { display_phone: phone }), "تم حفظ الرقم.")}>{busy === "phone" ? <Spinner /> : "حفظ"}</button><DisabledReason id="dr-adminwhatsapp-3" show={phone === (row.display_phone ?? "")} text="لا يوجد تغيير للحفظ" /></div>
         </label>
         <div className="min-w-0">
           <span className="label">مفتاح ربط كمبيوتر الاستقبال</span>
@@ -149,10 +150,11 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
             </div>
           )}
           {!row.has_bridge_key && (
-            <button type="button" className="btn-primary w-full justify-center" disabled={!!busy || !row.display_phone} onClick={createKey} title={row.display_phone ? "" : "احفظ رقم الفرع أولًا"}>
+            <button type="button" className="btn-primary w-full justify-center" disabled={!!busy || !row.display_phone} onClick={createKey} aria-describedby={row.display_phone ? undefined : "dr-whatsapp-key"}>
               {busy === "key" ? <Spinner /> : <><KeyRound className="h-4 w-4" /> إنشاء مفتاح الربط وتنزيل ملف الإعداد</>}
             </button>
           )}
+          {!row.has_bridge_key && <DisabledReason id="dr-whatsapp-key" show={!row.display_phone} text="احفظ رقم الفرع أولًا" />}
           {confirmKey && (
             <div className="space-y-2 rounded-xl border border-warning-500/30 bg-warning-500/5 p-3 text-xs text-ink-600">
               <p>{confirmKey === "new" ? "المفتاح الجديد يوقف البرنامج الحالي حتى تضع ملف الإعداد الجديد في مجلده." : "إلغاء الربط يوقف الرد عبر كمبيوتر الاستقبال ويُخفي رمز QR حتى تنشئ مفتاحًا جديدًا."}</p>
@@ -343,7 +345,7 @@ function BranchChannel({ row, live, onSaved, flash, setFlash }: { row: WaChannel
             ? <BridgePanel row={row} live={live} busy={busy} run={run} newKey={flash.config ?? null} setNewKey={(v) => setFlash((x) => ({ ...x, config: v }))} />
             : <CloudPanel row={row} busy={busy} run={run} onChecked={setCheck} />}
           <div className="flex flex-wrap items-center gap-2 border-t border-ink-50 pt-3">
-            <button type="button" className={row.enabled ? "btn-outline" : "btn-accent"} onClick={toggle} disabled={!!busy || (!row.enabled && row.status === "not_configured")}>{busy === "toggle" ? <Spinner /> : <><Power className="h-4 w-4" /> {row.enabled ? "إيقاف" : "تفعيل للنزلاء"}</>}</button>
+            <button type="button" className={row.enabled ? "btn-outline" : "btn-accent"} onClick={toggle} disabled={!!busy || (!row.enabled && row.status === "not_configured")} aria-describedby={!row.enabled && row.status === "not_configured" ? "dr-adminwhatsapp-2" : undefined} title={!row.enabled && row.status === "not_configured" ? "أكمل إعداد الربط أولًا قبل التفعيل" : undefined}>{busy === "toggle" ? <Spinner /> : <><Power className="h-4 w-4" /> {row.enabled ? "إيقاف" : "تفعيل للنزلاء"}</>}</button><DisabledReason id="dr-adminwhatsapp-2" show={!row.enabled && row.status === "not_configured"} text="أكمل إعداد الربط أولًا قبل التفعيل" />
             <span className="text-[11px] text-ink-400">{row.enabled ? "رمز QR لهذا الفرع ظاهر في الموقع." : "عند التفعيل يظهر رمز QR لهذا الفرع في الموقع."}</span>
             {row.mode === "cloud_api" && row.last_checked_at && <span className="text-[11px] text-ink-400">· آخر فحص: {formatDateTime(row.last_checked_at)}</span>}
           </div>

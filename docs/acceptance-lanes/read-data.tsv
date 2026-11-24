@@ -1,0 +1,41 @@
+sig	final_class	anon	authenticated	transitive_writes	dynamic_sql_in_closure	outbound_table_hits
+fn_admin_alert_rules()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_bank_mail_get()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_branch_media_info(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_journey_settings(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_media_items(p_branch uuid, p_archived boolean)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_payment_settings(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_products()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_purge_history()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_trial_overview()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_unit_guides(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_admin_whatsapp_channels()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_ai_ops_allowed_actions()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_chain_verify()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_authorize_export(p_page text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_backup_status()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_bank_poll_allowed()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_branch_media(p_branch uuid, p_kind text)	READ: no write in closure (needs marker adapter)	True	True		False	
+fn_branch_photo(p_id uuid)	READ: no write in closure (needs marker adapter)	True	True		False	
+fn_category_capacity_impact(p_category uuid, p_max_capacity integer)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_definition_dependencies(p_entity text, p_id uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_hotel_exit_tables()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_hotel_exit_verify(p_archive uuid)	READ: no write in closure (needs marker adapter)	False	True		True	
+fn_invoice_preview(p jsonb)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_lookup_trace(p_trace text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_my_page_access()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_organization_info()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_platform_hotels()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_platform_operator_id()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_price_limits(p_category uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_public_review(p_token text)	READ: no write in closure (needs marker adapter)	True	True		False	
+fn_purge_categories()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_quote_stay(p jsonb)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_report_filter_options(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_reports_capability_usage(p jsonb)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_review_list(p jsonb)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_review_summary()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_room_licenses(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_saved_views_list(p_screen text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_staff_knowledge(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_staff_product_menu(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	

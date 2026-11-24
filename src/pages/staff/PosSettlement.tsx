@@ -4,7 +4,7 @@
  * a difference is saved with its explanation and goes to the owner's review. The server recomputes the vouchers'
  * total itself; the screen only shows it.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CreditCard, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
@@ -15,6 +15,7 @@ import { Field, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { VOUCHER_KIND_LABELS, type VoucherKind } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO, addDaysISO } from "../../lib/utils";
+import { DisabledReason } from "../../components/DisabledReason";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
 interface Data { accounts: CashAccount[]; history: Settlement[] }
@@ -84,6 +85,7 @@ function DayCard({ branchId, accountId, date, onSaved }: { branchId: string; acc
   const [terminal, setTerminal] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false); // 6.7: a synchronous lock, so two submits in the same tick write once
   const [saved, setSaved] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -109,13 +111,15 @@ function DayCard({ branchId, accountId, date, onSaved }: { branchId: string; acc
     if (terminal == null) return;
     setSaved(null); setSaveError(null);
     if (diff !== 0 && !note.trim()) { setSaveError(toArabicError(new Error("VALIDATION: note_required"))); return; }
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     try {
       const r = await moneyApi.posSettle({ branch_id: branchId, account_id: accountId, business_date: date, terminal_total_halalas: terminal, note: note.trim() || undefined, version: s?.version });
       setSaved(r.settlement.status === "matched" ? "حُفظت: مطابقة." : "حُفظت مع الفرق وسببه، وتظهر للمالك للمراجعة.");
       setTick((t) => t + 1); onSaved();
     } catch (err) { setSaveError(toArabicError(err)); }
-    finally { setBusy(false); }
+    finally { saving.current = false; setBusy(false); }
   }
 
   return (
@@ -150,7 +154,7 @@ function DayCard({ branchId, accountId, date, onSaved }: { branchId: string; acc
         <Field label={diff ? "سبب الفرق (إلزامي)" : "ملاحظة"}><input className="input" value={note} onChange={(e) => setNote(e.target.value)} aria-label="سبب الفرق" /></Field>
         {diff != null && <p className={`sm:col-span-2 text-sm ${diff === 0 ? "text-success-600" : "text-danger-600"}`} data-testid="pos-diff">{diff === 0 ? "مطابق للسندات." : <>الفرق: <span dir="ltr">{sar(diff)}</span> {diff > 0 ? "(الجهاز أكثر من السندات)" : "(السندات أكثر من الجهاز)"}</>}</p>}
         <div className="sm:col-span-2 flex items-center gap-3">
-          <button type="submit" disabled={busy || terminal == null} className="btn-primary text-sm">{busy ? <Spinner className="h-4 w-4" /> : null} {s ? "تحديث التسوية" : "حفظ التسوية"}</button>
+          <button type="submit" disabled={busy || terminal == null} aria-describedby={terminal == null ? "dr-possettlement-1" : undefined} title={terminal == null ? "أدخل إجمالي الشبكة من إيصال التسوية أولًا" : undefined} className="btn-primary text-sm">{busy ? <Spinner className="h-4 w-4" /> : null} {s ? "تحديث التسوية" : "حفظ التسوية"}</button><DisabledReason id="dr-possettlement-1" show={terminal == null} text="أدخل إجمالي الشبكة من إيصال التسوية أولًا" />
           {saved && <span className="text-sm text-success-600">{saved}</span>}
           {saveError && <span className="text-sm text-danger-600" role="alert">{saveError}</span>}
         </div>

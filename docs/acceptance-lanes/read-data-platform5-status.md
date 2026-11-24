@@ -1,0 +1,5 @@
+# read-data platform/exit/status five (read-only)
+Proof: tests/isolation/read-data-platform5-proof.sql (base fixtures.sql only, one rolled-back transaction, strict gate). 250 calls, 0 failures.
+Fixtures (in-transaction, synthetic): platform_operators (active, inactive, owner-A login), hotel names MK-HOT-*, backup_runs per hotel + legacy org (MK-BK/FAIL/DR markers), hotel_exit_archives with independently computed manifests (good, row-tampered, sha-tampered, missing table, extra table). No exit mutator or auth/session change is called.
+Oracles: exit_tables = pg_catalog table set, seq 1..n, FK child-before-parent, only audit_events retained; platform_hotels = direct organizations/branches fields; verify = own manifest builder; backup_status = exact markers, no foreign marker.
+Limits: archive requester-who-is-not-owner positive is not covered (requesters are existing actors who are owners); fn_backup_status page gate is untestable independently of the owner role (owner always passes the page check, non-owners fail the role check); platform_hotels pending_owner_id not asserted exactly; role = owner is from the function source.

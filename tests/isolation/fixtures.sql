@@ -156,28 +156,69 @@ insert into iso.col_override(tbl, col, expr) values
  ('alert_rules','event','''deposit_overdue'''),
  ('cash_accounts','kind','case abs(hashtext($SALT$)) % 2 when 0 then ''cash_box'' else ''bank_account'' end'),
  ('gl_accounts','code','''1'' || (abs(hashtext($SALT$)) % 9999999)'),
- ('reservation_allocations','from_date','current_date + 1'),
- ('reservation_allocations','to_date','current_date + 3'),
+ ('reservation_allocations','from_date','current_date + 10 + abs(hashtext($SALT$)) % 5000'),
+ ('reservation_allocations','to_date','current_date + 13 + abs(hashtext($SALT$)) % 5000'),
  ('branch_media_items','kind','''video'''),
  ('branch_media_items','url','''https://iso.invalid/'' || $SALT$'),
  ('housekeeping_tasks','room_id','(select c.id::uuid from iso.created c where c.tbl=''rooms'' and c.org=$ORG$::uuid order by c.id limit 1)');
 
 -- Register rows created by initialization triggers, rather than attempting duplicate inserts.
 do $$ declare t text; sc text; pk text; begin
- for t in select unnest(array['ai_settings','finance_control_settings','system_settings','branch_journey_settings','cash_accounts']) loop
+ for t in select unnest(array['ai_settings','finance_control_settings','system_settings','branch_journey_settings','cash_accounts','alert_rules']) loop
   pk := iso.pk_col(t);
   select scope into sc from iso.scope where tbl=t;
-  execute format('insert into iso.created(tbl,id,org,branch,purpose) select %L,%I::text,organization_id,%s,''victim'' from public.%I where organization_id in ($1,$2) on conflict do nothing',
-   t,pk,case when sc='branch' then 'branch_id' else 'null::uuid' end,t) using iso.id('org-a'),iso.id('org-b');
+  execute format('insert into iso.created(tbl,id,org,branch,purpose) select %L,%s,organization_id,%s,''victim'' from public.%I where organization_id in ($1,$2) on conflict do nothing',
+   t,iso.pk_ret(t),case when sc='branch' then 'branch_id' else 'null::uuid' end,t) using iso.id('org-a'),iso.id('org-b');
  end loop;
 end $$;
 insert into iso.col_override values
  ('role_permissions','role','''manager''::role_code'),
- ('journal_lines','debit_halalas','0'),
+ ('journal_lines','debit_halalas','100'),
  ('journal_lines','credit_halalas','0'),
  ('expense_attachments','mime','''image/png'''),
  ('expense_attachments','bytes','decode(''01'',''hex'')'),
  ('expense_attachments','sha256','encode(digest(decode(''01'',''hex''),''sha256''),''hex'')');
-insert into iso.seed_skip values ('journal_lines','Unfinished balanced journal fixture, not an exception; report missing');
+insert into iso.seed_skip values ('journal_lines','hand-made balanced debit/credit pair per target (deferred balance trigger), see end of file');
 -- Every failure is retained in iso.seed_error; absence never counts as isolation.
 select iso.seed_all() as seeded;
+
+-- Balanced journal lines: the deferred balance trigger checks each entry at commit, so every victim entry gets a
+-- debit and a matching credit. The debit line is registered as the victim row.
+do $$
+declare tg record; e record; a uuid; l uuid;
+begin
+  for tg in select * from iso.target loop
+    select c.id::uuid as id into e from iso.created c where c.tbl = 'journal_entries' and c.org = tg.org and c.purpose = 'victim'
+      order by (c.branch is distinct from tg.branch_id), c.id limit 1;
+    select c.id::uuid into a from iso.created c where c.tbl = 'gl_accounts' and c.org = tg.org and c.purpose = 'victim' order by c.id limit 1;
+    if e.id is null or a is null then
+      insert into iso.seed_error values ('journal_lines', tg.key, 'ISO_FIXTURE', 'no victim journal entry or account to attach lines to');
+      continue;
+    end if;
+    insert into journal_lines(entry_id, account_id, debit_halalas, credit_halalas, organization_id, branch_id)
+      values (e.id, a, 100, 0, tg.org, tg.branch_id) returning id into l;
+    insert into journal_lines(entry_id, account_id, debit_halalas, credit_halalas, organization_id, branch_id)
+      values (e.id, a, 0, 100, tg.org, tg.branch_id);
+    insert into iso.created(tbl, id, org, branch, purpose) values ('journal_lines', l::text, tg.org, tg.branch_id, 'victim');
+  end loop;
+end $$;
+
+-- Non-owner delete victim for staff_profiles: the last-owner guard blocks deleting the hand-made owners, so the delete
+-- control and attacks aim at a separate housekeeping staff row per hotel (no auth identity, no children).
+do $$
+declare tg record; sid uuid; sc text;
+begin
+  select scope into sc from iso.scope where tbl = 'staff_profiles';
+  for tg in select * from iso.target loop
+    if exists (select 1 from iso.created where tbl = 'staff_profiles' and purpose = 'delvictim' and org = tg.org and branch is not distinct from case when sc = 'branch' then tg.branch_id end) then continue; end if;
+    insert into staff_profiles(organization_id, full_name, email, role, is_active)
+      values (tg.org, 'ضحية الحذف ' || tg.key, 'iso-del-' || replace(tg.key, '|', '-') || '@gate.invalid', 'housekeeping'::role_code, true)
+      returning id into sid;
+    insert into iso.created(tbl, id, org, branch, purpose)
+      values ('staff_profiles', sid::text, tg.org, case when sc = 'branch' then tg.branch_id end, 'delvictim');
+  end loop;
+end $$;
+
+insert into iso.immutable_op values
+ ('audit_events','update','AUDIT_IMMUTABLE','supabase/migrations/20261124070000_0088_audit_log_hardening.sql: trg_audit_immutable (before update or delete, errcode 42501)'),
+ ('audit_events','delete','AUDIT_IMMUTABLE','supabase/migrations/20261124070000_0088_audit_log_hardening.sql: trg_audit_immutable (before update or delete, errcode 42501)');

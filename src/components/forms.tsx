@@ -185,6 +185,71 @@ export function useFormDraft<T>({ storageKey, open, value, pristine, apply }: {
   return { saved, restoreSaved, clearSaved };
 }
 
+/**
+ * 6.5 for EDITING an existing record. The record stays the source of truth: what is kept is only the edited form values
+ * (never fields listed in `omit`, e.g. a licence number), tied to the record's `version`. If the record changed since
+ * (its version moved), the stored edit is dropped and never offered, so it cannot overwrite newer data. Offered back on a
+ * click only; cleared on a successful save. sessionStorage, this tab, debounced like the new-record draft.
+ */
+export function useEditDraft<T extends object>({ storageKey, open, value, original, version, omit = [], apply }: {
+  storageKey: string | null;      // null disables persistence (no user, no record)
+  open: boolean;
+  value: T;                       // the form values now
+  original: T | null;             // the record as loaded (what "unchanged" means)
+  version: number | string | null | undefined;
+  omit?: string[];                // fields never written to storage
+  apply: (v: T) => void;
+}): { saved: Partial<T> | null; restoreSaved: () => void; clearSaved: () => void } {
+  const [saved, setSaved] = useState<Partial<T> | null>(null);
+  const openedFor = useRef<string | null>(null);
+  const strip = (v: T) => { const o = { ...(v as Record<string, unknown>) }; for (const k of omit) delete o[k]; return o; };
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  useEffect(() => {
+    if (!open || !storageKey || !original) { if (!open) openedFor.current = null; return; }
+    if (openedFor.current === storageKey) return;
+    openedFor.current = storageKey;
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      const env = raw ? (JSON.parse(raw) as { version?: unknown; value?: Partial<T> }) : null;
+      if (!env || !env.value || String(env.version) !== String(version)) { if (raw) sessionStorage.removeItem(storageKey); setSaved(null); return; }
+      setSaved(same({ ...strip(original), ...env.value }, strip(original)) ? null : env.value);
+    } catch { setSaved(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, storageKey, original]);
+  useEffect(() => {
+    if (!open || !storageKey || !original) return;
+    if (saved && same(strip(value), strip(original))) return;   // an offered edit stays until restored or replaced
+    const t = window.setTimeout(() => {
+      try {
+        if (same(strip(value), strip(original))) sessionStorage.removeItem(storageKey);
+        else sessionStorage.setItem(storageKey, JSON.stringify({ version, value: strip(value) }));
+      } catch { /* storage off */ }
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, storageKey, value, saved]);
+  const restoreSaved = () => { if (saved && original) { apply({ ...original, ...saved } as T); setSaved(null); } };
+  const clearSaved = () => { try { if (storageKey) sessionStorage.removeItem(storageKey); } catch { /* storage off */ } setSaved(null); };
+  return { saved, restoreSaved, clearSaved };
+}
+
+/**
+ * Sign-out: every unsaved draft of this tab is removed (new and edit drafts, and the expense and new-reservation forms'
+ * drafts, which keep the typed guest name/phone), so the next person in the tab is never offered them. This only removes
+ * data; it adds no retention.
+ */
+const DRAFT_KEY = /^zaaer:([a-z-]+-(draft|edit)|new-reservation):/;
+export function clearAllDrafts() {
+  try { for (const k of Object.keys(sessionStorage)) if (DRAFT_KEY.test(k)) sessionStorage.removeItem(k); } catch { /* storage off */ }
+}
+/**
+ * Drafts written before keys carried the user: `zaaer:{branch|room-category|service}-draft:{one id}`. They are discarded,
+ * never moved into a user's key (whose text it was is unknown).
+ */
+export function dropLegacyDrafts() {
+  try { for (const k of Object.keys(sessionStorage)) if (/^zaaer:(branch|room-category|service)-draft:[^:]+$/.test(k)) sessionStorage.removeItem(k); } catch { /* storage off */ }
+}
+
 /** The banner offering an unsaved draft back (6.5): what it is, and the restore action. */
 export function DraftRestoreBanner({ label, summary, onRestore }: { label: string; summary?: string | null; onRestore: () => void }) {
   return (

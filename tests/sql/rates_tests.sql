@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Rates (Phase 2, migration 0030): decisions 9, 15, 32, 33 and the rounding rule of 47.
 -- PR01–PR12: the price calendar (base fallback, platform row, group edits, past nights, the minimum, audit),
@@ -111,7 +112,7 @@ do $$ declare r1 text; r2 text; r3 text; r4 text; e audit_events; begin
           'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', t_day('D') + 5)))), 'VALIDATION: below_minimum%');
   r2 := t_fails(format('select fn_rate_calendar_set(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'price_halalas', 30000,
           'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1)))), 'VALIDATION: past_night%');
-  select * into e from audit_events where action = 'rates.updated' and branch_id = '00000000-0000-0000-0000-000000000010' order by created_at desc limit 1;
+  select * into e from t_audit_all() where action = 'rates.updated' and branch_id = '00000000-0000-0000-0000-000000000010' order by created_at desc limit 1;
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   r3 := t_fails(format('select fn_rate_calendar_set(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'price_halalas', 30000,
           'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', t_day('D') + 5)))), 'FORBIDDEN%');
@@ -138,7 +139,7 @@ do $$ declare r jsonb; expected int; set_n bigint; other bigint; cleared jsonb; 
   cleared := fn_rate_calendar_set(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'clear', true,
          'from', t_day('D') + 40, 'to', t_day('D') + 53, 'category_ids', jsonb_build_array(t_id('cat'))));
   q := t_quote(t_id('cat'), t_day('D') + 40, t_day('D') + 42, '00000000-0000-0000-0000-000000000021');
-  select * into e from audit_events where action = 'rates.updated' and branch_id = '00000000-0000-0000-0000-000000000010'
+  select * into e from t_audit_all() where action = 'rates.updated' and branch_id = '00000000-0000-0000-0000-000000000010'
     and details->'after'->>'clear' = 'both' order by created_at desc limit 1;
   perform t_record('PR05 a group edit (from–to × types × weekdays) sets exactly the matching nights; clearing returns them to the base price',
     (r->>'changed')::int = expected and (e.details->'before'->'cells'->0->>'price')::bigint = 30000 and e.details->'after'->>'clear' = 'both'

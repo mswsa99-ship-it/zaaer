@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 \set ON_ERROR_STOP on
 begin;
 create temp table signup_results(name text,ok boolean);
@@ -28,7 +29,7 @@ insert into signup_results select 'new owner uses real identity and new tenant, 
 insert into signup_results select 'new owner has no branches until internal setup',count(*)=0 from branches;
 b:=fn_owner_register_hotel('{}');insert into signup_results values('repeat registration idempotently returns same hotel',b->>'id'=a->>'id' and b->>'existing'='true');
 insert into signup_results select 'fresh hotel settings disable demo mode',exists(select 1 from system_settings where organization_id=(a->>'id')::uuid and not demo_mode) and exists(select 1 from ai_settings where organization_id=(a->>'id')::uuid);
-insert into signup_results select 'self registration is audited',exists(select 1 from audit_events where organization_id=(a->>'id')::uuid and action='hotel.owner_self_registered');
+insert into signup_results select 'self registration is audited',exists(select 1 from t_audit_all() where organization_id=(a->>'id')::uuid and action='hotel.owner_self_registered');
 begin perform fn_admin_invite_staff('{"full_name":"مالك ممنوع","email":"owner-invite-denied@example.test","role":"owner"}');bad:=false;exception when others then bad:=sqlerrm='OWNER_SELF_SIGNUP_REQUIRED';end;
 insert into signup_results values('owner cannot invite another owner through staff API',bad);
 end$$;

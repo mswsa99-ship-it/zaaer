@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Plan 5.3 (finding S4, migration 0082): the audit log's source derives in the server, a trigger refuses any
 -- change or deletion of a row from any role (the owner and even the superuser), and the hotel's hash chain
@@ -28,8 +29,8 @@ end $$;
 
 -- every new row carries the chain, linked to the row before it in the same hotel
 do $$ declare a audit_events; b audit_events; begin
-  select * into a from audit_events where organization_id = '00000000-0000-0000-0000-000000000001' order by chain_seq desc limit 1;
-  select * into b from audit_events where organization_id = '00000000-0000-0000-0000-000000000001' and chain_seq = a.chain_seq - 1;
+  select * into a from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001' order by chain_seq desc limit 1;
+  select * into b from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001' and chain_seq = a.chain_seq - 1;
   perform t_record('a new audit row is chained to the row before it in its hotel',
     a.chain_seq is not null and a.row_hash is not null and length(a.row_hash) = 64 and a.prev_hash is not null and a.prev_hash = b.row_hash,
     'seq ' || a.chain_seq);
@@ -53,14 +54,14 @@ select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 select set_config('request.headers', '{"x-client-source":"staff-app"}', false);
 do $$ declare r jsonb; a audit_events; begin
   r := fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k = 'res'), 'kind','receipt', 'received_confirmed',true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','n7-src-1'));
-  select * into a from audit_events where entity_id = (r->>'voucher_id')::uuid order by chain_seq desc limit 1;
+  select * into a from t_audit_all() where entity_id = (r->>'voucher_id')::uuid order by chain_seq desc limit 1;
   perform t_record('the client source header no longer writes the log''s source', a.source = 'screen', a.source);
 exception when others then perform t_record('the client source header no longer writes the log''s source', false, sqlerrm); end $$;
 select set_config('request.headers', '', false);
 select set_config('app.source', 'ops_assistant', false);
 do $$ declare r jsonb; a audit_events; begin
   r := fn_create_voucher(jsonb_build_object('reservation_id', (select v from ids where k = 'res'), 'kind','receipt', 'received_confirmed',true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','n7-src-2'));
-  select * into a from audit_events where entity_id = (r->>'voucher_id')::uuid order by chain_seq desc limit 1;
+  select * into a from t_audit_all() where entity_id = (r->>'voucher_id')::uuid order by chain_seq desc limit 1;
   perform t_record('a trusted in-database source is still recorded', a.source = 'ops_assistant', a.source);
 exception when others then perform t_record('a trusted in-database source is still recorded', false, sqlerrm); end $$;
 select set_config('app.source', '', false);
@@ -70,15 +71,15 @@ do $$ declare msg text := 'accepted'; changed boolean; begin
   begin
     update audit_events set action = 'tampered' where organization_id = '00000000-0000-0000-0000-000000000001';
   exception when others then msg := sqlerrm; end;
-  select exists(select 1 from audit_events where organization_id = '00000000-0000-0000-0000-000000000001' and action = 'tampered') into changed;
+  select exists(select 1 from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001' and action = 'tampered') into changed;
   perform t_record('the owner cannot change an audit row — the trigger refuses', not changed, coalesce(nullif(msg, 'accepted'), 'no row was changed'));
 exception when others then perform t_record('the owner cannot change an audit row — the trigger refuses', false, sqlerrm); end $$;
 do $$ declare msg text := 'accepted'; before int; after int; begin
-  select count(*) into before from audit_events where organization_id = '00000000-0000-0000-0000-000000000001';
+  select count(*) into before from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001';
   begin
     delete from audit_events where organization_id = '00000000-0000-0000-0000-000000000001';
   exception when others then msg := sqlerrm; end;
-  select count(*) into after from audit_events where organization_id = '00000000-0000-0000-0000-000000000001';
+  select count(*) into after from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001';
   perform t_record('the owner cannot delete an audit row — the trigger refuses', before = after, coalesce(nullif(msg, 'accepted'), 'count ' || before || ' -> ' || after));
 exception when others then perform t_record('the owner cannot delete an audit row — the trigger refuses', false, sqlerrm); end $$;
 reset role;
@@ -91,7 +92,7 @@ exception when others then perform t_record('no role deletes from the log — ev
 
 -- a row removed through the one sanctioned path (the purge's transaction-local setting) breaks the chain loudly
 do $$ declare target uuid; begin
-  select id into target from audit_events where organization_id = '00000000-0000-0000-0000-000000000001' order by chain_seq desc limit 1 offset 1;
+  select id into target from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001' order by chain_seq desc limit 1 offset 1;
   perform set_config('app.audit_purge', 'on', false);
   delete from audit_events where id = target;
   perform set_config('app.audit_purge', '', false);

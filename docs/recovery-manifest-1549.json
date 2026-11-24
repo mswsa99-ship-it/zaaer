@@ -1,0 +1,162 @@
+{
+  "frontend": "d3634f4",
+  "context_isolation": "fresh browser context per test",
+  "mode": "five completed foreground serial suites, not uninterrupted whole-run",
+  "cases": [
+    {
+      "route": "/staff/dashboard",
+      "suite": 1,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/pos-settlement",
+      "suite": 1,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/day-close",
+      "suite": 1,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/accounts",
+      "suite": 1,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/access-approvals",
+      "suite": 1,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/day-summary",
+      "suite": 1,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/rooms",
+      "suite": 2,
+      "result": "PASS"
+    },
+    {
+      "route": "/staff/inbox",
+      "suite": 2,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/dashboard",
+      "suite": 2,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/organization",
+      "suite": 2,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/products",
+      "suite": 2,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/rates",
+      "suite": 2,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/availability",
+      "suite": 3,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/availability-rules",
+      "suite": 3,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/reservations",
+      "suite": 3,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/guests",
+      "suite": 3,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/finance",
+      "suite": 3,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/platform-payouts",
+      "suite": 3,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/bank-mail",
+      "suite": 4,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/roles",
+      "suite": 4,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/finance-controls",
+      "suite": 4,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/ai-settings",
+      "suite": 4,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/whatsapp",
+      "suite": 4,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/backups",
+      "suite": 4,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/payment-providers",
+      "suite": 5,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/reports",
+      "suite": 5,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/audit-logs",
+      "suite": 5,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/usage",
+      "suite": 5,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/review",
+      "suite": 5,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/integrations",
+      "suite": 5,
+      "result": "PASS"
+    },
+    {
+      "route": "/admin/journey",
+      "suite": 5,
+      "result": "PASS"
+    }
+  ]
+}

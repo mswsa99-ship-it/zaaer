@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Traceable audit (decision 39, G22) and failure in the middle of an operation (X08).
 -- AT01–AT08: correlation, source, actor type, security category, owner-only security events,
@@ -21,7 +22,7 @@ create or replace function t_record(p_name text, p_ok boolean, p_detail text def
 $$;
 create or replace function t_id(p_k text) returns uuid language sql security definer as $$ select v from ids where k = p_k $$;
 create or replace function t_audit(p_entity uuid, p_action text) returns audit_events language sql security definer as $$
-  select * from audit_events where entity_id = p_entity and action = p_action order by created_at desc limit 1
+  select * from t_audit_all() where entity_id = p_entity and action = p_action order by created_at desc limit 1
 $$;
 create or replace function t_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
 create or replace function t_ver(p_table text, p_id uuid) returns int language plpgsql security definer as $$ declare v int; begin execute format('select version from %I where id = $1', p_table) into v using p_id; return v; end $$;
@@ -86,13 +87,13 @@ select set_config('app.source', '', false);
 do $$ declare n int; r int; begin
   perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000006', false, 'اختبار التتبع');
   perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000006', true, 'اختبار التتبع');
-  select count(*), count(*) filter (where details->>'reason' = 'اختبار التتبع') into n, r from audit_events where entity_id = '10000000-0000-0000-0000-000000000006' and action in ('staff.deactivated','staff.activated') and category = 'security';
+  select count(*), count(*) filter (where details->>'reason' = 'اختبار التتبع') into n, r from t_audit_all() where entity_id = '10000000-0000-0000-0000-000000000006' and action in ('staff.deactivated','staff.activated') and category = 'security';
   perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', n = 2 and r = 2, n || ' / with reason ' || r);
 exception when others then perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', false, sqlerrm); end $$;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare n int; m int; begin
-  select count(*) into n from audit_events where entity_id = '10000000-0000-0000-0000-000000000006' and category = 'security';
-  select count(*) into m from audit_events where category = 'business';
+  n := (fn_audit_list('{"category":"security"}'::jsonb)->>'total')::int;  -- the manager's own view through the permitted RPC
+  m := (fn_audit_list('{"category":"business"}'::jsonb)->>'total')::int;
   perform t_record('AT06b a manager reads business events but no security event', n = 0 and m > 0, n || ' / ' || m);
 exception when others then perform t_record('AT06b a manager reads business events but no security event', false, sqlerrm); end $$;
 
@@ -117,7 +118,7 @@ exception when others then perform t_record('AT07b an invite records its branche
 do $$ declare n int; begin
   update audit_events set action = 'tampered' where organization_id = '00000000-0000-0000-0000-000000000001';
   get diagnostics n = row_count;
-  perform t_record('AT08 nobody can change an audit row through the API', n = 0 and t_count('select count(*) from audit_events where action = ''tampered''') = 0, n::text);
+  perform t_record('AT08 nobody can change an audit row through the API', n = 0 and t_count('select count(*) from t_audit_all() where action = ''tampered''') = 0, n::text);
 exception when others then perform t_record('AT08 nobody can change an audit row through the API', true, sqlerrm); end $$;
 reset role;
 

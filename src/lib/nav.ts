@@ -266,3 +266,18 @@ export function unifiedMenu(role: string | null | undefined, allows?: Allows): A
  const admin = PAGES.filter(p => p.area === "admin" && !p.hidden && pageListed(p, role, allows) && !paths.has(p.path));
  return [...primary, ...admin];
 }
+
+/**
+ * One app, grouped for presentation only: the staff entries (centres included) stay top-level, and every admin page the
+ * person may see sits under ONE «الإدارة» entry, in its existing groups. Nothing is added or removed: the same
+ * `pageListed` rule as `unifiedMenu` decides, so a page the person cannot open never appears.
+ * Top-level count = staff entries + 1 (at most 10 for the owner; the limit is 12).
+ */
+export interface MenuGroup { title: string; items: NavPage[] }
+export function groupedMenu(role: string | null | undefined, allows?: Allows): { top: Array<NavPage & { members?: string[] }>; adminGroups: MenuGroup[] } {
+  const top = staffMenu(role, allows);
+  const adminGroups = adminNav(role, allows);
+  return { top, adminGroups };
+}
+/** Top-level entries a person sees in the grouped menu. */
+export const topLevelCount = (m: { top: unknown[]; adminGroups: unknown[] }) => m.top.length + (m.adminGroups.length ? 1 : 0);

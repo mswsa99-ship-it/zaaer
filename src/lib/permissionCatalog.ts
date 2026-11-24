@@ -79,6 +79,7 @@ export const PERMISSION_CATALOG: readonly PermissionRow[] = [
   { code: "bank.manage", label: "بريد البنك وقواعد قراءة الرسائل وإعادة قراءتها", area: "التقارير والسجل", sort: 528, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "reports.identities_usage", label: "تقرير الهويات المعتمدة من المكتب وتقرير الاستعمال", area: "التقارير والسجل", sort: 530, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "audit.log", label: "سجل الإجراءات", area: "التقارير والسجل", sort: 540, defaultRoles: ["owner", "manager", "supervisor"], fullRoles: ["owner", "manager"], limitNote: "بلا تفاصيل التغييرات", locked: false },
+  { code: "history.details", label: "تفاصيل قبل وبعد التعديل في سجل الإجراءات وتاريخ الحجز (للحسابات الفردية فقط، بمنحة صريحة)", area: "التقارير والسجل", sort: 545, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
 ];
 
 /** the roles the owner edits (the owner's column is always allowed) */

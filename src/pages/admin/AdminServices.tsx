@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ConciergeBell, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput, useFormDraft, DraftRestoreBanner } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput, dropLegacyDrafts, useFormDraft, useEditDraft, DraftRestoreBanner } from "../../components/forms";
+import { useAuth } from "../../lib/auth";
 import { BranchPicker } from "../../components/BranchPicker";
 import { BILLING_UNIT_LABELS } from "../../lib/types";
 import { formatCurrency } from "../../lib/utils";
@@ -14,6 +15,7 @@ interface Service { id: string; name_ar: string; name_en: string | null; descrip
 const NO_DATA: { rows: Service[]; taskTypes: { id: string; name: string }[] } = { rows: [], taskTypes: [] };
 
 export default function AdminServices() {
+  const { profile } = useAuth();
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Partial<Service> | null>(null);
 
@@ -31,7 +33,11 @@ export default function AdminServices() {
   const svcPristine = (d: Partial<Service>) => !d.name_ar?.trim() && !d.name_en?.trim() && !d.description?.trim()
     && d.price_halalas == null && !d.task_type_id && !d.late_checkout_until && d.billing_unit === "once" && d.is_free === false && d.taxable === true;
   const isNew = !!draft && !draft.id;
-  const fd = useFormDraft<Partial<Service>>({ storageKey: isNew && branchId ? `zaaer:service-draft:${branchId}` : null, open: isNew, value: draft ?? {}, pristine: svcPristine, apply: (v) => setDraft(v) });
+  useEffect(() => { dropLegacyDrafts(); }, []);   // drafts from before keys carried the user are discarded
+  const fd = useFormDraft<Partial<Service>>({ storageKey: isNew && profile?.id && profile?.organization_id && branchId ? `zaaer:service-draft:${profile.id}:${profile.organization_id}:${branchId}` : null, open: isNew, value: draft ?? {}, pristine: svcPristine, apply: (v) => setDraft(v) });
+  // 6.5 edit: an existing service's unsaved edit survives a reload, tied to its version; offered back on a click
+  const svcOriginal = draft?.id ? (rows.find((r) => r.id === draft.id) as Partial<Service> | undefined) ?? null : null;
+  const ed = useEditDraft<Partial<Service>>({ storageKey: draft?.id && profile?.id && profile?.organization_id && branchId ? `zaaer:service-edit:${profile.id}:${profile.organization_id}:${draft.id}` : null, open: !!draft?.id, value: draft ?? {}, original: svcOriginal, version: svcOriginal?.version, apply: (v) => setDraft(v) });
 
   if (q.loading) return <LoadingScreen />;
   const visible = rows.filter((r) => showArchived || !r.archived_at);
@@ -60,8 +66,9 @@ export default function AdminServices() {
       )}
       <Modal open={!!draft} title={draft?.id ? "تعديل خدمة" : "خدمة جديدة"} onClose={() => setDraft(null)}>
         {draft && (
-          <ActionForm onSubmit={async () => { await opsApi.upsertService({ id: draft.id, branch_id: branchId, name_ar: draft.name_ar, name_en: draft.name_en, description: draft.description, billing_unit: draft.billing_unit, price_halalas: draft.price_halalas, is_free: draft.is_free, taxable: draft.taxable, task_type_id: draft.task_type_id || null, late_checkout_until: (draft.billing_unit ?? "once") === "once" ? draft.late_checkout_until || null : null, is_active: draft.is_active, version: draft.version }); fd.clearSaved(); setDraft(null); await load(); }}>
+          <ActionForm onSubmit={async () => { await opsApi.upsertService({ id: draft.id, branch_id: branchId, name_ar: draft.name_ar, name_en: draft.name_en, description: draft.description, billing_unit: draft.billing_unit, price_halalas: draft.price_halalas, is_free: draft.is_free, taxable: draft.taxable, task_type_id: draft.task_type_id || null, late_checkout_until: (draft.billing_unit ?? "once") === "once" ? draft.late_checkout_until || null : null, is_active: draft.is_active, version: draft.version }); fd.clearSaved(); ed.clearSaved(); setDraft(null); await load(); }}>
             {fd.saved && <DraftRestoreBanner label="مسودة خدمة لم تُحفظ" summary={fd.saved.name_ar?.trim() || null} onRestore={fd.restoreSaved} />}
+            {ed.saved && <DraftRestoreBanner label="تعديل لم يُحفظ على هذه الخدمة" summary={ed.saved.name_ar?.trim() || null} onRestore={ed.restoreSaved} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} /></Field>

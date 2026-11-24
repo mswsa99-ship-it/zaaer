@@ -18,6 +18,7 @@ import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
 import { listsApi, fetchAllPages, type VoucherList, type VoucherListFilters, type VoucherRow, type ReportFilterOptions } from "../../lib/api";
 import { money, type ExportScope, type ExportStatement } from "../../lib/exports";
+import { DisabledReason } from "../../components/DisabledReason";
 
 const sar = (h: number) => formatCurrency(h / 100);
 const monthStart = () => todayISO().slice(0, 8) + "01";
@@ -106,7 +107,7 @@ export default function AdminFinance() {
           </table>
           <div className="flex items-center justify-between border-t border-ink-50 px-3 py-2 text-xs text-ink-500">
             <span>صفحة {page + 1} من {pages} · {COUNT.voucher(total)}{ledger.refreshing && <Spinner className="mr-2 inline h-3 w-3" />}</span>
-            <div className="flex gap-2"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn-ghost px-2 py-1 text-xs">السابق</button><button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} className="btn-ghost px-2 py-1 text-xs">التالي</button></div>
+            <div className="flex flex-wrap items-center gap-2"><button disabled={page === 0} aria-describedby={page === 0 ? "dr-adminfinance-10" : undefined} title={page === 0 ? "أنت في الصفحة الأولى" : undefined} onClick={() => setPage(page - 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">السابق</button><DisabledReason id="dr-adminfinance-10" show={page === 0} text="أنت في الصفحة الأولى" /><button disabled={page + 1 >= pages} aria-describedby={page + 1 >= pages ? "dr-adminfinance-9" : undefined} title={page + 1 >= pages ? "هذه آخر صفحة" : undefined} onClick={() => setPage(page + 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">التالي</button><DisabledReason id="dr-adminfinance-9" show={page + 1 >= pages} text="هذه آخر صفحة" /></div>
           </div>
         </Card>
       </DataState>

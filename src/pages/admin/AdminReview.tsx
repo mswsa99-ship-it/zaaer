@@ -13,6 +13,7 @@ import { notifyReviewChanged } from "../../lib/reviewAlerts";
 import { SectionTitle, Card, Badge, DataState, ErrorBanner, Spinner } from "../../components/ui";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/types";
 import { formatCurrency, formatDateTime } from "../../lib/utils";
+import { DisabledReason } from "../../components/DisabledReason";
 
 const sar = (h: unknown) => (typeof h === "number" ? formatCurrency(h / 100) : "—");
 
@@ -188,9 +189,9 @@ export default function AdminReview() {
               </label>
               <input className="input h-8 min-w-0 max-w-sm flex-1 basis-48 text-xs" placeholder="ملاحظة المراجعة (اختيارية)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة المراجعة" />
               {!confirmBulk
-                ? <button type="button" disabled={busy || selected.size === 0} onClick={() => setConfirmBulk(true)} className="btn-primary text-xs">
+                ? <><button type="button" disabled={busy || selected.size === 0} aria-describedby={selected.size === 0 ? "dr-adminreview-5" : undefined} title={selected.size === 0 ? "حدّد بندًا واحدًا على الأقل" : undefined} onClick={() => setConfirmBulk(true)} className="btn-primary text-xs">
                     <CheckCheck className="h-3.5 w-3.5" /> تأشير المحدد كمراجَع ({selected.size})
-                  </button>
+                  </button><DisabledReason id="dr-adminreview-5" show={selected.size === 0} text="حدّد بندًا واحدًا على الأقل" /></>
                 : <span className="flex flex-wrap items-center gap-2 text-xs" data-testid="review-bulk-confirm">تأكيد مراجعة {selected.size}؟
                     <button type="button" className="btn-primary text-xs" disabled={busy} onClick={() => { const n = note.trim(); setNote(""); void mark([...selected], n); }}>{busy ? <Spinner className="h-3.5 w-3.5" /> : "نعم، تمت المراجعة"}</button>
                     <button type="button" className="btn-ghost text-xs" onClick={() => setConfirmBulk(false)}>إلغاء</button></span>}

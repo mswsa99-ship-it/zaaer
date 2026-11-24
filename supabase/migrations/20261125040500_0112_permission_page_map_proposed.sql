@@ -1,5 +1,6 @@
--- 0112 PROPOSED code -> (page, action, sensitive) map for individual mode. NOT owner-approved: it is the permissions
--- worker's conservative engineering proposal. Individual mode is disabled, so this changes nothing for any account today.
+-- 0112 code -> (page, action, sensitive) map for individual mode.
+-- Included in the migration batch approved by the owner on 2026-11-24 at 12:55 and 12:57 Asia/Riyadh.
+-- Individual mode remains disabled. This migration does not activate individual grants.
 -- any_write = true (create+modify codes, coarse add OR edit): bank.manage, cash_accounts, knowledge, platform.payouts, policies, rates, staff.manage, task.work.
 -- Deliberately NOT mapped (they stay denied for individual accounts until a decision): definitions, branch.settings,
 -- security, reports.identities_usage (each serves several pages: gate the endpoint, not the code), admin.permissions

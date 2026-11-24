@@ -49,7 +49,7 @@ export default defineConfig({
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 }, launchOptions: chromiumLaunch } },
     // Housekeeping and the guest reception are used on phones: run those specs at phone width too.
-    { name: "mobile", use: { ...devices["Pixel 7"], launchOptions: chromiumLaunch }, testMatch: /(housekeeping|guest-reception|smoke)\.spec\.ts/ },
+    { name: "mobile", use: { ...devices["Pixel 7"], launchOptions: chromiumLaunch }, testMatch: /(housekeeping|guest-reception|smoke|new-release-coverage-tables|menu-grouping)\.spec\.ts/ },
     // Playwright WebKit is Safari-engine coverage, not a physical iPhone/Safari run.
     { name: "firefox", use: { ...devices["Desktop Firefox"] }, testMatch: crossBrowserScreens },
     { name: "webkit", use: { ...devices["Desktop Safari"] }, testMatch: crossBrowserScreens },

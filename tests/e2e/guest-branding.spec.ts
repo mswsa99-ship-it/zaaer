@@ -48,7 +48,9 @@ test.describe("guest branding (plan item 3.5)", () => {
   test("the footer line carries the approved mark and translates with the guest's language toggle", async ({ page, go }) => {
     await go("/booking/lookup");
     // the 16px mark (arch + spark) sits with the line, per the approved GuestBrand spec
-    await expect(page.getByTestId("powered-by-roomai").locator("img")).toBeVisible();
+    const marks = page.getByTestId("powered-by-roomai").locator("img");
+    await expect(marks.filter({ visible: true })).toHaveCount(1);
+    await expect(marks.filter({ visible: true })).toHaveAttribute("src", /roomai-mark(?:-reversed)?\.svg$/);
     await page.getByTestId("guest-lang").click();
     await expect(page.locator("footer")).toContainText(POWERED_EN);
     await page.getByTestId("guest-lang").click();

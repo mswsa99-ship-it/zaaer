@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { todayISO } from "../../lib/utils";
@@ -32,8 +32,11 @@ export default function AdminAvailability() {
   const rows = q.data; const branchId = q.branchId; const load = q.reload;
 
   // 0055 (SETUP-01): through fn_admin_set_inventory — 0 ≤ blocked ≤ total ≤ the type's units, public ≤ total − blocked
+  const saveLock = useRef(false);
   async function updateField(r: InventoryRow, field: "total_units" | "publicly_visible_units" | "blocked_units", value: number | null) {
     if (value === r[field]) return;
+    if (saveLock.current) return;
+    saveLock.current = true;
     setActing(r.id + field); setError(null);
     try {
       if (value == null) throw new Error("VALIDATION: inventory");
@@ -41,7 +44,7 @@ export default function AdminAvailability() {
       setRowState((s) => ({ ...s, [r.id]: { ok: true, text: res.unchanged ? "لا تغيير" : "حُفظ" } }));
     } catch (e) { setRowState((s) => ({ ...s, [r.id]: { ok: false, text: toArabicError(e) } })); }
     load();
-    setActing(null);
+    saveLock.current = false; setActing(null);
   }
 
   if (q.loading) return <LoadingScreen />;
@@ -75,13 +78,13 @@ export default function AdminAvailability() {
                 <td className="py-2.5 text-ink-700">{r.date}</td>
                 <td className="py-2.5 text-ink-600">{r.category?.name_ar}</td>
                 <td className="py-2.5 text-center">
-                  <NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting === r.id + "total_units"} />
+                  <NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting !== null} />
                 </td>
                 <td className="py-2.5 text-center">
-                  <NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting === r.id + "publicly_visible_units"} />
+                  <NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting !== null} />
                 </td>
                 <td className="py-2.5 text-center">
-                  <NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting === r.id + "blocked_units"} />
+                  <NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting !== null} />
                 </td>
                 <td className="py-2.5 text-xs" aria-live="polite">{rowState[r.id] && <span className={rowState[r.id].ok ? "text-success-600" : "text-danger-600"}>{rowState[r.id].text}</span>}</td>
               </tr>

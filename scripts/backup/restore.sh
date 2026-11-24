@@ -56,6 +56,9 @@ if [ "$EXISTING" != "0" ] && [ "${BACKUP_RESTORE_ALLOW_OVERWRITE:-0}" != "1" ]; 
   backup_die "target database already holds $EXISTING tables (refusing; set BACKUP_RESTORE_ALLOW_OVERWRITE=1 to proceed)"
 fi
 
+# 4b. dependencies: every extension the dump needs must exist on the target
+scripts/backup/restore-preflight.sh "$WORK/db.dump" || backup_die "restore preflight failed"
+
 # 5. restore
 if ! pg_restore -d "$BACKUP_TARGET_PGURI" --no-owner --exit-on-error "$WORK/db.dump" 2> "$WORK/pg_restore.log"; then
   backup_die "pg_restore failed"

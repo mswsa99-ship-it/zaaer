@@ -281,12 +281,13 @@ function Archive({ branchId, tick, onPick, canApprove, onChanged }: { branchId: 
   const [error, setError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<{ id: string; approve: boolean; date: string } | null>(null);
   const [note, setNote] = useState("");
+  const [retryTick, setRetryTick] = useState(0);
   useEffect(() => {
     let alive = true; setError(null);
     closingApi.list(branchId, addDaysISO(todayISO(), -30), todayISO()).then((d) => { if (alive) setData(d); }, (e) => { if (alive) setError(toArabicError(e)); });
     return () => { alive = false; };
-  }, [branchId, tick]);
-  if (error) return <LoadErrorCard message={error} />;
+  }, [branchId, tick, retryTick]);
+  if (error) return <LoadErrorCard message={error} onRetry={() => setRetryTick((t) => t + 1)} />;
   if (!data) return <Card><Spinner /></Card>;
   return (
     <>

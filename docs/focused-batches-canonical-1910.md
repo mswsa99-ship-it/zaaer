@@ -1,0 +1,9 @@
+# Standalone batch qualification
+
+PG16.6 after0118, localrollbackonly:
+
+* Archive/draft2:40assertions in freshiso_candidate_pages1902, no baserpcfixtures. Tightened wildcardany-errornegativestoFORBIDDENmessage+42501, unknownpageVALIDATIONmessage+P0001, othererrorsSQLSTATEpinned. AddedfailureRAISE becauseworkerSQLonlyprintedFAILEDandcouldexit0. Syntheticservices/tasktypearchive/unarchive andinactivepermissiondraft, noactivegrantschanged. Target/decoyrows+auditchecks, notwholepublicexacttouchproof.
+* Moneyapprovals3:155assertions iso_credit1745. AddedfailureRAISE becauseprintedfailedcountcouldexit0. Wholepublicforeigndenialandexactrow/auditpositives; prioraudits/notifcountpreserved. Workerrole-removalmutantcandidate20failuresnotcanonicallyrerun. Remaining14moneybankunqualified, nofull17claim.
+* Implicitorgcreators5:40assertions iso_credit1745. Tenownactororgcontrols, exactmainrow+auditandotherorgrowhashcontrast. Noengineadaptercount. Snapshotlimitedtoorgtableswithidcolumns, notorgtableswithoutid/globaltables. Creatoronly, noexistingupdate/individualpage/role-negativeclaim. Ownsliceeffectnotlabelledforeigndenial.
+
+Noexternalnetwork/livechanges/messages/spend. No protected9 execution. Standalone contracts do not upgrade generic RPC inventory labels or satisfy full2.11matrix.

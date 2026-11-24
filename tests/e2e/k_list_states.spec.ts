@@ -27,6 +27,8 @@ for (const [path] of PAGES) {
     await page.waitForTimeout(1200);
     await expect(main.locator("[role=alert]")).toHaveCount(0);
     await expect(main.locator(".animate-spin")).toHaveCount(0);
-    errors.length = 0;   // the failed reads are logged by design in this test
+    const unexpected = errors.filter((e) => !/network down/i.test(e));
+    expect(unexpected, "no unexpected console errors during injected failure").toEqual([]);
+    errors.splice(0, errors.length, ...unexpected);
   });
 }

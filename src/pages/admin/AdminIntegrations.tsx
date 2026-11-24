@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { aiHealth, whatsappApi } from "../../lib/api";
 import { isFreeTierError, providerErrorHint } from "../../lib/providerErrors";
 import { COUNT } from "../../lib/utils";
-import { SectionTitle, Card, Badge, Spinner } from "../../components/ui";
+import { SectionTitle, Card, Badge, Spinner, ErrorBanner } from "../../components/ui";
 import { Plug, Check, Clock, AlertCircle, XCircle } from "lucide-react";
 
 type Status = "connected" | "awaiting" | "future" | "disabled" | "error" | "checking";
@@ -22,6 +22,9 @@ export default function AdminIntegrations() {
   const [ai, setAi] = useState<Integration>({ name: "مزود الذكاء الاصطناعي (Gemini)", status: "checking", description: "جارٍ الفحص…", link: "/admin/ai-settings" });
   const [db, setDb] = useState<Integration>({ name: "قاعدة البيانات (Supabase)", status: "checking", description: "قاعدة البيانات والمصادقة وRealtime" });
   const [wa, setWa] = useState<Integration>({ name: "واتساب الفروع (WhatsApp Business)", status: "checking", description: "جارٍ الفحص…", link: "/admin/whatsapp" });
+
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
 
   // per-branch numbers (owner only — other roles see the generic state)
   useEffect(() => {
@@ -41,11 +44,13 @@ export default function AdminIntegrations() {
   }, []);
 
   useEffect(() => {
+    setLoadError(null);
     (async () => {
       const [settings, health] = await Promise.all([
         supabase.from("ai_settings").select("enabled, provider, model").maybeSingle(),
         aiHealth(),
       ]);
+      if (settings.error) setLoadError("تعذّر تحميل حالة التكاملات. تحقق من الاتصال ثم أعد المحاولة.");
       setDb({ name: "قاعدة البيانات (Supabase)", status: settings.error && /fetch|network/i.test(settings.error.message) ? "error" : "connected", description: "قاعدة البيانات والمصادقة وRealtime" });
       const s = settings.data as { enabled: boolean; provider: string; model: string } | null;
       const base = { name: "مزود الذكاء الاصطناعي (Gemini)", link: "/admin/ai-settings" };
@@ -61,13 +66,14 @@ export default function AdminIntegrations() {
         }
       }
     })();
-  }, []);
+  }, [retryTick]);
 
   const integrations = [db, ai, wa, ...STATIC];
 
   return (
     <div>
       <SectionTitle title="التكاملات" subtitle="حالة الربط مع الخدمات الخارجية" />
+      {loadError && <div className="mb-4 flex flex-wrap items-center gap-3"><ErrorBanner message={loadError} /><button type="button" className="btn-outline text-sm" onClick={() => setRetryTick((t) => t + 1)}>إعادة المحاولة</button></div>}
       <div className="space-y-3">
         {integrations.map((i) => (
           <Card key={i.name} className="flex items-center justify-between">

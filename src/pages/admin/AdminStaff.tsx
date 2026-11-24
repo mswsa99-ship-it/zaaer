@@ -1,3 +1,4 @@
+import { emptyStaffBranchesLabel, changedStaffBranches } from "../../lib/staffBranchMetadata";
 import { IndividualPermissionDraft } from "../../components/IndividualPermissionDraft";
 /**
  * «الموظفون» (decisions 34, 35): the list from fn_admin_staff_list; «تعديل موظف» for the owner only — name, phone, role
@@ -157,7 +158,7 @@ export default function AdminStaff() {
                 {s.phone && <p className="text-xs text-ink-500" dir="ltr">{s.phone}</p>}
                 <div className="mt-1 flex flex-wrap gap-1">
                   <Badge className={s.linked ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{s.linked ? "مرتبط" : "بانتظار تسجيل الدخول"}</Badge>
-                  {s.role === "owner" ? <Badge className="bg-ink-100 text-ink-600">كل الفروع</Badge> : s.branch_ids.length === 0 ? <Badge className="bg-danger-500/10 text-danger-600">بلا فرع</Badge> : s.branch_ids.map((b) => <Badge key={b} className="bg-ink-100 text-ink-600">{branchName(b)}</Badge>)}
+                  {s.role === "owner" ? <Badge className="bg-ink-100 text-ink-600">كل الفروع</Badge> : s.branch_ids.length === 0 ? <Badge className="bg-rai-surface-sunken text-rai-ink-muted">{emptyStaffBranchesLabel(isOwner)}</Badge> : s.branch_ids.map((b) => <Badge key={b} className="bg-ink-100 text-ink-600">{branchName(b)}</Badge>)}
                 </div>
                 {s.sessions_ended_at && <p className="mt-1 text-[11px] text-ink-400">أُنهيت جلساته {formatDateTime(s.sessions_ended_at)}</p>}
                 {authStatus[s.id] && (
@@ -194,7 +195,7 @@ export default function AdminStaff() {
             if (edit.phone.trim() && !normalizePhone(edit.phone)) throw new Error("VALIDATION: phone");
             const emailChanged = !edit.s.linked && edit.email.trim().toLowerCase() !== edit.s.email;
             if (emailChanged && !validEmail(edit.email)) throw new Error("VALIDATION: email");
-            const r = await staffAdminApi.update({ staff_id: edit.s.id, reason: edit.reason.trim(), ...(emailChanged ? { email: edit.email.trim() } : {}), full_name: edit.full_name.trim(), phone: edit.phone.trim() || null, ...(edit.s.is_me ? {} : edit.role === "owner" ? { role: edit.role } : { role: edit.role, branch_ids: edit.branch_ids }) });
+            const r = await staffAdminApi.update({ staff_id: edit.s.id, reason: edit.reason.trim(), ...(emailChanged ? { email: edit.email.trim() } : {}), full_name: edit.full_name.trim(), phone: edit.phone.trim() || null, ...(edit.s.is_me ? {} : edit.role === "owner" ? { role: edit.role } : { role: edit.role, ...changedStaffBranches(edit.s.branch_ids, edit.branch_ids) }) });
             setEdit(null); setNotice(r.unchanged ? "لا تغيير." : `حُفظ التعديل (${(r.changed ?? []).map((c) => ({ email: "البريد", full_name: "الاسم", phone: "الهاتف", role: "الدور", branches: "الفروع" })[c] ?? c).join("، ")}). يسري تغيير الدور أو الفروع من العملية التالية للموظف.`); await load();
           }}>
             <div className="space-y-3">
@@ -209,7 +210,7 @@ export default function AdminStaff() {
                 <select className="input" value={edit.role} disabled={edit.s.is_me} onChange={(e) => setEdit({ ...edit, role: e.target.value })} data-testid="edit-role">{roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
               </Field>
               {edit.role !== "owner" && (
-                <Field label="الفروع" hint={edit.s.is_me ? "لا يغيّر أحد فروعه بنفسه." : "إزالة فرع تسري من العملية التالية للموظف؛ تاريخ عضويته يبقى."}>
+                <Field label="الفروع" hint={edit.s.is_me ? "لا يغيّر أحد فروعه بنفسه." : isOwner ? "إزالة فرع تسري من العملية التالية للموظف؛ تاريخ عضويته يبقى." : "تعرض القائمة الفروع المسموحة لك فقط، ولا تعني القائمة الفارغة أن الموظف بلا فرع. لا يُستبدل ارتباطه بالفروع دون تغيير صريح ومسموح."}>
                   <div className="flex flex-wrap gap-2 rounded-xl border border-ink-100 p-2" data-testid="edit-branches">
                     {branches.map((b) => (
                       <label key={b.id} className="flex items-center gap-1.5 text-xs text-ink-700">

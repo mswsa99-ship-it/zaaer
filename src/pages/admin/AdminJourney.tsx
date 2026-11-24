@@ -18,6 +18,7 @@ import { useAuth } from "../../lib/auth";
 import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, ErrorBanner } from "../../components/ui";
 import { Field, Modal, MoneyInput, Toggle, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
+import { DisabledReason } from "../../components/DisabledReason";
 
 const RECIPIENT_AR: Record<AlertRecipient, string> = { responsible: "مسؤول الفرع", fallback: "البديل (الإدارة)", owner: "المالك", manager: "المدير", supervisor: "المشرفون" };
 const CHANNEL_AR: Record<AlertChannel, string> = { app: "داخل النظام", whatsapp: "واتساب", both: "النظام وواتساب" };
@@ -140,7 +141,7 @@ export default function AdminJourney() {
         <p className="mb-2 text-xs text-ink-500">تُكتب منه روابط التقييم التي يرسلها النظام بنفسه. {owner ? "" : "تعديله للمالك وحده."}</p>
         <div className="flex flex-wrap items-end gap-2">
           <input className="input min-w-0 flex-1 basis-64" dir="ltr" maxLength={200} value={site} disabled={!owner} onChange={(e) => setSite(e.target.value)} placeholder="https://…" aria-label="عنوان صفحات النزلاء" />
-          {owner && <button type="button" className="btn-outline" disabled={busy !== null || site.trim() === (s.guest_site_url ?? "")} onClick={() => run("site", () => journeyApi.setGuestSite(site.trim() || null), "حُفظ عنوان صفحات النزلاء.")}>{busy === "site" ? <Spinner className="h-4 w-4" /> : "حفظ"}</button>}
+          {owner && <><button type="button" className="btn-outline" disabled={busy !== null || site.trim() === (s.guest_site_url ?? "")} aria-describedby={site.trim() === (s.guest_site_url ?? "") ? "dr-journey-site" : undefined} onClick={() => run("site", () => journeyApi.setGuestSite(site.trim() || null), "حُفظ عنوان صفحات النزلاء.")}>{busy === "site" ? <Spinner className="h-4 w-4" /> : "حفظ"}</button><DisabledReason id="dr-journey-site" show={site.trim() === (s.guest_site_url ?? "")} text="لا يوجد تغيير للحفظ" /></>}
         </div>
       </Card>
 
@@ -220,17 +221,17 @@ function RuleRow({ rule, editable, busy, onSave }: { rule: AlertRule; editable: 
             <input type="number" min={1} max={1440} className="input mt-1" placeholder="بلا تصعيد" value={r.escalate_after_minutes ?? ""} onChange={(e) => setR({ ...r, escalate_after_minutes: e.target.value === "" ? null : Number(e.target.value) })} />
           </label>
           <label className="block text-xs text-ink-500">إلى
-            <select className="input mt-1" value={r.escalate_to} onChange={(e) => setR({ ...r, escalate_to: e.target.value as "fallback" | "owner" })} disabled={!editable || r.escalate_after_minutes == null}>
+            <select className="input mt-1" value={r.escalate_to} onChange={(e) => setR({ ...r, escalate_to: e.target.value as "fallback" | "owner" })} disabled={!editable || r.escalate_after_minutes == null} aria-describedby={editable && r.escalate_after_minutes == null ? "dr-journey-esc" : undefined}>
               <option value="fallback">البديل (الإدارة)</option><option value="owner">المالك</option>
-            </select>
+            </select><DisabledReason id="dr-journey-esc" show={editable && r.escalate_after_minutes == null} text="حدّد مدة التصعيد أولًا" />
           </label>
         </div>
       </fieldset>
       {editable && changed && (
         <div className="mt-2 flex justify-end gap-2">
           <button type="button" className="btn-outline text-xs" onClick={() => setR(rule)}>تراجع</button>
-          <button type="button" className="btn-primary text-xs" disabled={busy !== null || r.recipients.length === 0}
-            onClick={() => onSave({ enabled: r.enabled, recipients: r.recipients, channel: r.channel, delay_minutes: String(r.delay_minutes), escalate_after_minutes: r.escalate_after_minutes == null ? null : String(r.escalate_after_minutes), escalate_to: r.escalate_to })}>حفظ القاعدة</button>
+          <button type="button" className="btn-primary text-xs" disabled={busy !== null || r.recipients.length === 0} aria-describedby={r.recipients.length === 0 ? "dr-journey-rcp" : undefined}
+            onClick={() => onSave({ enabled: r.enabled, recipients: r.recipients, channel: r.channel, delay_minutes: String(r.delay_minutes), escalate_after_minutes: r.escalate_after_minutes == null ? null : String(r.escalate_after_minutes), escalate_to: r.escalate_to })}>حفظ القاعدة</button><DisabledReason id="dr-journey-rcp" show={r.recipients.length === 0} text="أضف مستلمًا واحدًا على الأقل" />
         </div>
       )}
     </div>

@@ -11,7 +11,7 @@ import { useAuth } from "../../lib/auth";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { knowledgeApi, suggestKeywords, KNOWLEDGE_CATEGORY_LABELS, type KnowledgeRow, type UnansweredRow, type KnowledgeDraft, type KnowledgeCategory } from "../../lib/knowledgeApi";
 import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge , NumberInput} from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge , NumberInput, useFormDraft, useEditDraft, DraftRestoreBanner } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatDateTime, COUNT } from "../../lib/utils";
 import { BookOpen, Plus, Pencil, Search, MessageCircleQuestion, Archive, RotateCcw, FileText, Building2, Globe, Lock, Sparkles } from "lucide-react";
@@ -52,6 +52,23 @@ export default function AdminKnowledge() {
 
   // 0055 (SETUP-13, the owner's decision): a contradicting answer is refused; the existing entry opens for editing instead
   const [conflict, setConflict] = useState<KnowledgeRow | null>(null);
+  // 6.5 (U4): a new answer survives a reload (session storage, offered back, restored only on click)
+  const kbPristine = (d: KnowledgeDraft) => !d.question.trim() && !d.answer.trim() && d.keywords.length === 0;
+  const fd = useFormDraft<KnowledgeDraft>({ storageKey: !!draft && !draft.id && profile?.organization_id ? `zaaer:knowledge-draft:${profile.id}:${profile.organization_id}:${draft.branch_id ?? "all"}` : null, open: !!draft && !draft.id, value: draft ?? EMPTY(null), pristine: kbPristine, apply: (v) => setDraft(v) });
+  // Match startEdit's form shape, not the row's extra audit metadata. The pending keyword input is part of the edit.
+  const originalRow = draft?.id ? rows.find((r) => r.id === draft.id) : null;
+  const editOriginal = originalRow ? {
+    id: originalRow.id, version: originalRow.version, branch_id: originalRow.branch_id,
+    category: originalRow.category, question: originalRow.question, keywords: originalRow.keywords,
+    answer: originalRow.answer, answer_en: originalRow.answer_en, is_public: originalRow.is_public,
+    is_active: originalRow.is_active, priority: originalRow.priority, pending_keywords: "",
+  } : null;
+  const ed = useEditDraft<KnowledgeDraft & { pending_keywords: string }>({
+    storageKey: draft?.id && profile?.id && profile.organization_id ? `zaaer:knowledge-edit:${profile.id}:${profile.organization_id}:${draft.id}` : null,
+    open: !!draft?.id, value: { ...(draft ?? EMPTY(null)), pending_keywords: kwInput }, original: editOriginal,
+    version: originalRow?.version,
+    apply: ({ pending_keywords, ...v }) => { setDraft(v); setKwInput(pending_keywords); },
+  });
   const startNew = (prefill?: Partial<KnowledgeDraft>) => { setConflict(null); setDraft({ ...EMPTY(branchId), ...prefill }); setKwInput(""); };
   const startEdit = (r: KnowledgeRow) => { setConflict(null); setDraft({ id: r.id, version: r.version, branch_id: r.branch_id, category: r.category, question: r.question, keywords: r.keywords, answer: r.answer, answer_en: r.answer_en, is_public: r.is_public, is_active: r.is_active, priority: r.priority }); setKwInput(""); };
   const answerUnanswered = (u: UnansweredRow) => startNew({ question: u.question, keywords: suggestKeywords(u.question), unanswered_id: u.id });
@@ -162,8 +179,10 @@ export default function AdminKnowledge() {
               setConflict(id ? rows.find((r) => r.id === id) ?? null : null);
               throw e;
             }
-            setDraft(null); setConflict(null); load();
+            fd.clearSaved(); ed.clearSaved(); setDraft(null); setConflict(null); load();
           }}>
+            {fd.saved && <DraftRestoreBanner label="مسودة إجابة لم تُحفظ" summary={fd.saved.question.trim() || null} onRestore={fd.restoreSaved} />}
+            {ed.saved && <DraftRestoreBanner label="تعديل الإجابة لم يُحفظ" summary={ed.saved.question || null} onRestore={ed.restoreSaved} />}
             <div className="space-y-3">
               {conflict && (
                 <div className="rounded-xl border border-warning-500/40 bg-warning-500/10 p-3 text-sm text-ink-700" data-testid="knowledge-conflict">

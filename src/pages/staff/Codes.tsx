@@ -8,7 +8,7 @@ import { weakKeyboxCode } from "../../lib/validation";
  * server. Housekeeping never sees or changes the code of a unit with a guest in house. The rules are in
  * fn_keybox_board / fn_keybox_reveal / fn_staff_rotate_keybox_code (0025); this page only shows them.
  */
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { KeyRound, Eye, EyeOff, CheckCircle2, Info } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery } from "../../lib/useBranchQuery";
@@ -227,6 +227,7 @@ function ChangeForm({ u, onCancel, onSaved }: { u: KeyboxUnit; onCancel: () => v
   const [code2, setCode2] = useState("");
   const [tested, setTested] = useState(false);
   const [busy, setBusy] = useState(false);
+  const changing = useRef(false); // 6.7: a synchronous lock, so two submits in the same tick change the code once
   const [error, setError] = useState<string | null>(null);
   const mismatch = code1.length > 0 && code2.length >= code1.length && code1 !== code2;
   const valid = CODE_RE.test(code1) && code1 === code2 && tested;
@@ -239,12 +240,15 @@ function ChangeForm({ u, onCancel, onSaved }: { u: KeyboxUnit; onCancel: () => v
     if (weakKeyboxCode(code1)) { setError("الرمز سهل التخمين (أرقام مكررة مثل 1111 أو متتالية مثل 1234). اختر رمزًا مختلطًا."); return; }
     if (code1 !== code2) { setError("الرمزان غير متطابقين."); return; }
     if (!tested) { setError("اضبط الرمز على الصندوق وجرّبه أولًا، ثم أكّد ذلك."); return; }
+    if (changing.current) return;
+    changing.current = true;
     setBusy(true);
     try {
       const r = await codesApi.change(u.room_id, code1, true);
       await onSaved(r.room_status);
     } catch (err) {
       setError(toArabicError(err));
+      changing.current = false;
       setBusy(false);
     }
   }

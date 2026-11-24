@@ -126,6 +126,7 @@ export default function Expenses() {
 }
 
 function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone: () => void; onCancel: () => void }) {
+  const { profile } = useAuth();
   const [accounts, setAccounts] = useState<CashAccount[]>([]);
   const [cats, setCats] = useState<ExpenseCategory[]>([]);
   const [accountId, setAccountId] = useState("");
@@ -140,19 +141,19 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
   const [key] = useState(newIdempotencyKey());
 
   // 6.5 (U4): what is typed survives a reload (this tab, per branch) and the form offers to restore it; the receipt file is never stored
-  const draftKey = `zaaer:expense-draft:${branchId}`;
+  const draftKey = profile?.id && profile.organization_id ? `zaaer:expense-draft:${profile.id}:${profile.organization_id}:${branchId}` : null;
   type ExpenseDraft = { accountId: string; categoryId: string; amount: number | null; day: string; payee: string; desc: string; reference: string };
   const [draft, setDraft] = useState<ExpenseDraft | null>(null);
   const typed = !!(desc.trim() || payee.trim() || amount || reference.trim());
   useEffect(() => {
-    try { const raw = sessionStorage.getItem(draftKey); const d = raw ? JSON.parse(raw) as ExpenseDraft : null; setDraft(d && (d.desc || d.payee || d.amount || d.reference) ? d : null); } catch { setDraft(null); }
+    try { sessionStorage.removeItem(`zaaer:expense-draft:${branchId}`); if (!draftKey) { setDraft(null); return; } const raw = sessionStorage.getItem(draftKey); const d = raw ? JSON.parse(raw) as ExpenseDraft : null; setDraft(d && (d.desc || d.payee || d.amount || d.reference) ? d : null); } catch { setDraft(null); }
   }, [draftKey]);
   useEffect(() => {
-    if (!typed) return;
+    if (!typed || !draftKey) return;
     const t = window.setTimeout(() => { try { sessionStorage.setItem(draftKey, JSON.stringify({ accountId, categoryId, amount, day, payee, desc, reference })); } catch { /* storage off */ } }, 300);
     return () => window.clearTimeout(t);
   }, [typed, draftKey, accountId, categoryId, amount, day, payee, desc, reference]);
-  const clearDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* storage off */ } setDraft(null); };
+  const clearDraft = () => { try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* storage off */ } setDraft(null); };
 
   useEffect(() => {
     Promise.all([

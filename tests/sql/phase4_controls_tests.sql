@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Plan phase 4, worker K items: 4.9 (M9 invoice cancellation / e-invoiced credit note, migration 0084),
 -- 4.12 (per-hotel finance control thresholds, migration 0085) and the plan's 10 MB expense receipt limit (0086).
@@ -88,7 +89,7 @@ do $$ declare cn jsonb; orig invoices%rowtype; row_cn invoices%rowtype; begin
     and row_cn.total_halalas = orig.total_halalas and row_cn.subtotal_halalas = orig.subtotal_halalas and row_cn.tax_halalas = orig.tax_halalas
     and row_cn.status = 'issued' and (select status from invoices where id = orig.id) = 'issued'
     and exists (select 1 from review_items where kind = 'invoice_credit_note' and entity_id = row_cn.id)
-    and exists (select 1 from audit_events where action = 'invoice.credit_note' and entity_id = row_cn.id));
+    and exists (select 1 from t_audit_all() where action = 'invoice.credit_note' and entity_id = row_cn.id));
 end $$;
 -- no second credit note on the same invoice
 select t_record('4.9 إشعار دائن ثانٍ على الفاتورة نفسها يُرفض',
@@ -133,7 +134,7 @@ select t_record('4.12 عتبات افتراضية موجودة للفندق',
 -- the owner changes a threshold; the change is in the security log with before and after
 do $$ declare g jsonb; ev audit_events%rowtype; begin
   g := fn_finance_controls_set(jsonb_build_object('expense_limit_supervisor_halalas', 7500000, 'discount_threshold_halalas', 2500000));
-  select * into ev from audit_events where action = 'security.control_thresholds_updated' order by created_at desc, id desc limit 1;
+  select * into ev from t_audit_all() where action = 'security.control_thresholds_updated' order by created_at desc, id desc limit 1;
   perform t_record('4.12 تغيير العتبة يُحفظ ويُسجَّل في «أمني» بالقيمتين',
     (g->>'expense_limit_supervisor_halalas')::bigint = 7500000 and (g->>'discount_threshold_halalas')::bigint = 2500000
     and ev.category = 'security' and ev.organization_id = '00000000-0000-0000-0000-000000000001'
@@ -145,7 +146,7 @@ end $$;
 reset role;
 select t_record('4.12 عتبة فندق لا تمس غيره',
   (select expense_limit_supervisor_halalas from finance_control_settings where organization_id = '00000000-0000-0000-0000-000000000002') = 5000000
-  and (select count(*) from audit_events where action = 'security.control_thresholds_updated' and organization_id = '00000000-0000-0000-0000-000000000002') = 0);
+  and (select count(*) from t_audit_all() where action = 'security.control_thresholds_updated' and organization_id = '00000000-0000-0000-0000-000000000002') = 0);
 set role authenticated;
 -- the supervisor reads but never writes; a rejected write changes nothing (rollback)
 do $$ declare m1 text; m2 text; m3 text; begin

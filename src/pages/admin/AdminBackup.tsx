@@ -48,7 +48,7 @@ export function BackupStatusView({ status, loading, error, reload }: {
         subtitle="نسخة مشفّرة أسبوعية وقبل كل نشر، وتمرين استعادة شهري. تُدار النسخ من خادم النظام وتظهر هنا حالتها الموثّقة."
         action={<button type="button" className="btn-outline" onClick={reload}>تحديث</button>}
       />
-      <DataState loading={loading} error={error} onRetry={reload} empty={false} emptyTitle="" emptyDescription="">
+      <DataState loading={loading} error={error} onRetry={reload} empty={!status && !!error} emptyTitle="" emptyDescription="">
         <>
           {failures > 0 && lastRun?.status === "failed" && (
             <Card className="border-red-200 bg-red-50/60 p-4">

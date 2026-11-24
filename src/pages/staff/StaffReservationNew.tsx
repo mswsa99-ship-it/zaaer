@@ -42,20 +42,20 @@ export default function StaffReservationNew() {
     // decision 4: a platform's booking says who collects and the day it was booked there
     platform_collects: null as boolean | null, platform_booked_on: todayISO() });
   // IX-05: what is typed survives a reload (a draft in this tab only, per branch), and leaving the page asks first
-  const draftKey = `zaaer:new-reservation:${branchId ?? ""}`;
+  const draftKey = profile?.id && profile.organization_id && branchId ? `zaaer:new-reservation:${profile.id}:${profile.organization_id}:${branchId}` : null;
   const [draft, setDraft] = useState<typeof f | null>(null);
   const typed = !!(f.guest_name.trim() || f.guest_phone.trim() || f.notes.trim() || f.external_ref.trim());
   useEffect(() => {
-    try { const raw = sessionStorage.getItem(draftKey); setDraft(raw ? JSON.parse(raw) : null); } catch { setDraft(null); }
+    try { sessionStorage.removeItem(`zaaer:new-reservation:${branchId ?? ""}`); if (!draftKey) { setDraft(null); return; } const raw = sessionStorage.getItem(draftKey); setDraft(raw ? JSON.parse(raw) : null); } catch { setDraft(null); }
   }, [draftKey]);
   useEffect(() => {
-    if (!typed) return;
+    if (!typed || !draftKey) return;
     const t = window.setTimeout(() => { try { sessionStorage.setItem(draftKey, JSON.stringify(f)); } catch { /* storage off */ } }, 400);
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => { window.clearTimeout(t); window.removeEventListener("beforeunload", warn); };
   }, [f, typed, draftKey]);
-  const clearDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* storage off */ } setDraft(null); };
+  const clearDraft = () => { try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* storage off */ } setDraft(null); };
   // decision 2: the guest profile — chosen from the search, matched by phone on the server, or a new one
   const [guest, setGuest] = useState<GuestProfileRow | null>(null);
   const [newProfile, setNewProfile] = useState(false);

@@ -1,0 +1,20 @@
+sig	final_class	anon	authenticated	transitive_writes	dynamic_sql_in_closure	outbound_table_hits
+fn_ai_ops_propose(p_conversation uuid, p_action text, p_args jsonb, p_summary text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	ai_action_proposals	True	
+fn_ai_ops_reject_proposal(p_id uuid, p_reason text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	ai_action_proposals	True	
+fn_auth_event(p_action text, p_target uuid)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events	False	
+fn_conversation_take(p_conversation uuid, p_take boolean)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,conversations,review_items	True	
+fn_guest_ban(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,guest_bans,review_items	True	
+fn_guest_phone_open(p_token text, p_internal_ref text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	True	True	audit_events,registration_sessions	True	
+fn_guest_phone_verify(p_phone text, p_code text, p_fingerprint text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	True	True	guest_phone_challenges,guest_phone_sessions,reservation_guests	True	
+fn_guest_phone_verify_ref(p_phone text, p_ref text, p_fingerprint text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	True	True	guest_lookup_attempts,guest_phone_sessions	True	
+fn_guest_rate(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,guest_profiles	False	
+fn_monitors_if_due(p_branch uuid)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	monitor_runs,review_items	True	
+fn_review_mark(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,notifications,review_items	True	
+fn_review_undo(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,review_items	True	
+fn_saved_view_remove(p_id uuid)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	staff_saved_views	True	
+fn_saved_view_save(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	staff_saved_views	True	
+fn_staff_alert_resolve(p_alert uuid, p_note text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	alert_events,audit_events	True	
+fn_staff_payment_exception(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,stay_payment_exceptions	True	
+fn_staff_record_inspection(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,checkout_inspections,notifications	True	
+fn_staff_record_paper_ack(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,stay_acknowledgements	True	
+fn_staff_release_next_slot(p_branch uuid, p_category uuid, p_date date, p_reason text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,released_slots	True	

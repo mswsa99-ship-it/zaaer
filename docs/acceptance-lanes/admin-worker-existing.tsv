@@ -1,0 +1,36 @@
+sig	final_class	anon	authenticated	transitive_writes	dynamic_sql_in_closure	outbound_table_hits
+fn_admin_alert_rule_save(p_event text, p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	alert_rules,audit_events	True	
+fn_admin_approve_media_item(p_id uuid, p_approve boolean)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_media_items	True	
+fn_admin_archive_knowledge(p_id uuid, p_reason text, p_archive boolean)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,knowledge_entries	True	
+fn_admin_archive_media_item(p_id uuid, p_reason text, p_archive boolean)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_media_items	True	
+fn_admin_delete_definition(p_entity text, p_id uuid)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,task_types	True	
+fn_admin_journey_settings_save(p_branch uuid, p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_journey_settings	True	
+fn_admin_resolve_unanswered(p_id uuid, p_status text, p_note text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,unanswered_questions	True	
+fn_admin_save_payment_settings(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_payment_settings	True	
+fn_admin_set_branch_guide(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_journey_settings,branches,cash_accounts,document_sequences,gl_accounts,journal_entries,journal_lines	True	
+fn_admin_set_branch_media(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_media	True	
+fn_admin_set_day_close_minutes(p_branch uuid, p_minutes integer)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_journey_settings,branches,cash_accounts,document_sequences,gl_accounts,journal_entries,journal_lines	True	
+fn_admin_set_guest_site(p_url text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	ai_settings,alert_rules,audit_events,bank_parse_rules,finance_control_settings,gl_accounts,organizations,system_settings	True	
+fn_admin_set_inventory(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,inventory_periods	True	
+fn_admin_set_room_license(p_room uuid, p_number text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,room_licenses	True	
+fn_admin_set_source_active(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,booking_sources	False	
+fn_admin_set_source_commission(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,booking_sources	False	
+fn_admin_update_ai_settings(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	ai_settings,audit_events	False	
+fn_admin_update_organization(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	ai_settings,alert_rules,audit_events,bank_parse_rules,finance_control_settings,gl_accounts,organizations,system_settings	True	
+fn_admin_upsert_bank_rule(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,bank_parse_rules	False	
+fn_admin_upsert_block(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,blocks	True	
+fn_admin_upsert_branch(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_journey_settings,branches,cash_accounts,document_sequences,gl_accounts,journal_entries,journal_lines,task_types	True	
+fn_admin_upsert_cash_account(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,cash_accounts,document_sequences,gl_accounts,journal_entries,journal_lines	True	
+fn_admin_upsert_expense_category(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,expense_categories,gl_accounts	True	
+fn_admin_upsert_facility(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,facilities	True	
+fn_admin_upsert_floor(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,floors	True	
+fn_admin_upsert_knowledge(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,knowledge_entries,unanswered_questions	True	
+fn_admin_upsert_media_item(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,branch_media_items	True	
+fn_admin_upsert_product(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,products	True	
+fn_admin_upsert_product_category(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,product_categories	True	
+fn_admin_upsert_release_rule(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,release_rules	True	
+fn_admin_upsert_room(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,rooms	True	
+fn_admin_upsert_room_category(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,room_categories	True	
+fn_admin_upsert_service(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,service_definitions	True	
+fn_admin_upsert_source(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,booking_sources	False	
+fn_admin_upsert_task_type(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,task_types	True	

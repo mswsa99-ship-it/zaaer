@@ -295,5 +295,10 @@ export const INDIVIDUAL_PERMISSION_MAP: Record<string, {page:string;action:PageA
     "page": "/admin/audit-logs",
     "action": "view",
     "sensitive": false
+  },
+  "history.details": {
+    "page": "/staff/reservations",
+    "action": "view",
+    "sensitive": true
   }
 };

@@ -52,7 +52,7 @@ create or replace function t_mv(p jsonb) returns bank_movements language sql sec
 
 -- ---------------------------------------------------------------- BK01 the matrix
 select t_record('BK01 the permissions matrix has «bank.view» (owner, manager, finance) and «bank.manage» (owner)',
-  (select count(*) from fn_permission_catalog()) = 64
+  (select count(*) from fn_permission_catalog()) = 65  -- 0125 adds history.details
   and exists (select 1 from fn_permission_catalog() c where c.code = 'bank.view' and c.default_roles = '{owner,manager,finance}')
   and exists (select 1 from fn_permission_catalog() c where c.code = 'bank.manage' and c.default_roles = '{owner}'));
 

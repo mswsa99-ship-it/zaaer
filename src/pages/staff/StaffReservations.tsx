@@ -22,6 +22,7 @@ import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 import { money, type ExportScope, type ExportStatement } from "../../lib/exports";
 import type { XlsxCell } from "../../lib/xlsx";
 import { supabase } from "../../lib/supabase";
+import { DisabledReason } from "../../components/DisabledReason";
 
 const PAGE = 25;
 const NO_ROWS: { total: number; rows: ReservationRow[] } = { total: 0, rows: [] };
@@ -270,7 +271,7 @@ export default function StaffReservations() {
           </table>
           <div className="flex items-center justify-between border-t border-ink-50 px-3 py-2 text-xs text-ink-500">
             <span>صفحة {page + 1} من {pages} · {data.total} حجز{list.refreshing && <Spinner className="mr-2 inline h-3 w-3" />}</span>
-            <div className="flex gap-2"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn-ghost px-2 py-1 text-xs">السابق</button><button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} className="btn-ghost px-2 py-1 text-xs">التالي</button></div>
+            <div className="flex flex-wrap items-center gap-2"><button disabled={page === 0} aria-describedby={page === 0 ? "dr-staffreservations-12" : undefined} title={page === 0 ? "أنت في الصفحة الأولى" : undefined} onClick={() => setPage(page - 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">السابق</button><DisabledReason id="dr-staffreservations-12" show={page === 0} text="أنت في الصفحة الأولى" /><button disabled={page + 1 >= pages} aria-describedby={page + 1 >= pages ? "dr-staffreservations-11" : undefined} title={page + 1 >= pages ? "هذه آخر صفحة" : undefined} onClick={() => setPage(page + 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">التالي</button><DisabledReason id="dr-staffreservations-11" show={page + 1 >= pages} text="هذه آخر صفحة" /></div>
           </div>
         </div>
       </DataState>

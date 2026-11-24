@@ -1,0 +1,12 @@
+# Finite2.11acceptance boundary, current580e362
+
+Latest localrepairs0115settingsview/0116notificationboundary integrated. Existingtableclassificationa24is a historicalpre-repaircatalog, not currentacceptance. Reconcilebeforeusingitscounts.
+
+-444directtable/opcells across111hotel/branchsurfaces, not allrolesmultiplied blindly. GrantabsentA can be sourcequalifiedN_A only exactAPIrole/op inclPUBLIC/inheritance/columngrants. PolicyabsentA2defaultdeny requires allapplicablepolicies/roles. Neither is PASS or anAPIownerpositive. Superusercontrolsdo not proveallowedstaffDML.
+-C1ownerpositive observesrows/effects, not eachroleintendedallow. Per-userpagegrants govern intendedindividualmodel; legacyRLSobservationsareimplementationregressiononly.
+-C2sevenactionablevalidcontrols: branch_membershipsINSERT/UPDATE/DELETE;conversation_messagesINSERT;conversationsUPDATE;staff_profilesUPDATE;property_policiesDELETE. Assignedmatrixworker, pluslatestpolicyreconciliation, not repeatedbroad33744run.
+-Writerclosureis regexlocator, not exactoverloadgrants/trigger/dynamicSQLproof. RPC-onlywrites are covered in exactRPCeffectcontracts, not forceddirecttablepositive. Protected9neverexecuted, explicituncovered, notgreen.
+-Current338signatureinventory128adapterrows includesvariants, not128qualifiedsignatures; sourceinventory214unadapted/33weak/4invalid must not disappear by declaringexceptions. Need finiteexactsignaturetriage beforecompletegate. Function/role/operationcoveragedoesnot automaticallymeanallbusinessinputbranches;pos/bankrefund and exceptionbranches remainexplicituntestedlimits.
+-fn_guest_checkout previouslysuccess/no-writeonly, stillneedsresponseidentityoracle. Guestmutators116proofdoesnotupgradethatreadidentity. Assignmentthroughmainneeded.
+
+Fullacceptancegate remains P0INCOMPLETE exit1. No user-facingdone/releasePASS, nopush/deploy/liveAuth/SMTP/spend. Scopedprovedfixesretainvaluewithoutlyingaboutremainingwork.

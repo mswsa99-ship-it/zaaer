@@ -1,0 +1,7 @@
+# Exact HK actions0123, bounded bank4
+
+0123 changes only fn_hk_create_task add versus fn_hk_start_task/fn_hk_complete_task edit, using existing fn_can_write after existing fn_require_cap. Preserves legacy/owner, branch/assignee, task business transitions and all indirect aliases through callee checks. No new capability/map/full_role rule. Independent approved perpagefiveactions design, no additional decision required for unambiguous create/existingupdate.
+
+Actual PG16.6 base1941 valid RED3wrongaction failures /15, GREEN15/15. Synthetic same supervisor credential, five grantstates add/edit/both/view/none; real target literal create/start/complete positives; oppositeaction/view/none42501+fullpublicbefore/after no-write; each businesscall nestedrollback. InitialcandidateNULLtestbugfixed and validREDrepeated beforeGREEN. No audit exacttouch/foreign/legacy endpoint matrix credit here. Prior0122legacy read/helper baselines remain separately qualified.
+
+Bank4 actualPG16 through0123base1941,424calls0failures,stricttrue+ROLLBACK; ownerpositive/capdenials/foreignownerNOT_FOUND, sixvalidationseparate. Sourceworkerbounds preserved: rejectedreparseonly,nooutbound/relay; nofees/voucher/payoutmatch; auditactorunasserted; touchedtablesregexpresenceNOTexactset. Original9outboxbaselinecountpreserved, no cleanup, no contenthashclaiminsideeachbankcall. Pythonharnessfirstattemptinterruptedbeforecollect, no productcredit; directfinalrun117secondscomplete.

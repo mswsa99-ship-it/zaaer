@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Core acceptance tests (ZAAER-TESTING-AND-CONTROL-RULES §9): property
 -- definitions, allocations/overlap, stay amendments, financial ledger,
@@ -105,7 +106,7 @@ do $$ declare r jsonb; fac uuid; svc uuid; t uuid; begin
   r := fn_admin_upsert_service('{"branch_id":"00000000-0000-0000-0000-000000000010","name_ar":"خدمة مؤقتة","price_halalas":1000}'); svc := (r->>'id')::uuid;
   r := fn_admin_delete_definition('service', svc);
   perform t_record('A07 unused service hard-deleted with audit', (r->>'ok')::boolean and (select count(*) from service_definitions where id = svc) = 0
-    and (select count(*) from audit_events where entity_id = svc and action = 'service.deleted') = 1, r::text);
+    and (select count(*) from t_audit_all() where entity_id = svc and action = 'service.deleted') = 1, r::text);
 end $$;
 
 -- A09: deactivating a room with a future allocation
@@ -170,7 +171,7 @@ do $$ declare r jsonb; res reservations; a record; begin
   perform t_record('R05 extension: check_out, allocation, rent charge and total consistent',
     res.check_out = a.to_date and res.total_halalas = (t_fin(res.id)->>'total')::bigint
     and (select count(*) from reservation_charges where reservation_id = res.id and kind = 'rent') = 2
-    and (select count(*) from audit_events where entity_id = res.id and action = 'reservation.departure_changed') = 1, r::text);
+    and (select count(*) from t_audit_all() where entity_id = res.id and action = 'reservation.departure_changed') = 1, r::text);
 exception when others then perform t_record('R05 extension: check_out, allocation, rent charge and total consistent', false, sqlerrm); end $$;
 
 -- R06 switch to a room of another branch
@@ -211,7 +212,7 @@ select t_login('a0000000-0000-0000-0000-000000000008','mgr@test.local');
 do $$ declare r jsonb; before_total bigint; e audit_events; begin
   before_total := (t_res((select v from ids where k='resIn'))).total_halalas;
   r := fn_staff_adjust_price((select v from ids where k='resIn'), 'discount', 5000, 'خصم تعويض', 'عطل تكييف', t_ver('reservations', (select v from ids where k='resIn')));
-  select * into e from audit_events where entity_id = (select v from ids where k='resIn') and action = 'reservation.total_changed' order by created_at desc limit 1;
+  select * into e from t_audit_all() where entity_id = (select v from ids where k='resIn') and action = 'reservation.total_changed' order by created_at desc limit 1;
   perform t_record('R09 manager discount with reason: total reduced, before/after + reason audited',
     (t_res((select v from ids where k='resIn'))).total_halalas < before_total and (e.details->'before'->>'total_halalas')::bigint = before_total and e.details->>'reason' = 'عطل تكييف', r::text);
 exception when others then perform t_record('R09 manager discount with reason: total reduced, before/after + reason audited', false, sqlerrm); end $$;
@@ -251,7 +252,7 @@ do $$ declare r1 jsonb; r2 jsonb; res uuid := (select v from ids where k='resOTA
   perform t_record('R11 duplicate OTA cancel event processed once; no implicit refund; refund flagged as separate action',
     (r1->>'duplicate')::boolean = false and (r2->>'duplicate')::boolean and (t_res(res)).status = 'cancelled'
     and (select count(*) from financial_vouchers where reservation_id = res and kind = 'refund') = 0 and (r1->>'refund_required_separately')::boolean
-    and (select count(*) from audit_events where entity_id = res and action = 'reservation.cancelled') = 1
+    and (select count(*) from t_audit_all() where entity_id = res and action = 'reservation.cancelled') = 1
     and (select count(*) from reservation_allocations where reservation_id = res and status = 'active') = 0, r1::text || r2::text);
 exception when others then perform t_record('R11 duplicate OTA cancel event processed once; no implicit refund; refund flagged as separate action', false, sqlerrm); end $$;
 
@@ -395,7 +396,7 @@ do $$ declare v int; q jsonb; r jsonb; res uuid; f jsonb; begin
   q := fn_staff_quote('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000030', current_date + 40, current_date + 43, 10005, 10);
   perform t_record('X07b2 a change of the tax policy applies to new reservations only: the old one taxes its new line at 15% (150), a new quote has none',
     (t_fin(res)->>'tax')::bigint = 4650 and (q->>'tax')::bigint = 0 and (q->>'total')::bigint = 30005
-    and (select count(*) from audit_events where entity_id = '00000000-0000-0000-0000-000000000010' and action = 'branch.tax_changed') >= 2, t_fin(res)::text || ' / ' || q::text);
+    and (select count(*) from t_audit_all() where entity_id = '00000000-0000-0000-0000-000000000010' and action = 'branch.tax_changed') >= 2, t_fin(res)::text || ' / ' || q::text);
 exception when others then perform t_record('X07b1 15% exclusive: rent 30015, discount −10, tax 4502 − 2 = 4500, total 34505 — quote and reservation agree', false, sqlerrm); end $$;
 
 -- X07c 15% included in the price: 115.00 gross → net round(11500 / 1.15) = 10000, tax 1500
@@ -472,7 +473,7 @@ do $$ declare room uuid := (select v from ids where k='room1'); r jsonb; t uuid;
   r := fn_hk_set_cleanliness(room, 'clean', 'تفقد سريع');
   perform t_record('HC01 a manual «clean» is accepted while a cleaning task is open; the task stays open; the change is recorded with who made it',
     (r->>'ok')::boolean and (t_room(room)).cleanliness = 'clean' and (select status from housekeeping_tasks where id = t) = 'pending'
-    and t_count(format('select count(*) from audit_events where entity_id = %L and action = %L and actor_id is not null and (details->''after''->>''open_cleaning_task'')::boolean',
+    and t_count(format('select count(*) from t_audit_all() where entity_id = %L and action = %L and actor_id is not null and (details->''after''->>''open_cleaning_task'')::boolean',
                        room, 'room.cleanliness_changed')) >= 1, r::text);
   r := fn_hk_complete_task(t, null, t_ver('housekeeping_tasks', t));
   perform t_record('HC01b the open task is completed afterwards as usual', (select status from housekeeping_tasks where id = t) = 'completed' and (t_room(room)).cleanliness = 'clean', r::text);
@@ -544,7 +545,7 @@ end $$;
 
 -- D03 financial audit has actor/time/reference/reason and no identity numbers or secrets
 do $$ declare e audit_events; begin
-  select * into e from audit_events where action = 'voucher.deposit_refund_created' order by created_at desc limit 1;
+  select * into e from t_audit_all() where action = 'voucher.deposit_refund_created' order by created_at desc limit 1;
   perform t_record('D03 financial audit: actor, time, amount, reason present; no document numbers or codes',
     e.actor_id is not null and e.created_at is not null and (e.details->'after'->>'amount_halalas') is not null and e.details->>'reason' is not null
     and regexp_replace(e.details::text, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '', 'g') !~ '\d{10}'   -- ids are random: a uuid may hold 10 digits
@@ -580,7 +581,7 @@ do $$ declare c uuid; p jsonb; r jsonb; res uuid := (select v from ids where k='
   r := fn_ai_ops_execute_proposal((p->>'proposal_id')::uuid);
   perform t_record('AI02 housekeeping confirming a task proposal → executed via fn_hk_create_task and audited',
     (r->>'ok')::boolean and (select status from ai_action_proposals where id = (p->>'proposal_id')::uuid) = 'executed'
-    and t_count('select count(*) from audit_events where action = ''ai_proposal.executed'' and entity_id = ''' || (p->>'proposal_id') || '''') = 1, r::text);
+    and t_count('select count(*) from t_audit_all() where action = ''ai_proposal.executed'' and entity_id = ''' || (p->>'proposal_id') || '''') = 1, r::text);
   begin
     perform fn_ai_ops_propose(c, 'drop_everything', '{}'::jsonb, 'x');
     perform t_record('AI03 unknown action cannot be proposed', false, 'accepted');

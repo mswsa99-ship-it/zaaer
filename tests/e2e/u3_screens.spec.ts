@@ -19,11 +19,19 @@ test("UB01 on a phone the supervisor and the owner get a bottom bar of four page
   await expect(drawer).toBeHidden();
 });
 
-test("UB01b the owner's bottom bar leads to the administration's main pages, and it is gone on a computer", async ({ page, loginAs, go }) => {
+test("UB01b on a phone the owner keeps the four operations tabs and reaches the administration's pages through «المزيد» → «الإدارة»; the bar is gone on a computer", async ({ page, loginAs, go }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await loginAs("owner");
   await go("/admin/dashboard");
-  await expect(page.getByTestId("bottom-tabs").getByRole("link", { name: "المالية" })).toBeVisible();
+  const bar = page.getByTestId("bottom-tabs");
+  await expect(bar.getByRole("link")).toHaveCount(4);   // the preferred operations tabs stay as they were
+  await bar.getByTestId("bottom-tabs-more").click();
+  const drawer = page.getByTestId("staff-menu-drawer");
+  await expect(drawer.getByTestId("admin-menu-toggle")).toHaveAttribute("aria-expanded", "true");   // on an admin page its group is already open
+  const admin = drawer.locator("#drawer-admin");   // the «الإدارة» entry
+  await admin.getByRole("button", { name: "العمليات", exact: true }).click();
+  await admin.getByRole("link", { name: "المالية", exact: true }).click();
+  await expect(page).toHaveURL(/admin\/finance/);
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.getByTestId("bottom-tabs")).toBeHidden();
 });

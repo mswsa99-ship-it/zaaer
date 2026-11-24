@@ -15,7 +15,7 @@ test.describe("اسم RoomAI في شاشات الموظفين", () => {
 
   test("بوابة الدخول تعرض شعار RoomAI الكامل", async ({ page, go }) => {
     await go("/staff/login");
-    await expect(page.locator("img[alt='RoomAI']")).toBeVisible();
+    await expect(page.locator("img[alt='RoomAI']:visible")).toHaveCount(1); // the day and night logos share the alt text; exactly one shows at a time
   });
 
   test("الضيف يرى «يعمل بـ RoomAI» في التذييل فقط", async ({ page, go }) => {

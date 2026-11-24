@@ -46,6 +46,7 @@ test("QM09 a refund starts from the payment it returns: its method by default, t
   for (let i = 0; i < n && !found; i++) {
     await rows.nth(i).getByRole("link", { name: "فتح" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/);
+    await expect(page.getByRole("heading", { name: "الملخص المالي", exact: true })).toBeVisible();
     const btn = page.getByRole("button", { name: "استرداد إقامة" });
     if (await btn.count()) {
       found = true;

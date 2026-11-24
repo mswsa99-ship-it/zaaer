@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- The review of 31 October, Phase 3a as the owner decided it (QR*; migration 0057): the front desk — past stays, what
 -- an ended booking owes, «مقيم في يوم», weak key-box codes. A branch of its own, «فرع الاستقبال»: the supervisor a…02,
@@ -67,7 +68,7 @@ do $$ declare base jsonb; r jsonb; begin
     t_err(format('select fn_staff_create_reservation(%L)', base), 'PAST_STAY%') = 'ok');
   r := fn_staff_create_reservation(base || '{"late_entry_reason":"حجز منصة أُدخل بعد المغادرة"}');
   perform t_record('QR02 the supervisor enters it late with a reason; the reason is in the audit trail',
-    r->>'id' is not null and exists (select 1 from audit_events where action = 'reservation.late_entry' and entity_id = (r->>'id')::uuid
+    r->>'id' is not null and exists (select 1 from t_audit_all() where action = 'reservation.late_entry' and entity_id = (r->>'id')::uuid
                                      and details::text like '%حجز منصة أُدخل بعد المغادرة%'), r::text);
   insert into ids values ('late', (r->>'id')::uuid);
 exception when others then perform t_record('QR02 the supervisor enters it late with a reason; the reason is in the audit trail', false, sqlerrm);

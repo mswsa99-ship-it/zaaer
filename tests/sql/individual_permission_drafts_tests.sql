@@ -73,7 +73,8 @@ reset role;
 update staff_page_access set sensitive_grants='["voucher.refund","voucher.correct"]'::jsonb where staff_id='fe100000-0000-4000-8000-000000000002';
 set role authenticated;
 insert into test_results values('sensitive refund requires page plus code',fn_can('voucher.refund'));
-insert into test_results values('role restriction still applies',not fn_can('voucher.correct'));
+-- 0121 individual-template design: no role ceiling in individual mode; page grant + explicit sensitive grant allow the code
+insert into test_results values('individual grant with page and explicit sensitive code allows it (0121, no role ceiling)',fn_can('voucher.correct'));
 insert into test_results values('locked owner code denied',not fn_can('admin.permissions'));
 insert into test_results values('unmapped security denied',not fn_can('security'));
 insert into test_results values('full grant not inferred',not fn_cap_full('voucher.correct'));

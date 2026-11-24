@@ -56,7 +56,8 @@ jobs:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-change.mjs
-      - name: Verify (all gates)
+      - name: Verify (all P0 gates; isolation-scoped executes the changed-scope suites, the full matrix is reported as not run)
+        # The full Plan 2.11 matrix is INCOMPLETE and shown as not run in the summary; it is never reported as PASS.
         run: npm run verify
       - name: Test log on the run page (decision 56)
         if: always()

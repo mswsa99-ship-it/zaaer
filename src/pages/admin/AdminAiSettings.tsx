@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { aiHealth, staffApi, toArabicError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -129,12 +129,15 @@ export default function AdminAiSettings() {
   const fallbackList = parseModelList(fallbackText);
   const fallbackError = fallbackList.length > 3 ? "ثلاثة نماذج احتياطية كحد أقصى." : fallbackList.some((m) => !MODEL_ID.test(m)) ? "اكتب معرّفات نماذج فقط (حروف لاتينية صغيرة وأرقام و . -) مفصولة بفواصل." : null;
 
+  const saveLock = useRef(false);
   async function save() {
+    if (saveLock.current) return;
     if (!isOwner) return;
     if (fallbackError) { setError(fallbackError); return; }
     // OWNER-19: every number within the range its field states, before anything is sent
     const bad = (Object.entries(NUMBER_RANGES) as Array<[keyof AiSettings, [number, number, string]]>).find(([k, [lo, hi]]) => { const v = Number(form[k]); return !Number.isFinite(v) || (k !== "temperature" && !Number.isInteger(v)) || v < lo || v > hi; });
     if (bad) { setError(`«${bad[1][2]}» خارج النطاق المسموح (${bad[1][0].toLocaleString("en-US")}–${bad[1][1].toLocaleString("en-US")}).`); return; }
+    saveLock.current = true;
     setSaving(true); setError(null); setSaved(false);
     try {
       const patch: Record<string, unknown> = {
@@ -157,7 +160,7 @@ export default function AdminAiSettings() {
       setSaved(true); setDirty(false);
       await load();
     } catch (e) { setError(toArabicError(e)); }
-    setSaving(false);
+    saveLock.current = false; setSaving(false);
   }
 
   async function test() {
@@ -290,7 +293,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
       <Card className="mt-4">
         <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink-700"><Gauge className="h-4 w-4 text-brand-600" /> الاستهلاك — آخر 14 يومًا</h3>
         <p className="-mt-2 mb-3 text-xs text-ink-500">«طلبات» كل ما وصل إلى المساعد، و«تقليدي» ما أُجيب بالمسار الثابت دون الذكاء الاصطناعي (وهو كل الطلبات حين يكون المساعد متوقفًا).</p>
-        {usage.length === 0 ? <p className="text-sm text-ink-400">لا يوجد استهلاك مسجّل بعد.</p> : (
+        {usage.length === 0 ? (error ? null : <p className="text-sm text-ink-400">لا يوجد استهلاك مسجّل بعد.</p>) : (
           <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={usageChart}>
@@ -338,7 +341,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <div>
             <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-600"><ShieldCheck className="h-3.5 w-3.5" /> آخر 30 حدثًا أمنيًا</h4>
-            {guards.length === 0 ? <p className="text-xs text-ink-400">لا توجد أحداث.</p> : (
+            {guards.length === 0 ? (error ? null : <p className="text-xs text-ink-400">لا توجد أحداث.</p>) : (
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">المرحلة</th><th className="py-1.5 text-right font-medium">القاعدة</th><th className="py-1.5 text-right font-medium">الوقت</th></tr></thead>
@@ -351,7 +354,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
           </div>
           <div>
             <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-600"><Activity className="h-3.5 w-3.5" /> آخر 30 تنفيذ أداة</h4>
-            {tools.length === 0 ? <p className="text-xs text-ink-400">لا توجد تنفيذات.</p> : (
+            {tools.length === 0 ? (error ? null : <p className="text-xs text-ink-400">لا توجد تنفيذات.</p>) : (
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">الأداة</th><th className="py-1.5 text-right font-medium">النتيجة</th><th className="py-1.5 text-center font-medium">ms</th></tr></thead>

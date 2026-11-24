@@ -33,7 +33,7 @@ The result summarizer requires a known unique pending cell ID, pass/fail outcome
 node tests/isolation/matrix-generator.mjs /tmp/roomai-catalog.json /tmp/roomai-matrix.json /tmp/roomai-results.json
 ```
 
-This is intentionally not wired as P0 yet. Full plan acceptance still requires actual authorized fixtures, all table CRUD probes, all function adapters, post-call mutation detection, public-link crossover probes and integration into the shared verification gate. Review all exemptions against the authoritative schema before promoting it. Do not infer isolation from inventory generation or unit tests.
+The complete matrix runner is not available yet. `acceptance-gate.sh` is now wired as a P0 blocker in full verification and therefore CI. It deliberately exits1 as INCOMPLETE without application SQL or fixture setup. This is an honest release block, not completed matrix coverage. Full plan acceptance still requires actual authorized fixtures, all table CRUD probes, all function adapters, post-call mutation detection and public-link crossover probes before a qualified complete runner can replace the blocker. Review all exemptions against the authoritative schema before promoting it. Do not infer isolation from inventory generation or unit tests.
 
 ## Executable partial gate, worker F (24 Nov 2026)
 
@@ -80,3 +80,7 @@ Known gaps, do not interpret these as security denial successes:
 
 `wiring.diff` is a proposal for the lead to apply sequentially. It is not applied and must not be
 called a green P0 gate. All future work must keep incomplete adapters fail-closed.
+
+## Historical loader quarantined (19:39)
+
+`local-smoke.sh` no longer connects to PostgreSQL or loads fixtures. Its former all-family fixture glob could reach protected/outbound prerequisites and is retained only in git history. It now refuses with exit2. Older instructions above describing its execution are historical, not current authorization or a runnable qualification route. Use `verify-local-candidate.sh` for explicit new disposable migrations-only bounded checks, never for full release acceptance.

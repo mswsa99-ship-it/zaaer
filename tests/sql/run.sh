@@ -125,6 +125,10 @@ echo "== running purge tenant isolation tests (0083)"
 run_tests tests/sql/purge_scope_tests.sql
 echo "== running hotel exit tests (2.12: the owner's full export, suspension, confirmed deletion, restore)"
 run_tests tests/hotel-exit/hotel_exit_tests.sql
+echo "== running 0115-0120 and 0122 isolation gap suites (before the trial-data erase, they need the seed rows)"
+run_tests tests/sql/individual_read_gates_0115_0120_tests.sql
+run_tests tests/sql/review_platform_scope_0119_0120_tests.sql
+run_tests tests/sql/audit_direct_columns_0122_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
 run_tests tests/sql/guest_limits_settings_tests.sql
 run_tests tests/sql/guest_quota_tests.sql
@@ -146,4 +150,7 @@ run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
 run_tests tests/release-proof/finance_role_scenarios_tests.sql
 
 run_tests tests/sql/individual_permission_drafts_tests.sql
+run_tests tests/sql/history_details_tests.sql
 run_tests tests/sql/page_rls_tests.sql
+
+run_tests tests/sql/branch_read_boundaries_tests.sql
