@@ -112,8 +112,8 @@ $PSQL -v round=before -f tests/load/23-measure-summary.sql > "$OUT/results-befor
 
 # ---- migrations 0101 (load-driven indexes) + 0106 (fn_reservation_list hoist) ----
 echo "== applying migrations 0101 and 0106"
-$PSQL -f supabase/migrations/20261124170000_0101_load_indexes.sql > "$OUT/migration-0101.log" 2>&1
-$PSQL -f supabase/migrations/20261124180000_0106_reservation_list_hoist.sql > "$OUT/migration-0106.log" 2>&1
+$PSQL -f supabase/migrations/20261124170100_0101_load_indexes.sql > "$OUT/migration-0101.log" 2>&1
+$PSQL -f supabase/migrations/20261124180100_0106_reservation_list_hoist.sql > "$OUT/migration-0106.log" 2>&1
 $PSQL -tA -c "
   select string_agg(t||'='||c, ' ' order by t) from (
     select 'organizations' t, count(*) c from organizations union all

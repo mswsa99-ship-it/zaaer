@@ -34,7 +34,7 @@ $PSQL -v hotel=91 -v year_start="${YEAR_START:-$(date -d '305 days ago' +%F)}" -
 $PSQL -c 'analyze;' > "$OUT/analyze.log" 2>&1
 
 $PSQL -tA -f tests/load/40-list-capture.sql > "$OUT/before-0106.txt" 2>&1
-$PSQL -f supabase/migrations/20261124180000_0106_reservation_list_hoist.sql > "$OUT/migration-0106.log" 2>&1
+$PSQL -f supabase/migrations/20261124180100_0106_reservation_list_hoist.sql > "$OUT/migration-0106.log" 2>&1
 $PSQL -tA -f tests/load/40-list-capture.sql > "$OUT/after-0106.txt" 2>&1
 
 # Matching failures are not equivalence evidence. Require every case to return

@@ -1,5 +1,16 @@
--- 0083: retain historical 0073 text; bind its branchless deletions to the requested hotel.
--- Installing this function does not execute a purge. Paired with 0073 before API exposure.
+-- 0083: self-contained replacement of the purge implementation, scoped to the requested hotel.
+-- Installation defines functions only. It does not invoke a purge.
+-- The legacy 0073 file is deliberately not required for this release path.
+do $$ begin
+  if to_regprocedure('public.fn_mark_imported_guests(uuid)') is null then
+    raise exception 'MIGRATION_DEPENDENCY_MISSING: 0072 imported guest marker';
+  end if;
+end $$;
+create or replace function public.fn_purge_categories() returns text[]
+language sql immutable set search_path = public, extensions as $$
+  select array['conversations', 'reservations', 'finance', 'guests', 'operations', 'logs', 'audit', 'samples']
+$$;
+
 create or replace function fn_purge_run(p_org uuid, p_branch uuid, p_from date, p_to date, p_cats text[]) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare
