@@ -40,6 +40,7 @@ export default function Inbox() {
   const [error, setError] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [acting, setActing] = useState<string | null>(null);
+  const sendingRef = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -92,6 +93,9 @@ export default function Inbox() {
   async function sendReply(e: React.FormEvent) {
     e.preventDefault();
     if (!selected || !reply.trim()) return;
+    // 6.7 (U7): the lock is a ref, not only the acting state — two sends in the same tick store one reply
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setActing("send"); setError(null); setNotice(null);
     try {
       const conv = conversations.find((c) => c.id === selected);
@@ -111,6 +115,7 @@ export default function Inbox() {
     } catch (err) {
       setError(toArabicError(err));
     } finally {
+      sendingRef.current = false;
       setActing(null);
     }
   }
