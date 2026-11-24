@@ -1,8 +1,7 @@
 import { test, expect } from "./fixtures";
-import { mkdirSync } from "node:fs";
 
 for (const width of [390, 1366]) {
-  test(`self-hosted Arabic and Latin fonts stay local at ${width}px`, async ({ page, loginAs, baseURL }) => {
+  test(`self-hosted Arabic and Latin fonts stay local at ${width}px`, async ({ page, loginAs, baseURL }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     const externalFonts: string[] = [];
     const fontResponses: { url: string; status: number }[] = [];
@@ -30,11 +29,10 @@ for (const width of [390, 1366]) {
         expect(fontResponses.some((response) => response.url.includes(`-${script}-${weight}-`) && response.status === 200)).toBe(true);
       }
     }
-    mkdirSync("/downloads/roomai-i-evidence", { recursive: true });
-    await page.screenshot({ path: `/downloads/roomai-i-evidence/guest-${width}.png`, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`guest-${width}.png`), fullPage: true });
     await loginAs("owner");
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: `/downloads/roomai-i-evidence/staff-${width}.png`, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`staff-${width}.png`), fullPage: true });
     expect(externalFonts).toEqual([]);
     expect(fontResponses.every((response) => response.status === 200)).toBe(true);
     console.log(JSON.stringify({ width, externalFonts, fontResponses }));
