@@ -4,7 +4,7 @@
  * Each test is a real flow, not a title check: guest lookup, staff sign-in per role, a list with filter and export,
  * the key-box codes, a booking form with typed input, and right-to-left layout.
  */
-import { test, expect, type DemoRole } from "./fixtures";
+import { test, expect, bookingNext, type DemoRole } from "./fixtures";
 
 test("the page is right-to-left Arabic and the guest lookup takes a phone and reaches the booking", async ({ page, go }) => {
   await go("/booking/lookup");
@@ -60,6 +60,7 @@ test("the key-box codes: a unit that must change takes a new code and turns gree
 test("the new reservation form keeps typed input through a reload and offers its restore", async ({ page, loginAs, go }) => {
   await loginAs("supervisor");
   await go("/staff/reservations/new");
+  await bookingNext(page);
   const field = () => page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first();
   await field().fill("سالم عبدالله القحطاني");
   await page.waitForTimeout(700);
@@ -67,6 +68,7 @@ test("the new reservation form keeps typed input through a reload and offers its
   await page.reload();
   await expect(page.getByTestId("reservation-draft")).toContainText("سالم عبدالله القحطاني");
   await page.getByRole("button", { name: "استعادة المسودة" }).click();
+  await bookingNext(page);
   await expect(field()).toHaveValue("سالم عبدالله القحطاني");
 });
 

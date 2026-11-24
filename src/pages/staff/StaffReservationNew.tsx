@@ -270,7 +270,7 @@ export default function StaffReservationNew() {
               <Field label="ملاحظات" className="sm:col-span-2"><textarea className="input" rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
             </div>
           </Card></div>
-          <WizardNav step={step} setStep={setStep} canNext={step === 1 ? step1Ok : step === 2 ? step2Ok : false} />
+          <WizardNav step={step} setStep={setStep} canNext={step === 1 ? step1Ok : step === 2 ? step2Ok : false} reason={step === 1 && !step1Ok ? "حدّد مدة صحيحة ونوع الوحدة، وسبب الإدخال المتأخر إن لزم." : step === 2 && !step2Ok ? blockReason : null} />
         </div>
         <div className="space-y-4" hidden={step !== 3}>
           <Card>
@@ -307,12 +307,12 @@ export default function StaffReservationNew() {
   );
 }
 const STEPS = ["المدة والوحدة", "النزيل", "المصدر والسعر"];
-function WizardNav({ step, setStep, canNext }: { step: 1 | 2 | 3; setStep: (n: 1 | 2 | 3) => void; canNext: boolean }) {
+function WizardNav({ step, setStep, canNext, reason }: { step: 1 | 2 | 3; setStep: (n: 1 | 2 | 3) => void; canNext: boolean; reason: string | null }) {
   return (
-    <div className="flex justify-between gap-2" data-testid="wizard-nav">
+    <div><div className="flex justify-between gap-2" data-testid="wizard-nav">
       {step > 1 ? <button type="button" className="btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>السابق</button> : <span />}
-      {step < 3 && <button type="button" className="btn-primary" disabled={!canNext} onClick={() => setStep((step + 1) as 2 | 3)}>التالي</button>}
-    </div>
+      {step < 3 && <button type="button" className="btn-primary" disabled={!canNext} aria-describedby={reason ? "wizard-step-block-reason" : undefined} onClick={() => setStep((step + 1) as 2 | 3)}>التالي</button>}
+    </div>{reason && <p id="wizard-step-block-reason" data-testid="wizard-step-block-reason" role="status" className="mt-2 text-xs text-ink-600">{reason}</p>}</div>
   );
 }
 const BASIS_AR: Record<PriceRun["basis"], string> = { base: "أساسي", calendar: "التقويم", platform: "سعر المنصات", weekly: "أسبوعي", monthly: "شهري", manual: "يدوي", kept: "بنفس السعر", legacy: "سابق" };
