@@ -18,8 +18,8 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const SCAN_FILES = ["index.html"];
 const SCAN_DIRS = ["src"];
 const EXTENSIONS = /\.(ts|tsx|css)$/;
-/** The future token file (created after approval 3.1) is the one place literals are allowed. */
-const ALLOWED = [/^src\/lib\/designTokens\.ts$/];
+/** The token file and its CSS-variable mirror (src/tokens.css) are the only places literals are allowed. */
+const ALLOWED = [/^src\/lib\/designTokens\.ts$/, /^src\/tokens\.css$/];
 
 function walk(dir) {
   const out = [];

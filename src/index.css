@@ -30,8 +30,8 @@ body,
 body {
   margin: 0;
   font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic", system-ui, sans-serif;
-  background-color: #f5f7fa;
-  color: #18233d;
+  background-color: theme('colors.ink.50');
+  color: theme('colors.ink.800');
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -51,8 +51,8 @@ textarea {
 }
 
 ::selection {
-  background: #a8d3df;
-  color: #14333f;
+  background: theme('colors.brand.200');
+  color: theme('colors.brand.900');
 }
 
 @layer components {
@@ -111,7 +111,7 @@ textarea {
   height: 6px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #cdd6e4;
+  background: theme('colors.ink.200');
   border-radius: 9999px;
 }
 
