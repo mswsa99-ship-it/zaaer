@@ -100,11 +100,14 @@ export async function fillGuest(page: Page, name: string, phone: string) {
 }
 export async function createReservation(page: Page, guestName: string, phone: string, opts: { pickRoom?: boolean } = {}) {
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-  await page.waitForTimeout(500);
+  await expect(page.getByRole("heading", { name: "حجز جديد", exact: true })).toBeVisible();
   if (opts.pickRoom !== false) {
     const roomSel = page.locator("select").filter({ has: page.locator("option:has-text('تخصيص لاحقًا')") });
-    const n = await roomSel.locator("option").count();
-    if (n > 1) await roomSel.selectOption({ index: 1 });
+    await expect(roomSel).toBeVisible();
+    // A room is required by callers checking allocation. Do not silently
+    // create an unassigned booking while async availability is still loading.
+    await expect.poll(() => roomSel.locator("option").count()).toBeGreaterThan(1);
+    await roomSel.selectOption({ index: 1 });
   }
   await bookingNext(page);                 // step 1 → 2
   await fillGuest(page, guestName, phone);
