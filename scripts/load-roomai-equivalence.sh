@@ -29,15 +29,52 @@ done
 $PSQL -v hotel=90 -v year_start="${YEAR_START:-$(date -d '305 days ago' +%F)}" -f tests/load/10-fixture-hotel.sql >"$OUT/fixture-90.log" 2>&1
 $PSQL -v hotel=91 -v year_start="${YEAR_START:-$(date -d '305 days ago' +%F)}" -f tests/load/10-fixture-hotel.sql >"$OUT/fixture-91.log" 2>&1
 
+# Refresh planner statistics before comparing the two bodies. A freshly bulk-loaded
+# fixture otherwise produces an unrepresentative old-body plan.
+$PSQL -c 'analyze;' > "$OUT/analyze.log" 2>&1
+
 $PSQL -tA -f tests/load/40-list-capture.sql > "$OUT/before-0106.txt" 2>&1
 $PSQL -f supabase/migrations/20261124180000_0106_reservation_list_hoist.sql > "$OUT/migration-0106.log" 2>&1
 $PSQL -tA -f tests/load/40-list-capture.sql > "$OUT/after-0106.txt" 2>&1
+
+# Matching failures are not equivalence evidence. Require every case to return
+# its result and reject caught SQL errors in either capture.
+for capture in "$OUT/before-0106.txt" "$OUT/after-0106.txt"; do
+  if grep -q '|ERR:' "$capture" || [ "$(grep -cE '^[0-9]+\\|' "$capture")" -ne 23 ]; then
+    echo "EQUIVALENCE: FAIL: incomplete or errored capture: $capture"
+    exit 1
+  fi
+done
 
 if diff -u "$OUT/before-0106.txt" "$OUT/after-0106.txt" > "$OUT/equivalence.diff"; then
   echo "EQUIVALENCE: PASS — 0106 body byte-identical to 0040 body across the call matrix"
 else
   echo "EQUIVALENCE: FAIL — see $OUT/equivalence.diff"; exit 1
 fi
+
+# Fail closed independently of the human-readable status rows below.
+$PSQL <<'SQL'
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', md5('auth:90:owner'), false);
+  perform set_config('request.jwt.claims', json_build_object('sub', md5('auth:90:owner'))::text, false);
+  if (fn_reservation_list(md5('branch:91:5')::uuid, '{}'::jsonb, 50, 0)->>'total')::int is distinct from 0 then
+    raise exception 'Cross-hotel isolation failed';
+  end if;
+  perform set_config('request.jwt.claim.sub', md5('auth:90:hk'), false);
+  perform set_config('request.jwt.claims', json_build_object('sub', md5('auth:90:hk'))::text, false);
+  if (fn_reservation_list(md5('branch:90:5')::uuid, '{}'::jsonb, 50, 0)->>'total')::int is distinct from 0 then
+    raise exception 'Non-member isolation failed';
+  end if;
+  if jsonb_array_length(fn_reservation_list(md5('branch:90:3')::uuid, '{}'::jsonb, 50, 0)->'rows') = 0 then
+    raise exception 'Housekeeping money check has no rows';
+  end if;
+  if exists (select 1 from jsonb_array_elements(fn_reservation_list(md5('branch:90:3')::uuid, '{}'::jsonb, 50, 0)->'rows') r
+             where (r->>'total_halalas') is not null or (r->>'paid_halalas') is not null or (r->>'balance_due_halalas') is not null) then
+    raise exception 'Housekeeping money visibility failed';
+  end if;
+end $$;
+SQL
 
 # explicit isolation/money invariants (documented intent behind the matrix)
 $PSQL -tA <<'EOF'
