@@ -1,0 +1,2 @@
+2026-11-24T06:10:04Z backup backup-20261124-061004-drill.tar.gpg started (reason: drill)
+2026-11-24T06:10:04Z backup backup-20261124-061004-drill.tar.gpg done: 102 tables, 974 rows, 410871 bytes, sha256 29c7e09bc0f5… (local-only (offsite upload not configured))

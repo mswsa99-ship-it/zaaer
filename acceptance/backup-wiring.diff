@@ -1,0 +1,78 @@
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -71,6 +71,7 @@
+ const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
+ const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"));
+ const AdminAssistant = lazy(() => import("./pages/admin/AdminAssistant"));
++const AdminBackup = lazy(() => import("./pages/admin/AdminBackup"));
+ const AdminDataPurge = lazy(() => import("./pages/admin/AdminDataPurge"));
+ import StaffReservationNew from "./pages/staff/StaffReservationNew";
+ import PosSettlement from "./pages/staff/PosSettlement";
+@@ -191,6 +192,7 @@
+           <Route path="/admin/ai-settings" element={<AdminAiSettings />} />
+           <Route path="/admin/whatsapp" element={<AdminWhatsapp />} />
+           <Route path="/admin/assistant" element={<AdminAssistant />} />
++          <Route path="/admin/backups" element={<AdminBackup />} />
+           <Route path="/admin/data-purge" element={<AdminDataPurge />} />
+           <Route path="/admin/payment-providers" element={<AdminPaymentProviders />} />
+           <Route path="/admin/policies" element={<AdminPolicies />} />
+--- a/src/lib/nav.ts
++++ b/src/lib/nav.ts
+@@ -161,6 +161,7 @@
+   { path: "/admin/usage", label: "استعمال القدرات", icon: Activity, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["reports.identities_usage"] },
+   // §16: corrections, invoice edits and cancellations, and what the monitors find (decision 54) wait for the owner alone
+   { path: "/admin/review", label: "بحاجة لمراجعة وتدقيق", icon: ClipboardCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["review.list"] },
++  { path: "/admin/backups", label: "النسخ الاحتياطي", icon: ShieldCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["security"] },
+   { path: "/admin/data-purge", label: "تفريغ البيانات", icon: Trash2, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["security"] },
+ ];
+ 
+--- a/tests/sql/run.sh
++++ b/tests/sql/run.sh
+@@ -129,3 +129,5 @@
+ run_tests tests/sql/free_text_limits_tests.sql
+ run_tests tests/sql/lookup_limits_tests.sql
+ run_tests tests/sql/purge_trial_tests.sql
++
++run_tests acceptance/backup-state-tests.sql
+--- a/.github/workflows/production.yml
++++ b/.github/workflows/production.yml
+@@ -57,6 +57,16 @@
+           done
+           exit $missing
+ 
++      # 7.1: install this gate only after the separate backup host is approved.
++      # This hook must perform fresh encrypted backup, offsite readback and scratch restore proof.
++      - name: Verified pre-deploy backup gate (7.1)
++        env:
++          BACKUP_GATE_HOOK: ${{ vars.BACKUP_GATE_HOOK }}
++        run: |
++          test -n "$BACKUP_GATE_HOOK" || { echo 'Backup gate not configured'; exit 1; }
++          test -x "$BACKUP_GATE_HOOK" || { echo 'Backup gate unavailable'; exit 1; }
++          "$BACKUP_GATE_HOOK"
++
+       - uses: ./.github/actions/supabase-backend
+         with:
+           project-ref: ${{ vars.SUPABASE_PROJECT_REF }}
+--- a/supabase/tenancy.json
++++ b/supabase/tenancy.json
+@@ -351,6 +351,9 @@
+   },
+   "discount_approvals": {
+    "scope": "branch"
++  },
++  "backup_runs": {
++   "scope": "platform"
+   }
+  }
+ }
+--- a/src/demo/client.ts
++++ b/src/demo/client.ts
+@@ -562,6 +562,8 @@
+   atomically: <V,>(fn: () => V): V => atomically(fn),
+ };
+ const rpcs: Record<string, (a: any) => any> = {
++  // 7.1: no synthetic success dates. Demo mirrors owner-only empty recorded state.
++  fn_backup_status: () => { requireRole("owner"); return { last_success: null, last_run: null, last_restore_drill: null, failures_since_last_success: 0 }; },
+   fn_staff_id: () => staffId(),
+   fn_user_branch_ids: () => myBranches(),
+   fn_claim_staff_profile: () => {

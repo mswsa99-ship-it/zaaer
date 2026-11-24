@@ -1,0 +1,76 @@
+== drill 1: build dataset A (production schema + synthetic history + bulk synthetic rows)
+NOTICE:  database "drill_a" does not exist, skipping
+--------------------------------------------------------------------------------------------------------
+------------
+----------------------------
+------------
+------------
+------------
+------------
+------------
+------------
+------------
+------------
+--------------------
+-------------------------
+------------
+------------
+------------
+---------------------
+-------------------------
+-------------------------
+psql:supabase/migrations/20261123120000_0076_tenant_columns.sql:166: WARNING:  SET CONSTRAINTS can only be used in transaction blocks
+dataset A: 258 guest profiles, 400 notifications
+== drill 1: state database (full schema incl. 0103)
+NOTICE:  database "drill_state" does not exist, skipping
+--------------------------------------------------------------------------------------------------------
+------------
+----------------------------
+------------
+------------
+------------
+------------
+------------
+------------
+------------
+------------
+--------------------
+-------------------------
+------------
+------------
+------------
+---------------------
+-------------------------
+-------------------------
+psql:supabase/migrations/20261123120000_0076_tenant_columns.sql:166: WARNING:  SET CONSTRAINTS can only be used in transaction blocks
+------------------------
+------------
+== drill 1: backup run
+2026-11-24T06:10:04Z backup backup-20261124-061004-drill.tar.gpg started (reason: drill)
+2026-11-24T06:10:04Z backup backup-20261124-061004-drill.tar.gpg done: 102 tables, 974 rows, 410871 bytes, sha256 29c7e09bc0f5… (local-only (offsite upload not configured))
+== drill 1: keep the manifest as evidence
+_hist_ids	4	76997b18e37a6993e7ed6d0875e2a1f4
+access_delivery_events	0	d41d8cd98f00b204e9800998ecf8427e
+access_release_requests	1	bf7515e1d43781dd21f01f9e148bb496
+accounting_periods	0	d41d8cd98f00b204e9800998ecf8427e
+ai_action_proposals	0	d41d8cd98f00b204e9800998ecf8427e
+== drill 1: restore into a fresh database with live-source comparison
+NOTICE:  database "drill_a_restored" does not exist, skipping
+2026-11-24T06:10:04Z archive verified: sha256 29c7e09bc0f5…
+2026-11-24T06:10:05Z restored data matches the live source
+2026-11-24T06:10:05Z restore verified: 102 tables, 974 rows, counts and content hashes identical
+== drill 1: read-only archive check
+2026-11-24T06:10:06Z archive intact: backup-20261124-061004-drill.tar.gpg sha256 29c7e09bc0f5…
+== drill 1: recorded state
+-[ RECORD 1 ]+------------------------------------------------------------
+kind         | backup
+reason       | drill
+status       | success
+run_ref      | backup-20261124-061004-drill.tar.gpg
+size_bytes   | 410871
+tables_count | 102
+rows_total   | 974
+verification | manifest+sha256; local-only (offsite upload not configured)
+error        |
+
+DRILL 1 DONE

@@ -1,0 +1,104 @@
+== drill 2: build dataset B (full current schema incl. 0103, different synthetic data)
+NOTICE:  database "drill_b" does not exist, skipping
+--------------------------------------------------------------------------------------------------------
+------------
+----------------------------
+------------
+------------
+------------
+------------
+------------
+------------
+------------
+------------
+--------------------
+-------------------------
+------------
+------------
+------------
+---------------------
+-------------------------
+-------------------------
+psql:supabase/migrations/20261123120000_0076_tenant_columns.sql:166: WARNING:  SET CONSTRAINTS can only be used in transaction blocks
+------------------------
+------------
+dataset B: 4 organizations, 60 staff, 504 guests, 1000 notifications
+== drill 2: weekly-style backup, state recorded in the backed-up database itself (live-like)
+2026-11-24T06:10:09Z backup backup-20261124-061009-scheduled.tar.gpg started (reason: scheduled)
+2026-11-24T06:10:09Z backup backup-20261124-061009-scheduled.tar.gpg done: 111 tables, 2102 rows, 469763 bytes, sha256 1410123bf743… (local-only (offsite upload not configured))
+== drill 2: pre-deploy wrapper
+2026-11-24T06:10:09Z backup backup-20261124-061009-pre-deploy.tar.gpg started (reason: pre-deploy)
+2026-11-24T06:10:10Z backup backup-20261124-061009-pre-deploy.tar.gpg done: 111 tables, 2103 rows, 469969 bytes, sha256 97e0ca31bda8… (local-only (offsite upload not configured))
+2026-11-24T06:10:10Z restore drill on backup-20261124-061009-pre-deploy.tar.gpg into scratch database
+2026-11-24T06:10:10Z archive verified: sha256 97e0ca31bda8…
+2026-11-24T06:10:11Z restore verified: 111 tables, 2103 rows, counts and content hashes identical
+2026-11-24T06:10:11Z restore drill PASS: backup-20261124-061009-pre-deploy.tar.gpg restores and matches its manifest
+== drill 2: monthly restore drill path (restore-drill.sh)
+2026-11-24T06:10:11Z restore drill on backup-20261124-061009-pre-deploy.tar.gpg into scratch database
+2026-11-24T06:10:11Z archive verified: sha256 97e0ca31bda8…
+2026-11-24T06:10:12Z restore verified: 111 tables, 2103 rows, counts and content hashes identical
+2026-11-24T06:10:12Z restore drill PASS: backup-20261124-061009-pre-deploy.tar.gpg restores and matches its manifest
+== drill 2: recorded state in the backed-up database
+-[ RECORD 1 ]+------------------------------------------------------------
+kind         | backup
+reason       | scheduled
+status       | success
+run_ref      | backup-20261124-061009-scheduled.tar.gpg
+size_bytes   | 469763
+tables_count | 111
+rows_total   | 2102
+verification | manifest+sha256; local-only (offsite upload not configured)
+error        |
+-[ RECORD 2 ]+------------------------------------------------------------
+kind         | backup
+reason       | pre-deploy
+status       | success
+run_ref      | backup-20261124-061009-pre-deploy.tar.gpg
+size_bytes   | 469969
+tables_count | 111
+rows_total   | 2103
+verification | manifest+sha256; local-only (offsite upload not configured)
+error        |
+-[ RECORD 3 ]+------------------------------------------------------------
+kind         | restore_drill
+reason       | drill
+status       | success
+run_ref      | drill-backup-20261124-061009-pre-deploy.tar.gpg
+size_bytes   |
+tables_count |
+rows_total   |
+verification | restore:counts+hashes identical
+error        |
+-[ RECORD 4 ]+------------------------------------------------------------
+kind         | restore_drill
+reason       | drill
+status       | success
+run_ref      | drill-backup-20261124-061009-pre-deploy.tar.gpg
+size_bytes   |
+tables_count |
+rows_total   |
+verification | restore:counts+hashes identical
+error        |
+
+== failure drill F1: upload failure is loud and recorded
+F1 ok: exit 1 (non-zero)
+2026-11-24T06:10:12Z backup backup-20261124-061012-scheduled.tar.gpg started (reason: scheduled)
+2026-11-24T06:10:12Z ERROR: upload failed
+== failure drill F2: corrupt archive is refused
+NOTICE:  database "drill_b_tampered" does not exist, skipping
+F2 ok: refused
+ERROR: decryption failed (wrong passphrase or corrupt archive)
+0
+== failure drill F3: wrong passphrase is refused
+F3 ok: refused
+ERROR: decryption failed (wrong passphrase or corrupt archive)
+== failure drill F4: restore over a non-empty database is refused without the explicit flag
+F4 ok: refused
+ERROR: target database already holds 111 tables (refusing; set BACKUP_RESTORE_ALLOW_OVERWRITE=1 to proceed)
+== failure drill F5: tampered sidecar hash is refused
+F5 ok: refused
+ERROR: hash mismatch: sidecar and bundle disagree (tampering suspected)
+== failure drill F1 state check: the upload failure is visible in the recorded state
+failed | upload failed
+success |
+DRILL 2 DONE

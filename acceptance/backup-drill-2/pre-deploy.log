@@ -1,0 +1,6 @@
+2026-11-24T06:10:09Z backup backup-20261124-061009-pre-deploy.tar.gpg started (reason: pre-deploy)
+2026-11-24T06:10:10Z backup backup-20261124-061009-pre-deploy.tar.gpg done: 111 tables, 2103 rows, 469969 bytes, sha256 97e0ca31bda8… (local-only (offsite upload not configured))
+2026-11-24T06:10:10Z restore drill on backup-20261124-061009-pre-deploy.tar.gpg into scratch database
+2026-11-24T06:10:10Z archive verified: sha256 97e0ca31bda8…
+2026-11-24T06:10:11Z restore verified: 111 tables, 2103 rows, counts and content hashes identical
+2026-11-24T06:10:11Z restore drill PASS: backup-20261124-061009-pre-deploy.tar.gpg restores and matches its manifest

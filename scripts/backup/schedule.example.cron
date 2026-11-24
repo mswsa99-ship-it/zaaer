@@ -1,0 +1,9 @@
+# Item 7.1 proposal only. Install on an approved backup host AFTER destination, retention,
+# scratch database isolation, secret injection and operational permission are confirmed.
+# /etc/roomai-backup.env is provisioned outside git, mode 600; never source repository content as secrets.
+# Host timezone: UTC. Weekly Sunday 02:15 UTC, monthly day 1 at 03:15 UTC.
+15 2 * * 0 /usr/local/bin/roomai-backup-run scheduled
+15 3 1 * * /usr/local/bin/roomai-backup-run restore-drill
+# roomai-backup-run is an operator-provisioned wrapper that injects vault references, changes to a
+# pinned reviewed checkout, and runs backup.sh or restore-drill.sh. It is intentionally NOT installed.
+# Alert on every non-zero exit. Never drop or restore into the production cluster for monthly drills.

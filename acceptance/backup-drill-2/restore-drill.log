@@ -1,0 +1,4 @@
+2026-11-24T06:10:11Z restore drill on backup-20261124-061009-pre-deploy.tar.gpg into scratch database
+2026-11-24T06:10:11Z archive verified: sha256 97e0ca31bda8…
+2026-11-24T06:10:12Z restore verified: 111 tables, 2103 rows, counts and content hashes identical
+2026-11-24T06:10:12Z restore drill PASS: backup-20261124-061009-pre-deploy.tar.gpg restores and matches its manifest

@@ -1,0 +1,8 @@
+BEGIN
+CREATE TABLE
+psql:acceptance/backup-state-tests.sql:110: ERROR:  function fn_backup_run_start(unknown, unknown, unknown, uuid) does not exist
+LINE 1: run := fn_backup_run_start('backup','scheduled','backup-2026...
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+QUERY:  run := fn_backup_run_start('backup','scheduled','backup-20261124-090000.tar.gpg',a)
+CONTEXT:  PL/pgSQL function inline_code_block line 13 at assignment

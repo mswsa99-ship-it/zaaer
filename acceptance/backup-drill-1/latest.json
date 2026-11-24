@@ -1,0 +1,3 @@
+{"run_ref": "backup-20261124-061004-drill.tar.gpg", "finished_at": "2026-11-24T06:10:04Z", "status": "success",
+ "reason": "drill", "size_bytes": 410871, "sha256": "29c7e09bc0f5ab55814c2ca74231d8934698d0a742dd43615fe657c4cbeb699f", "tables": 102, "rows_total": 974,
+ "verification": "manifest+sha256; local-only (offsite upload not configured)"}
