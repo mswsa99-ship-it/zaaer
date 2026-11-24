@@ -1,5 +1,6 @@
 # Expected changes for pending migrations, one per line: "<snapshot key>: <reason>".
 # Keys come from scripts/migration-snapshot.sql (rows:<table>, money:..., reservations:..., allocations:...).
 # When a migration listed here reaches production (supabase/production-applied.txt), remove its lines.
-rows:booking_sources: 0038 adds the ten remaining sources of decision 22 (2 → 12); the two existing rows keep their ids and reservations
-rows:discount_approvals: 0084 adds the table (the owner's prior approvals for over-threshold discounts, 4.8); it starts empty
+# Exact form (preferred): "<key>: expect=<before>-><after> | <reason>". Only that transition is explained; any other value of the key fails. A line without expect= explains any change of its key.
+rows:permission_page_map: expect=59->60 | 0125 adds exactly one row (history.details); remove with the two permmap lines once 0125 is in supabase/production-applied.txt
+permmap:history_details_row: expect=->history.details;/staff/reservations;view;true;false | the single row 0125 inserts; remove once 0125 is in production-applied.txt

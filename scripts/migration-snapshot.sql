@@ -19,6 +19,8 @@ select current_setting('mig.phase'), k, v from (
   union all select 'reservations:status:' || status, count(*)::text from reservations group by status
   union all select 'reservations:refs', md5(coalesce(string_agg(internal_ref || ':' || coalesce(external_ref, ''), ',' order by internal_ref), '')) from reservations
   union all select 'allocations:status:' || status, count(*)::text from reservation_allocations group by status
+  union all select 'permmap:rows_except_history_details', md5(coalesce(string_agg(concat_ws(';', code, page, action, sensitive::text, any_write::text), ',' order by code), '')) from permission_page_map where code <> 'history.details'
+  union all select 'permmap:history_details_row', coalesce(string_agg(concat_ws(';', code, page, action, sensitive::text, any_write::text), ',' order by code), '') from permission_page_map where code = 'history.details'
   union all select 'vouchers:numbers', md5(coalesce(string_agg(number, ',' order by number), '')) from financial_vouchers
 ) s
 on conflict (phase, k) do update set v = excluded.v;

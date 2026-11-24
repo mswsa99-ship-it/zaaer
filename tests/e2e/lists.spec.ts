@@ -281,7 +281,9 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     const row = page.locator("[data-testid=audit-row]").first();
     await expect(row).toContainText("تعديل بيانات موظف");
     await expect(row).toContainText("انتقل إلى فرع آخر");
-    await row.click();
+    // The row's centre falls on the «كل أحداثه» filter button in the reference cell, which pins a filter instead of opening the detail.
+    // Open the detail from the action cell, which has no nested control.
+    await row.getByText("تعديل بيانات موظف").click();
     const detail = page.getByTestId("audit-detail");
     await expect(detail).toContainText("فهد الاستقبال (معدّل)");
     await expect(detail).toContainText("••••1234");

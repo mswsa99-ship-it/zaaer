@@ -1,4 +1,5 @@
 import {test,expect} from './fixtures';
+const SHOT_DIR = process.env.E2E_SHOT_DIR ?? "test-results/screens"; // CI has no /downloads folder
 test('manager hidden branch metadata uses neutral wording and does not grant editing',async({page,loginAs,go,errors})=>{
  await loginAs('manager');
  await page.waitForTimeout(300);
@@ -22,6 +23,6 @@ test('manager hidden branch metadata uses neutral wording and does not grant edi
  await expect(page.getByTestId('staff-edit')).toHaveCount(0);
  await expect(page.getByTestId('staff-toggle-active')).toHaveCount(0);
  await expect(card.getByTestId('staff-force-logout')).toBeVisible();
- await page.screenshot({path:'/downloads/roomai-staff-branch-metadata1724.png',fullPage:true});
+ await page.screenshot({path:`${SHOT_DIR}/roomai-staff-branch-metadata1724.png`,fullPage:true});
  expect(errors).toEqual([]);
 });

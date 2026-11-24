@@ -3,6 +3,7 @@
  * click only, is tied to the record's version, and is cleared by a successful save. Synthetic demo data.
  */
 import { test, expect } from "./fixtures";
+const SHOT_DIR = process.env.E2E_SHOT_DIR ?? "test-results/screens"; // CI has no /downloads folder
 
 const FORMS = [
   { name: "service", path: "/admin/services", edit: /^تعديل الخدمة$/, field: "الوصف", key: "zaaer:service-edit:", banner: "تعديل لم يُحفظ على هذه الخدمة" },
@@ -71,7 +72,7 @@ for (const f of FORMS) {
       await page.getByRole("button", { name: f.edit }).nth(1).click();
       dlg = page.getByRole("dialog");
       await expect(dlg.getByLabel(nameField)).toHaveValue(recordName);   // same record as before
-      if (f.name === "service") await page.screenshot({ path: "/downloads/editdraft-same-record-stale-dropped.png" });
+      if (f.name === "service") await page.screenshot({ path: `${SHOT_DIR}/editdraft-same-record-stale-dropped.png` });
       await expect(dlg.getByTestId("form-draft-restore")).toHaveCount(0);
       expect(await page.evaluate((k) => Object.keys(sessionStorage).filter((x) => x.startsWith(k)), f.key)).toEqual([]);
     });

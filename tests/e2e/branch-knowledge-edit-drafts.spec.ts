@@ -1,6 +1,7 @@
 /** Local synthetic 6.5 increment only: branch settings and knowledge edits. */
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+const SHOT_DIR = process.env.E2E_SHOT_DIR ?? "test-results/screens"; // CI has no /downloads folder
 const FORMS = [
  { name: "branch", path: "/admin/branches", field: "المدينة", key: "zaaer:branch-edit:", rpc: "rpc:fn_admin_upsert_branch" },
  { name: "knowledge", path: "/admin/knowledge", field: "الإجابة التي تُرسل للنزيل حرفيًا (مطلوب)", key: "zaaer:knowledge-edit:", rpc: "rpc:fn_admin_upsert_knowledge" },
@@ -24,7 +25,7 @@ for (const f of FORMS) {
   await page.reload({ waitUntil: "networkidle" }); await edit(page).click(); dlg = page.getByRole("dialog");
   await expect(dlg.getByLabel(f.field, { exact: true })).toHaveValue(original);
   await expect(dlg.getByTestId("form-draft-restore")).toBeVisible();
-  await page.screenshot({ path: `/downloads/${f.name}-edit-${width}-offered.png` });
+  await page.screenshot({ path: `${SHOT_DIR}/${f.name}-edit-${width}-offered.png` });
   await dlg.getByRole("button", { name: "استعادة المسودة" }).click();
   await expect(dlg.getByLabel(f.field, { exact: true })).toHaveValue("تعديل تجريبي غير محفوظ");
   await page.evaluate((rpc) => { (window as any).__demoFail = (t: string) => t === rpc ? "network down" : undefined; }, f.rpc);
@@ -38,7 +39,7 @@ for (const f of FORMS) {
   await edit(page).click();
   await expect(page.getByRole("dialog").getByLabel(f.field, { exact: true })).toHaveValue("تعديل تجريبي غير محفوظ");
   await expect(page.getByRole("dialog").getByTestId("form-draft-restore")).toHaveCount(0);
-  await page.screenshot({ path: `/downloads/${f.name}-edit-${width}-saved.png` });
+  await page.screenshot({ path: `${SHOT_DIR}/${f.name}-edit-${width}-saved.png` });
  });
  test(`${f.name}: untouched form stores nothing; same-record version mismatch is discarded`, async ({ page, loginAs, go }) => {
   await loginAs("owner"); await go(f.path); await edit(page).click();
