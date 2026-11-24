@@ -116,6 +116,7 @@ echo "== running hotel settings tests (0079: independent defaults for each hotel
 run_tests tests/sql/hotel_settings_tests.sql
 run_tests tests/sql/phase4_voucher_closing_tests.sql
 run_tests tests/sql/phase4_controls_tests.sql
+run_tests tests/sql/finance_execution_settings_tests.sql
 run_tests tests/sql/finance_role_matrix_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 run_tests tests/sql/whatsapp_purge_tests.sql

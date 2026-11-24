@@ -351,6 +351,9 @@
   },
   "discount_approvals": {
    "scope": "branch"
+  },
+  "finance_refund_approvals": {
+   "scope": "branch"
   }
  }
 }
