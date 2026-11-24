@@ -49,7 +49,7 @@ export default function AdminFinanceControls() {
   }
   const input = (k: string, label: string, hint?: string) => <label key={k} className="block space-y-2 text-sm">
     <span className="font-medium">{label}</span>
-    <input className="input w-full" aria-label={label} inputMode="numeric" value={values[k] ?? ""} disabled={busy}
+    <input className="input w-full" aria-label={label} inputMode="numeric" value={values[k] ?? ""} disabled={busy || k === "operational_refund_threshold_halalas"}
       onChange={e => { setValues(v => ({ ...v, [k]: e.target.value })); setSaved(false); }} />
     {hint && <span className="block text-ink-600">{hint}</span>}
   </label>;
@@ -64,7 +64,7 @@ export default function AdminFinanceControls() {
         <div className="grid gap-5 md:grid-cols-3">{EXPENSE_ROLES.map(r => input(r, ROLE_LABELS[r], `المطبق الآن: ${data.effective_expense_limits[r]?.toLocaleString("ar-SA")} هللة. اتركه فارغًا لاستعادة السلوك الموروث.`))}</div>
       </Card>
       <Card className="space-y-5 p-5"><h2 className="text-lg font-semibold">الاعتماد ورصد الشذوذ</h2>
-        <div className="grid gap-5 md:grid-cols-3">{FINANCE_FIELDS.map(([k, label]) => input(k, label, k === "discount_review_threshold_bp" ? "الفراغ يبقي اعتماد الخصم غير مفعّل. فوق العتبة يلزم اعتماد مسبق." : k === "operational_refund_threshold_halalas" ? "فوق العتبة يلزم اعتماد المالك مسبقًا. الفراغ لا يفعّل قاعدة جديدة." : k === "operational_closing_diff_alert_halalas" ? "فوق العتبة يُنشأ بند مراجعة وتنبيه للمالك. الفراغ يبقي القاعدة غير مفعّلة." : "فوق العتبة يُنشأ بند مراجعة وتنبيه للمالك."))}</div>
+        <div className="grid gap-5 md:grid-cols-3">{FINANCE_FIELDS.map(([k, label]) => input(k, label, k === "discount_review_threshold_bp" ? "الفراغ يبقي اعتماد الخصم غير مفعّل. فوق العتبة يلزم اعتماد مسبق." : k === "operational_refund_threshold_halalas" ? "غير متاح للتفعيل من هذه الصفحة حتى اكتمال شاشة اعتماد الاسترداد. لا تفعّل قاعدة جديدة الآن." : k === "operational_closing_diff_alert_halalas" ? "فوق العتبة يُنشأ بند مراجعة وتنبيه للمالك. الفراغ يبقي القاعدة غير مفعّلة." : "فوق العتبة يُنشأ بند مراجعة وتنبيه للمالك."))}</div>
         <p className="text-sm text-ink-600">الوصول الآجل: اعتماد المدير أو المالك. الإقامة المجانية: اعتماد المالك. الزيادة على المستحق: سبب وتأكيد ومراجعة. لم تُغيّر قواعد القبض أو التأمين.</p>
         <p className="text-sm text-ink-600">الفراغ في عتبة الاسترداد أو فرق الإقفال يبقي السلوك الحالي. عند تفعيل عتبة الاسترداد، يلزم اعتماد المالك للمبلغ نفسه قبل تنفيذه.</p>
       </Card>

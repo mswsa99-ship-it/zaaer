@@ -1,3 +1,5 @@
+import { financeControlRpcs } from "./financeControls";
+import type { FinanceControls } from "../lib/financeControls";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * In-browser demo backend. Implements the slice of the Supabase client the UI uses
@@ -2672,6 +2674,12 @@ const originalSession=rpcs.fn_guest_session;
 rpcs.fn_guest_session=(a:any)=>{const x=T("registration_sessions").find(s=>s.token===a.p_token);const res=byId("reservations",x?.reservation_id);if(currentGuestScope().slug && res?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return originalSession(a);};
 
 Object.assign(rpcs,platformRpcs({T,uid,user:()=>session?.user.id??null,owner:me,emit,atomic:atomically}));
+
+
+Object.assign(rpcs,financeControlRpcs({org:()=>me()?.organization_id,role:()=>me()?.role,
+ read:(org)=>T("finance_control_settings").find(x=>x.organization_id===org) as unknown as FinanceControls | undefined,
+ write:(d)=>{const rows=T("finance_control_settings");const at=rows.findIndex(x=>x.organization_id===d.organization_id);if(at<0)rows.push(d);else rows[at]=d;emit("finance_control_settings");},
+ audit:(before,after)=>audit(null,"security.finance_execution_thresholds_updated","finance_control_settings",after.organization_id,{before,after})}));
 
 function invoke(name: string, opts: any, trustedService = false) {
   if(name === "platform-invite")return{data:{ok:false,error:"owner_self_signup_required"},error:{message:"owner_self_signup_required"}};
