@@ -1,0 +1,237 @@
+/* Compatibility for legacy Tailwind colour utilities. All colours resolve to the shared palette.
+   Specificity intentionally exceeds legacy component styles, without route-specific palettes. */
+body, #root {background:var(--paper);color:var(--ink);}
+[data-theme="dark"] {color-scheme:dark;}
+:root ::selection {background:var(--surface-sunken);color:var(--ink);}
+:root .bg-accent-500 {background-color:var(--spark-tint);}
+:root .bg-accent-500\/10 {background-color:var(--spark-tint);}
+:root .bg-brand-100 {background-color:var(--action-fill);}
+:root .bg-brand-400 {background-color:var(--action-fill);}
+:root .bg-brand-50 {background-color:var(--action-fill);}
+:root .bg-brand-50\/40 {background-color:var(--action-fill);}
+:root .bg-brand-50\/50 {background-color:var(--action-fill);}
+:root .bg-brand-50\/60 {background-color:var(--action-fill);}
+:root .bg-brand-500 {background-color:var(--action-fill);}
+:root .bg-brand-500\/10 {background-color:var(--action-fill);}
+:root .bg-brand-500\/80 {background-color:var(--action-fill);}
+:root .bg-brand-600 {background-color:var(--action-fill);}
+:root .bg-brand-800 {background-color:var(--action-fill);}
+:root .bg-danger-50 {background-color:var(--danger-tint);}
+:root .bg-danger-500 {background-color:var(--danger-tint);}
+:root .bg-danger-500\/10 {background-color:var(--danger-tint);}
+:root .bg-danger-500\/5 {background-color:var(--danger-tint);}
+:root .bg-danger-600 {background-color:var(--danger-tint);}
+:root .bg-ink-100 {background-color:var(--surface-sunken);}
+:root .bg-ink-200 {background-color:var(--surface-sunken);}
+:root .bg-ink-200\/70 {background-color:var(--surface-sunken);}
+:root .bg-ink-300 {background-color:var(--surface-sunken);}
+:root .bg-ink-400\/70 {background-color:var(--surface-sunken);}
+:root .bg-ink-50 {background-color:var(--paper);}
+:root .bg-ink-50\/50 {background-color:var(--paper);}
+:root .bg-ink-50\/60 {background-color:var(--paper);}
+:root .bg-ink-800 {background-color:var(--surface-sunken);}
+:root .bg-ink-900 {background-color:var(--surface-sunken);}
+:root .bg-ink-900\/40 {background-color:var(--scrim);}
+:root .bg-ink-900\/50 {background-color:var(--scrim);}
+:root .bg-ink-900\/60 {background-color:var(--scrim);}
+:root .bg-success-50 {background-color:var(--success-tint);}
+:root .bg-success-500 {background-color:var(--success-tint);}
+:root .bg-success-500\/10 {background-color:var(--success-tint);}
+:root .bg-success-500\/15 {background-color:var(--success-tint);}
+:root .bg-success-500\/5 {background-color:var(--success-tint);}
+:root .bg-success-500\/85 {background-color:var(--success-tint);}
+:root .bg-warning-50 {background-color:var(--warning-tint);}
+:root .bg-warning-500 {background-color:var(--warning-tint);}
+:root .bg-warning-500\/10 {background-color:var(--warning-tint);}
+:root .bg-warning-500\/15 {background-color:var(--warning-tint);}
+:root .bg-warning-500\/5 {background-color:var(--warning-tint);}
+:root .bg-warning-500\/80 {background-color:var(--warning-tint);}
+:root .bg-white {background-color:var(--surface);}
+:root .bg-white\/10 {background-color:var(--surface);}
+:root .bg-white\/70 {background-color:var(--surface);}
+:root .bg-white\/85 {background-color:var(--surface);}
+:root .bg-white\/90 {background-color:var(--surface);}
+:root .border-accent-500\/30 {border-color:var(--line-strong);}
+:root .border-brand-100 {border-color:var(--line);}
+:root .border-brand-200 {border-color:var(--line);}
+:root .border-brand-400 {border-color:var(--line-strong);}
+:root .border-brand-500 {border-color:var(--line-strong);}
+:root .border-brand-600 {border-color:var(--line-strong);}
+:root .border-danger-500\/30 {border-color:var(--line-strong);}
+:root .border-danger-500\/40 {border-color:var(--line-strong);}
+:root .border-danger-500\/50 {border-color:var(--line-strong);}
+:root .border-ink-100 {border-color:var(--line);}
+:root .border-ink-200 {border-color:var(--line);}
+:root .border-ink-300 {border-color:var(--line);}
+:root .border-ink-50 {border-color:var(--line);}
+:root .border-success-500\/30 {border-color:var(--line-strong);}
+:root .border-warning-500\/30 {border-color:var(--line-strong);}
+:root .border-warning-500\/40 {border-color:var(--line-strong);}
+:root .hover\:bg-accent-600:hover {background-color:var(--spark-tint);}
+:root .hover\:bg-brand-100:hover {background-color:var(--action-hover);}
+:root .hover\:bg-brand-50:hover {background-color:var(--action-hover);}
+:root .hover\:bg-brand-50\/40:hover {background-color:var(--action-hover);}
+:root .hover\:bg-danger-600:hover {background-color:var(--danger-tint);}
+:root .hover\:bg-ink-100:hover {background-color:var(--action-hover);}
+:root .hover\:bg-ink-50:hover {background-color:var(--action-hover);}
+:root .hover\:bg-ink-50\/50:hover {background-color:var(--action-hover);}
+:root .hover\:bg-ink-50\/60:hover {background-color:var(--action-hover);}
+:root .hover\:bg-ink-900:hover {background-color:var(--action-hover);}
+:root .hover\:bg-white:hover {background-color:var(--action-hover);}
+:root .hover\:bg-white\/10:hover {background-color:var(--action-hover);}
+:root .hover\:border-brand-200:hover {border-color:var(--line);}
+:root .hover\:border-brand-300:hover {border-color:var(--line);}
+:root .hover\:border-brand-500:hover {border-color:var(--line-strong);}
+:root .hover\:border-ink-200:hover {border-color:var(--line);}
+:root .hover\:ring-brand-300:hover {--tw-ring-color:var(--focus);}
+:root .hover\:text-brand-600:hover {color:var(--action-ink);}
+:root .hover\:text-brand-700:hover {color:var(--action-ink);}
+:root .hover\:text-danger-500:hover {color:var(--danger);}
+:root .hover\:text-ink-600:hover {color:var(--ink-muted);}
+:root .hover\:text-ink-700:hover {color:var(--ink);}
+:root .hover\:text-ink-800:hover {color:var(--ink);}
+:root .hover\:text-warning-700:hover {color:var(--warning);}
+:root .hover\:text-white:hover {color:var(--action-ink);}
+:root .ring-brand-100 {--tw-ring-color:var(--focus);}
+:root .ring-danger-500\/20 {--tw-ring-color:var(--focus);}
+:root .ring-ink-100 {--tw-ring-color:var(--focus);}
+:root .text-accent-500 {color:var(--spark-text);}
+:root .text-accent-600 {color:var(--spark-text);}
+:root .text-accent-700 {color:var(--spark-text);}
+:root .text-brand-100 {color:var(--action-ink);}
+:root .text-brand-400 {color:var(--action-ink);}
+:root .text-brand-500 {color:var(--action-ink);}
+:root .text-brand-600 {color:var(--action-ink);}
+:root .text-brand-700 {color:var(--action-ink);}
+:root .text-brand-800 {color:var(--action-ink);}
+:root .text-brand-900 {color:var(--action-ink);}
+:root .text-danger-500 {color:var(--danger);}
+:root .text-danger-600 {color:var(--danger);}
+:root .text-danger-700 {color:var(--danger);}
+:root .text-ink-200 {color:var(--ink-muted);}
+:root .text-ink-400 {color:var(--ink-muted);}
+:root .text-ink-500 {color:var(--ink-muted);}
+:root .text-ink-600 {color:var(--ink-muted);}
+:root .text-ink-700 {color:var(--ink);}
+:root .text-ink-800 {color:var(--ink);}
+:root .text-ink-900 {color:var(--ink);}
+:root .text-success-600 {color:var(--success);}
+:root .text-success-700 {color:var(--success);}
+:root .text-warning-500 {color:var(--warning);}
+:root .text-warning-700 {color:var(--warning);}
+:root .text-warning-700\/70 {color:var(--warning);}
+:root .text-warning-800 {color:var(--warning);}
+:root .text-white {color:var(--action-ink);}
+
+:root .card, :root .rai-card, :root .rai-stat, :root .rfo-card {background:var(--card);color:var(--ink);}
+:root aside, :root header, :root [role="menu"], :root [data-testid="bottom-tabs"] {background-color:var(--surface);color:var(--ink);border-color:var(--line);}
+:root [role="dialog"]:not(.inset-0) {background-color:var(--surface);color:var(--ink);}
+:root .input, :root select, :root textarea, :root .rai-input, :root .rfo-in {background:var(--field-fill);color:var(--field-ink);border-color:var(--line-strong);}
+:root input::placeholder, :root textarea::placeholder {color:var(--ink-muted);opacity:1;}
+:root .btn-primary, :root .btn-accent, :root .rai-btn-primary, :root .rfo-btn-primary, :root [data-testid="ops-copilot-fab"] {background:var(--action-fill);color:var(--action-ink);}
+:root .btn-primary:hover:not(:disabled), :root .btn-accent:hover:not(:disabled), :root .rai-btn-primary:hover:not(:disabled), :root .rfo-btn:hover:not(:disabled), :root [data-testid="ops-copilot-fab"]:hover {background:var(--action-hover);color:var(--action-ink);filter:none;}
+:root .btn-ghost, :root .label {color:var(--ink);}
+:root .btn-outline {background:var(--surface);color:var(--ink);border-color:var(--line-strong);}
+:root .btn-outline:hover:not(:disabled), :root .btn-ghost:hover:not(:disabled) {background:var(--surface-sunken);}
+:root .btn-danger {background:var(--danger-tint);color:var(--danger);}
+:root button:disabled, :root input:disabled, :root select:disabled, :root textarea:disabled {opacity:1;cursor:not-allowed;box-shadow:inset 0 0 0 1px var(--line-strong);border-style:dashed;}
+:root :is(button,a,input,select,textarea):focus-visible {outline:2px solid var(--focus);outline-offset:2px;--tw-ring-color:var(--focus);}
+[data-theme="dark"] :is(.input,.rai-input,.rfo-in,select,textarea) {border-color:transparent;}
+:root [data-testid="keybox-alert"], :root [data-testid="keybox-alert"]:hover {--alert-opacity:0.5;background:rgb(140 33 27 / var(--alert-opacity));color:var(--alert-ink);}
+:root [data-testid="keybox-alert"] * {color:var(--alert-ink);opacity:1;}
+:root [data-testid="keybox-alert"] > span:last-child {background:transparent;box-shadow:inset 0 0 0 1px currentColor;}
+:root [data-testid="keybox-alert"] [aria-hidden="true"] span {background:currentColor;}
+:root [data-testid="keybox-alert"] [class*="animate-ping"] {display:none;}
+:root [data-testid="occupancy-strip"] > * {background:var(--card);}
+[data-theme="dark"] :is(aside,header) img[src$="roomai-mark.svg"] {background:#e7f1f2;border-radius:8px;padding:3px;}
+:root .recharts-default-tooltip {background:var(--surface)!important;color:var(--ink)!important;border-color:var(--line-strong)!important;}
+:root .recharts-cartesian-axis-tick-value, :root .recharts-legend-item-text {fill:var(--ink-muted);color:var(--ink-muted)!important;}
+
+/* Semantic chips and action labels retain their tone even on legacy inverse utilities. */
+:root :is(.bg-danger-500,.bg-danger-600,.bg-danger-50,.bg-danger-500\/10,.bg-danger-500\/5) {color:var(--danger);}
+:root :is(.bg-success-500,.bg-success-600,.bg-success-50,.bg-success-500\/10) {color:var(--success);}
+:root :is(.bg-warning-500,.bg-warning-600,.bg-warning-50,.bg-warning-500\/10) {color:var(--warning);}
+:root [data-testid="keybox-alert"],:root [data-testid="keybox-alert"] * {color:var(--alert-ink);}
+:root .bg-red-50{background-color:var(--danger-tint);}
+:root .bg-red-100{background-color:var(--danger-tint);}
+:root .bg-red-200{background-color:var(--danger-tint);}
+:root .bg-red-600{background-color:var(--danger-tint);}
+:root .bg-red-700{background-color:var(--danger-tint);}
+:root .bg-red-800{background-color:var(--danger-tint);}
+:root .bg-red-900{background-color:var(--danger-tint);}
+:root .text-red-50{color:var(--danger);}
+:root .text-red-100{color:var(--danger);}
+:root .text-red-200{color:var(--danger);}
+:root .text-red-600{color:var(--danger);}
+:root .text-red-700{color:var(--danger);}
+:root .text-red-800{color:var(--danger);}
+:root .text-red-900{color:var(--danger);}
+:root .border-red-50{border-color:var(--line);}
+:root .border-red-100{border-color:var(--line);}
+:root .border-red-200{border-color:var(--line);}
+:root .border-red-600{border-color:var(--line);}
+:root .border-red-700{border-color:var(--line);}
+:root .border-red-800{border-color:var(--line);}
+:root .border-red-900{border-color:var(--line);}
+:root .bg-amber-50{background-color:var(--warning-tint);}
+:root .bg-amber-100{background-color:var(--warning-tint);}
+:root .bg-amber-200{background-color:var(--warning-tint);}
+:root .bg-amber-600{background-color:var(--warning-tint);}
+:root .bg-amber-700{background-color:var(--warning-tint);}
+:root .bg-amber-800{background-color:var(--warning-tint);}
+:root .bg-amber-900{background-color:var(--warning-tint);}
+:root .text-amber-50{color:var(--warning);}
+:root .text-amber-100{color:var(--warning);}
+:root .text-amber-200{color:var(--warning);}
+:root .text-amber-600{color:var(--warning);}
+:root .text-amber-700{color:var(--warning);}
+:root .text-amber-800{color:var(--warning);}
+:root .text-amber-900{color:var(--warning);}
+:root .border-amber-50{border-color:var(--line);}
+:root .border-amber-100{border-color:var(--line);}
+:root .border-amber-200{border-color:var(--line);}
+:root .border-amber-600{border-color:var(--line);}
+:root .border-amber-700{border-color:var(--line);}
+:root .border-amber-800{border-color:var(--line);}
+:root .border-amber-900{border-color:var(--line);}
+:root .bg-green-50{background-color:var(--success-tint);}
+:root .bg-green-100{background-color:var(--success-tint);}
+:root .bg-green-200{background-color:var(--success-tint);}
+:root .bg-green-600{background-color:var(--success-tint);}
+:root .bg-green-700{background-color:var(--success-tint);}
+:root .bg-green-800{background-color:var(--success-tint);}
+:root .bg-green-900{background-color:var(--success-tint);}
+:root .text-green-50{color:var(--success);}
+:root .text-green-100{color:var(--success);}
+:root .text-green-200{color:var(--success);}
+:root .text-green-600{color:var(--success);}
+:root .text-green-700{color:var(--success);}
+:root .text-green-800{color:var(--success);}
+:root .text-green-900{color:var(--success);}
+:root .border-green-50{border-color:var(--line);}
+:root .border-green-100{border-color:var(--line);}
+:root .border-green-200{border-color:var(--line);}
+:root .border-green-600{border-color:var(--line);}
+:root .border-green-700{border-color:var(--line);}
+:root .border-green-800{border-color:var(--line);}
+:root .border-green-900{border-color:var(--line);}
+
+/* State is conveyed by labels and disabled semantics, never by fading legible content. */
+:root :is(.opacity-60,.opacity-70,.opacity-80,.opacity-90,.rai-guest-welcome), :root [data-testid="ops-copilot-fab"] {opacity:1;}
+:root .bg-danger-500\/15{background-color:var(--danger-tint);}
+:root .bg-ink-300\/30{background-color:var(--surface-sunken);}
+:root .bg-ink-500\/10{background-color:var(--surface-sunken);}
+
+/* Labels are not fields. Keep only the actual input filled. */
+[data-theme="dark"] .rai-field {background:transparent;color:var(--ink);}
+:root .rfo-step[aria-pressed="true"] {background:var(--spark-tint);color:var(--spark-text);box-shadow:inset 0 0 0 1px var(--spark-text);}
+:root .rfo-step:hover:not(:disabled) {background:var(--action-hover);color:var(--action-ink);}
+
+/* The sign-in cover keeps its dark gradient in both themes. Its heading is
+   inverse text, not an action label, so do not remap it to day action ink. */
+:root .login-type-midpoint > div > .text-white h1 {color:#f8fbfb;}
+/* The legacy guest layout has a fixed pale gradient. Use the shared canvas
+   so night foreground colours are never painted on that day-only ground. */
+[data-theme="dark"] #root > [lang] {background:var(--paper);}
+[data-theme="dark"] #root .bg-gradient-to-b {background-image:none;background-color:var(--paper);}
+[data-theme="dark"] #root > [lang] > footer {background:var(--surface);color:var(--ink-muted);}

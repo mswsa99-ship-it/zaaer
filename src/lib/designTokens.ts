@@ -1,12 +1,4 @@
-/**
- * Plan 3.2 — ملف الرموز الواحد: the single token file of the approved RoomAI design system (owner approval
- * 2026-11-24, relayed by main; values verbatim from the approved tokens.json v1 — never edited here).
- * Every color, spacing, radius, shadow, font and size comes from this file; a literal in a component is a
- * violation of the style rule (scripts/check-design-tokens.mjs).
- *
- * Two themes: نهار (light) and ليل (dark). rgba grounds (surface-sunken, sand-sheer) are measured for contrast
- * on their documented composites over paper: ≈ #F7F3ED and ≈ #FAF6F0 (tokens.json usage notes).
- */
+/** Shared theme values. CSS consumers use src/tokens.css. Keep both palettes in sync. */
 
 export type Theme = "light" | "dark";
 
@@ -16,45 +8,45 @@ export interface ThemedColor {
   usage: string;
 }
 
-/** The 28 color tokens, verbatim from the approved tokens.json. */
+/** Shared theme colour tokens, with day/night values. */
 export const colors = {
-  paper: { light: "#fffffe", dark: "#435054", usage: "Page ground, staff pages: the lightest ground." },
-  surface: { light: "#ffffff", dark: "#112830", usage: "Cards, tables, dialogs, fields." },
-  "surface-sunken": { light: "rgba(241,235,225,0.6)", dark: "#17323a", usage: "Menus' ground (sidebar, top bar, phone tab bar), 16px backdrop blur (rai-menu). ≈ #F7F3ED over paper." },
-  line: { light: "#e2d9cb", dark: "#24434c", usage: "Hairlines and dividers (decoration only, never a control border)." },
-  "line-strong": { light: "#8c8170", dark: "#0b1f24", usage: "Borders of fields, check boxes and controls (3:1 on surface)." },
-  "field-fill": { light: "#ffffff", dark: "#4c7780", usage: "Owner-approved night filled fields, no visible border." },
-  "field-ink": { light: "#10262d", dark: "#ffffff", usage: "Text inside filled fields." },
-  ink: { light: "#10262d", dark: "#ecf2f1", usage: "Body text and headings on paper and surface." },
-  "ink-muted": { light: "#5a6a6d", dark: "#b9c9ca", usage: "Secondary text, hints, captions (4.5:1 on paper and surface)." },
-  night: { light: "#10343f", dark: "#cfe6e8", usage: "ليل — the brand: primary buttons, the sidebar's active item, the mark's arch." },
-  "on-night": { light: "#ffffff", dark: "#5c6061", usage: "Text and icons on night." },
-  spark: { light: "#0fa3b1", dark: "#38c6d2", usage: "نسيم — the AI touch, for the assistant alone. Large shapes and icons only (3:1)." },
-  "spark-text": { light: "#0b6f78", dark: "#4bafb7", usage: "Text in the AI touch: «اقتراح من المساعد»." },
-  "spark-tint": { light: "#e3f6f7", dark: "#1d3b41", usage: "The ground of an AI suggestion card or chip." },
-  saffron: { light: "#d9952b", dark: "#e8ae4c", usage: "زعفران — hospitality: the guest's welcome, ratings, a reserved unit. Shapes and icons only." },
-  "saffron-text": { light: "#875812", dark: "#f0c27a", usage: "Text in the hospitality colour." },
-  "saffron-tint": { light: "#f2f0ed", dark: "#3a2a10", usage: "The ground of a welcome note or a reserved badge." },
-  sand: { light: "#f4ede2", dark: "#2a241b", usage: "رمل — warm relief blocks, the cover's doorways, the reversed mark's arch." },
-  "sand-sheer": { light: "rgba(244,237,226,0.5)", dark: "#2a241b", usage: "Guest pages' ground: sand made half sheer, ≈ #FAF6F0 over paper. Cards on it stay surface." },
-  success: { light: "#276e3d", dark: "#6ccb8a", usage: "Done, paid, available: text and icons." },
-  "success-tint": { light: "#e5f3e9", dark: "#133222", usage: "Ground of a success badge or notice." },
-  warning: { light: "#8a5300", dark: "#f1b85a", usage: "Needs attention: cleaning due, a balance left: text and icons." },
-  "warning-tint": { light: "#e8e5e0", dark: "#3a2a0b", usage: "Ground of a warning badge or notice." },
-  danger: { light: "#d21606", dark: "#f08a7e", usage: "Refused, failed, destructive: text, icons, the danger button." },
-  "danger-tint": { light: "#fbe8e6", dark: "#3d1612", usage: "Ground of an error notice." },
-  sky: { light: "#2f6db0", dark: "#7fb0ea", usage: "A unit being cleaned; information that is not the assistant's." },
-  "sky-tint": { light: "#e6eff9", dark: "#13283f", usage: "Ground of a cleaning badge." },
-  stone: { light: "#5f686a", dark: "#9aa6a8", usage: "Out of service, archived, disabled: text and icons." },
-  "stone-tint": { light: "#eef0f0", dark: "#1c2b2f", usage: "Ground of an out-of-service badge." },
-  focus: { light: "#0b6f78", dark: "#6fdce5", usage: "Focus ring, 2px, outside the control (3:1 on every ground)." },
+  paper: { light: "#f5f7fa", dark: "#091c24", usage: "Page ground, staff pages: the lightest ground." },
+  surface: { light: "#ffffff", dark: "#112b35", usage: "Cards, tables, dialogs, fields." },
+  "surface-sunken": { light: "#e5edf0", dark: "#183b47", usage: "Selected surface and recessed areas." },
+  line: { light: "#d2dfe3", dark: "#37525c", usage: "Hairlines and dividers (decoration only, never a control border)." },
+  "line-strong": { light: "#607c86", dark: "#8babb6", usage: "Borders of fields, check boxes and controls (3:1 on surface)." },
+  "field-fill": { light: "#ffffff", dark: "#244a54", usage: "Owner-approved night filled fields, no visible border." },
+  "field-ink": { light: "#10262d", dark: "#f8fbfb", usage: "Text inside filled fields." },
+  ink: { light: "#10262d", dark: "#f8fbfb", usage: "Body text and headings on paper and surface." },
+  "ink-muted": { light: "#354d55", dark: "#eaf1f2", usage: "Secondary text, hints, captions (4.5:1 on paper and surface)." },
+  night: { light: "#e5edf0", dark: "#183b47", usage: "Legacy action surface alias, follows the active theme." },
+  "on-night": { light: "#095865", dark: "#daf8fb", usage: "Text and icons on night." },
+  spark: { light: "#095865", dark: "#daf8fb", usage: "نسيم — the AI touch, for the assistant alone. Large shapes and icons only (3:1)." },
+  "spark-text": { light: "#3e4678", dark: "#e9e7ff", usage: "Text in the AI touch: «اقتراح من المساعد»." },
+  "spark-tint": { light: "#e8e8f5", dark: "#33304e", usage: "The ground of an AI suggestion card or chip." },
+  saffron: { light: "#624000", dark: "#fff0d3", usage: "زعفران — hospitality: the guest's welcome, ratings, a reserved unit. Shapes and icons only." },
+  "saffron-text": { light: "#624000", dark: "#fff0d3", usage: "Text in the hospitality colour." },
+  "saffron-tint": { light: "#f7ead2", dark: "#49350e", usage: "The ground of a welcome note or a reserved badge." },
+  sand: { light: "#f5f7fa", dark: "#091c24", usage: "رمل — warm relief blocks, the cover's doorways, the reversed mark's arch." },
+  "sand-sheer": { light: "#f5f7fa", dark: "#112b35", usage: "Guest pages' ground: sand made half sheer, ≈ #FAF6F0 over paper. Cards on it stay surface." },
+  success: { light: "#155b30", dark: "#d1f4db", usage: "Done, paid, available: text and icons." },
+  "success-tint": { light: "#dcefe2", dark: "#193f2a", usage: "Ground of a success badge or notice." },
+  warning: { light: "#624000", dark: "#fff0d3", usage: "Needs attention: cleaning due, a balance left: text and icons." },
+  "warning-tint": { light: "#f7ead2", dark: "#49350e", usage: "Ground of a warning badge or notice." },
+  danger: { light: "#92190f", dark: "#ffddd7", usage: "Refused, failed, destructive: text, icons, the danger button." },
+  "danger-tint": { light: "#f8e2df", dark: "#4b201b", usage: "Ground of an error notice." },
+  sky: { light: "#095865", dark: "#daf8fb", usage: "A unit being cleaned; information that is not the assistant's." },
+  "sky-tint": { light: "#dfeef2", dark: "#173f49", usage: "Ground of a cleaning badge." },
+  stone: { light: "#354d55", dark: "#eaf1f2", usage: "Out of service, archived, disabled: text and icons." },
+  "stone-tint": { light: "#e5edf0", dark: "#183b47", usage: "Ground of an out-of-service badge." },
+  focus: { light: "#095865", dark: "#daf8fb", usage: "Focus ring, 2px, outside the control (3:1 on every ground)." },
 } as const satisfies Record<string, ThemedColor>;
 
 export type ColorToken = keyof typeof colors;
 
-/** Documented composites of the sheer grounds over paper (tokens.json usage notes) — for contrast measurement. */
+/** Shared opaque grounds used for contrast measurement. */
 export const composites = {
-  light: { "surface-sunken": "#f7f3ed", "sand-sheer": "#faf6f0" },
+  light: { "surface-sunken": "#e5edf0", "sand-sheer": "#f5f7fa" },
 } as const;
 
 export const fontFamilies = {
@@ -129,11 +121,11 @@ export interface DeclaredPair {
 export const declaredPairs: DeclaredPair[] = [
   { label: "ink على paper", theme: "light", text: colors.ink.light, background: colors.paper.light, minimum: 4.5 },
   { label: "ink على surface", theme: "light", text: colors.ink.light, background: colors.surface.light, minimum: 4.5 },
-  { label: "ink على القوائم (surface-sunken ≈ #F7F3ED)", theme: "light", text: colors.ink.light, background: composites.light["surface-sunken"], minimum: 4.5 },
+  { label: "ink على القوائم (surface-sunken)", theme: "light", text: colors.ink.light, background: composites.light["surface-sunken"], minimum: 4.5 },
   { label: "ink-muted على paper", theme: "light", text: colors["ink-muted"].light, background: colors.paper.light, minimum: 4.5 },
   { label: "ink-muted على surface", theme: "light", text: colors["ink-muted"].light, background: colors.surface.light, minimum: 4.5 },
-  { label: "ink-muted على القوائم (surface-sunken ≈ #F7F3ED)", theme: "light", text: colors["ink-muted"].light, background: composites.light["surface-sunken"], minimum: 4.5 },
-  { label: "ink-muted على أرضية النزيل (sand-sheer ≈ #FAF6F0)", theme: "light", text: colors["ink-muted"].light, background: composites.light["sand-sheer"], minimum: 4.5 },
+  { label: "ink-muted على القوائم (surface-sunken)", theme: "light", text: colors["ink-muted"].light, background: composites.light["surface-sunken"], minimum: 4.5 },
+  { label: "ink-muted على أرضية النزيل (sand-sheer)", theme: "light", text: colors["ink-muted"].light, background: composites.light["sand-sheer"], minimum: 4.5 },
   { label: "on-night على night", theme: "light", text: colors["on-night"].light, background: colors.night.light, minimum: 4.5 },
   { label: "spark-text على spark-tint", theme: "light", text: colors["spark-text"].light, background: colors["spark-tint"].light, minimum: 4.5 },
   { label: "saffron-text على saffron-tint", theme: "light", text: colors["saffron-text"].light, background: colors["saffron-tint"].light, minimum: 4.5 },
@@ -163,11 +155,7 @@ export const declaredPairs: DeclaredPair[] = [
   { label: "حلقة التركيز focus على paper (ليل)", theme: "dark", text: colors.focus.dark, background: colors.paper.dark, minimum: 3 },
 ];
 
-/**
- * Approved values that do NOT meet their declared contrast — recorded, never claimed as AA (owner/main flag
- * 2026-11-24, and the 3.2 gate's own measurements). Exact values stay pending a design decision; any consumer
- * must surface the same warning. Each entry names its measured ratio so a silent value change fails the test.
- */
+/** Measured non-text boundary exception. This is not a passing AA boundary claim. */
 export const knownContrastExceptions = [
-  { label: "شكل saffron على paper", ratio: 2.53, minimum: 3, note: "Owner explicitly retained day saffron 2026-11-24 08:54. Decorative shapes only, never meaningful icons or text without a separate accessible cue. Not claimed as AA." },
+  { label: "تعبئة الحقول على surface (ليل)", ratio: 1.54, minimum: 3, note: "The selected night field fill is only 1.54:1 against the shell. Text contrast is separate. Borderless field identification is not claimed to pass SC 1.4.11." },
 ] as const;

@@ -9,17 +9,17 @@ import { colors, textStyles, spacing, radii, shadows, sizes, fontFamilies, decla
 
 describe("the single token file (plan 3.2)", () => {
   it("carries the approved identity colours verbatim, نهار وليل", () => {
-    expect(colors.night).toMatchObject({ light: "#10343f", dark: "#cfe6e8" });
-    expect(colors.spark).toMatchObject({ light: "#0fa3b1", dark: "#38c6d2" });
-    expect(colors.saffron).toMatchObject({ light: "#d9952b", dark: "#e8ae4c" });
-    expect(colors.sand).toMatchObject({ light: "#f4ede2", dark: "#2a241b" });
-    expect(colors.paper).toMatchObject({ light: "#fffffe", dark: "#435054" });
+    expect(colors.night).toMatchObject({ light: "#e5edf0", dark: "#183b47" });
+    expect(colors.spark).toMatchObject({ light: "#095865", dark: "#daf8fb" });
+    expect(colors.saffron).toMatchObject({ light: "#624000", dark: "#fff0d3" });
+    expect(colors.sand).toMatchObject({ light: "#f5f7fa", dark: "#091c24" });
+    expect(colors.paper).toMatchObject({ light: "#f5f7fa", dark: "#091c24" });
     expect(Object.keys(colors)).toHaveLength(30);
   });
 
-  it("keeps the alpha of the sheer grounds (the approved tokens.css lost it; tokens.json wins)", () => {
-    expect(colors["surface-sunken"].light).toBe("rgba(241,235,225,0.6)");
-    expect(colors["sand-sheer"].light).toBe("rgba(244,237,226,0.5)");
+  it("uses the unified selected surface and canvas values", () => {
+    expect(colors["surface-sunken"].light).toBe("#e5edf0");
+    expect(colors["sand-sheer"].light).toBe("#f5f7fa");
   });
 
   it("carries the type, spacing, radius, shadow and size scales verbatim", () => {

@@ -9,6 +9,7 @@ import App from "./App";
 import { currentGuestScope } from "./lib/guestScope";
 import { AppErrorBoundary, OfflineBanner } from "./components/AppErrorBoundary";
 import "./index.css";
+import "./themeIdentity.css";
 import { startLabelLinker } from "./lib/a11y";
 import { installFrameGuard } from "./lib/frameGuard";
 
