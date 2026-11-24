@@ -9,6 +9,7 @@
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 grant all on test_results to public;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
@@ -191,10 +192,10 @@ set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare p jsonb; begin
   -- what other suites already put on this account today is the baseline; this suite adds to it
-  p := fn_pos_settlement_preview('00000000-0000-0000-0000-000000000010', t_id('bank10'), fn_branch_today('00000000-0000-0000-0000-000000000010'));
+  p := fn_pos_settlement_preview('00000000-0000-0000-0000-000000000010', t_id('bank10'), t_today('00000000-0000-0000-0000-000000000010'));
   insert into nums values ('pos_total0', (p->>'system_total_halalas')::bigint), ('pos_count0', (p->>'voucher_count')::bigint);
 end $$;
-do $$ declare p jsonb; s jsonb; s2 jsonb; nonote text; d date := fn_branch_today('00000000-0000-0000-0000-000000000010'); refund_id uuid; begin
+do $$ declare p jsonb; s jsonb; s2 jsonb; nonote text; d date := t_today('00000000-0000-0000-0000-000000000010'); refund_id uuid; begin
   -- today on the default bank account: 50.00 (MC02) + 25.00 + a refund of 10.00 by terminal
   perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 2500, 'method','pos', 'reference','TRX-9001', 'idempotency_key','mc-10a'));
   reset role;
@@ -228,7 +229,7 @@ do $$ declare r1 text; r2 text; begin
   perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000001', 'email', 'owner@test.local')::text, false);
   set role authenticated;
   r2 := t_fails(format('select fn_pos_settle(%L::jsonb)', jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'account_id', t_id('bank10'),
-                  'business_date', fn_branch_today('00000000-0000-0000-0000-000000000010') + 1, 'terminal_total_halalas', 0)), 'VALIDATION: business_date%');
+                  'business_date', t_today('00000000-0000-0000-0000-000000000010') + 1, 'terminal_total_halalas', 0)), 'VALIDATION: business_date%');
   perform t_record('MC11b housekeeping cannot see the settlement; a day that has not come yet cannot be settled', r1 = 'ok' and r2 = 'ok', r1 || ' / ' || r2);
 end $$;
 reset role;

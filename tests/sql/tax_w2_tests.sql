@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Guest journey, task W2 (VT*; migration 0069): the tax switches. The value-added tax is off by default; each of
 -- rent, services and products has its own switch and its own rate in the branch's settings, the owner's alone;
@@ -29,7 +30,7 @@ begin
 exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
-create or replace function tv_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tv_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 create or replace function tv_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;
 create or replace function tv_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function tv_branch(p uuid) returns branches language sql security definer as $$ select * from branches where id = p $$;

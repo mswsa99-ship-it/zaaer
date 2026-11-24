@@ -233,3 +233,26 @@ describe("PG harness inherited effects and writer proof", () => {
     expect(h).toContain('H06b');
   });
 });
+
+
+describe("coverage by schema (backup_toc_coverage)", () => {
+  it("BK23 tells a schema whose rows are in the dump from one with structure only, and never counts rows", () => {
+    const dir = tmp(); const toc = join(dir, "toc.txt");
+    writeFileSync(toc, [
+      "; toc",
+      "10; 2615 2200 SCHEMA - public owner", "11; 2615 3 SCHEMA - auth owner", "12; 2615 4 SCHEMA - storage owner",
+      "20; 1259 5 TABLE public rooms owner", "21; 1259 6 TABLE public guests owner", "22; 0 5 TABLE DATA public rooms owner",
+      "30; 1259 7 TABLE auth users owner", "31; 0 7 TABLE DATA auth users owner",
+      "40; 1259 8 TABLE storage objects owner", "41; 1259 9 TABLE storage buckets owner",
+    ].join("\n") + "\n");
+    const r = spawnSync("bash", ["-c", `source scripts/backup/lib.sh; backup_toc_coverage ${toc}`], { encoding: "utf8", cwd: ROOT });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim().split("\n")).toEqual(["auth\t1\t1", "public\t2\t1", "storage\t2\t0"]); // exact set: no "owner" pseudo-schema
+  });
+  it("BK22 coverage-report names auth data as unverified and storage bytes as never included", () => {
+    const c = readFileSync(join(ROOT, "scripts/backup/coverage-report.sh"), "utf8");
+    expect(c).toContain("password hashes");
+    expect(c).toContain("file contents (bytes) are never in a database dump");
+    expect(c).toContain("not fingerprinted and not restore-verified");
+  });
+});

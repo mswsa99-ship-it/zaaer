@@ -17,8 +17,8 @@ for (const role of Object.keys(EXPECT) as DemoRole[]) {
     await expect(board).toHaveAttribute("data-role", role);
     for (const k of EXPECT[role].tiles) {
       const tile = page.getByTestId(`shift-tile-${k}`);
-      // a tile whose page the role cannot open is not shown (PERM-05): require it only when the role may open it
-      if (await tile.count()) await expect(tile).toBeVisible();
+      // Seeded role grants are fixed for this test: absence is a failure, not a skip.
+      await expect(tile, `${role}: required tile ${k}`).toBeVisible();
     }
     expect(await page.getByTestId("shift-tiles").locator("a").count()).toBeGreaterThan(0);
   });

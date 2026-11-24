@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Phase 4 money controls (proposed migrations 0084/0085): 4.1 «استلمت» وسقف النقص والآجل باعتماد المدير،
 -- 4.2 سقف القبض (سند 99,999 على حجز قيمته 75 يُرفض) والدفعة المقدمة، 4.3 حد المصروف لكل دور و«بانتظار اعتماد»
@@ -58,13 +59,13 @@ do $$ declare r jsonb; b uuid; cat uuid; begin
   r := fn_admin_upsert_branch('{"name_ar":"فرع المرحلة الرابعة","name_en":"PhaseFour branch","tax_rate_bp":0}'); b := (r->>'id')::uuid;
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', b, 'name_ar', 'غرفة الضبط', 'base_price_halalas', 3750)); cat := (r->>'id')::uuid;
   perform fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number', '941'));
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (fn_branch_today(b) + 30)::text,
-         'check_out', (fn_branch_today(b) + 32)::text, 'guest_phone', '0551000091', 'guest_name', 'نزيل الضبط الأول', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (t_today(b) + 30)::text,
+         'check_out', (t_today(b) + 32)::text, 'guest_phone', '0551000091', 'guest_name', 'نزيل الضبط الأول', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('b', b), ('res1', (r->>'id')::uuid);
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (fn_branch_today(b) + 40)::text,
-         'check_out', (fn_branch_today(b) + 42)::text, 'guest_phone', '0551000092', 'guest_name', 'نزيل الضبط الثاني', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (t_today(b) + 40)::text,
+         'check_out', (t_today(b) + 42)::text, 'guest_phone', '0551000092', 'guest_name', 'نزيل الضبط الثاني', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res2', (r->>'id')::uuid);
-  perform fn_admin_set_account_opening(t_accid(b, 'cash_box'), 5000000, fn_branch_today(b), 'رصيد افتتاحي تجريبي');
+  perform fn_admin_set_account_opening(t_accid(b, 'cash_box'), 5000000, t_today(b), 'رصيد افتتاحي تجريبي');
   perform t_record('P4-00 the branch, two stays of 7,500 halalas each and a cash box with an opening are set up',
     (select (t_fin(t_id('res1'))->>'total')::bigint) = 7500
     and (select (t_fin(t_id('res2'))->>'total')::bigint) = 7500
@@ -129,7 +130,7 @@ end $$;
 -- ---------------------------------------------------------------- 4.1: «الآجل باعتماد المدير فقط»
 do $$ declare r jsonb; x text; ri int; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', t_id('b'), 'category_id', (select room_category_id from reservations where id = t_id('res1')),
-         'check_in', (fn_branch_today(t_id('b')) + 50)::text, 'check_out', (fn_branch_today(t_id('b')) + 52)::text,
+         'check_in', (t_today(t_id('b')) + 50)::text, 'check_out', (t_today(t_id('b')) + 52)::text,
          'guest_phone', '0551000093', 'guest_name', 'نزيل الآجل', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res3', (r->>'id')::uuid) on conflict (k) do update set v = excluded.v;
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
@@ -175,6 +176,13 @@ do $$ declare x text; r jsonb; bal bigint; begin
   perform t_record('P4-14 4.3: the manager approves; the expense now moves the box and appears in the ledger',
     (r->>'ok')::boolean and t_bal(t_accid(t_id('b'), 'cash_box')) = bal - 600000
     and t_mov_has_expense(t_accid(t_id('b'), 'cash_box'), t_id('exp_pending')), r->>'number');
+  -- 0126 regression pin: an approved-from-pending expense also has exactly one balanced journal entry (found 2026-11-24:
+  -- before 0126 the approval moved the box and the ledger but wrote no journal entry).
+  perform t_record('P4-14b 4.3: the approval also posts exactly one balanced journal entry for the expense',
+    (select count(*) from journal_entries where source_type = 'expense' and source_id = t_id('exp_pending')) = 1
+    and (select coalesce(sum(l.debit_halalas),0) = coalesce(sum(l.credit_halalas),0) and coalesce(sum(l.debit_halalas),0) = 600000
+         from journal_lines l join journal_entries j on j.id = l.entry_id
+         where j.source_type = 'expense' and j.source_id = t_id('exp_pending')), null);
 exception when others then perform t_record('P4-13/P4-14 4.3 اعتماد المصروف', false, sqlerrm);
 end $$;
 do $$ declare x text; n bigint; begin
@@ -206,17 +214,17 @@ end $$;
 -- ---------------------------------------------------------------- 4.4: the blind count — no system figure before sending
 do $$ declare g jsonb; begin
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  g := fn_day_closing_get(t_id('b'), fn_branch_today(t_id('b')));
+  g := fn_day_closing_get(t_id('b'), t_today(t_id('b')));
   perform t_record('P4-18 4.4: before any closing the function returns no system figure and no matrix',
     not exists (select 1 from jsonb_array_elements(g->'live'->'boxes') b where b ? 'system_halalas')
     and g->'live'->'matrix' = '[]'::jsonb, (g->'live'->'boxes')::text);
 exception when others then perform t_record('P4-18 4.4: before any closing the function returns no system figure and no matrix', false, sqlerrm);
 end $$;
 do $$ declare s jsonb; g jsonb; live jsonb; lines jsonb; begin
-  live := t_compute(t_id('b'), fn_branch_today(t_id('b')));   -- the test computes what the screen must not see
+  live := t_compute(t_id('b'), t_today(t_id('b')));   -- the test computes what the screen must not see
   select jsonb_agg(jsonb_build_object('key', b->>'key', 'entered_halalas', b->>'system_halalas')) into lines from jsonb_array_elements(live->'boxes') b;
-  s := fn_day_closing_save(jsonb_build_object('branch_id', t_id('b'), 'business_date', fn_branch_today(t_id('b')), 'lines', lines));
-  g := fn_day_closing_get(t_id('b'), fn_branch_today(t_id('b')));
+  s := fn_day_closing_save(jsonb_build_object('branch_id', t_id('b'), 'business_date', t_today(t_id('b')), 'lines', lines));
+  g := fn_day_closing_get(t_id('b'), t_today(t_id('b')));
   perform t_record('P4-19 4.4: while the draft is counted, the stored lines hide the system figure and the difference but keep what was entered',
     (s->>'ok')::boolean
     and not exists (select 1 from jsonb_array_elements(g->'lines') l where l ? 'system_halalas' or l ? 'difference_halalas')
@@ -224,11 +232,11 @@ do $$ declare s jsonb; g jsonb; live jsonb; lines jsonb; begin
 exception when others then perform t_record('P4-19 4.4: while the draft is counted, the stored lines hide the system figure and the difference but keep what was entered', false, sqlerrm);
 end $$;
 do $$ declare c day_closings%rowtype; rv jsonb; s jsonb; g jsonb; exp bigint; begin
-  select * into c from day_closings where branch_id = t_id('b') and business_date = fn_branch_today(t_id('b'));
+  select * into c from day_closings where branch_id = t_id('b') and business_date = t_today(t_id('b'));
   rv := fn_day_closing_review(c.id);
   s := fn_day_closing_submit(c.id, (rv->>'version')::int, rv->>'hash');
-  exp := (select (b->>'system_halalas')::bigint from jsonb_array_elements(t_compute(t_id('b'), fn_branch_today(t_id('b')))->'boxes') b where b->>'key' = 'cash');
-  g := fn_day_closing_get(t_id('b'), fn_branch_today(t_id('b')));
+  exp := (select (b->>'system_halalas')::bigint from jsonb_array_elements(t_compute(t_id('b'), t_today(t_id('b')))->'boxes') b where b->>'key' = 'cash');
+  g := fn_day_closing_get(t_id('b'), t_today(t_id('b')));
   perform t_record('P4-20 4.4: after sending, the system figure is returned and equals the computed cash (totals invariant)',
     (s->>'ok')::boolean
     and exists (select 1 from jsonb_array_elements(g->'live'->'boxes') b where b->>'key' = 'cash' and (b->>'system_halalas')::bigint = exp)

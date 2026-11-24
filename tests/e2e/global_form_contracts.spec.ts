@@ -11,6 +11,7 @@
  * or a broken network exactly as the earlier K-specs do.
  */
 import { test, expect, bookingNext } from "./fixtures";
+import { retainUnexpectedErrors } from "./scoped-network-errors";
 
 /* ---------------------------------- 6.5 ---------------------------------- */
 
@@ -100,7 +101,9 @@ test.describe("one state per admin list, error card clears after recovery (6.6)"
     test(`list state is single and recovers: ${path}`, async ({ page, loginAs, go, errors }) => {
       await loginAs("owner");
       await go("/admin/dashboard");
-      await page.evaluate(() => { (window as unknown as { __demoFail: unknown }).__demoFail = () => "network down"; });
+      const expectedRefusal = `e2e admin-list refusal: ${path}`;
+      const injectionStart = errors.length;
+      await page.evaluate((message) => { (window as unknown as { __demoFail: unknown }).__demoFail = () => message; }, expectedRefusal);
       await page.evaluate((p) => { window.location.hash = p; }, path);
       await page.waitForTimeout(1200);
       const main = page.locator("main");
@@ -112,13 +115,15 @@ test.describe("one state per admin list, error card clears after recovery (6.6)"
       expect(states, `${path}: error=${failed} empty=${empty} loading=${spinning} must be a single state`).toBeLessThanOrEqual(1);
       // the connection returns: a retry or a reload shows the data and the error card is gone
       await page.evaluate(() => { (window as unknown as { __demoFail: unknown }).__demoFail = undefined; });
+      const injectionEnd = errors.length;
       const retry = main.getByRole("button", { name: "إعادة المحاولة" }).first();
       if (await retry.count()) await retry.click();
       else await page.evaluate((p) => { window.location.hash = "/admin/dashboard"; setTimeout(() => { window.location.hash = p; }, 50); }, path);
       await page.waitForTimeout(1200);
       await expect(main.locator("[role=alert]")).toHaveCount(0);
       await expect(main.locator(".animate-spin")).toHaveCount(0);
-      errors.length = 0; // the failed reads are logged by design in this test
+      retainUnexpectedErrors(errors, expectedRefusal, injectionStart, injectionEnd);
+      expect(errors, `${path}: no unexpected errors before, during or after injected refusal`).toEqual([]);
     });
   }
 });

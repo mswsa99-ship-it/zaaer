@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Guest journey, task W1 (PR*; migration 0068): products and ordering. A catalogue of products in categories, without
 -- stock, each one offered or not in each branch; a guest in their room orders (WhatsApp, with the verified token) or
@@ -31,7 +32,7 @@ exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
 create or replace function tp_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
-create or replace function tp_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tp_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 create or replace function tp_bal(p_branch uuid, p_key text) returns bigint language sql security definer as $$
   select coalesce(sum(l.credit_halalas - l.debit_halalas), 0)::bigint from journal_lines l join journal_entries e on e.id = l.entry_id join gl_accounts g on g.id = l.account_id
   where e.branch_id = p_branch and g.system_key = p_key $$;

@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Release proof 4.6 (M6 رصد الشذوذ): the six anomaly rules, each with a case that fires (review item + immediate
 -- owner-side alert) and a case that does not, plus the imported-negative-cash path the acceptance text names.
@@ -34,7 +35,7 @@ create or replace function t_rp_stay(p_room uuid, p_phone text, p_name text, p_o
 declare r jsonb;
 begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', p_room,
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + p_offset, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + p_offset + 2,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + p_offset, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + p_offset + 2,
          'guest_phone', p_phone, 'guest_name', p_name, 'source_id', '00000000-0000-0000-0000-000000000021'));
   return (r->>'id')::uuid;
 end $$;
@@ -178,7 +179,7 @@ exception when others then perform t_record('RP46-09 deposit duplicate flag afte
 -- ---------------------------------------------------------------- rule «سعر صفر»: the owner''s approved free stay flags once per stay; a priced night never does
 do $$ declare r jsonb; rid uuid; m timestamptz := now(); begin
   r := fn_staff_create_free_stay(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room2'),
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 450, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 451,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + 450, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 451,
          'guest_phone', '0571000006', 'guest_name', 'إقامة مجانية', 'source_id', '00000000-0000-0000-0000-000000000021', 'reason', 'تعويض نزيل عن إزعاج'));
   rid := (r->>'id')::uuid;
   perform t_record('RP46-10 the approved free stay opens zero_price with an immediate alert, once for the stay',
@@ -213,7 +214,7 @@ do $$ declare rid uuid; v uuid; m timestamptz; att jsonb; bal bigint; r jsonb; b
   att := jsonb_build_array(jsonb_build_object('file_name', 'r.png', 'data_base64', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='));
   -- the import branch's box starts empty: a cash receipt, an expense that drains it, then the cancelled stay's cash refund
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', t_id('branch2'), 'category_id', t_id('cat2'), 'room_id', t_id('room-b2'),
-         'check_in', fn_branch_today(t_id('branch2')) + 410, 'check_out', fn_branch_today(t_id('branch2')) + 412,
+         'check_in', t_today(t_id('branch2')) + 410, 'check_out', t_today(t_id('branch2')) + 412,
          'guest_phone', '0571000008', 'guest_name', 'صندوق سالب', 'source_id', '00000000-0000-0000-0000-000000000021'));
   rid := (r->>'id')::uuid;
   insert into ids values ('res-neg', rid);
@@ -234,7 +235,7 @@ exception when others then perform t_record('RP46-14a voucher-path negative box'
 
 -- the import path the acceptance text names: a negative opening balance imported into a box (no voucher, no expense)
 do $$ declare r jsonb; m timestamptz := now(); begin
-  r := fn_admin_set_account_opening(t_id('box3'), -50000, fn_branch_today(t_id('branch3')), 'استيراد رصيد افتتاحي سالب');
+  r := fn_admin_set_account_opening(t_id('box3'), -50000, t_today(t_id('branch3')), 'استيراد رصيد افتتاحي سالب');
   perform t_record('RP46-14b an imported negative opening balance opens «صندوق سالب» (negative_cash_box) with an immediate alert',
     (r->>'ok')::boolean and t_flags('negative_cash_box', 'cash_account', t_id('box3')) = 1
     and t_alerts(t_id('branch3'), m) >= 1,
@@ -244,7 +245,7 @@ do $$ declare r jsonb; m timestamptz := now(); begin
 exception when others then perform t_record('RP46-14b imported negative opening', false, sqlerrm); end $$;
 -- leave the branch as found
 do $$ begin
-  perform fn_admin_set_account_opening(t_id('box3'), 0, fn_branch_today(t_id('branch3')), 'إعادة الرصيد بعد الاختبار');
+  perform fn_admin_set_account_opening(t_id('box3'), 0, t_today(t_id('branch3')), 'إعادة الرصيد بعد الاختبار');
 exception when others then null; end $$;
 
 -- =====================================================================

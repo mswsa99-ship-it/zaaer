@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- The guest journey after the stay (migration 0070): W3 the check-out options and the extension (CX), W4 the
 -- departure and the deposit's return (DR), W5 the review (RW), W6 the alert rules (AR), and the journey's messages
@@ -30,10 +31,10 @@ begin
 exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
-create or replace function tj_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tj_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 -- today at a local hour of the branch
 create or replace function tj_at(p_branch uuid, p_hm text) returns timestamptz language sql security definer as $$
-  select (fn_branch_today(p_branch) + p_hm::time) at time zone (select timezone from branches where id = p_branch) $$;
+  select (t_today(p_branch) + p_hm::time) at time zone (select timezone from branches where id = p_branch) $$;
 create or replace function tj_tick(p_branch uuid, p_at timestamptz default now()) returns jsonb language sql security definer as $$ select fn_journey_tick(p_branch, true, p_at) $$;
 create or replace function tj_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function tj_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;

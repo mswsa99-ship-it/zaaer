@@ -61,3 +61,15 @@ SQL
 backup_fingerprint() { # pguri
   psql "$1" -q -At -F $'\t' -v ON_ERROR_STOP=1 -c "set timezone = 'UTC'; $(cat "$(dirname "${BASH_SOURCE[0]}")/../data-fingerprint.sql")"
 }
+
+# What a pg_restore --list table of contents shows per schema. Counts TABLE entries and TABLE DATA entries so a
+# schema whose rows are in the dump is told apart from one whose structure only is. Rows are NOT counted or hashed
+# here: only public tables are fingerprinted on restore. Usage: backup_toc_coverage <toc-file>
+backup_toc_coverage() {
+  awk '
+    / SCHEMA - /           { s[$(NF-1)]=1 }
+    / TABLE DATA /         { d[$(NF-2)]++; s[$(NF-2)]=1 }
+    / TABLE [a-z_]+ [^ ]+ /{ if ($0 !~ /TABLE DATA/) { t[$(NF-2)]++; s[$(NF-2)]=1 } }
+    END { for (k in s) printf "%s\t%d\t%d\n", k, t[k]+0, d[k]+0 }
+  ' "$1" | sort
+}

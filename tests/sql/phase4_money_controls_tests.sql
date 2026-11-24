@@ -8,6 +8,7 @@
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 grant all on test_results to public;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
@@ -37,7 +38,7 @@ create or replace function t_stay(p_room uuid, p_phone text, p_name text) return
 declare r jsonb;
 begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', p_room,
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 402,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 402,
          'guest_phone', p_phone, 'guest_name', p_name, 'source_id', '00000000-0000-0000-0000-000000000021'));
   return (r->>'id')::uuid;
 end $$;
@@ -130,30 +131,30 @@ end $$;
 -- ---------------------------------------------------------------- 4.7 the price floor and the owner-approved free stay
 do $$ declare e_owner text; e_mgr text; e_sup text; e_sup2 text; e_norsn text; r jsonb; rid uuid; begin
   e_owner := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-    'room_id', t_id('room3'), 'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 401,
+    'room_id', t_id('room3'), 'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 401,
     'guest_phone', '0560000010', 'guest_name', 'صفر مالك', 'source_id', '00000000-0000-0000-0000-000000000021', 'nightly_rate_halalas', 0)), 'PRICE_FLOOR%');
   perform t_record('4.7 a zero night price is refused for the owner, and the refusal writes neither reservation nor nights',
     e_owner = 'ok'
     and t_count('select count(*) from reservations where id in (select reservation_id from reservation_guests where phone = ''0560000010'')') = 0, e_owner);
   perform t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
   e_mgr := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-    'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 401,
+    'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 401,
     'guest_phone', '0560000011', 'guest_name', 'صفر مدير', 'source_id', '00000000-0000-0000-0000-000000000021', 'nightly_rate_halalas', 0)), 'PRICE_FLOOR%');
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   e_sup := t_fails(format('select fn_staff_create_reservation(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-    'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 401,
+    'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 401,
     'guest_phone', '0560000012', 'guest_name', 'صفر مشرف', 'source_id', '00000000-0000-0000-0000-000000000021', 'nightly_rate_halalas', 0)), 'accepted');
   e_sup2 := t_fails(format('select fn_staff_create_free_stay(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-    'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 401,
+    'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 401,
     'guest_phone', '0560000013', 'guest_name', 'مجاني مشرف', 'source_id', '00000000-0000-0000-0000-000000000021', 'reason', 'مجاملة')), 'FORBIDDEN%');
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   perform t_record('4.7 a zero night price is refused for the manager and the supervisor, and the free-stay path is the owner''s alone',
     e_mgr = 'ok' and e_sup <> 'accepted' and e_sup2 = 'ok', e_mgr || ' / ' || e_sup || ' / ' || e_sup2);
   e_norsn := t_fails(format('select fn_staff_create_free_stay(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-    'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 401,
+    'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 401,
     'guest_phone', '0560000014', 'guest_name', 'مجاني بلا سبب', 'source_id', '00000000-0000-0000-0000-000000000021')), 'VALIDATION: reason%');
   r := fn_staff_create_free_stay(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room3'),
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 402,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 402,
          'guest_phone', '0560000015', 'guest_name', 'ضيف مجاني', 'source_id', '00000000-0000-0000-0000-000000000021', 'reason', 'تعويض عن إزعاج سابق'));
   rid := (r->>'id')::uuid; insert into ids values ('resfree', rid) on conflict (k) do nothing;
   perform t_record('4.7 the free stay needs the owner''s reason, marks the stay, books zero nights, and the zero price is flagged and alerted',
@@ -182,14 +183,14 @@ select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 do $$ declare r jsonb; e text; begin
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 402,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 402,
          'guest_phone', '0560000020', 'guest_name', 'خصم مشرف', 'source_id', '00000000-0000-0000-0000-000000000021', 'discount_halalas', 3000, 'discount_reason', 'خصم خمسة بالمئة'));
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   perform t_record('4.8 a small discount under the hotel''s threshold passes for the supervisor exactly as before (no approval, no flag)',
     (r->>'ok')::boolean
     and t_count(format('select count(*) from review_items where kind = ''discount_over_threshold'' and reservation_id = %L', (r->>'id')::uuid)) = 0, r::text);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'),
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 402,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + 400, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 402,
          'guest_phone', '0560000021', 'guest_name', 'خصم عادي', 'source_id', '00000000-0000-0000-0000-000000000021', 'discount_halalas', 6000, 'discount_reason', 'حسم عشرة بالمئة'));
   insert into ids values ('res5', (r->>'id')::uuid) on conflict (k) do nothing;
   perform t_record('4.8 a discount under the hotel''s threshold passes at booking with no approval and no flag',

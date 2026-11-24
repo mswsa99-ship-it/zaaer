@@ -20,6 +20,7 @@ create or replace function t_vouchers(p_res uuid, p_kind text) returns int langu
 create or replace function t_paid(p_res uuid) returns bigint language sql security definer as $$ select paid_halalas from reservations where id = p_res $$;
 create or replace function t_memberships(p_staff uuid) returns int language sql security definer as $$ select count(*)::int from branch_memberships where staff_id = p_staff $$;
 create or replace function t_charge(p_id uuid) returns reservation_charges language sql security definer as $$ select * from reservation_charges where id = p_id $$;
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated can no longer call fn_branch_today directly
 
 create temp table rf(k text primary key, v uuid);
 grant all on rf to public;
@@ -100,7 +101,7 @@ end $$;
 do $$ declare res uuid := (select v from rf where k='res'); rep jsonb; led jsonb; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'deposit', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'rf-dep'));
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'refund', 'amount_halalas', 2500, 'method', 'cash', 'method_reason', 'النزيل طلب الرد نقدًا', 'reason', 'تعويض', 'idempotency_key', 'rf-ref'));
-  rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010'), '{}'::jsonb);
+  rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', t_today('00000000-0000-0000-0000-000000000010') - 1, t_today('00000000-0000-0000-0000-000000000010'), '{}'::jsonb);
   led := rep->'ledger';
   perform t_record('RF12 A05 report ledger reconciles: net = receipts − refunds + deposit_apply, read straight from vouchers',
     (led->>'net_collected')::bigint = (led->>'receipts')::bigint - (led->>'refunds')::bigint + (led->>'deposits_applied')::bigint

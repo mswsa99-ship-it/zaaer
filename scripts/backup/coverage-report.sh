@@ -11,7 +11,20 @@ W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 gpg --batch --yes --quiet --decrypt --passphrase-file "$BACKUP_PASSPHRASE_FILE" --output "$W/f.tar" "$A" || backup_die "decryption failed"
 python3 scripts/backup/unpack.py "$W/f.tar" "$W" bundle.tar bundle.sha256
 python3 scripts/backup/unpack.py "$W/bundle.tar" "$W" db.dump manifest.tsv
-echo "schemas in the dump:"; pg_restore --list "$W/db.dump" | awk '/ SCHEMA - /{print "  " $NF}' | sort -u
+pg_restore --list "$W/db.dump" > "$W/toc.txt"
+echo "schemas in the dump:"; awk '/ SCHEMA - /{print "  " $(NF-1)}' "$W/toc.txt" | sort -u
+echo "per schema (table definitions / table data entries in the dump; rows are not counted here):"
+backup_toc_coverage "$W/toc.txt" | awk -F'\t' '{printf "  %s: %s tables, %s with data\n", $1, $2, $3}'
+if backup_toc_coverage "$W/toc.txt" | awk -F'\t' '$1=="auth" && $3>0 {f=1} END{exit !f}'; then
+  echo "auth: user table DATA is in this dump (may include password hashes). It is not fingerprinted and not restore-verified; the archive must stay encrypted."
+else
+  echo "auth: no table data in this dump."
+fi
+if backup_toc_coverage "$W/toc.txt" | awk -F'\t' '$1=="storage" && $3>0 {f=1} END{exit !f}'; then
+  echo "storage: object METADATA rows are in this dump. The file contents (bytes) are never in a database dump."
+else
+  echo "storage: no metadata data in this dump; file contents are never in a database dump."
+fi
 echo "fingerprinted (counts+hashes proven on restore): public schema tables only"
-echo "NOT covered: Supabase Auth settings/providers/templates, Storage bucket objects (files), Edge function code and secrets,"
+echo "NOT covered: Supabase Auth settings/providers/templates, Storage file contents, Edge function code and secrets,"
 echo "             project config, the encryption passphrase itself, vault contents. Each needs its own approved path."

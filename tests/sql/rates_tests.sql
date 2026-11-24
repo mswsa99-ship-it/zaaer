@@ -9,6 +9,7 @@
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 grant all on test_results to public;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
@@ -47,7 +48,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- fixtures
-insert into days values ('D', fn_branch_today('00000000-0000-0000-0000-000000000010') + 200);
+insert into days values ('D', t_today('00000000-0000-0000-0000-000000000010') + 200);
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare r jsonb; b branches%rowtype; begin
@@ -111,7 +112,7 @@ do $$ declare r1 text; r2 text; r3 text; r4 text; e audit_events; begin
   r1 := t_fails(format('select fn_rate_calendar_set(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'price_halalas', 14000,
           'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', t_day('D') + 5)))), 'VALIDATION: below_minimum%');
   r2 := t_fails(format('select fn_rate_calendar_set(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'price_halalas', 30000,
-          'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1)))), 'VALIDATION: past_night%');
+          'cells', jsonb_build_array(jsonb_build_object('category_id', t_id('cat'), 'night', t_today('00000000-0000-0000-0000-000000000010') - 1)))), 'VALIDATION: past_night%');
   select * into e from t_audit_all() where action = 'rates.updated' and branch_id = '00000000-0000-0000-0000-000000000010' order by created_at desc limit 1;
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   r3 := t_fails(format('select fn_rate_calendar_set(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'price_halalas', 30000,
@@ -231,10 +232,10 @@ exception when others then perform t_record('PR07b shortening a weekly stay is t
 -- ---------------------------------------------------------------- PR08: the discount report
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare full_r jsonb; sup_r jsonb; mine jsonb; begin
-  full_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010') + 1, '{}'::jsonb);
+  full_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', t_today('00000000-0000-0000-0000-000000000010') - 1, t_today('00000000-0000-0000-0000-000000000010') + 1, '{}'::jsonb);
   select x into mine from jsonb_array_elements(full_r->'rows') x where x->>'reservation_id' = t_id('resDisc')::text;
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  sup_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010') + 1, '{}'::jsonb);
+  sup_r := fn_reports_discounts('00000000-0000-0000-0000-000000000010', t_today('00000000-0000-0000-0000-000000000010') - 1, t_today('00000000-0000-0000-0000-000000000010') + 1, '{}'::jsonb);
   perform t_record('PR08 the discount report shows who, how much and why; the supervisor gets the totals only',
     (mine->>'amount_halalas')::bigint = 6000 and mine->>'reason' = 'ضيف دائم' and mine->>'role' = 'supervisor' and (full_r->>'count')::int >= 2
     and sup_r->'rows' = 'null'::jsonb and (sup_r->>'total_halalas')::bigint = (full_r->>'total_halalas')::bigint,
@@ -316,7 +317,7 @@ do $$ declare r jsonb; rid uuid; rid2 uuid; t0 bigint; t2 bigint; sw jsonb; sw2 
   -- the platform collected this stay: it is re-priced too (the owner's decision, 30 Oct); its deferred receipt stays
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room2'),
          'check_in', t_day('D') + 90, 'check_out', t_day('D') + 92, 'guest_phone', '0551000041', 'guest_name', 'ضيف منصة', 'source_id', '00000000-0000-0000-0000-000000000020',
-         'external_ref', 'PRSW1', 'platform_collects', true, 'platform_booked_on', fn_branch_today('00000000-0000-0000-0000-000000000010')));
+         'external_ref', 'PRSW1', 'platform_collects', true, 'platform_booked_on', t_today('00000000-0000-0000-0000-000000000010')));
   rid := (r->>'id')::uuid; t0 := (t_res(rid)).total_halalas;
   sw := fn_staff_switch_room(rid, t_id('roomX2'), null, 'صيانة', (t_res(rid)).version);
   -- within the same type nothing is re-priced
@@ -335,14 +336,14 @@ exception when others then perform t_record('PR13b a stay the platform collected
 do $$ declare r jsonb; rid uuid; t0 bigint; sw jsonb; begin
   -- a resident's switch keeps the price (a difference is an explicit adjustment)
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', t_id('room1'),
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010'), 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + 2,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010'), 'check_out', t_today('00000000-0000-0000-0000-000000000010') + 2,
          'guest_phone', '0551000043', 'guest_name', 'ضيف مقيم', 'source_id', '00000000-0000-0000-0000-000000000021'));
   rid := (r->>'id')::uuid;
   reset role; update reservations set status = 'checked_in', actual_check_in = now() where id = rid; update rooms set status = 'occupied' where id = t_id('room1');
   update rooms set cleanliness = 'clean' where id = t_id('roomX1');
   set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   t0 := (t_res(rid)).total_halalas;
-  sw := fn_staff_switch_room(rid, t_id('roomX1'), fn_branch_today('00000000-0000-0000-0000-000000000010'), 'عطل', (t_res(rid)).version);
+  sw := fn_staff_switch_room(rid, t_id('roomX1'), t_today('00000000-0000-0000-0000-000000000010'), 'عطل', (t_res(rid)).version);
   perform t_record('PR13c a resident''s switch to another type keeps the price',
     not (sw->>'repriced')::boolean and sw->>'price_kept_reason' = 'in_house' and (t_res(rid)).total_halalas = t0, sw::text);
 exception when others then perform t_record('PR13c a resident''s switch to another type keeps the price', false, sqlerrm); end $$;

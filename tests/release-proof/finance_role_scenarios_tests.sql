@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Release proof 4.13 (مصفوفة الأدوار المالية) — synthetic end-to-end role scenarios. Beyond the capability probes
 -- of tests/sql/finance_role_matrix_tests.sql: each role EXECUTES its allowed operations with valid data (they must
@@ -33,7 +34,7 @@ create or replace function t_rs_stay(p_room uuid, p_phone text, p_name text, p_o
 declare r jsonb;
 begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_id', p_room,
-         'check_in', fn_branch_today('00000000-0000-0000-0000-000000000010') + p_offset, 'check_out', fn_branch_today('00000000-0000-0000-0000-000000000010') + p_offset + 1,
+         'check_in', t_today('00000000-0000-0000-0000-000000000010') + p_offset, 'check_out', t_today('00000000-0000-0000-0000-000000000010') + p_offset + 1,
          'guest_phone', p_phone, 'guest_name', p_name, 'source_id', '00000000-0000-0000-0000-000000000021'));
   return (r->>'id')::uuid;
 end $$;

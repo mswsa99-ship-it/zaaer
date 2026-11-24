@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Guest journey, task W7 (UG*; migration 0071): the photos that show a guest how to enter and leave their unit. One
 -- set per unit for the way in and one for the way out, uploaded in the branch's guide; a guest sees them only once the
@@ -33,7 +34,7 @@ begin
 exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
-create or replace function tg_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tg_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 create or replace function tg_token(p uuid) returns text language sql security definer as $$ insert into registration_sessions(reservation_id) values (p) returning token $$;
 -- (a key is made in a statement of its own: a page's function reads the database as it was when its statement began)
 create or replace function tg_tok(p_k text) returns text language sql security definer as $$ select v from toks where k = p_k $$;

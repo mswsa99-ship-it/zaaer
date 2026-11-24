@@ -5,6 +5,7 @@
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 grant all on test_results to public;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
@@ -264,7 +265,7 @@ end $$;
 do $$ declare r jsonb; c jsonb; acc uuid; v0 financial_vouchers%rowtype; n_rev int; st text; ritem int; begin
   r := fn_create_voucher(jsonb_build_object('reservation_id', t_id('m1'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method', 'pos', 'reference', 'TRX-QM-1', 'idempotency_key', 'qm-1'));
   reset role; select * into v0 from financial_vouchers where id = (r->>'voucher_id')::uuid; set role authenticated;
-  perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', v0.account_id, 'business_date', fn_branch_today(t_id('b'))::text, 'terminal_total_halalas', 30000));
+  perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', v0.account_id, 'business_date', t_today(t_id('b'))::text, 'terminal_total_halalas', 30000));
   c := fn_staff_correct_voucher(jsonb_build_object('voucher_id', v0.id, 'amount_halalas', 25000, 'reason', 'المبلغ الصحيح 250', 'idempotency_key', 'qm-1c'));
   reset role;
   select status into st from financial_vouchers where id = v0.id;
@@ -293,11 +294,11 @@ exception when others then perform t_record('QM01c a voucher not settled is re-i
 end $$;
 do $$ declare r jsonb; acc uuid; n int; n2 int; begin
   reset role; acc := fn_voucher_account(t_id('b'), 'pos', null); set role authenticated;
-  perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', acc, 'business_date', (fn_branch_today(t_id('b')) - 1)::text, 'terminal_total_halalas', 1200, 'note', 'فرق في الجهاز'));
+  perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', acc, 'business_date', (t_today(t_id('b')) - 1)::text, 'terminal_total_halalas', 1200, 'note', 'فرق في الجهاز'));
   reset role;
   select count(*) into n from review_items where kind = 'pos_difference' and branch_id = t_id('b');
   set role authenticated;
-  perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', acc, 'business_date', (fn_branch_today(t_id('b')) - 1)::text, 'terminal_total_halalas', 1500, 'note', 'تصحيح المبلغ', 'version', 1));
+  perform fn_pos_settle(jsonb_build_object('branch_id', t_id('b'), 'account_id', acc, 'business_date', (t_today(t_id('b')) - 1)::text, 'terminal_total_halalas', 1500, 'note', 'تصحيح المبلغ', 'version', 1));
   reset role;
   select count(*) into n2 from review_items where kind = 'pos_difference' and branch_id = t_id('b');
   perform t_record('QM02 a POS settlement with a difference raises a review item for the owner, and again when the difference changes', n = 1 and n2 = 2, n || ' → ' || n2);

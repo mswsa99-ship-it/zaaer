@@ -3,6 +3,7 @@
 \set ON_ERROR_STOP on
 begin;
 create temp table opening_results(name text primary key, ok boolean not null);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 create temp table opening_ids(k text primary key, id uuid);
 grant all on opening_results, opening_ids to public;
 create or replace function pg_temp.opening_login(p_uid uuid) returns void language plpgsql as $$
@@ -22,7 +23,7 @@ do $$ declare r jsonb; b uuid; begin
 end $$;
 -- Initial negative import: exact review kind/entity, balance details, tenant and manager audience.
 do $$ declare box uuid := (select id from opening_ids where k = 'cash_box'); b uuid := (select id from opening_ids where k = 'branch'); r jsonb; begin
-  r := fn_admin_set_account_opening(box, -50000, fn_branch_today(b), 'اختبار استيراد افتتاحي');
+  r := fn_admin_set_account_opening(box, -50000, t_today(b), 'اختبار استيراد افتتاحي');
   insert into opening_results values ('OPEN-01 negative import succeeds and creates one scoped review',
     (r->>'ok')::boolean and (select count(*) = 1 from review_items
       where kind = 'negative_cash_box' and entity_type = 'cash_account' and entity_id = box
@@ -34,8 +35,8 @@ do $$ declare box uuid := (select id from opening_ids where k = 'cash_box'); b u
   insert into opening_results values ('OPEN-03 ordinary opening review and audit still exist',
     exists(select 1 from review_items where entity_id = box and kind = 'account_opening_set')
     and exists(select 1 from audit_events where entity_id = box and action = 'cash_account.opening_set'));
-  perform fn_admin_set_account_opening(box, -60000, fn_branch_today(b), 'إعادة استيراد سالب');
-  perform fn_admin_set_account_opening(box, -60000, fn_branch_today(b), 'تكرار الاستيراد');
+  perform fn_admin_set_account_opening(box, -60000, t_today(b), 'إعادة استيراد سالب');
+  perform fn_admin_set_account_opening(box, -60000, t_today(b), 'تكرار الاستيراد');
   insert into opening_results values ('OPEN-04 repeat imports do not duplicate the open anomaly or alert',
     (select count(*) = 1 from review_items where entity_id = box and kind = 'negative_cash_box' and reviewed_at is null)
     and (select count(*) = 1 from notifications where branch_id = b and audience = 'manager' and title like 'شذوذ مالي:%'));
@@ -46,18 +47,18 @@ update review_items set reviewed_at = now(), reviewed_by = '10000000-0000-0000-0
   where entity_id = (select id from opening_ids where k = 'cash_box') and kind = 'negative_cash_box';
 set local role authenticated;
 do $$ declare box uuid := (select id from opening_ids where k = 'cash_box'); b uuid := (select id from opening_ids where k = 'branch'); bank uuid := (select id from opening_ids where k = 'bank_account'); begin
-  perform fn_admin_set_account_opening(box, 0, fn_branch_today(b), 'رصيد صفر');
-  perform fn_admin_set_account_opening(box, 10000, fn_branch_today(b), 'رصيد موجب');
-  perform fn_admin_set_account_opening(bank, -50000, fn_branch_today(b), 'حساب بنكي سالب ليس صندوقا');
+  perform fn_admin_set_account_opening(box, 0, t_today(b), 'رصيد صفر');
+  perform fn_admin_set_account_opening(box, 10000, t_today(b), 'رصيد موجب');
+  perform fn_admin_set_account_opening(bank, -50000, t_today(b), 'حساب بنكي سالب ليس صندوقا');
   insert into opening_results values ('OPEN-05 zero, positive, and bank opening do not create cash-box alerts',
     not exists(select 1 from review_items where entity_id in (box, bank) and kind = 'negative_cash_box' and reviewed_at is null)
     and (select count(*) = 1 from notifications where branch_id = b and title like 'شذوذ مالي:%'));
-  perform fn_admin_set_account_opening(box, -1, fn_branch_today(b), 'حالة جديدة بعد المراجعة');
+  perform fn_admin_set_account_opening(box, -1, t_today(b), 'حالة جديدة بعد المراجعة');
   insert into opening_results values ('OPEN-06 later negative import after review creates one new anomaly and alert',
     (select count(*) = 2 from review_items where entity_id = box and kind = 'negative_cash_box')
     and (select count(*) = 1 from review_items where entity_id = box and kind = 'negative_cash_box' and reviewed_at is null)
     and (select count(*) = 2 from notifications where branch_id = b and title like 'شذوذ مالي:%'));
-  perform fn_admin_set_account_opening(box, 10000, fn_branch_today(b), 'تمويل مصروف اختباري');
+  perform fn_admin_set_account_opening(box, 10000, t_today(b), 'تمويل مصروف اختباري');
   perform fn_expense_create(jsonb_build_object('branch_id', b, 'account_id', box,
     'category_id', (select id from opening_ids where k = 'expense_category'), 'amount_halalas', 7000,
     'description', 'مصروف اختبار الرصيد الفعلي', 'idempotency_key', 'opening-regression-expense',
@@ -69,7 +70,7 @@ update review_items set reviewed_at = now(), reviewed_by = '10000000-0000-0000-0
   where entity_id = (select id from opening_ids where k = 'cash_box') and kind = 'negative_cash_box' and reviewed_at is null;
 set local role authenticated;
 do $$ declare box uuid := (select id from opening_ids where k = 'cash_box'); b uuid := (select id from opening_ids where k = 'branch'); begin
-  perform fn_admin_set_account_opening(box, 5000, fn_branch_today(b), 'افتتاحي موجب برصيد فعلي سالب');
+  perform fn_admin_set_account_opening(box, 5000, t_today(b), 'افتتاحي موجب برصيد فعلي سالب');
   insert into opening_results values ('OPEN-07 positive opening with posted expense detects actual negative balance',
     exists(select 1 from review_items where entity_id = box and kind = 'negative_cash_box' and reviewed_at is null
       and details->>'balance_halalas' = '-2000')
@@ -110,7 +111,7 @@ end $$;
 select pg_temp.opening_login('a0000000-0000-0000-0000-000000000005');
 set local role authenticated;
 do $$ declare box uuid := (select id from opening_ids where k = 'box_b'); b uuid := (select id from opening_ids where k = 'branch_b'); begin
-  perform fn_admin_set_account_opening(box, -100, fn_branch_today(b), 'رصيد الفندق الآخر');
+  perform fn_admin_set_account_opening(box, -100, t_today(b), 'رصيد الفندق الآخر');
   insert into opening_results values ('OPEN-11 second hotel receives its own review and manager alert',
     (select count(*) = 1 from review_items where kind = 'negative_cash_box' and entity_id = box and organization_id = fn_user_org_id())
     and (select count(*) = 1 from notifications where branch_id = b and organization_id = fn_user_org_id() and audience = 'manager' and title like 'شذوذ مالي:%')

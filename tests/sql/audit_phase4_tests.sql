@@ -5,6 +5,7 @@
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 grant all on test_results to public;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
@@ -35,8 +36,8 @@ do $$ declare r jsonb; b uuid; cat uuid; begin
   insert into ids values ('b', b), ('cat', cat);
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number', '401')); insert into ids values ('r1', (r->>'id')::uuid);
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', b, 'category_id', cat, 'room_number', '402')); insert into ids values ('r2', (r->>'id')::uuid);
-  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', fn_branch_today(b)::text,
-         'check_out', (fn_branch_today(b) + 2)::text, 'guest_phone', '0551000061', 'guest_name', 'ضيف المالك', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', t_today(b)::text,
+         'check_out', (t_today(b) + 2)::text, 'guest_phone', '0551000061', 'guest_name', 'ضيف المالك', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('s1', (r->>'id')::uuid);
 end $$;
 do $$ declare r jsonb; begin
@@ -51,16 +52,16 @@ set role authenticated;
 
 -- ---------------------------------------------------------------- QO01–QO02 the owner's day (OWNER-02, OWNER-03, OWNER-04)
 select t_record('QO01 «المحصّل اليوم» is the money taken at the property; the platform''s money of the day is apart',
-  (fn_ops_daily_summary_at(t_id('b'), fn_branch_today(t_id('b')))->'finance'->>'received_today')::bigint = 30000
-  and (fn_ops_daily_summary_at(t_id('b'), fn_branch_today(t_id('b')))->'finance'->>'platform_today')::bigint = 10000,
-  (fn_ops_daily_summary_at(t_id('b'), fn_branch_today(t_id('b')))->'finance')::text);
+  (fn_ops_daily_summary_at(t_id('b'), t_today(t_id('b')))->'finance'->>'received_today')::bigint = 30000
+  and (fn_ops_daily_summary_at(t_id('b'), t_today(t_id('b')))->'finance'->>'platform_today')::bigint = 10000,
+  (fn_ops_daily_summary_at(t_id('b'), t_today(t_id('b')))->'finance')::text);
 select t_record('QO02 both occupancy figures, each by its own definition: the working units and every unit',
-  (fn_ops_daily_summary_at(t_id('b'), fn_branch_today(t_id('b')))->>'occupancy_pct')::numeric = 100
-  and (fn_ops_daily_summary_at(t_id('b'), fn_branch_today(t_id('b')))->>'occupancy_all_pct')::numeric = 50,
-  (fn_ops_daily_summary_at(t_id('b'), fn_branch_today(t_id('b')))->>'occupancy_all_pct'));
+  (fn_ops_daily_summary_at(t_id('b'), t_today(t_id('b')))->>'occupancy_pct')::numeric = 100
+  and (fn_ops_daily_summary_at(t_id('b'), t_today(t_id('b')))->>'occupancy_all_pct')::numeric = 50,
+  (fn_ops_daily_summary_at(t_id('b'), t_today(t_id('b')))->>'occupancy_all_pct'));
 
 -- ---------------------------------------------------------------- QO03–QO06 the reports (OWNER-02, OWNER-07, OWNER-08, OWNER-10)
-do $$ declare b uuid := t_id('b'); d date := fn_branch_today(t_id('b')); r jsonb; begin
+do $$ declare b uuid := t_id('b'); d date := t_today(t_id('b')); r jsonb; begin
   r := fn_reports_finance(b, d - 6, d, '{}');
   perform t_record('QO03 net collected leaves out what the platform holds; the platform''s money and the staff table say so',
     (r->'ledger'->>'net_collected')::bigint = 30000 and (r->'ledger'->>'platform_receipts')::bigint = 10000

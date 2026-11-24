@@ -1,5 +1,6 @@
 /* Shared day/night palette, 2026-11-24. Alpha is applied to backgrounds only. */
 :root, [data-theme="light"] {
+  --alert-opacity: 0.5;
   --paper: #f5f7fa;
   --surface: #ffffff;
   --surface-sunken: #e5edf0;

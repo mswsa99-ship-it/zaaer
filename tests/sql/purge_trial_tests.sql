@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- The trial data (TD*; migrations 0072 and 0073): the example catalogue stays until the owner erases it, a trial
 -- item the owner edits becomes theirs, and «مسح كل بيانات التجربة» (every branch, the whole period, every kind)
@@ -59,7 +60,7 @@ reset role;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
 create or replace function td_id(p_k text) returns uuid language sql security definer as $$ select v from ids where k = p_k $$;
-create or replace function td_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function td_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 create or replace function td_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;
 create or replace function td_acc(p_branch uuid, p_kind text) returns uuid language sql security definer as $$
   select id from cash_accounts where branch_id = p_branch and kind::text = p_kind order by created_at limit 1 $$;
@@ -131,7 +132,7 @@ select td_record('TD09 the guests imported from Zaaer are marked by their note (
 insert into guest_profiles(organization_id, full_name, phone, created_at)
 values ('00000000-0000-0000-0000-0000000000d1', 'ضيف قديم بلا علامة', '0559000014', timestamptz '2026-10-20 10:00:00+03');
 do $$ begin
-  perform fn_purge_run('00000000-0000-0000-0000-0000000000d1', null, date '2026-10-01', fn_branch_today('00000000-0000-0000-0000-0000000000d2'), array['guests', 'samples']);
+  perform fn_purge_run('00000000-0000-0000-0000-0000000000d1', null, date '2026-10-01', t_today('00000000-0000-0000-0000-0000000000d2'), array['guests', 'samples']);
   insert into notes values ('guard', 'accepted');
 exception when others then insert into notes values ('guard', sqlerrm);
 end $$;
@@ -177,7 +178,7 @@ reset role;
 create temp table kept as
 select (select count(*) from reservations r where r.organization_id = '00000000-0000-0000-0000-000000000001'
           and not (r.status in ('checked_out', 'closed', 'cancelled', 'rejected', 'no_show')
-                   or (r.status in ('draft', 'pending_verification', 'confirmed') and r.check_out < fn_branch_today(r.branch_id)))) as live_stays,
+                   or (r.status in ('draft', 'pending_verification', 'confirmed') and r.check_out < t_today(r.branch_id)))) as live_stays,
        (select count(*) from guest_profiles where organization_id = '00000000-0000-0000-0000-000000000001' and imported_at is not null) as imported,
        (select count(*) from journal_entries where organization_id = '00000000-0000-0000-0000-000000000001' and source_type = 'opening') as openings,
        (select count(*) from products where organization_id = '00000000-0000-0000-0000-000000000001' and not is_sample) as own_products,
@@ -185,7 +186,7 @@ select (select count(*) from reservations r where r.organization_id = '00000000-
 grant select on kept to public;
 do $$ declare c jsonb; v_from date; begin
   select least(min(check_in), min((created_at at time zone 'Asia/Riyadh')::date)) into v_from from reservations where organization_id = '00000000-0000-0000-0000-000000000001';
-  c := fn_purge_run('00000000-0000-0000-0000-000000000001', null, least(v_from, current_date - 400), fn_branch_today('00000000-0000-0000-0000-000000000010'), fn_purge_categories());
+  c := fn_purge_run('00000000-0000-0000-0000-000000000001', null, least(v_from, current_date - 400), t_today('00000000-0000-0000-0000-000000000010'), fn_purge_categories());
   insert into notes values ('counts', c::text);
 exception when others then insert into notes values ('counts', 'ERROR ' || sqlerrm);
 end $$;
@@ -201,7 +202,7 @@ select td_record('TD04 «مسح كل بيانات التجربة» runs to its e
 select td_record('TD05 nothing of the hotel goes: the stays in the house or to come, the guests imported from Zaaer, the opening balances, the owner''s own items, the units',
   (select live_stays from kept) = (select count(*) from reservations r where r.organization_id = '00000000-0000-0000-0000-000000000001'
           and not (r.status in ('checked_out', 'closed', 'cancelled', 'rejected', 'no_show')
-                   or (r.status in ('draft', 'pending_verification', 'confirmed') and r.check_out < fn_branch_today(r.branch_id))))
+                   or (r.status in ('draft', 'pending_verification', 'confirmed') and r.check_out < t_today(r.branch_id))))
   and (select imported from kept) = (select count(*) from guest_profiles where organization_id = '00000000-0000-0000-0000-000000000001' and imported_at is not null)
   and (select openings from kept) = (select count(*) from journal_entries where organization_id = '00000000-0000-0000-0000-000000000001' and source_type = 'opening')
   and (select own_products from kept) = (select count(*) from products where organization_id = '00000000-0000-0000-0000-000000000001' and not is_sample)

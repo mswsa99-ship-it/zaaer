@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Branch-local dates (LD01–LD04, migration 0019). The hosted database runs sessions in UTC; between 00:00 and
 -- 03:00 in Riyadh the UTC date is still yesterday. These tests do not depend on the hour they run at:
@@ -53,7 +54,7 @@ declare res uuid := (select v::uuid from ld where k = 'res');
 begin
   insert into ld values ('tz_before', (select timezone from branches where id = '00000000-0000-0000-0000-000000000010'));
   update branches set timezone = tz where id = '00000000-0000-0000-0000-000000000010';
-  b_today := fn_branch_today('00000000-0000-0000-0000-000000000010');
+  b_today := t_today('00000000-0000-0000-0000-000000000010');
   insert into ld values ('b_today', b_today::text);
   update reservations set check_in = b_today, check_out = b_today + 1 where id = res;
   perform t_record('LD03 setup: the branch date differs from the session (UTC) date', b_today <> current_date,

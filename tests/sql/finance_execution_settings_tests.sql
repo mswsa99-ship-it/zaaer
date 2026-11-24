@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- Transactional synthetic fixtures. Run after core fixtures, before purge tests.
 \set ON_ERROR_STOP on
 begin;
@@ -17,7 +18,7 @@ do $$ declare b uuid; c uuid; a uuid; e jsonb; p jsonb; other_before jsonb; begi
  insert into fcs_ids values('branch',b);
  e:=fn_admin_upsert_expense_category('{"name":"فئة اختبار إعدادات المال"}'); c:=(e->>'id')::uuid;
  select id into a from cash_accounts where branch_id=b and kind='cash_box' and archived_at is null;
- perform fn_admin_set_account_opening(a,1000000,fn_branch_today(b),'اختبار محلي');
+ perform fn_admin_set_account_opening(a,1000000,t_today(b),'اختبار محلي');
  insert into fcs_ids values('account',a),('category',c);
  perform fn_finance_controls_set('{"expense_role_limits":{"supervisor":1500,"finance":2500,"housekeeping":3500},"anomaly_expense_threshold_halalas":1000,"discount_review_threshold_bp":2000}');
  insert into fcs_results values('setter returns actual operational fields',
@@ -92,7 +93,7 @@ do $$ declare cat uuid; r uuid; e jsonb; payload jsonb; refused boolean:=false; 
  perform fn_finance_controls_set('{"operational_refund_threshold_halalas":1000,"operational_closing_diff_alert_halalas":100}');
  e:=fn_admin_upsert_room_category(jsonb_build_object('branch_id',b,'name_ar','غرفة اختبار اعتماد الاسترداد','base_price_halalas',10000)); cat:=(e->>'id')::uuid;
  perform fn_admin_upsert_room(jsonb_build_object('branch_id',b,'category_id',cat,'room_number','FCS-01'));
- e:=fn_staff_create_reservation(jsonb_build_object('branch_id',b,'category_id',cat,'check_in',fn_branch_today(b)+200,'check_out',fn_branch_today(b)+202,'guest_phone','0557654321','guest_name','ضيف اعتماد الاسترداد','source_id','00000000-0000-0000-0000-000000000021')); r:=(e->>'id')::uuid;
+ e:=fn_staff_create_reservation(jsonb_build_object('branch_id',b,'category_id',cat,'check_in',t_today(b)+200,'check_out',t_today(b)+202,'guest_phone','0557654321','guest_name','ضيف اعتماد الاسترداد','source_id','00000000-0000-0000-0000-000000000021')); r:=(e->>'id')::uuid;
  perform fn_create_voucher(jsonb_build_object('reservation_id',r,'kind','receipt','amount_halalas',10000,'method','cash','received_confirmed',true,'idempotency_key','fcs-receipt'));
  e:=fn_refund(jsonb_build_object('reservation_id',r,'kind','refund','amount_halalas',1000,'method','cash','reason','عند العتبة','idempotency_key','fcs-at-threshold'));
  insert into fcs_results values('refund at threshold needs no prior approval',coalesce((e->>'ok')::boolean,false));
@@ -116,17 +117,17 @@ do $$ declare cat uuid; r uuid; e jsonb; payload jsonb; refused boolean:=false; 
 end $$;
 -- Closing alert follows the configured threshold. Counts remain blind until review.
 do $$ declare b uuid:=(select v from fcs_ids where k='branch'); live jsonb; lines jsonb; e jsonb; rv jsonb; c uuid; begin
- live:=fcs_compute(b,fn_branch_today(b));
+ live:=fcs_compute(b,t_today(b));
  select jsonb_agg(jsonb_build_object('key',x->>'key','entered_halalas',(x->>'system_halalas')::bigint+case when x->>'key'='cash' then 101 else 0 end,'reason','فرق اختبار')) into lines from jsonb_array_elements(live->'boxes') x;
- e:=fn_day_closing_save(jsonb_build_object('branch_id',b,'business_date',fn_branch_today(b),'lines',lines)); c:=(e->>'id')::uuid;
+ e:=fn_day_closing_save(jsonb_build_object('branch_id',b,'business_date',t_today(b),'lines',lines)); c:=(e->>'id')::uuid;
  rv:=fn_day_closing_review(c);
  perform fn_day_closing_submit(c,(rv->>'version')::int,rv->>'hash');
  insert into fcs_results select 'closing difference above saved threshold alerts',exists(select 1 from review_items where kind='closing_difference_over_threshold' and entity_id=c);
 end $$;
 do $$ declare b uuid:=(select v from fcs_ids where k='branch'); live jsonb; lines jsonb; e jsonb; rv jsonb; c uuid; begin
- live:=fcs_compute(b,fn_branch_today(b)-1);
+ live:=fcs_compute(b,t_today(b)-1);
  select jsonb_agg(jsonb_build_object('key',x->>'key','entered_halalas',(x->>'system_halalas')::bigint+case when x->>'key'='cash' then 100 else 0 end,'reason','فرق عند العتبة')) into lines from jsonb_array_elements(live->'boxes') x;
- e:=fn_day_closing_save(jsonb_build_object('branch_id',b,'business_date',fn_branch_today(b)-1,'lines',lines)); c:=(e->>'id')::uuid;
+ e:=fn_day_closing_save(jsonb_build_object('branch_id',b,'business_date',t_today(b)-1,'lines',lines)); c:=(e->>'id')::uuid;
  rv:=fn_day_closing_review(c);
  perform fn_day_closing_submit(c,(rv->>'version')::int,rv->>'hash');
  insert into fcs_results select 'closing difference at threshold does not alert',not exists(select 1 from review_items where kind='closing_difference_over_threshold' and entity_id=c);
