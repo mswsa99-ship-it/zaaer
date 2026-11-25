@@ -40,8 +40,8 @@ commit;
 EOF
 }
 OUT="${TMPDIR:-/tmp}/zaaer-race"; mkdir -p "$OUT"
-call_res "race A" 3 > "$OUT/a" & sleep 1
-B=$(call_res "race B" 0)
+call_res "race alpha" 3 > "$OUT/a" & sleep 1
+B=$(call_res "race beta" 0)
 wait
 A=$(cat "$OUT/a")
 ACTIVE=$(psql -d "$DB" -At -c "select count(*) from reservation_allocations where room_id='00000000-0000-0000-0000-000000000198' and status='active'")
