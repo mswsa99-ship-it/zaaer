@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { buildXlsx, crc32, columnName, sheetName, safeFileName, zipStore } from "../../src/lib/xlsx";
-import { statementLines, sheetOf, exportFileName, buildPrintDocument, csvText, money, type ExportStatement } from "../../src/lib/exports";
+import { statementLines, sheetOf, exportFileName, buildPrintDocument, csvText, money, dateTimeCell, type ExportStatement } from "../../src/lib/exports";
 import { readZip, sheetCells } from "../e2e/helpers/xlsx";
 
 const statement: ExportStatement = {
@@ -86,5 +86,22 @@ describe("xlsx writer", () => {
     // the zip helper itself: an empty data entry and the CRC of a known string
     expect(crc32(new TextEncoder().encode("123456789"))).toBe(0xcbf43926);
     expect(readZip(zipStore([{ name: "a.txt", data: new Uint8Array(0) }])).get("a.txt")!.data.length).toBe(0);
+  });
+});
+
+describe("xlsx date cells (finance review: the time column was text)", () => {
+  it("XL07 a date and time is a numeric Excel cell with a date format, equal to the wall-clock shown, and prints as text", () => {
+    const iso = "2026-11-25T14:05:00";
+    const c = dateTimeCell(iso) as { v: number; fmt: string };
+    expect(c.fmt).toBe("datetime");
+    const d = new Date(iso);
+    expect(c.v).toBeCloseTo(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()) / 86400000 + 25569, 6);
+    expect(Math.floor(c.v)).toBe(46351);   // 2026-11-25 as an Excel day number
+    const z = readZip(buildXlsx([{ name: "ت", rows: [[c]] }], new Date("2026-11-25T10:00:00")));
+    const td = new TextDecoder();
+    expect(td.decode(z.get("xl/worksheets/sheet1.xml")!.data)).toMatch(/<c r="A1" s="5"><v>46351\.58/);
+    expect(td.decode(z.get("xl/styles.xml")!.data)).toContain("yyyy");
+    expect(csvText(statement, { columns: ["الوقت"], rows: [[c]] })).toContain("2026-11-25 14:05");
+    expect(dateTimeCell("")).toBeNull();
   });
 });

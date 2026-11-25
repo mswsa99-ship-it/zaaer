@@ -70,7 +70,7 @@ export function downloadXlsx(s: ExportStatement, t: ExportTable, extraSheets: Xl
 }
 
 const escHtml = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const cellText = (c: XlsxCell) => (c == null ? "" : typeof c === "object" ? (c.fmt === "money" ? c.v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : c.v.toLocaleString("en-US")) : String(c));
+const cellText = (c: XlsxCell) => (c == null ? "" : typeof c === "object" ? (c.fmt === "datetime" ? serialText(c.v) : c.fmt === "money" ? c.v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : c.v.toLocaleString("en-US")) : String(c));
 
 /**
  * 6.10 (U2 الطباعة): the print page is independent and divided into pages — the rows split into page-sized
@@ -186,4 +186,10 @@ export function csvText(s: ExportStatement, t: ExportTable): string {
   return "﻿" + lines.map((r) => r.map(q).join(",")).join("\n");
 }
 
+/** A date and time as an Excel date cell (a real date, not text). Its wall-clock is the device's, the same time the screen shows. */
+export const dateTimeCell = (iso: string | null | undefined): XlsxCell => {
+  if (!iso) return null; const d = new Date(iso); if (Number.isNaN(d.getTime())) return null;
+  return { v: Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()) / 86400000 + 25569, fmt: "datetime" };
+};
+const serialText = (v: number) => { const d = new Date(Math.round((v - 25569) * 86400000)); const z = (n: number) => String(n).padStart(2, "0"); return `${d.getUTCFullYear()}-${z(d.getUTCMonth() + 1)}-${z(d.getUTCDate())} ${z(d.getUTCHours())}:${z(d.getUTCMinutes())}`; };
 export const money = (halalas: number | null | undefined): XlsxCell => (halalas == null ? null : { v: halalas / 100, fmt: "money" });

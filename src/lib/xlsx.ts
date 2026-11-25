@@ -8,7 +8,7 @@
  *
  * Kept deliberately small: strings, numbers, a money format (two decimals), a bold row for the header, column widths.
  */
-export type XlsxCell = string | number | null | undefined | { v: number; fmt: "money" | "int" };
+export type XlsxCell = string | number | null | undefined | { v: number; fmt: "money" | "int" | "datetime" };
 export interface XlsxSheet {
   /** at most 31 characters, none of : \ / ? * [ ] */
   name: string;
@@ -75,14 +75,14 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export function columnName(i: number): string { let s = ""; let n = i + 1; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
 export function sheetName(name: string): string { const clean = name.replace(/[:\\/?*[\]]/g, " ").trim().slice(0, 31); return clean || "Sheet1"; }
 
-// styles: 0 = default, 1 = bold (header), 2 = money #,##0.00, 3 = integer #,##0, 4 = bold title
+// styles: 0 = default, 1 = bold (header), 2 = money #,##0.00, 3 = integer #,##0, 4 = bold title, 5 = date and time yyyy-mm-dd hh:mm
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="13"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="13"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 
 function cellXml(ref: string, c: XlsxCell, bold: boolean): string {
   if (c == null) return bold ? `<c r="${ref}" s="1"/>` : "";
   if (typeof c === "number") return Number.isFinite(c) ? `<c r="${ref}"${bold ? ' s="1"' : ""}><v>${c}</v></c>` : "";
-  if (typeof c === "object") return Number.isFinite(c.v) ? `<c r="${ref}" s="${c.fmt === "money" ? 2 : 3}"><v>${c.v}</v></c>` : "";
+  if (typeof c === "object") return Number.isFinite(c.v) ? `<c r="${ref}" s="${c.fmt === "money" ? 2 : c.fmt === "datetime" ? 5 : 3}"><v>${c.v}</v></c>` : "";
   const s = String(c);
   const space = /^\s|\s$/.test(s) ? ' xml:space="preserve"' : "";
   return `<c r="${ref}" t="inlineStr"${bold ? ' s="1"' : ""}><is><t${space}>${esc(s)}</t></is></c>`;

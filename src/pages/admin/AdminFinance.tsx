@@ -18,7 +18,7 @@ import { useCashAccounts } from "../../lib/useCashAccounts";
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
 import { listsApi, fetchAllPages, type VoucherList, type VoucherTotals, type VoucherListFilters, type VoucherRow, type ReportFilterOptions } from "../../lib/api";
-import { money, type ExportScope, type ExportStatement } from "../../lib/exports";
+import { money, dateTimeCell, type ExportScope, type ExportStatement } from "../../lib/exports";
 import { DisabledReason } from "../../components/DisabledReason";
 import { DateRangePicker } from "../../components/DateRangePicker";
 
@@ -65,7 +65,7 @@ export default function AdminFinance() {
   }, [f, accounts, options.data]);
 
   const COLS = ["السند", "النوع", "الحجز", "المبلغ", "الطريقة", "الصندوق أو الحساب", "المرجع", "الوقت", "المنشئ", "الحالة", "السبب / الملاحظة"];
-  const rowOut = (r: VoucherRow & { branch_name?: string }) => [...(allBranches ? [r.branch_name ?? ""] : []), r.number, VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind, r.reservation?.internal_ref ?? "", money(r.amount_halalas), PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method, accountText(r), r.reference ?? "", formatDateTime(r.occurred_at), r.creator_name ?? "", r.status === "approved" ? "معتمد" : `ملغى${r.cancel_reason ? ` · ${r.cancel_reason}` : ""}`, r.reason ?? r.note ?? ""];
+  const rowOut = (r: VoucherRow & { branch_name?: string }) => [...(allBranches ? [r.branch_name ?? ""] : []), r.number, VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind, r.reservation?.internal_ref ?? "", money(r.amount_halalas), PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method, accountText(r), r.reference ?? "", dateTimeCell(r.occurred_at), r.creator_name ?? "", r.status === "approved" ? "معتمد" : `ملغى${r.cancel_reason ? ` · ${r.cancel_reason}` : ""}`, r.reason ?? r.note ?? ""];
   const statement = (scope: ExportScope): ExportStatement => ({ title: "دفتر السندات", branch: allBranches ? "جميع الفروع" : branch?.name_ar ?? null, period: { from: f.from, to: f.to }, filters: words, scope, generatedAt: formatDateTime(new Date().toISOString()), by: profile?.full_name ?? null });
   const table = async (scope: ExportScope) => {
     const all = scope.kind === "page" ? rows : (await Promise.all((allBranches ? branches : [{ id: branchId!, name_ar: "" }]).map(async (b) => (await fetchAllPages((limit, offset) => listsApi.vouchers({ ...f, branch_id: b.id, limit, offset }), 500)).rows.map((x) => ({ ...x, branch_name: b.name_ar }) as VoucherRow & { branch_name?: string })))).flat();
