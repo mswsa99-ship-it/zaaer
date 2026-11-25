@@ -123,7 +123,7 @@ select t_login('a0000000-0000-0000-0000-000000000006', 'supB@test.local');
 set role authenticated;
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000012', 'category_id', '00000000-0000-0000-0000-000000000039',
-         'room_id', '00000000-0000-0000-0000-000000000199', 'check_in', t_today() + 40, 'check_out', t_today() + 42, 'guest_name', 'ضيف الفرع ب',
+         'room_id', '00000000-0000-0000-0000-000000000199', 'check_in', t_today() + 40, 'check_out', t_today() + 42, 'guest_name', 'ضيف الفرع باء',
          'guest_phone', '0500009901', 'source_id', '00000000-0000-0000-0000-000000000021'));
   perform t_set('res_b', (r->>'id')::uuid);
 exception when others then perform t_record('fixture: a booking in branch B', false, sqlerrm); end $$;

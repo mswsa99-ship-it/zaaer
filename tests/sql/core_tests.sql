@@ -129,11 +129,11 @@ end $$;
 -- R01 partial overlap on the same unit
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-        'room_id',(select v from ids where k='room1'),'check_in',(current_date + 1)::text,'check_out',(current_date + 3)::text,'guest_name','ضيف أ','guest_phone','0500000002','source_id','00000000-0000-0000-0000-000000000021'));
+        'room_id',(select v from ids where k='room1'),'check_in',(current_date + 1)::text,'check_out',(current_date + 3)::text,'guest_name','ضيف ألف','guest_phone','0500000002','source_id','00000000-0000-0000-0000-000000000021'));
   insert into ids values ('resA', (r->>'id')::uuid);
   begin
     r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-          'room_id',(select v from ids where k='room1'),'check_in',(current_date + 2)::text,'check_out',(current_date + 4)::text,'guest_name','ضيف ب','guest_phone','0500000003','source_id','00000000-0000-0000-0000-000000000021'));
+          'room_id',(select v from ids where k='room1'),'check_in',(current_date + 2)::text,'check_out',(current_date + 4)::text,'guest_name','ضيف باء','guest_phone','0500000003','source_id','00000000-0000-0000-0000-000000000021'));
     perform t_record('R01 partially overlapping allocation of same unit rejected', false, 'accepted');
   exception when others then
     perform t_record('R01 partially overlapping allocation of same unit rejected', sqlerrm like '%ROOM_NOT_AVAILABLE%' or sqlerrm like '%ALLOCATION_CONFLICT%', sqlerrm);
