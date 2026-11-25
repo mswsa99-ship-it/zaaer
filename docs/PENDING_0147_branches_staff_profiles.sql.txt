@@ -1,0 +1,16 @@
+-- DRAFT (not shipped): table-level select withdrawn and granted back by column. Breaks direct reads in many older SQL tests (rates, guests_platforms, accounting_a1, audit_phase2, owner_self_signup, finance_role_chain); needs a test and call-site review first.
+-- branches and staff_profiles carry a TABLE-level select grant, and a column revoke cannot carve a column out of it.
+-- So the table grant is withdrawn and every other column is granted back by name (the same columns, minus the ones closed).
+do $$
+declare cols text;
+begin
+  select string_agg(quote_ident(attname), ', ' order by attnum) into cols from pg_attribute
+   where attrelid = 'public.branches'::regclass and attnum > 0 and not attisdropped and attname <> 'bank_iban';
+  revoke select on public.branches from authenticated;
+  execute format('grant select (%s) on public.branches to authenticated', cols);
+
+  select string_agg(quote_ident(attname), ', ' order by attnum) into cols from pg_attribute
+   where attrelid = 'public.staff_profiles'::regclass and attnum > 0 and not attisdropped and attname not in ('email', 'phone');
+  revoke select on public.staff_profiles from authenticated;
+  execute format('grant select (%s) on public.staff_profiles to authenticated', cols);
+end $$;

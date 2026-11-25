@@ -47,7 +47,7 @@ interface RoomOption { id: string; room_number: string; status: RoomStatus }
 const RESERVATION_SELECT = `
   id, internal_ref, external_ref, status, branch_id, room_id, room_category_id,
   check_in, check_out, adults, companions,
-  payment_status, identity_status, expected_arrival_time, expected_departure_time, group_ref,
+  identity_status, expected_arrival_time, expected_departure_time, group_ref,
   government_registration, shomoos_accepted_at, children_ages, access_status, keybox_delivered,
   security_hold, security_hold_reason,
   checkin_approved_by, checkin_approved_at, actual_check_in, actual_check_out, notes,
@@ -103,7 +103,8 @@ export default function StaffReservationDetail() {
       // they arrive from the role-masked fn_reservation_detail (owner/manager/supervisor only for phone and birth date)
       let ex: ReservationDetail | null = null;
       if (canMoney) { try { ex = await opsApi.detail(id); } catch { ex = null; } }
-      if (d) d = { ...d, gov_registration_ref: (ex?.reservation?.gov_registration_ref as string | null | undefined) ?? null };
+      // 0146 (code first): the payment status also comes from the role-masked detail now, not from the table column
+      if (d) d = { ...d, gov_registration_ref: (ex?.reservation?.gov_registration_ref as string | null | undefined) ?? null, payment_status: ((ex?.reservation?.payment_status as PaymentStatus | undefined) ?? "pending") as PaymentStatus };
       setDetail(d);
       setGuests(((g.data as unknown as Array<Omit<GuestDetail, "identity_number_last4" | "birth_date" | "phone">>) ?? []).map((x) => {
         const e = ex?.guests?.find((y) => y.id === x.id);

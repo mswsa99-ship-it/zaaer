@@ -220,9 +220,8 @@ test("MOBRES at 390px the reservations list is cards, not a 1084px table (no hor
   const measure = () => page.getByTestId("reservations-table").evaluate((el) => ({ table: (el.parentElement as HTMLElement).scrollWidth, page: document.documentElement.scrollWidth, view: document.documentElement.clientWidth, wide: Array.from(el.querySelectorAll("*")).filter((n) => n.getBoundingClientRect().right > document.documentElement.clientWidth + 1).map((n) => n.tagName + "." + String(n.className).slice(0, 30)).slice(0, 5) }));
   await expect.poll(async () => (await measure()).wide, { timeout: 8000 }).toEqual([]);
   await expect.poll(async () => { const w = await measure(); return w.page <= w.view; }, { timeout: 8000 }).toBe(true);
-  const lbl = await page.getByTestId("reservation-row").first().locator("td[data-label]").count();
-  expect(lbl).toBeGreaterThan(3);
+  await expect.poll(() => page.getByTestId("reservation-row").first().locator("td[data-label]").count()).toBeGreaterThan(3);
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-  const bg = await page.getByRole("button", { name: "التالي" }).evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(bg).toBe("rgb(23, 79, 96)");
+  await expect(page.getByRole("button", { name: "التالي" })).toBeVisible();
+  await expect.poll(() => page.getByRole("button", { name: "التالي" }).evaluate((el) => getComputedStyle(el).backgroundColor), { timeout: 8000 }).toBe("rgb(23, 79, 96)");
 });
