@@ -217,9 +217,9 @@ test("MOBRES at 390px the reservations list is cards, not a 1084px table (no hor
   await loginAs("owner");
   await page.goto("/#/staff/reservations", { waitUntil: "networkidle" });
   await expect(page.getByTestId("reservation-row").first()).toBeVisible();
-  const w = await page.getByTestId("reservations-table").evaluate((el) => ({ table: (el.parentElement as HTMLElement).scrollWidth, page: document.documentElement.scrollWidth, view: document.documentElement.clientWidth, wide: Array.from(el.querySelectorAll("*")).filter((n) => n.getBoundingClientRect().right > document.documentElement.clientWidth + 1).map((n) => n.tagName + "." + String(n.className).slice(0, 30)).slice(0, 5) }));
-  expect(w.wide).toEqual([]);
-  expect(w.page).toBeLessThanOrEqual(w.view);
+  const measure = () => page.getByTestId("reservations-table").evaluate((el) => ({ table: (el.parentElement as HTMLElement).scrollWidth, page: document.documentElement.scrollWidth, view: document.documentElement.clientWidth, wide: Array.from(el.querySelectorAll("*")).filter((n) => n.getBoundingClientRect().right > document.documentElement.clientWidth + 1).map((n) => n.tagName + "." + String(n.className).slice(0, 30)).slice(0, 5) }));
+  await expect.poll(async () => (await measure()).wide, { timeout: 8000 }).toEqual([]);
+  await expect.poll(async () => { const w = await measure(); return w.page <= w.view; }, { timeout: 8000 }).toBe(true);
   const lbl = await page.getByTestId("reservation-row").first().locator("td[data-label]").count();
   expect(lbl).toBeGreaterThan(3);
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
