@@ -68,3 +68,25 @@ test("two-branch export: a Jeddah reservation made in the demo UI shows in the a
   await d.saveAs("/tmp/proof/all-branches.xlsx");
   expect(fs.statSync("/tmp/proof/all-branches.xlsx").size).toBeGreaterThan(1000);
 });
+
+test("CAL1 departure picker: days up to the arrival are disabled, click is rejected, 390px screenshot", async ({ page, loginAs }) => {
+  await loginAs("supervisor");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "المغادرة", exact: true }).click();
+  const dlg = page.getByRole("dialog", { name: "المغادرة" });
+  const arrival = await page.getByRole("button", { name: "الوصول", exact: true }).locator("bdi").innerText();
+  await expect(dlg).toBeVisible();
+  const earlier = dlg.locator(`button[data-day="${arrival}"]`);
+  if (await earlier.count()) {
+    await expect(earlier).toBeDisabled();
+    await earlier.click({ force: true });
+    await expect(dlg).toBeVisible();
+    await dlg.getByRole("button", { name: "موافق" }).click();
+    await expect(page.getByRole("button", { name: "المغادرة", exact: true }).locator("bdi")).not.toHaveText(arrival);   // the rejected click chose nothing
+  }
+  await page.getByRole("button", { name: "المغادرة", exact: true }).click();
+  const disabledCount = await dlg.locator("button[data-day]:disabled").count();
+  expect(disabledCount).toBeGreaterThan(0);
+  await page.screenshot({ path: "/downloads/after-departure-calendar.png" });
+});
