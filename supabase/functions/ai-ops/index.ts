@@ -62,6 +62,10 @@ Deno.serve(async (req) => {
   // page guard (0109/0110): the assistant lives on the staff dashboard; an individual account needs that page, fail closed on any error
   { const { data: pageOk, error: pageErr } = await user.rpc("fn_user_page_can", { p_page: "/staff/dashboard", p_action: "view" });
     if (pageErr || pageOk !== true) return json({ error: "forbidden" }, 403); }
+  // which pages this person may open (individual settings or role defaults): context for "where do I do X", never an authority.
+  // If the answer is missing the assistant is told no page list at all.
+  const { data: accessData, error: accessErr } = await user.rpc("fn_my_page_access");
+  const pageAccess = accessErr || !accessData ? { mode: "unknown" } : (accessData as { mode?: string; pages?: Record<string, { view?: unknown }> });
   const { data: org } = await admin.from("organizations").select("name_ar").eq("id", staff.organization_id).maybeSingle();
   const today = localDay(branch.timezone);
 
@@ -91,7 +95,7 @@ Deno.serve(async (req) => {
     if (provider && s.briefing_with_insights && budgetReadAvailable(s, briefingUsage, true)) {
       try {
         const res = await provider.generate({
-          system: buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, extra: s.extra_instructions }) + "\nالمطلوب الآن: من السياق المعطى اكتب 3 توصيات تشغيلية مرتبة بالأولوية لبداية اليوم، كل توصية سطر واحد يبدأ بفعل. لا تكرر الأرقام الموجودة في الملخص، ركز على ما يجب فعله ولماذا.",
+          system: buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, access: pageAccess, extra: s.extra_instructions }) + "\nالمطلوب الآن: من السياق المعطى اكتب 3 توصيات تشغيلية مرتبة بالأولوية لبداية اليوم، كل توصية سطر واحد يبدأ بفعل. لا تكرر الأرقام الموجودة في الملخص، ركز على ما يجب فعله ولماذا.",
           history: [{ role: "user", text: "السياق التشغيلي (JSON):\n" + JSON.stringify(ctxData).slice(0, 12000) }],
           tools: [], temperature: 0.3, maxOutputTokens: 350, timeoutMs: Number(s.timeout_ms ?? 15000),
         });
@@ -140,7 +144,7 @@ Deno.serve(async (req) => {
 
   const { data: hist } = await user.from("ai_ops_messages").select("sender, content").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(HISTORY_TURNS);
   const history: ChatTurn[] = (hist ?? []).reverse().filter((m) => m.sender !== "system").map((m) => ({ role: m.sender === "staff" ? "user" : "model", text: m.content }));
-  const system = buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, extra: s.extra_instructions });
+  const system = buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, access: pageAccess, extra: s.extra_instructions });
   const toolCtx = { db: user, branchId, conversationId: conversationId!, today };
 
   // 6.12 (U5): a simple question starts from the fastest approved model (flash-lite), the full chain still behind it

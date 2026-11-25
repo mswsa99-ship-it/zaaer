@@ -25,6 +25,20 @@ describe("RM assistant route map", () => {
     const adminOnly = PAGES.find((p) => !p.hidden && !p.roles.includes("housekeeping") && p.roles.includes("owner"))!;
     expect(hk).not.toContain(adminOnly.path + "\n");
   });
+  it("RM05 individual settings decide the list (view=true only, canonical page ids); legacy uses role defaults; unknown gives none; owner gets all", () => {
+    const pages = ROUTE_MAP.filter((r) => r.area === "staff");
+    const one = pages[0], two = pages[1];
+    const ind = routeMapText("housekeeping", { mode: "individual", pages: { [one.path]: { view: true }, [two.path]: { view: false } } });
+    expect(ind).toContain(one.path);
+    expect(ind).not.toContain(two.path);
+    expect(routeMapText("housekeeping", { mode: "individual", pages: {} })).toBe("");
+    expect(routeMapText("housekeeping", { mode: "unknown" })).toBe("");
+    expect(routeMapText("housekeeping", { mode: "legacy" })).toBe(routeMapText("housekeeping"));
+    expect(routeMapText("owner", { mode: "unknown" }).split("\n").length).toBe(ROUTE_MAP.length);
+    // a detail/create route is granted through its list page, as the server does
+    const res = ROUTE_MAP.find((r) => r.path === "/staff/reservations/new" || r.path === "/staff/reservations/:id");
+    if (res) expect(routeMapText("manager", { mode: "individual", pages: { "/staff/reservations": { view: true } } })).toContain(res.path);
+  });
   it("RM04 the map holds no secret-like field (paths and labels only)", () => {
     for (const r of ROUTE_MAP) expect(Object.keys(r).sort()).toEqual(["area", "label", "path", "roles"]);
   });

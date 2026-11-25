@@ -1,5 +1,5 @@
-// GENERATED from src/lib/nav.ts (PAGES, non-hidden) by tests/unit/route_map.test.ts; do not edit by hand.
-// Role-level defaults only. An individual permission setting can narrow or widen a person's pages; the server decides.
+// ROUTE_MAP is GENERATED from src/lib/nav.ts (PAGES, non-hidden); tests/unit/route_map.test.ts RM01 fails if it drifts.
+// The functions below are hand-written.
 export interface RouteEntry { path: string; label: string; area: "staff" | "admin"; roles: string[] }
 export const ROUTE_MAP: RouteEntry[] = [
   {
@@ -563,9 +563,29 @@ export const ROUTE_MAP: RouteEntry[] = [
   }
 ];
 
-/** The pages a role may open by default, one line each, for the assistant's context (guidance only, never an authority). */
-export function routeMapText(role: string): string {
-  const mine = ROUTE_MAP.filter((r) => r.roles.includes(role));
-  if (mine.length === 0) return "";
+/** The page id the permission table uses (mirrors fn_canonical_user_page in 0109). */
+export function canonicalPage(path: string): string {
+  if (path === "/staff/reservations/new" || path === "/staff/reservations/:id") return "/staff/reservations";
+  if (path === "/admin/guests/:id") return "/admin/guests";
+  return path;
+}
+
+/** What fn_my_page_access() returns for the signed-in person (only the parts used here). */
+export interface PageAccess { mode?: string; pages?: Record<string, { view?: unknown }> }
+
+/**
+ * The pages this person may open, one line each, for the assistant's context. Guidance only, never an authority.
+ * - owner: every page (the server lets the owner in everywhere).
+ * - individual settings ON: exactly the pages whose "view" grant is true.
+ * - legacy (no individual settings): the role's default pages.
+ * - anything else (no access answer, unknown mode): NO map, so a person is never told about pages that may be closed to them.
+ */
+export function routeMapText(role: string, access?: PageAccess | null): string {
+  let mine: RouteEntry[];
+  if (role === "owner") mine = ROUTE_MAP;
+  else if (!access) mine = ROUTE_MAP.filter((r) => r.roles.includes(role));   // legacy callers and tests that pass no access answer
+  else if (access.mode === "individual") mine = ROUTE_MAP.filter((r) => access.pages?.[canonicalPage(r.path)]?.view === true);
+  else if (access.mode === "legacy") mine = ROUTE_MAP.filter((r) => r.roles.includes(role));
+  else mine = [];
   return mine.map((r) => `- ${r.label}: ${r.path}`).join("\n");
 }

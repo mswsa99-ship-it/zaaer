@@ -9,7 +9,7 @@
  *  - Output is PII-redacted; the context never contains access codes or document numbers.
  */
 import type { ToolDeclaration } from "./llm.ts";
-import { routeMapText } from "./route_map.ts";
+import { routeMapText, type PageAccess } from "./route_map.ts";
 import { redactPII, normalizeDigits } from "./guardrails.ts";
 
 export interface OpsDb { rpc(fn: string, args?: Record<string, unknown>): any } // deno-lint-ignore no-explicit-any
@@ -189,11 +189,11 @@ export function gateOpsOutput(raw: string, maxChars = 1800): { ok: boolean; text
 // System prompt
 // ---------------------------------------------------------------------------
 /** The pages this role may open by default (from the app's own page table). Guidance for "where do I do X", never an authority: the server decides. */
-function routeBlock(role: string): string {
-  const t = routeMapText(role);
-  return t ? "صفحات التطبيق المتاحة لدور هذا الموظف افتراضيًا (للإرشاد إلى مكان الإجراء فقط؛ الخادم هو من يقرر الصلاحية الفعلية وقد تُقيَّد فرديًا، ولا تذكر صفحة غير مدرجة هنا):\n" + t : "";
+function routeBlock(role: string, access?: PageAccess | null): string {
+  const t = routeMapText(role, access);
+  return t ? "صفحات التطبيق المتاحة لهذا الموظف (للإرشاد إلى مكان الإجراء فقط؛ الخادم هو من يقرر الصلاحية الفعلية، ولا تذكر صفحة غير مدرجة هنا):\n" + t : "";
 }
-export function buildOpsSystemPrompt(o: { propertyName: string; branchName: string; staffName: string; role: string; today: string; extra?: string | null }): string {
+export function buildOpsSystemPrompt(o: { propertyName: string; branchName: string; staffName: string; role: string; today: string; extra?: string | null; access?: PageAccess | null }): string {
   return [
     `أنت «مساعد العمليات» في ${o.propertyName} — فرع ${o.branchName}. تتحدث مع ${o.staffName} (الدور: ${o.role}). التاريخ اليوم ${o.today}.`,
     "مهمتك: مساعدة فريق التشغيل على فهم حالة اليوم واتخاذ القرار بسرعة: الوصول والمغادرة، الوحدات والنظافة والجاهزية، المهام، الأرصدة والتأمينات، التمديد والتبديل والإلغاء.",
@@ -205,7 +205,7 @@ export function buildOpsSystemPrompt(o: { propertyName: string; branchName: stri
     "5) الحالات: النشاط والنظافة والإشغال وجاهزية الدخول مستقلة؛ «نظيفة» لا تعني «خالية» ولا «جاهزة للدخول».",
     "6) أجب بالعربية، بإيجاز وبترتيب الأولوية (الأعلى خطورة أولًا). استخدم قوائم قصيرة عند تعدد العناصر. بدون عناوين Markdown.",
     "7) إن كان السؤال خارج تشغيل المنشأة، اعتذر باختصار وأعد التوجيه.",
-    routeBlock(o.role),
+    routeBlock(o.role, o.access),
     o.extra ? `تعليمات إضافية من الإدارة: ${o.extra}` : "",
   ].filter(Boolean).join("\n");
 }
