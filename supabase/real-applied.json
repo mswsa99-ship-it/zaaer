@@ -1,0 +1,1 @@
+{ "version": "20261126043000", "note": "newest migration applied by hand on the real project and read back from supabase_migrations.schema_migrations" }

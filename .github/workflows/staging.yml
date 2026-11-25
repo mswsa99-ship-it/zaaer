@@ -86,6 +86,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Newest migration is recorded as applied on the real project (publication precondition)
+        run: node scripts/check-backend-applied.mjs
       - id: pages
         uses: actions/configure-pages@v6
         continue-on-error: true   # Pages not switched on yet: still build and check; the last step says what to do
