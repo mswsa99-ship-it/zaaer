@@ -247,3 +247,20 @@ body, #root {background:var(--paper);color:var(--ink);}
 
 /* Preserve the approved error boundary above the faint normal night-field edge. */
 [data-theme="dark"] .rai-field.is-error .rai-input {border-color:var(--danger);box-shadow:inset 0 0 0 1px var(--danger);}
+
+/* UX review: the wizard's «التالي» is the one forward action; the quiet tint read as disabled. A solid fill, full width on a phone. */
+:root .wizard-next {background:#174f60;color:#ffffff;min-height:44px;flex:1 1 auto;}
+:root .wizard-next:hover:not(:disabled) {background:#123f4d;}
+@media (min-width: 640px) { :root .wizard-next { flex:0 0 auto; min-width:8rem; } }
+
+/* UX review (390px): the reservations table was 1084px wide with the dates, status and balance off-screen and no cue.
+   On a phone each row becomes a card of labelled fields, from the same markup (one row in the DOM, no duplicate list). */
+@media (max-width: 639px) {
+  :root .res-table, .res-table tbody {display:block;}
+  :root .res-table thead {display:none;}
+  :root .res-table tr {display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;padding:.75rem;border-top:1px solid var(--line);}
+  :root .res-table td {display:block;padding:0;white-space:normal;min-width:0;overflow-wrap:anywhere;}
+  :root .res-table td[data-label]::before {content:attr(data-label);display:block;font-size:11px;color:var(--ink-muted);}
+  :root .res-table td:last-child {grid-column:1 / -1;}
+  :root .res-table td:last-child a {width:100%;}
+}

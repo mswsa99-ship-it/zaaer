@@ -85,7 +85,7 @@ export default function AdminIntegrations() {
               </div>
             </div>
             {i.status === "checking" && <Spinner className="h-4 w-4" />}
-            {i.status === "connected" && (isDemo && i.name.includes("Supabase") ? <Badge className="bg-warning-500/10 text-warning-700"><AlertCircle className="h-3 w-3" /> محاكاة (غير متصل بخادم)</Badge> : <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> متصل</Badge>)}
+            {i.status === "connected" && <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> {isDemo && i.name.includes("Supabase") ? "محاكاة (غير متصل بخادم)" : "متصل"}</Badge>}
             {i.status === "awaiting" && <Badge className="bg-warning-500/10 text-warning-700"><Clock className="h-3 w-3" /> بانتظار الاعتماد</Badge>}
             {i.status === "disabled" && <Badge className="bg-ink-100 text-ink-500"><AlertCircle className="h-3 w-3" /> معطّل</Badge>}
             {i.status === "error" && <Badge className="bg-danger-500/10 text-danger-600"><XCircle className="h-3 w-3" /> خطأ</Badge>}

@@ -269,12 +269,12 @@ export default function StaffReservations() {
 
       <DataState loading={list.loading} error={list.error} empty={data.rows.length === 0} onRetry={reload} emptyIcon={<BookCheck className="h-10 w-10" />} emptyTitle="لا توجد حجوزات مطابقة" emptyDescription={activeCount ? "جرّب تخفيف المرشحات." : undefined}>
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm" data-testid="reservations-table">
+          <table className="res-table w-full text-sm" data-testid="reservations-table">
             <thead className="bg-ink-50 text-xs text-ink-500"><tr>{visibleColumns.map((c) => <th key={c.key} className="whitespace-nowrap px-3 py-2 text-right font-medium">{c.label}</th>)}<th /></tr></thead>
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-t border-ink-50 hover:bg-ink-50/60" data-testid="reservation-row">
-                  {visibleColumns.map((c) => <td key={c.key} className="whitespace-nowrap px-3 py-2 text-ink-700" dir={c.money ? "ltr" : undefined}>{c.cell(r)}</td>)}
+                  {visibleColumns.map((c) => <td key={c.key} data-label={c.label} className="whitespace-nowrap px-3 py-2 text-ink-700" dir={c.money ? "ltr" : undefined}>{c.cell(r)}</td>)}
                   <td className="px-3 py-2"><Link to={`/staff/reservations/${r.id}`} className="btn-outline inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 py-1 text-xs">فتح</Link></td>
                 </tr>
               ))}

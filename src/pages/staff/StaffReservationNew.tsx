@@ -347,7 +347,7 @@ function WizardNav({ step, setStep, canNext, reason, onBlocked }: { step: 1 | 2 
   return (
     <div><div className="flex justify-between gap-2" data-testid="wizard-nav">
       {step > 1 ? <button type="button" className="btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>السابق</button> : <span />}
-      {step < 3 && <button type="button" className="btn-primary" data-blocked={!canNext || undefined} aria-describedby={reason ? "wizard-step-block-reason" : undefined} onClick={() => (canNext ? setStep((step + 1) as 2 | 3) : onBlocked())}>التالي</button>}
+      {step < 3 && <button type="button" className="btn-primary wizard-next" data-blocked={!canNext || undefined} aria-describedby={reason ? "wizard-step-block-reason" : undefined} onClick={() => (canNext ? setStep((step + 1) as 2 | 3) : onBlocked())}>التالي</button>}
     </div>{reason && <p id="wizard-step-block-reason" data-testid="wizard-step-block-reason" role="status" className="mt-2 text-xs text-ink-600">{reason}</p>}</div>
   );
 }

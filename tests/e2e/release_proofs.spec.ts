@@ -211,3 +211,18 @@ test("CASHFLOOR an expense above the cash-box balance is refused with the balanc
   await page.getByRole("button", { name: "حفظ السند" }).click();
   await expect(page.getByText(/أكبر من رصيد الصندوق/)).toBeVisible();
 });
+
+test("MOBRES at 390px the reservations list is cards, not a 1084px table (no horizontal scroll), and the wizard's التالي is a solid fill", async ({ page, loginAs }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginAs("owner");
+  await page.goto("/#/staff/reservations", { waitUntil: "networkidle" });
+  await expect(page.getByTestId("reservation-row").first()).toBeVisible();
+  const w = await page.getByTestId("reservations-table").evaluate((el) => ({ table: (el.parentElement as HTMLElement).scrollWidth, page: document.documentElement.scrollWidth, view: document.documentElement.clientWidth, wide: Array.from(el.querySelectorAll("*")).filter((n) => n.getBoundingClientRect().right > document.documentElement.clientWidth + 1).map((n) => n.tagName + "." + String(n.className).slice(0, 30)).slice(0, 5) }));
+  expect(w.wide).toEqual([]);
+  expect(w.page).toBeLessThanOrEqual(w.view);
+  const lbl = await page.getByTestId("reservation-row").first().locator("td[data-label]").count();
+  expect(lbl).toBeGreaterThan(3);
+  await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+  const bg = await page.getByRole("button", { name: "التالي" }).evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(bg).toBe("rgb(23, 79, 96)");
+});

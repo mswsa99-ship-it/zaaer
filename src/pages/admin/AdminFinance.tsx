@@ -92,7 +92,7 @@ export default function AdminFinance() {
           <Card key={String(l)} className="p-3"><p className="text-[11px] text-ink-400">{l}</p><p className={`text-lg font-bold ${c}`} dir="ltr">{sar(Number(v))}</p></Card>
         ))}
       </div>
-      {platformReceipts > 0 && <p className="mb-1 text-xs text-warning-700" data-testid="finance-platform-note">منه {sar(platformReceipts)} آجل عند المنصات: لم يصل المنشأة بعد، ويُطابق في «إيداعات المنصات»، وليس نقدًا في الصندوق.</p>}
+      {platformReceipts > 0 && <p className="mb-1 text-xs font-medium" data-testid="finance-platform-note">منه {sar(platformReceipts)} آجل عند المنصات: لم يصل المنشأة بعد، ويُطابق في «إيداعات المنصات»، وليس نقدًا في الصندوق.</p>}
       <p className="mb-1 text-[11px] text-ink-400">المجاميع على كل السندات المطابقة ({totals.approved} معتمدًا{totals.cancelled ? ` و${totals.cancelled} ملغى` : ""})، لا على الصفحة المعروضة.</p>
       {totals.by_method.length > 0 && <p className="mb-2 text-xs text-ink-500">قبض الإقامة حسب الطريقة: {totals.by_method.map((m) => `${PAYMENT_METHOD_LABELS[m.method as PaymentMethod] ?? m.method}: ${sar(m.amount_halalas)}`).join(" · ")}</p>}
       {totals.by_account.length > 0 && <p className="mb-4 text-xs text-ink-500" data-testid="finance-by-account">حركة الفترة حسب الصندوق والحساب: {totals.by_account.map((a) => `${a.account_name ?? accounts.nameOf(a.account_id) ?? "—"}: قبض ${sar(a.in_halalas)}، صرف ${sar(a.out_halalas)}`).join(" · ")}</p>}
