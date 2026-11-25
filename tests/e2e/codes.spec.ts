@@ -106,4 +106,27 @@ test.describe("«الرموز» — key-box codes", () => {
     await expect(page).toHaveURL(/#\/staff\/codes/);
     await expect(page.locator("main h1")).toHaveText("الرموز");
   });
+  test("C07 owner «جميع الفروع»: every branch's units in one list, each labelled with its branch; other accounts have no such option", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/codes", { waitUntil: "networkidle" });
+    const sel = page.locator('select[aria-label="الفرع النشط"]').first();
+    await expect(sel.locator("option").last()).toHaveText("جميع الفروع");
+    await expect(page.getByTestId("code-branch")).toHaveCount(0);        // one branch selected: no extra label
+    const single = await page.getByTestId("code-unit").count();
+    await sel.selectOption({ label: "جميع الفروع" });
+    await expect(page.getByTestId("code-branch").first()).toBeVisible();
+    const all = await page.getByTestId("code-unit").count();
+    expect(all).toBeGreaterThan(single);
+    const names = new Set(await page.getByTestId("code-branch").allTextContents());
+    expect(names.size).toBeGreaterThanOrEqual(2);
+    await page.screenshot({ path: "/tmp/proof/codes-all-branches.png" });
+  });
+
+  test("C08 a manager or housekeeping account is unchanged: no «جميع الفروع» option on «الرموز»", async ({ page, loginAs }) => {
+    await loginAs("housekeeping");
+    await page.goto("/#/staff/codes", { waitUntil: "networkidle" });
+    await expect(page.getByTestId("code-unit").first()).toBeVisible();
+    await expect(page.getByText("جميع الفروع")).toHaveCount(0);
+    await expect(page.getByTestId("code-branch")).toHaveCount(0);
+  });
 });

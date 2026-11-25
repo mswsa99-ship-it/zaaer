@@ -20,6 +20,7 @@ import { BranchPicker } from "../../components/BranchPicker";
 import { CodeLight } from "../../components/KeyboxAlert";
 import { ROOM_STATUS_LABELS, roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, type RoomStatus } from "../../lib/types";
 import { cn, formatDateTime, sinceArabic } from "../../lib/utils";
+import { useBranch } from "../../lib/branch";
 
 const CODE_RE = /^\d{4,8}$/;
 const RANK: Record<KeyboxState, number> = { change: 0, untested: 1, ok: 2, none: 3 };
@@ -32,7 +33,7 @@ const FILTERS: ReadonlyArray<{ key: "all" | KeyboxState; label: string }> = [
   { key: "none", label: "بلا صندوق" },
 ];
 const EMPTY: Record<"all" | KeyboxState, string> = {
-  all: "لا توجد وحدات فعالة في هذا الفرع",
+  all: "لا توجد وحدات فعالة في الفرع المحدد",
   change: "لا توجد وحدة تنتظر تغيير رمزها",
   untested: "لا توجد رموز بانتظار التجربة",
   ok: "لا توجد رموز محدّثة بعد",
@@ -50,12 +51,17 @@ export default function Codes() {
   const [busy, setBusy] = useState<string | null>(null);
   const [, setClock] = useState(0);
 
-  // G24: the codes of the active branch only; a late answer for another branch is dropped
-  const board = useBranchQuery((b) => codesApi.board(b), [], NO_UNITS);
+  // G24: the codes of the active branch only; a late answer for another branch is dropped.
+  // «جميع الفروع» (owner): every branch's units in one list, each unit tagged with its branch; every action still targets one unit (room_id).
+  const { branches, allBranches } = useBranch();
+  const board = useBranchQuery((b) => codesApi.board(b).then((us) => us.map((u) => ({ ...u, branch_id: b }))), [], NO_UNITS,
+    { merge: (parts) => parts.flat() });
+  const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
+  const showBranch = board.all && allBranches;
   const units = board.data;
   const { reload, branchId } = board;
   // a code shown or being edited never survives a change of branch
-  useEffect(() => { setEditing(null); setShown(null); }, [branchId]);
+  useEffect(() => { setEditing(null); setShown(null); }, [branchId, allBranches]);
   useEffect(() => {
     // a check-out or a finished cleaning changes the unit: the list follows at once; the clock keeps «منذ …» current
     const ch = supabase.channel("codes-board").on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => reload()).subscribe();
@@ -89,21 +95,21 @@ export default function Codes() {
     setBusy("test:" + u.room_id); setError(null); setNotice(null);
     try {
       const r = await codesApi.markTested(u.room_id);
-      setNotice(`تم تأكيد تجربة رمز وحدة ${u.room_number}. ${roomStatusText(r.room_status)}`);
+      setNotice(`تم تأكيد تجربة رمز وحدة ${u.room_number}${showBranch ? ` (${branchName(u.branch_id)})` : ""}. ${roomStatusText(r.room_status)}`);
       notifyKeyboxChanged(); reload();
     } catch (e) { setError(toArabicError(e)); }
     setBusy(null);
   }
   async function saved(u: KeyboxUnit, roomStatus: string) {
     setEditing(null); setShown(null); setError(null);
-    setNotice(`تم حفظ الرمز الجديد لوحدة ${u.room_number}. ${roomStatusText(roomStatus)}`);
+    setNotice(`تم حفظ الرمز الجديد لوحدة ${u.room_number}${showBranch ? ` (${branchName(u.branch_id)})` : ""}. ${roomStatusText(roomStatus)}`);
     notifyKeyboxChanged(); reload();
   }
 
   if (board.loading) return <LoadingScreen />;
   return (
     <div>
-      <SectionTitle title="الرموز" subtitle="رموز صناديق المفاتيح — يتغيّر رمز الوحدة بعد مغادرة كل نزيل" action={<BranchPicker />} />
+      <SectionTitle title="الرموز" subtitle="رموز صناديق المفاتيح — يتغيّر رمز الوحدة بعد مغادرة كل نزيل" action={<BranchPicker allowAll />} />
       {(error || (board.error && units.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? board.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" role="status">{notice}</div>}
 
@@ -123,7 +129,7 @@ export default function Codes() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {list.map((u) => (
             <UnitCard key={u.room_id} u={u} shownCode={shown?.room === u.room_id ? shown.code : null} editing={editing === u.room_id} busy={busy}
-              onReveal={() => reveal(u)} onHide={() => setShown(null)} onEdit={() => { setEditing(u.room_id); setNotice(null); }}
+              branchLabel={showBranch ? branchName(u.branch_id) : null} onReveal={() => reveal(u)} onHide={() => setShown(null)} onEdit={() => { setEditing(u.room_id); setNotice(null); }}
               onCancel={() => setEditing(null)} onSaved={(st) => saved(u, st)} onTested={() => markTested(u)} />
           ))}
         </div>
@@ -151,8 +157,8 @@ function stateLine(u: KeyboxUnit): string {
 
 const LINE_COLOR: Record<KeyboxState, string> = { change: "text-danger-600", untested: "text-warning-700", ok: "text-success-600", none: "text-ink-500" };
 
-function UnitCard({ u, shownCode, editing, busy, onReveal, onHide, onEdit, onCancel, onSaved, onTested }: {
-  u: KeyboxUnit; shownCode: string | null; editing: boolean; busy: string | null;
+function UnitCard({ u, branchLabel, shownCode, editing, busy, onReveal, onHide, onEdit, onCancel, onSaved, onTested }: {
+  u: KeyboxUnit; branchLabel?: string | null; shownCode: string | null; editing: boolean; busy: string | null;
   onReveal: () => void; onHide: () => void; onEdit: () => void; onCancel: () => void; onSaved: (roomStatus: string) => Promise<void>; onTested: () => void;
 }) {
   const red = u.state === "change";
@@ -164,6 +170,7 @@ function UnitCard({ u, shownCode, editing, busy, onReveal, onHide, onEdit, onCan
             <span className="mt-1.5"><CodeLight tone={TONE[u.state]} size="h-3.5 w-3.5" /></span>
             <div className="min-w-0">
               <p className="text-base font-semibold text-ink-800">وحدة {u.room_number}</p>
+              {branchLabel && <Badge className="mt-1" testId="code-branch">{branchLabel}</Badge>}
               {(u.block || u.floor) && <p className="text-xs text-ink-400">{[u.block, u.floor].filter(Boolean).join(" · ")}</p>}
               <p className={cn("mt-1 text-sm font-medium", LINE_COLOR[u.state])}>
                 {stateLine(u)}

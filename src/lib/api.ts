@@ -616,6 +616,8 @@ export interface KeyboxUnit {
   needs_change_since: string | null; last_changed_at: string | null; last_changed_by: string | null;
   /** for the signed-in user: housekeeping never acts on a unit with a guest in house */
   can_change: boolean; can_view: boolean;
+  /** set by the screen when it merges several branches («جميع الفروع»); the server rows do not carry it */
+  branch_id?: string;
 }
 export interface KeyboxAlerts { count: number; oldest_since: string | null; rooms: string[] }
 
