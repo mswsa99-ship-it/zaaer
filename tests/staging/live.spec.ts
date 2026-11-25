@@ -88,7 +88,8 @@ test("L02 deep links load, and a protected staff route sends an anonymous visito
   await open(page, "booking/lookup");
   await expect(page.getByPlaceholder("05xxxxxxxx")).toBeVisible();
   await open(page, "staff/dashboard");
-  await expect(page).toHaveURL(/\/login$/);
+  // contract (src/App.tsx ProtectedStaff): anonymous -> /login?returnTo=<encoded pathname of the requested page>; resolved against the site base URL, exact match
+  await expect(page).toHaveURL("login?returnTo=%2Fstaff%2Fdashboard");
   await expect(page.getByRole("heading", { name: /تسجيل الدخول|بوابة الموظفين/ })).toBeVisible();
   expect(problems).toEqual([]);
 });
