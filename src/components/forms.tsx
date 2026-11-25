@@ -90,14 +90,16 @@ export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placehol
   // the last value this field sent up: a different value arriving is set from outside (a suggestion, a reset) and shows
   // at once, even while the field has the focus; the field's own value never rewrites what the user is typing
   const sent = useRef<number | null>(valueHalalas);
+  const [refused, setRefused] = useState(false);   // a keystroke the field did not accept is said out loud, never dropped silently
   useEffect(() => { if (valueHalalas !== sent.current) { sent.current = valueHalalas; setText(formatMoneyInput(valueHalalas)); } }, [valueHalalas]);
   return (
     <div className="relative">
       <input type="text" inputMode="decimal" autoComplete="off" data-money="" value={text} disabled={disabled} placeholder={placeholder ?? "0"} aria-label={label}
-        onBlur={() => setText(formatMoneyInput(moneyTextToHalalas(text)))}
-        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) return; setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
+        onBlur={() => { setRefused(false); setText(formatMoneyInput(moneyTextToHalalas(text))); }}
+        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) { setRefused(true); return; } setRefused(false); setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
         className="input pl-12 tabular-nums" dir="ltr" />
       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-500">ر.س</span>
+      {refused && <p role="alert" data-testid="money-refused" className="mt-1 text-xs text-danger-600">لم يُقبل هذا الإدخال. اكتب أرقامًا فقط{min < 0 ? "" : " (بدون إشارة سالب)"}، وبحد أقصى خانتين بعد الفاصلة.</p>}
     </div>
   );
 }

@@ -35,3 +35,16 @@ describe("AM01 the money field starts empty and takes riyals, halalas only after
     expect(moneyTextToHalalas(".")).toBeNull();
   });
 });
+
+import { readFileSync } from "node:fs";
+describe("MoneyInput says a refused keystroke out loud (review 2)", () => {
+  it("the field shows a refusal alert instead of dropping the character silently", () => {
+    const src = readFileSync("src/components/forms.tsx", "utf8");
+    expect(src).toContain("money-refused");
+    expect(src).toContain("setRefused(true)");
+  });
+  it("a minus and an exponent are refused by the sanitiser, never turned into digits", () => {
+    expect(sanitizeMoneyText("-100", false)).toBeNull();
+    expect(sanitizeMoneyText("1e3", false)).toBeNull();
+  });
+});
