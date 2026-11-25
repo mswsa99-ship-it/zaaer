@@ -256,9 +256,10 @@ body, #root {background:var(--paper);color:var(--ink);}
 /* UX review (390px): the reservations table was 1084px wide with the dates, status and balance off-screen and no cue.
    On a phone each row becomes a card of labelled fields, from the same markup (one row in the DOM, no duplicate list). */
 @media (max-width: 639px) {
-  :root .res-table, .res-table tbody {display:block;}
+  :root .overflow-x-auto table.res-table, :root .res-table, .res-table tbody {display:block;width:100%;max-width:100%;min-width:0;}
+  :root .res-table td.font-mono {white-space:normal;}
   :root .res-table thead {display:none;}
-  :root .res-table tr {display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;padding:.75rem;border-top:1px solid var(--line);}
+  :root .res-table tr {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem .75rem;padding:.75rem;border-top:1px solid var(--line);}
   :root .res-table td {display:block;padding:0;white-space:normal;min-width:0;overflow-wrap:anywhere;}
   :root .res-table td[data-label]::before {content:attr(data-label);display:block;font-size:11px;color:var(--ink-muted);}
   :root .res-table td:last-child {grid-column:1 / -1;}
