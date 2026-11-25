@@ -48,7 +48,7 @@ const RESERVATION_SELECT = `
   id, internal_ref, external_ref, status, branch_id, room_id, room_category_id,
   check_in, check_out, adults, companions,
   payment_status, identity_status, expected_arrival_time, expected_departure_time, group_ref,
-  government_registration, shomoos_accepted_at, children_ages, gov_registration_ref, access_status, keybox_delivered,
+  government_registration, shomoos_accepted_at, children_ages, access_status, keybox_delivered,
   security_hold, security_hold_reason,
   checkin_approved_by, checkin_approved_at, actual_check_in, actual_check_out, notes,
   source:booking_sources(name), room:rooms(room_number, status), room_category:room_categories(name_ar), branch:branches(name_ar)
@@ -88,7 +88,7 @@ export default function StaffReservationDetail() {
     try {
       const [res, g] = await Promise.all([
         supabase.from("reservations").select(RESERVATION_SELECT).eq("id", id).maybeSingle(),
-        supabase.from("reservation_guests").select("id, is_primary, full_name, identity_type, identity_number_last4, nationality, birth_date, phone, relationship, verification_status, data_submitted").eq("reservation_id", id).order("is_primary", { ascending: false }),
+        supabase.from("reservation_guests").select("id, is_primary, full_name, identity_type, nationality, relationship, verification_status, data_submitted").eq("reservation_id", id).order("is_primary", { ascending: false }),
       ]);
       if (res.error) throw res.error;
       if (g.error) throw g.error;
@@ -99,9 +99,17 @@ export default function StaffReservationDetail() {
         const f = (fin.data ?? null) as { total?: number; net_collected?: number; rent?: number } | null;
         d = { ...d, total_halalas: f?.total ?? 0, paid_halalas: f?.net_collected ?? 0, rent_amount_halalas: f?.rent ?? 0 };
       }
+      // 0144: the phone, birth date, document tail and the government reference are no longer selectable through the tables;
+      // they arrive from the role-masked fn_reservation_detail (owner/manager/supervisor only for phone and birth date)
+      let ex: ReservationDetail | null = null;
+      if (canMoney) { try { ex = await opsApi.detail(id); } catch { ex = null; } }
+      if (d) d = { ...d, gov_registration_ref: (ex?.reservation?.gov_registration_ref as string | null | undefined) ?? null };
       setDetail(d);
-      setGuests((g.data as GuestDetail[]) ?? []);
-      if (canMoney) { try { setExtra(await opsApi.detail(id)); } catch { setExtra(null); } }
+      setGuests(((g.data as unknown as Array<Omit<GuestDetail, "identity_number_last4" | "birth_date" | "phone">>) ?? []).map((x) => {
+        const e = ex?.guests?.find((y) => y.id === x.id);
+        return { ...x, identity_number_last4: e?.identity_number_last4 ?? null, birth_date: ((e as { birth_date?: string | null } | undefined)?.birth_date) ?? null, phone: e?.phone ?? null };
+      }));
+      setExtra(ex);
       setTick((t) => t + 1);
       setLoadError(null);
     } catch (e) {

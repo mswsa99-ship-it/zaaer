@@ -570,6 +570,7 @@ end $$;
 -- =====================================================================
 select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
 do $$ declare c uuid; p jsonb; r jsonb; res uuid := (select v from ids where k='resA'); st text; begin
+  reset role; -- 0144: signed-in staff can no longer call the proposal functions (see AI06); these checks prove the dormant executor's own role gates
   insert into ai_ops_conversations(organization_id, branch_id, staff_id, title) values ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000010','10000000-0000-0000-0000-000000000003','t') returning id into c;
   p := fn_ai_ops_propose(c, 'cancel_reservation', jsonb_build_object('reservation_id', res, 'reason', 'اقتراح'), 'إلغاء الحجز A');
   r := fn_ai_ops_execute_proposal((p->>'proposal_id')::uuid);
@@ -587,14 +588,25 @@ do $$ declare c uuid; p jsonb; r jsonb; res uuid := (select v from ids where k='
     perform t_record('AI03 unknown action cannot be proposed', false, 'accepted');
   exception when others then perform t_record('AI03 unknown action cannot be proposed', sqlerrm like '%action%', sqlerrm); end;
 end $$;
+set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ declare pid uuid; begin
+  reset role;
   select id into pid from ai_action_proposals where status = 'executed' limit 1;
   begin
     perform fn_ai_ops_execute_proposal(pid);
     perform t_record('AI04 another staff member cannot execute someone else''s proposal', false, 'accepted');
   exception when others then perform t_record('AI04 another staff member cannot execute someone else''s proposal', sqlerrm like '%FORBIDDEN%', sqlerrm); end;
   perform t_record('AI05 ops context contains no document numbers / codes', (fn_ai_ops_context('00000000-0000-0000-0000-000000000010')::text !~ '(^|[^0-9a-f-])[12]\d{9}([^0-9a-f-]|$)') and not (fn_ai_ops_context('00000000-0000-0000-0000-000000000010')::text ~ 'code_encrypted'));
+end $$;
+set role authenticated;
+do $$ declare ok1 boolean; ok2 boolean; ok3 boolean; begin
+  ok1 := has_function_privilege('authenticated','public.fn_ai_ops_propose(uuid,text,jsonb,text)','execute');
+  ok2 := has_function_privilege('authenticated','public.fn_ai_ops_execute_proposal(uuid)','execute');
+  ok3 := has_function_privilege('authenticated','public.fn_ai_ops_reject_proposal(uuid,text)','execute');
+  perform t_record('AI06 0144: signed-in staff cannot call the assistant proposal functions (the assistant is read-only)', not (ok1 or ok2 or ok3), ok1::text||ok2::text||ok3::text);
+  perform t_record('AI07 0144: guest phone, birth date, document tail and reservation gov ref/company/platform flag are not table-selectable',
+    not (has_column_privilege('authenticated','public.reservation_guests','phone','select') or has_column_privilege('authenticated','public.reservation_guests','birth_date','select') or has_column_privilege('authenticated','public.reservation_guests','identity_number_last4','select') or has_column_privilege('authenticated','public.reservations','gov_registration_ref','select') or has_column_privilege('authenticated','public.reservations','company_name','select') or has_column_privilege('authenticated','public.reservations','platform_collects','select')), null);
 end $$;
 
 
@@ -742,13 +754,15 @@ do $$ begin
   perform t_record('RV17 task cannot reference a reservation of another branch', false, 'accepted');
 exception when others then perform t_record('RV17 task cannot reference a reservation of another branch', sqlerrm like '%BRANCH_MISMATCH%', sqlerrm); end $$;
 do $$ declare c uuid; p jsonb; r jsonb; begin
+  reset role;
   insert into ai_ops_conversations(organization_id, branch_id, staff_id, title) values ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000010','10000000-0000-0000-0000-000000000001','exp') returning id into c;
   p := fn_ai_ops_propose(c, 'set_cleanliness', jsonb_build_object('room_id', (select v from ids where k='room1'), 'state', 'dirty'), 'علامة');
   reset role; update ai_action_proposals set expires_at = now() - interval '1 minute' where id = (p->>'proposal_id')::uuid;
-  set role authenticated; perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
+  perform t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
   r := fn_ai_ops_execute_proposal((p->>'proposal_id')::uuid);
   perform t_record('RV16 expired proposal is persisted as expired and not executed', (r->>'ok')::boolean = false and r->>'error' = 'PROPOSAL_EXPIRED' and (select status from ai_action_proposals where id = (p->>'proposal_id')::uuid) = 'expired', r::text);
 end $$;
+set role authenticated;
 do $$ declare res uuid := (select v from ids where k='resRV'); a record; begin
   -- RV12: an active allocation that does not end at check_out blocks amend_stay instead of silently skipping it
   reset role; update reservation_allocations set to_date = to_date - 1 where reservation_id = res and status = 'active';
