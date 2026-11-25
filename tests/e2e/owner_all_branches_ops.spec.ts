@@ -94,3 +94,13 @@ test("AB-S1 accounts: the visible scope always matches the effective one (picker
   await expect(page.getByRole("checkbox", { name: /كل فروعي/ })).toHaveCount(0);
   await expect(page.getByTestId("acc-scope")).toHaveText("النطاق: جميع الفروع");
 });
+
+test("KB-R1 the rooms board never says «must change» for a unit that simply has no ready box (it says «not ready»); Codes keeps the three states", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/rooms", { waitUntil: "networkidle" });
+  await picker(page).selectOption({ label: "فرع جدة — الكورنيش" });
+  await expect(page.getByText("J-1").first()).toBeVisible();
+  const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  expect(text).toContain("الرمز غير جاهز");
+  expect(text).not.toContain("يجب تغيير الرمز");
+});
