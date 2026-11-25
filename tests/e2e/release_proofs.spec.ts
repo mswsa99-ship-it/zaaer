@@ -161,3 +161,23 @@ test("ALLROOMS owner «جميع الفروع» on the units board and calendar: 
   await page.getByRole("tab", { name: /التقويم|تقويم/ }).click();
   await expect(page.getByText(/ · فرع جدة/).first()).toBeVisible();
 });
+
+test("COMPCAP companions are capped by the unit's capacity: adults + companions can never exceed max", async ({ page, loginAs }) => {
+  await loginAs("supervisor");
+  await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+  const roomSel = page.locator("select").filter({ has: page.locator("option:has-text('تخصيص لاحقًا')") });
+  await expect.poll(() => roomSel.locator("option").count()).toBeGreaterThan(1);
+  await roomSel.selectOption({ index: 1 });
+  await page.getByRole("button", { name: "التالي" }).click();
+  const adults = page.locator('select[aria-label="بالغون"]').first();
+  const comps = page.locator('select[aria-label="مرافقون"]').first();
+  await expect(adults).toBeVisible();
+  const aOpts = await adults.locator("option").allTextContents();
+  const maxCap = Math.max(...aOpts.map(Number));
+  await adults.selectOption(String(1));
+  const c1 = (await comps.locator("option").allTextContents()).map(Number);
+  expect(Math.max(...c1)).toBe(maxCap - 1);
+  await adults.selectOption(String(maxCap));
+  const c2 = (await comps.locator("option").allTextContents()).map(Number);
+  expect(Math.max(...c2)).toBe(0);
+});
