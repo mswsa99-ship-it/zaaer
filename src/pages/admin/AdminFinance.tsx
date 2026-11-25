@@ -98,21 +98,21 @@ export default function AdminFinance() {
       {totals.by_account.length > 0 && <p className="mb-4 text-xs text-ink-500" data-testid="finance-by-account">حركة الفترة حسب الصندوق والحساب: {totals.by_account.map((a) => `${a.account_name ?? accounts.nameOf(a.account_id) ?? "—"}: قبض ${sar(a.in_halalas)}، صرف ${sar(a.out_halalas)}`).join(" · ")}</p>}
       <DataState loading={ledger.loading} error={ledger.error} empty={rows.length === 0} onRetry={ledger.reload} emptyIcon={<Wallet className="h-10 w-10" />} emptyTitle="لا سندات مطابقة">
         <Card className="overflow-x-auto p-0">
-          <table className="w-full text-sm" data-testid="vouchers-table">
+          <table className="res-table w-full text-sm" data-testid="vouchers-table">
             <thead className="bg-ink-50 text-xs text-ink-500"><tr>{["السند", "النوع", "الحجز", "المبلغ", "الطريقة", "الصندوق أو الحساب", "المرجع", "الوقت", "المنشئ", "الحالة"].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 text-right font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className={`border-t border-ink-50 ${r.status === "cancelled" ? "opacity-60" : ""}`} data-testid="voucher-row">
-                  <td className="px-3 py-2 font-mono text-xs">{r.number}{r.original_number && <div className="text-[10px] text-ink-400">بدل {r.original_number}</div>}</td>
-                  <td className="px-3 py-2">{VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{r.reservation ? <Link className="hover:underline" to={`/staff/reservations/${r.reservation.id}`}>{r.reservation.internal_ref}</Link> : "—"}</td>
-                  <td className={`whitespace-nowrap px-3 py-2 ${r.status === "cancelled" ? "line-through" : ""}`} dir="ltr">{sar(r.amount_halalas)}</td>
-                  <td className="px-3 py-2 text-ink-600">{PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method}</td>
-                  <td className="px-3 py-2 text-xs text-ink-500">{accountText(r)}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-ink-400" dir="ltr">{r.reference ?? "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-400">{formatDateTime(r.occurred_at)}</td>
-                  <td className="px-3 py-2 text-xs text-ink-500">{r.creator_name ?? "—"}</td>
-                  <td className="px-3 py-2">{r.status === "approved" ? <Badge className="bg-success-500/10 text-success-600">معتمد</Badge> : <Badge className="bg-danger-500/10 text-danger-600">ملغى{r.cancel_reason ? ` · ${r.cancel_reason}` : ""}</Badge>}</td>
+                  <td data-label="السند" className="px-3 py-2 font-mono text-xs">{r.number}{r.original_number && <div className="text-[10px] text-ink-400">بدل {r.original_number}</div>}</td>
+                  <td data-label="النوع" className="px-3 py-2">{VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind}</td>
+                  <td data-label="الحجز" className="px-3 py-2 font-mono text-xs">{r.reservation ? <Link className="hover:underline" to={`/staff/reservations/${r.reservation.id}`}>{r.reservation.internal_ref}</Link> : "—"}</td>
+                  <td data-label="المبلغ" className={`whitespace-nowrap px-3 py-2 ${r.status === "cancelled" ? "line-through" : ""}`} dir="ltr">{sar(r.amount_halalas)}</td>
+                  <td data-label="الطريقة" className="px-3 py-2 text-ink-600">{PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method}</td>
+                  <td data-label="الصندوق أو الحساب" className="px-3 py-2 text-xs text-ink-500">{accountText(r)}</td>
+                  <td data-label="المرجع" className="px-3 py-2 font-mono text-xs text-ink-400" dir="ltr">{r.reference ?? "—"}</td>
+                  <td data-label="الوقت" className="whitespace-nowrap px-3 py-2 text-xs text-ink-400">{formatDateTime(r.occurred_at)}</td>
+                  <td data-label="المنشئ" className="px-3 py-2 text-xs text-ink-500">{r.creator_name ?? "—"}</td>
+                  <td data-label="الحالة" className="px-3 py-2">{r.status === "approved" ? <Badge className="bg-success-500/10 text-success-600">معتمد</Badge> : <Badge className="bg-danger-500/10 text-danger-600">ملغى{r.cancel_reason ? ` · ${r.cancel_reason}` : ""}</Badge>}</td>
                 </tr>
               ))}
             </tbody>
