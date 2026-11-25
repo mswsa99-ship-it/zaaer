@@ -168,3 +168,14 @@ export async function pickRange(page: Page, label: string, from: string, to: str
   if (to !== from) await tap(to);
   await dlg.getByRole("button", { name: "موافق" }).click();
 }
+
+/** The two-wheel time control named `label`: opens it, taps the hour (24h) and the minutes, confirms. */
+export async function pickTime(page: Page, label: string, hhmm: string) {
+  const [hh, mm] = hhmm.split(":").map(Number);
+  await page.getByRole("button", { name: label }).first().click();
+  const dlg = page.getByRole("dialog", { name: label });
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  await dlg.getByRole("listbox", { name: /الساعة/ }).getByRole("option", { name: new RegExp(`^${h12} ${hh < 12 ? "صباحًا" : "مساءً"}`) }).click();
+  await dlg.getByRole("listbox", { name: /الدقائق/ }).getByRole("option", { name: String(mm).padStart(2, "0"), exact: true }).click();
+  await dlg.getByRole("button", { name: "موافق" }).click();
+}

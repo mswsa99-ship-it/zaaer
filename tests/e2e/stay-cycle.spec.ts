@@ -6,7 +6,7 @@
  * inspection), G17 (resources with commitments), G19 (corrections only within their windows), G22 (each step audited
  * with who and when), G27 (the screen shows the server's refusal, never a fake success).
  */
-import { test, expect, financeCell, checkOut } from "./fixtures";
+import { test, expect, financeCell, checkOut, pickTime } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Opens the stay whose unit is `room`, among the reservations of `status`. */
@@ -35,7 +35,8 @@ test.describe("the stay cycle (phase 3)", () => {
     // no deposit and no reason: the server refuses, and nothing is recorded
     await deposit.locator("input[data-money]").fill("0");
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
-    await expect(page.getByTestId("reasons").first()).toContainText("التأمين لم يُستلم كاملًا");
+    // the form now stops it first: a deposit below the branch's needs a manager's authorisation answer or a reason
+    await expect(arrival.getByRole("alert").first()).toContainText("التأمين أقل من تأمين الفرع");
     await expect(arrival).toBeVisible();
     // the branch's deposit, on its own voucher, with its «استلمت» confirmation
     await deposit.locator("input[data-money]").fill("50");
@@ -144,9 +145,8 @@ test.describe("the stay cycle (phase 3)", () => {
     await expect(card).toContainText("تنقل المغادرة إلى الساعة");
     await card.getByRole("button").first().click();
     const dlg = page.getByRole("dialog");
-    const hour = dlg.getByLabel("مغادرة متأخرة حتى الساعة");
-    await expect(hour).toHaveValue("16:00");
-    await hour.fill("11:00");
+    await expect(dlg.getByRole("button", { name: "مغادرة متأخرة حتى الساعة" })).toContainText("4:00");
+    await pickTime(page, "مغادرة متأخرة حتى الساعة", "11:00");
     await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
     await expect(dlg.getByText("ساعة المغادرة المتأخرة تكون بعد موعد المغادرة في الفرع.")).toBeVisible();
     await dlg.getByRole("button", { name: "إلغاء", exact: true }).click();

@@ -4,7 +4,7 @@
  * Controls: G06 (a stay's price moves with its nights), G14 (halalas, one rounding rule), G19 (no edit lost — the
  * calendar answers with what it changed), G22 (audited), G27 (a price change never reprices a booked stay).
  */
-import { test, expect, parseSar, bookingNext, fillGuest } from "./fixtures";
+import { test, expect, parseSar, bookingNext, fillGuest, pickRange } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const riyadhToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
@@ -18,8 +18,8 @@ async function startBooking(page: Page, type: RegExp, from: string, to: string, 
   await expect(typeSelect.locator("option", { hasText: type }).first()).toBeAttached();
   const value = await typeSelect.locator("option", { hasText: type }).first().getAttribute("value");
   await typeSelect.selectOption(value!);
-  await page.locator("input[type=date]").nth(0).fill(from);
-  await page.locator("input[type=date]").nth(1).fill(to);
+  await pickRange(page, "الوصول", from);      // the wizard now uses the day pickers
+  await pickRange(page, "المغادرة", to);
   await bookingNext(page);
   await fillGuest(page, guest, "0501234500");
   await bookingNext(page);

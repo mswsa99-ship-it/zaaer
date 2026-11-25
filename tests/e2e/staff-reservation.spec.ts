@@ -5,7 +5,7 @@
  * deposit is a separate balance — SR01), G12 (refunds capped at what was received; cancel never refunds — SR03),
  * G22 (operations are audited — SR01).
  */
-import { test, expect, createReservation, financeCell, parseSar, bookingNext, fillGuest } from "./fixtures";
+import { test, expect, createReservation, financeCell, parseSar, bookingNext, fillGuest, pickTime } from "./fixtures";
 
 test.describe("staff reservation lifecycle", () => {
   test("SR01 create → deposit → partial payment stays 'دفع جزئي' → extension is audited", async ({ page, loginAs }) => {
@@ -132,7 +132,7 @@ test.describe("staff reservation lifecycle", () => {
   test("SR05 Zaaer parity: arrival time, named companions and two units in one booking (atomic group)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
-    await page.locator("div:has(> label:has-text('وقت الوصول المتوقع')) input").fill("18:30");
+    await pickTime(page, "وقت الوصول المتوقع", "18:30");
     await page.getByRole("button", { name: "وحدة أخرى في نفس الحجز" }).click();
     await bookingNext(page);
     await fillGuest(page, "عائلة المجموعة", "0501110009");

@@ -144,7 +144,7 @@ end $$;
 -- R03 back-to-back [10,12) then [12,14) allowed (half-open)
 do $$ declare r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010','category_id','00000000-0000-0000-0000-000000000030',
-        'room_id',(select v from ids where k='room1'),'check_in',(current_date + 3)::text,'check_out',(current_date + 5)::text,'guest_name','ضيف ج','guest_phone','0500000004','source_id','00000000-0000-0000-0000-000000000021'));
+        'room_id',(select v from ids where k='room1'),'check_in',(current_date + 3)::text,'check_out',(current_date + 5)::text,'guest_name','ضيف جيم','guest_phone','0500000004','source_id','00000000-0000-0000-0000-000000000021'));
   insert into ids values ('resC', (r->>'id')::uuid);
   perform t_record('R03 reservation starting at previous end accepted (half-open interval)', (r->>'ok')::boolean, r::text);
 exception when others then perform t_record('R03 reservation starting at previous end accepted (half-open interval)', false, sqlerrm); end $$;

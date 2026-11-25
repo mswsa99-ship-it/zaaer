@@ -31,7 +31,10 @@ test.describe("core money (phase 1)", () => {
     await dlg.getByLabel("رقم العملية").fill("TRX-445566");
     await dlg.getByRole("button", { name: "حفظ السند" }).click();
     await expect(dlg).toBeHidden();
-    await expect(page.getByText(/شبكة · حساب الشبكة والتحويل · TRX-445566/)).toBeVisible();
+    // the voucher list now shows method, account and reference as separate cells of one row
+    const trxRow = page.locator("li").filter({ hasText: "المرجع: TRX-445566" });
+    await expect(trxRow).toContainText("شبكة");
+    await expect(trxRow).toContainText("حساب الشبكة والتحويل");
 
     // the deposit: 50.00 suggested (decision 69), and the platform is not a way to take it
     await page.getByRole("button", { name: "قبض تأمين" }).click();
