@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { isDemo } from "./lib/supabase";
 import { LoadingScreen } from "./components/ui";
@@ -107,9 +107,17 @@ function ProtectedStaff({ children, platform = false }: { children: React.ReactN
   return <>{children}</>;
 }
 
+/** A new page opens at its top: the previous page's scroll position never carries over (review 4). */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); document.querySelectorAll<HTMLElement>("main, [data-scroll-root]").forEach((el) => { el.scrollTop = 0; }); }, [pathname]);
+  return null;
+}
+
 export default function App() {
   return (
     <Suspense fallback={<LoadingScreen />}>
+    <ScrollToTop />
     <Routes>
       <Route path="/platform" element={<ProtectedStaff platform><PlatformHotels /></ProtectedStaff>} />
       {/* Guest */}

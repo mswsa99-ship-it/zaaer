@@ -36,7 +36,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
     <div className={"relative " + (className ?? "")} data-testid="date-range-picker">
       <button ref={btn} type="button" className="input flex items-center justify-between gap-2 text-start" aria-haspopup="dialog" aria-expanded={open} aria-label={label} onClick={openIt}>
         <CalendarDays className="h-4 w-4 shrink-0 text-rai-ink-muted" />
-        <bdi dir="ltr" className="tabular-nums" data-testid="date-range-value">{from ? describeRange(from, to) : "كل التواريخ"}</bdi>
+        <bdi dir="ltr" className="whitespace-nowrap tabular-nums" data-testid="date-range-value">{from ? describeRange(from, to) : "كل التواريخ"}</bdi>
       </button>
       {open && (
         <>
@@ -52,7 +52,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
               {monthCells(view.y, view.m).map((d, i) => d === null ? <span key={"e" + i} /> : (
                 <button key={d} type="button" disabled={disabled(d)} data-day={d} aria-pressed={inPick(pick, d)} aria-label={d}
                   onClick={() => { setPick(fresh ? { a: d, b: null } : tapDay(pick, d, single)); setFresh(false); }}
-                  className={`min-h-[44px] rounded-xl text-sm tabular-nums ${inPick(pick, d) ? "bg-rai-action font-semibold text-rai-action-ink ring-1 ring-rai-line-strong" : "text-rai-ink hover:bg-rai-surface-sunken"} ${d === todayISO() && !inPick(pick, d) ? "ring-1 ring-rai-line-strong" : ""} disabled:cursor-not-allowed disabled:opacity-30`}>{Number(d.slice(8))}</button>
+                  className={`min-h-[44px] rounded-xl text-sm tabular-nums ${inPick(pick, d) ? "bg-rai-action font-semibold text-rai-action-ink ring-1 ring-rai-line-strong" : "text-rai-ink hover:bg-rai-surface-sunken"} ${d === todayISO() && !inPick(pick, d) ? "ring-1 ring-rai-line-strong" : ""} disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-rai-ink-muted disabled:line-through disabled:opacity-40 disabled:ring-0 disabled:hover:bg-transparent`}>{Number(d.slice(8))}</button>
               ))}
             </div>
             <p className="mt-2 text-center text-xs text-rai-ink-muted" aria-live="polite"><bdi dir="ltr" className="tabular-nums">{confirmed ? describeRange(confirmed.from, confirmed.to) : "—"}</bdi>{!single && pick.b === null && confirmed ? " · يوم واحد" : ""}</p>

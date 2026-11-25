@@ -29,7 +29,7 @@ export function SectionTitle({ title, subtitle, action, level = 1 }: { title: st
 }
 
 export function Badge({ children, className, title, testId }: { children: ReactNode; className?: string; title?: string; testId?: string }) {
-  return <span className={cn("badge", className)} title={title} data-testid={testId}>{children}</span>;
+  return <span className={cn("badge whitespace-nowrap shrink-0", className)} title={title} data-testid={testId}>{children}</span>;
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
