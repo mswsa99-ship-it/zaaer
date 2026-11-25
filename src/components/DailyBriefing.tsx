@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Sunrise, RefreshCw, Sparkles } from "lucide-react";
 import { useBranchQuery } from "../lib/useBranchQuery";
+import { useBranch } from "../lib/branch";
 import { aiOpsBriefing, type Briefing } from "../lib/api";
 import { Card, Spinner, ErrorBanner } from "./ui";
 import { formatDateTime } from "../lib/utils";
@@ -8,7 +9,20 @@ import { formatDateTime } from "../lib/utils";
 /** Morning briefing: deterministic prioritized items from the ops context + optional AI recommendations. */
 export function DailyBriefing() {
   // G24 (decision 40): the active branch's briefing only — switching branch clears it, a late answer is dropped
-  const q = useBranchQuery<Briefing | null>((branchId) => aiOpsBriefing(branchId), [], null);
+  // «جميع الفروع» (owner): every branch's briefing, each line named by its branch; the single-branch view is unchanged
+  const { branches, allBranches } = useBranch();
+  const nameOf = (id: string) => branches.find((x) => x.id === id)?.name_ar ?? "";
+  const q = useBranchQuery<Briefing | null>(async (branchId) => {
+    const r = await aiOpsBriefing(branchId);
+    return allBranches ? { ...r, headline: `${nameOf(branchId)}: ${r.headline}`, items: r.items.map((i) => ({ ...i, text: `${nameOf(branchId)}: ${i.text}` })) } : r;
+  }, [allBranches], null, {
+    merge: (parts) => {
+      const ok = parts.filter((x): x is Briefing => !!x);
+      if (ok.length === 0) return null;
+      const lv = { critical: 0, warning: 1, info: 2 } as const;
+      return { ...ok[0], headline: "جميع الفروع: " + ok.map((x) => x.headline).join(" · "), items: ok.flatMap((x) => x.items).sort((a, b) => lv[a.level] - lv[b.level]), insights: null, mode: "deterministic" as Briefing["mode"] };
+    },
+  });
   const b = q.data, error = q.error, loading = q.loading || q.refreshing, load = q.reload;
   const dot = { critical: "bg-danger-500", warning: "bg-warning-500", info: "bg-brand-400" } as const;
   return (

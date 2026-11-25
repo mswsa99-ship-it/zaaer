@@ -71,7 +71,7 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
       .eq("is_primary", true)) as { reservation_id: string; full_name: string }[];
     const guestMap = new Map(guests.map((g) => [g.reservation_id, g.full_name]));
     return list.map((r) => ({ ...r, payment_status: money ? r.payment_status : null, primary_guest: { full_name: guestMap.get(r.id) ?? "—" } }));
-  }, [statusKey, todayOnly, money], NO_CARDS);
+  }, [statusKey, todayOnly, money], NO_CARDS, { merge: (parts) => parts.flat() });   // «جميع الفروع» (owner): every branch's cards in one list
   const reload = q.reload;
 
   // Realtime: any reservation change reloads the active branch's list. Each use of this hook has its own channel:

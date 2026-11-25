@@ -90,3 +90,21 @@ test("CAL1 departure picker: days up to the arrival are disabled, click is rejec
   expect(disabledCount).toBeGreaterThan(0);
   await page.screenshot({ path: process.env.CAL1_SHOT ?? "test-results/after-departure-calendar.png" });
 });
+
+test("ALLDASH owner operations centre offers «جميع الفروع» (390px) and the combined total is at least one branch", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sel = () => page.locator('select[aria-label="الفرع النشط"]').first();
+  await page.goto("/#/staff/dashboard", { waitUntil: "networkidle" });
+  await expect(sel().locator("option").last()).toHaveText("جميع الفروع");
+  const total = async () => Number((await page.locator("a", { hasText: "إجمالي الحجوزات" }).first().innerText()).replace(/\D/g, "") || "0");
+  const first = (await sel().locator("option").first().getAttribute("value")) as string;
+  await sel().selectOption(first);
+  await page.waitForTimeout(800);
+  const one = await total();
+  await sel().selectOption({ label: "جميع الفروع" });
+  await page.waitForTimeout(1200);
+  const all = await total();
+  expect(all).toBeGreaterThanOrEqual(one);
+  await page.screenshot({ path: process.env.ALLDASH_SHOT ?? "test-results/all-branches-dashboard-390.png" });
+});

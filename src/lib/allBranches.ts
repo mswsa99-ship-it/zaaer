@@ -111,3 +111,20 @@ export function mergeIdentities<T extends { count: number; by_staff: Json[]; row
     rows: parts.flatMap((p) => p.rows ?? []),
   };
 }
+
+/** «جميع الفروع» for the operations centre: counts add up, the occupancy percentages are recomputed from the summed units (never averaged). */
+export function mergeDailySummary<T extends { units: { active: number; all?: number; occupied: number }; occupancy_pct: number; occupancy_all_pct?: number }>(parts: Array<T | null>): T | null {
+  const ok = parts.filter((p): p is T => !!p);
+  if (ok.length === 0) return null;
+  const m = sumDeep(ok) as T;
+  m.occupancy_pct = pct(m.units.occupied, m.units.active);
+  if (ok.every((p) => p.units.all != null)) m.occupancy_all_pct = pct(m.units.occupied, m.units.all ?? 0);
+  return m;
+}
+
+/** The stay follow-ups of every branch, one list per kind. */
+export function mergeFollowups<T extends { overdue: unknown[]; departed_open: unknown[]; late_departures: unknown[] }>(parts: Array<T | null>): T | null {
+  const ok = parts.filter((p): p is T => !!p);
+  if (ok.length === 0) return null;
+  return { ...ok[0], overdue: ok.flatMap((p) => p.overdue), departed_open: ok.flatMap((p) => p.departed_open), late_departures: ok.flatMap((p) => p.late_departures) } as T;
+}

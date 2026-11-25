@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { DailyBriefing } from "../../components/DailyBriefing";
 import { BranchPicker } from "../../components/BranchPicker";
 import { useBranchQuery } from "../../lib/useBranchQuery";
+import { mergeDailySummary, mergeFollowups } from "../../lib/allBranches";
 import { opsApi, stayApi, type DailySummary, type StayFollowups } from "../../lib/api";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { useAuth } from "../../lib/auth";
@@ -20,12 +21,12 @@ export default function StaffDashboard() {
   const { data: arrivals, loading: l1, error: e1, reload: r1 } = useReservations({ todayOnly: true });
   const { data: all, loading: l2, error: e2, reload: r2 } = useReservations();
   // G24 (decision 40): the active branch's summary only; it refreshes when the reservation count changes
-  const sumQ = useBranchQuery<DailySummary | null>((branchId) => opsApi.dailySummary(branchId), [all.length], null);
+  const sumQ = useBranchQuery<DailySummary | null>((branchId) => opsApi.dailySummary(branchId), [all.length], null, { merge: mergeDailySummary });
   const sum = sumQ.data;
   // 0033: what waits for a decision today (the money roles; the server refuses the others)
   const { permissions, profile, can, canFull } = useAuth();
   const followRole = permissions.seesMoney;
-  const fuQ = useBranchQuery<StayFollowups | null>((branchId) => (followRole ? stayApi.followups(branchId) : Promise.resolve(null)), [all.length, followRole], null);
+  const fuQ = useBranchQuery<StayFollowups | null>((branchId) => (followRole ? stayApi.followups(branchId) : Promise.resolve(null)), [all.length, followRole], null, { merge: mergeFollowups });
   const fu = fuQ.data;
   const review = useReviewSummary(true);   // the owner: what waits for review, and the monitors when due (decision 54)
 
@@ -34,7 +35,7 @@ export default function StaffDashboard() {
   if (listError && all.length === 0 && arrivals.length === 0) {
     return (
       <div className="ops-type-trial">
-        <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+        <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker allowAll />} />
         <LoadErrorCard message={listError} onRetry={() => { r1(); r2(); sumQ.reload(); }} />
       </div>
     );
@@ -90,7 +91,7 @@ export default function StaffDashboard() {
 
   return (
     <div className="ops-type-trial">
-      <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+      <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker allowAll />} />
       <ShiftBoard role={role} title={board.title} subtitle={board.subtitle} tiles={shownTiles} rowsTitle={board.rowsTitle} rows={board.rows} />
       <ReviewBanner summary={review} />
       {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
