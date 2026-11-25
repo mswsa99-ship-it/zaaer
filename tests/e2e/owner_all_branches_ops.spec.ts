@@ -48,3 +48,22 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     }
   });
 });
+
+test.describe("owner all branches: product orders and accounts", () => {
+  test("AB-P1 product orders: the owner's all-branches list labels each order with its branch; a new order asks for the branch first", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/orders", { waitUntil: "networkidle" });
+    await expect(picker(page).locator("option").last()).toHaveText("جميع الفروع");
+    await picker(page).selectOption({ label: "جميع الفروع" });
+    await page.getByRole("button", { name: "طلب لنزيل" }).click();
+    await expect(page.getByTestId("po-new-branch")).toBeVisible();
+    expect(await page.getByTestId("po-new-branch").evaluate((e: HTMLSelectElement) => e.value)).toBe("");
+  });
+  test("AB-A1 accounts: the owner can pick «جميع الفروع»; a supervisor-level account has no such option", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/accounts", { waitUntil: "networkidle" });
+    await expect(picker(page).locator("option").last()).toHaveText("جميع الفروع");
+    await picker(page).selectOption({ label: "جميع الفروع" });
+    await expect(page.getByText("الحسابات").first()).toBeVisible();
+  });
+});

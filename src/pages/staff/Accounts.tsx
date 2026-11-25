@@ -22,20 +22,20 @@ const TYPE: Record<string, string> = { asset: "أصول", liability: "التزا
 type View = "trial" | "income" | "balance" | "chart" | "months";
 
 export default function Accounts() {
-  const { branchId } = useBranch();
+  const { branchId, allBranches } = useBranch();
   const { can } = useAuth();
   const [view, setView] = useState<View>("trial");
   const [all, setAll] = useState(false);
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayISO());
-  const scope = all ? null : branchId;
+  const scope = all || allBranches ? null : branchId;   // «جميع الفروع» (owner) or «كل فروعي»: the combined books
   const views: Array<[View, string]> = [...(can("accounts.view") ? [["trial", "ميزان المراجعة"], ["income", "قائمة الدخل"], ["balance", "الميزانية"], ["chart", "دليل الحسابات"]] as Array<[View, string]> : []),
     ...(can("accounts.close_month") ? [["months", "قفل الشهر"] as [View, string]] : [])];
   const current = views.some(([v]) => v === view) ? view : views[0]?.[0] ?? "trial";
 
   return (
     <div>
-      <SectionTitle title="الحسابات" subtitle="القيود تُنشأ تلقائيًا من كل سند وإقفال؛ هنا تقرؤها" action={<BranchPicker />} />
+      <SectionTitle title="الحسابات" subtitle="القيود تُنشأ تلقائيًا من كل سند وإقفال؛ هنا تقرؤها" action={<BranchPicker allowAll />} />
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-ink-50 p-1" role="tablist" aria-label="عرض الحسابات">
         {views.map(([v, label]) => (
           <button key={v} type="button" role="tab" id={`acc-tab-${v}`} aria-controls="acc-panel" aria-selected={current === v} tabIndex={current === v ? 0 : -1} onClick={() => setView(v)}

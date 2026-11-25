@@ -31,7 +31,9 @@ type View = "open" | ProductOrderStatus | "all";
 const VIEWS: Array<[View, string]> = [["open", "المفتوحة"], ["pending_payment", "بانتظار الدفع"], ["paid", "بانتظار التسليم"], ["delivered", "سُلِّمت"], ["cancelled", "ملغاة"], ["all", "الكل"]];
 
 export default function ProductOrders() {
-  const { branchId } = useBranch();
+  const { branchId, branches, allBranches } = useBranch();
+  const [newBranch, setNewBranch] = useState("");
+  const bName = (id: string) => (allBranches ? branches.find((b) => b.id === id)?.name_ar ?? "" : "");
   const { can } = useAuth();
   const [view, setView] = useState<View>("open");
   const [days, setDays] = useState(7);
@@ -47,9 +49,11 @@ export default function ProductOrders() {
   useEffect(() => {
     if (!branchId) return;
     let alive = true; setError(null);
-    productsApi.orders(branchId, null, days).then((r) => { if (alive) setRows(r); }, (e) => { if (alive) setError(toArabicError(e)); });
+    // «جميع الفروع» (owner): every authorised branch's orders together, newest first; each order keeps its own branch
+    const ids = allBranches ? branches.map((b) => b.id) : [branchId];
+    Promise.all(ids.map((b) => productsApi.orders(b, null, days))).then((parts) => { if (alive) setRows(parts.flat().sort((a, b) => b.created_at.localeCompare(a.created_at))); }, (e) => { if (alive) setError(toArabicError(e)); });
     return () => { alive = false; };
-  }, [branchId, days, tick]);
+  }, [branchId, allBranches, branches, days, tick]);
   // a guest's order from WhatsApp arrives while the page is open: it is looked for again every 30 seconds
   useEffect(() => {
     const t = setInterval(() => { if (typeof document === "undefined" || document.visibilityState === "visible") reload(); }, 30_000);
@@ -64,7 +68,7 @@ export default function ProductOrders() {
   return (
     <div>
       <SectionTitle title="طلبات المنتجات" subtitle="ما يطلبه النزيل المقيم من واتساب أو يطلبه له الاستقبال: الدفع لدى الاستقبال، ثم السند ومهمة التسليم معًا" action={
-        <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker />
+        <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker allowAll />
           {can("voucher.receipt") && <button type="button" className="btn-primary text-sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> طلب لنزيل</button>}
         </div>} />
       <Card className="mb-4">
@@ -94,30 +98,33 @@ export default function ProductOrders() {
           description="يطلب النزيل المقيم من واتساب بإرسال «المنتجات»، أو يطلب له الاستقبال بزر «طلب لنزيل». المنتجات وإتاحتها لكل فرع من «المنتجات» في الإدارة." />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2" data-testid="product-orders">
-          {shown.map((o) => <OrderCard key={o.id} o={o} canCancelPaid={can("voucher.cancel")} onPay={() => { setChanged(false); setPaying(o); }} onCancel={() => setCancelling(o)} />)}
+          {shown.map((o) => <OrderCard key={o.id} o={o} branchLabel={bName(o.branch_id)} canCancelPaid={can("voucher.cancel")} onPay={() => { setChanged(false); setPaying(o); }} onCancel={() => setCancelling(o)} />)}
         </div>
       )}
       <Modal open={!!paying} title="تسلّم دفع الطلب" onClose={() => setPaying(null)}>
-        {paying && branchId && <PayForm order={paying} branchId={branchId} onDone={() => { setPaying(null); reload(); }} onChanged={() => { setChanged(true); setPaying(null); reload(); }} onCancel={() => setPaying(null)} />}
+        {paying && <PayForm order={paying} branchId={paying.branch_id} onDone={() => { setPaying(null); reload(); }} onChanged={() => { setChanged(true); setPaying(null); reload(); }} onCancel={() => setPaying(null)} />}
       </Modal>
       <Modal open={!!cancelling} title="إلغاء الطلب" onClose={() => setCancelling(null)}>
         {cancelling && <CancelForm order={cancelling} onDone={() => { setCancelling(null); reload(); }} onCancel={() => setCancelling(null)} />}
       </Modal>
       <Modal open={creating} title="طلب منتجات لنزيل" onClose={() => setCreating(false)} wide>
-        {creating && branchId && <CreateForm branchId={branchId} onDone={() => { setCreating(false); setView("open"); reload(); }} onCancel={() => setCreating(false)} />}
+        {creating && allBranches && (
+          <label className="mb-3 block text-sm">الفرع<select className="input mt-1" required value={newBranch} data-testid="po-new-branch" onChange={(e) => setNewBranch(e.target.value)}><option value="">اختر الفرع</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}</select></label>
+        )}
+        {creating && (allBranches ? newBranch : branchId) && <CreateForm key={allBranches ? newBranch : branchId} branchId={(allBranches ? newBranch : branchId) as string} onDone={() => { setCreating(false); setView("open"); reload(); }} onCancel={() => setCreating(false)} />}
       </Modal>
     </div>
   );
 }
 
-function OrderCard({ o, canCancelPaid, onPay, onCancel }: { o: ProductOrder; canCancelPaid: boolean; onPay: () => void; onCancel: () => void }) {
+function OrderCard({ o, branchLabel, canCancelPaid, onPay, onCancel }: { o: ProductOrder; branchLabel?: string; canCancelPaid: boolean; onPay: () => void; onCancel: () => void }) {
   const [label, tone] = ORDER_STATUS[o.status];
   return (
     <Card className={o.status === "cancelled" ? "opacity-70" : ""} data-testid="product-order">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-ink-800">غرفة {o.room_number ?? "—"}</h3>
+            <h3 className="font-semibold text-ink-800">غرفة {o.room_number ?? "—"}{branchLabel && <Badge className="ms-2" testId="po-branch">{branchLabel}</Badge>}</h3>
             <Badge className={tone} testId="order-status">{label}</Badge>
             <Badge className="bg-ink-100 text-ink-600">{o.source === "whatsapp" ? <><MessageCircle className="ml-1 inline h-3 w-3" />واتساب</> : <><ConciergeBell className="ml-1 inline h-3 w-3" />الاستقبال</>}</Badge>
           </div>
