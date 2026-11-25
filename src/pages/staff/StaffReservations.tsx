@@ -18,7 +18,7 @@ import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
 import { BranchPicker } from "../../components/BranchPicker";
 import { RESERVATION_STATUS_LABELS, RESERVATION_STATUS_COLORS, PAYMENT_STATUS_LABELS, ACCESS_STATUS_LABELS, GUEST_VERIFICATION_LABELS, type ReservationStatus } from "../../lib/types";
-import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
+import { formatCurrency, formatDateTime } from "../../lib/utils";
 import { money, type ExportScope, type ExportStatement } from "../../lib/exports";
 import type { XlsxCell } from "../../lib/xlsx";
 import { supabase } from "../../lib/supabase";
@@ -249,7 +249,7 @@ export default function StaffReservations() {
             {dateRange("الوصول", "check_in_from", "check_in_to")}
             {dateRange("المغادرة", "check_out_from", "check_out_to")}
             {dateRange("تاريخ الإنشاء", "created_from", "created_to")}
-            <label className="flex items-center gap-1.5 text-xs text-ink-600"><span className="w-20">مقيم في يوم</span><input type="date" className="input w-auto py-1 text-xs" dir="ltr" value={String(filters.stay_on ?? "")} onChange={(e) => set("stay_on", e.target.value)} aria-label="مقيم في يوم" /><button type="button" className="text-brand-600 hover:underline" onClick={() => set("stay_on", todayISO())}>اليوم</button></label>
+            <div className="flex items-center gap-1.5 text-xs text-ink-600"><span className="w-20">مقيم في يوم</span><DateRangePicker single clearable className="w-44" label="مقيم في يوم" from={String(filters.stay_on ?? "")} to={String(filters.stay_on ?? "")} onChange={(a) => set("stay_on", a)} /></div>
             {sel("source_id", "المصدر", (options.data?.sources ?? []).map((s) => [s.id, s.name]))}
             {sel("category_id", "نوع الوحدة", (options.data?.categories ?? []).map((c) => [c.id, c.name]))}
             <label className="flex items-center gap-1.5 text-xs text-ink-600">رقم الوحدة <input className="input w-24 py-1 text-xs" value={String(filters.room_number ?? "")} onChange={(e) => set("room_number", e.target.value)} aria-label="رقم الوحدة" /></label>

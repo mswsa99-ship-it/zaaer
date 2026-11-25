@@ -108,3 +108,16 @@ test("ALLDASH owner operations centre offers «جميع الفروع» (390px) a
   expect(all).toBeGreaterThanOrEqual(one);
   await page.screenshot({ path: process.env.ALLDASH_SHOT ?? "test-results/all-branches-dashboard-390.png" });
 });
+
+test("STAYON the reservations «مقيم في يوم» filter uses the day picker (one day + OK), not a raw date box", async ({ page, loginAs, go }) => {
+  await loginAs("owner");
+  await go("/staff/reservations");
+  await page.getByTestId("toggle-advanced").click();
+  await expect(page.locator('input[type="date"]')).toHaveCount(0);
+  const picker = page.getByRole("button", { name: "مقيم في يوم" });
+  await picker.click();
+  const today = new Date().toISOString().slice(0, 10);
+  await page.locator(`button[data-day="${today}"]`).click();
+  await page.getByRole("button", { name: "موافق" }).click();
+  await expect(page.getByText(/مقيم في يوم/).first()).toBeVisible();
+});
