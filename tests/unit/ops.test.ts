@@ -65,6 +65,22 @@ describe("finance read tools (read-only, under the signed-in person's own sessio
     expect(calls[0][1].p_branch).toBe("b1");
     expect((calls[1][1].p as { branch_id: string }).branch_id).toBe("b1");
   });
+  it("DENIAL: when the signed-in role or branch is refused by the RPC, the tool returns no data (the refusal is thrown, nothing is substituted)", async () => {
+    for (const msg of ["FORBIDDEN: money", "FORBIDDEN: reports.finance (limited)", "FORBIDDEN: branch"]) {
+      const db = { rpc: async () => ({ data: { leaked: 1 }, error: { message: msg } }) };
+      const c = { db, branchId: "other-branch", conversationId: "c", today: "2026-11-25" };
+      await expect(executeOpsTool("get_finance_report", { from: "2026-11-01", to: "2026-11-25" }, c)).rejects.toThrow(/FORBIDDEN/);
+      await expect(executeOpsTool("list_vouchers", { from: "2026-11-01", to: "2026-11-25" }, c)).rejects.toThrow(/FORBIDDEN/);
+    }
+  });
+  it("DENIAL: a model-supplied branch is never used (the branch is the conversation's)", async () => {
+    const seen: unknown[] = [];
+    const db = { rpc: async (_f: string, a: Record<string, unknown>) => { seen.push(a); return { data: {}, error: null }; } };
+    const c = { db, branchId: "mine", conversationId: "c", today: "2026-11-25" };
+    await executeOpsTool("get_finance_report", { from: "2026-11-01", to: "2026-11-25", branch_id: "theirs", p_branch: "theirs" } as never, c);
+    await executeOpsTool("list_vouchers", { from: "2026-11-01", to: "2026-11-25", branch_id: "theirs" } as never, c);
+    expect(JSON.stringify(seen)).not.toContain("theirs");
+  });
 });
 
 describe("ops output gate", () => {
