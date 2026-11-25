@@ -18,21 +18,29 @@ export function notifyKeyboxChanged() {
 
 export function useKeyboxAlerts(): KeyboxAlerts | null {
   const { profile, can } = useAuth();
-  const { branchId } = useBranch();
+  const { branchId, branches, allBranches } = useBranch();
+  const scopeKey = allBranches ? "all:" + branches.map((b) => b.id).join(",") : branchId;
   const allowed = !!profile && can("keybox.code");
   const [alerts, setAlerts] = useState<KeyboxAlerts | null>(null);
 
   useEffect(() => {
     setAlerts(null);   // nothing of the previous branch stays on screen after a switch (G24)
-    if (!allowed || !branchId) return;
+    if (!allowed || !scopeKey) return;
     let alive = true;
     let seq = 0;       // an older refresh that answers after a newer one is dropped
-    const load = () => { const n = ++seq; codesApi.alerts(branchId).then((a) => { if (alive && n === seq) setAlerts(a); }).catch(() => { /* the next refresh tries again */ }); };
+    // «جميع الفروع» (owner): the alert covers every branch, each room named with its branch; otherwise the active branch only
+    const fetchAlerts = (): Promise<KeyboxAlerts> => !allBranches ? codesApi.alerts(branchId as string)
+      : Promise.all(branches.map((b) => codesApi.alerts(b.id).then((a) => ({ a, name: b.name_ar })))).then((parts) => ({
+        count: parts.reduce((n, x) => n + x.a.count, 0),
+        oldest_since: parts.map((x) => x.a.oldest_since).filter((v): v is string => !!v).sort()[0] ?? null,
+        rooms: parts.flatMap((x) => x.a.rooms.map((r) => `${r} (${x.name})`)),
+      }));
+    const load = () => { const n = ++seq; fetchAlerts().then((a) => { if (alive && n === seq) setAlerts(a); }).catch(() => { /* the next refresh tries again */ }); };
     load();
     const timer = window.setInterval(load, 30_000);
     window.addEventListener("focus", load);
     window.addEventListener(CHANGED, load);
-    const ch = supabase.channel(`keybox-alerts-${branchId}`).on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => load()).subscribe();
+    const ch = supabase.channel(`keybox-alerts-${scopeKey}`).on("postgres_changes", { event: "*", schema: "public", table: "rooms" }, () => load()).subscribe();
     return () => {
       alive = false;
       window.clearInterval(timer);
@@ -40,7 +48,7 @@ export function useKeyboxAlerts(): KeyboxAlerts | null {
       window.removeEventListener(CHANGED, load);
       supabase.removeChannel(ch);
     };
-  }, [allowed, branchId]);
+  }, [allowed, scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return alerts;
 }

@@ -169,7 +169,7 @@ function UnitCard({ u, branchLabel, shownCode, editing, busy, onReveal, onHide, 
           <div className="flex min-w-0 items-start gap-3">
             <span className="mt-1.5"><CodeLight tone={TONE[u.state]} size="h-3.5 w-3.5" /></span>
             <div className="min-w-0">
-              <p className="text-base font-semibold text-ink-800">وحدة {u.room_number}</p>
+              <p className="text-base font-semibold text-ink-800">وحدة <bdi dir="ltr">{u.room_number}</bdi></p>
               {branchLabel && <Badge className="mt-1" testId="code-branch">{branchLabel}</Badge>}
               {(u.block || u.floor) && <p className="text-xs text-ink-400">{[u.block, u.floor].filter(Boolean).join(" · ")}</p>}
               <p className={cn("mt-1 text-sm font-medium", LINE_COLOR[u.state])}>

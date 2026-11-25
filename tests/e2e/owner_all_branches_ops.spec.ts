@@ -30,8 +30,10 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     const first = await roomSel.locator("option").allTextContents();
     await br.selectOption({ index: 2 });
     const second = await roomSel.locator("option").allTextContents();
-    expect(first.length).toBeGreaterThan(0);
-    expect(second.length).toBeGreaterThan(0);
+    expect(first.length).toBeGreaterThan(1);
+    expect(second.length).toBeGreaterThan(1);
+    expect(first[0]).toBe("اختر الوحدة");                       // no unit is chosen for the owner: the choice is deliberate
+    expect(await roomSel.evaluate((e: HTMLSelectElement) => e.value)).toBe("");
   });
   test("AB-I1 inbox: the owner gets the all-branches choice and the page loads", async ({ page, loginAs }) => {
     await loginAs("owner");
@@ -66,4 +68,15 @@ test.describe("owner all branches: product orders and accounts", () => {
     await picker(page).selectOption({ label: "جميع الفروع" });
     await expect(page.getByText("الحسابات").first()).toBeVisible();
   });
+});
+
+test("AB-K1 all-branches keybox alert covers every branch and names each room's branch; a branch view names only its own", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/housekeeping", { waitUntil: "networkidle" });
+  const banner = page.getByTestId("keybox-alert");
+  await expect(banner).toBeVisible();
+  const single = (await banner.innerText()).replace(/\s+/g, " ");
+  expect(single).not.toMatch(/\(فرع/);
+  await picker(page).selectOption({ label: "جميع الفروع" });
+  await expect.poll(async () => (await banner.innerText()).replace(/\s+/g, " "), { timeout: 8000 }).toMatch(/\(فرع/);
 });
