@@ -135,6 +135,7 @@ body, #root {background:var(--paper);color:var(--ink);}
 :root .btn-outline:hover:not(:disabled), :root .btn-ghost:hover:not(:disabled) {background:var(--surface-sunken);}
 :root .btn-danger {background:var(--danger-tint);color:var(--danger);}
 :root button:disabled, :root input:disabled, :root select:disabled, :root textarea:disabled {opacity:1;cursor:not-allowed;box-shadow:inset 0 0 0 1px var(--line-strong);border-style:dashed;}
+:root button[data-day]:disabled {box-shadow:none;border-style:none;background:transparent;opacity:.45;}
 :root :is(button,a,input,select,textarea):focus-visible {outline:2px solid var(--focus);outline-offset:2px;--tw-ring-color:var(--focus);}
 [data-theme="dark"] :is(.input,.rai-input,.rfo-in,select,textarea) {border-color:transparent;}
 :root [data-testid="keybox-alert"], :root [data-testid="keybox-alert"]:hover {background:var(--alert-background);color:var(--alert-ink);}
