@@ -72,6 +72,9 @@ jobs:
           VITE_DEFAULT_BRANCH_ID: ${{ vars.VITE_DEFAULT_BRANCH_ID }}
         run: npm run build
 
+      - name: Stamp the build with the published commit (7.8)
+        run: node scripts/build-version.mjs write dist
+
       - name: Web — deploy to Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -85,3 +88,8 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_DEFAULT_BRANCH_ID: ${{ vars.VITE_DEFAULT_BRANCH_ID }}
         run: bash scripts/smoke-deployed.sh
+
+      - name: The served version is the published commit (7.8)
+        env:
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: node scripts/build-version.mjs verify "$APP_BASE_URL" "$GITHUB_SHA"

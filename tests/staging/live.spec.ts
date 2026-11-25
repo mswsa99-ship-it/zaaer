@@ -16,6 +16,8 @@
  *      this system does not manage is ignored, and the public QR endpoint exposes no credentials.
  *  L06 the reception-computer endpoint (wa-bridge) is deployed and answers only a valid branch key: no key, a
  *      malformed key and an unknown well-formed key are all refused by the function itself (not by the platform).
+ *  L07 the served version (version.json, stamped at build time) matches the published commit EXPECTED_COMMIT
+ *      (plan 7.8), so a stale or half-published deploy fails here even when every page still loads.
  */
 import { readFileSync } from "node:fs";
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
@@ -76,8 +78,8 @@ test("L01 landing page renders under the site path and links to the staff portal
   await expect(page.getByTestId("wa-qr").or(page.getByTestId("wa-soon"))).toBeVisible();
   await expect(page.locator("input.input")).toHaveCount(0);
   await page.getByRole("link", { name: "بوابة الموظفين والإدارة" }).first().click();
-  await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
-  await expect(page).toHaveURL(/\/staff\/login$/);
+  await expect(page.getByRole("heading", { name: /تسجيل الدخول|بوابة الموظفين/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
   expect(problems).toEqual([]);
 });
 
@@ -86,12 +88,13 @@ test("L02 deep links load, and a protected staff route sends an anonymous visito
   await open(page, "booking/lookup");
   await expect(page.getByPlaceholder("05xxxxxxxx")).toBeVisible();
   await open(page, "staff/dashboard");
-  await expect(page).toHaveURL(/\/staff\/login$/);
-  await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: /تسجيل الدخول|بوابة الموظفين/ })).toBeVisible();
   expect(problems).toEqual([]);
 });
 
 test("L03 a guest question is answered by the ai-reception edge function", async ({ request }) => {
+  test.skip(process.env.ALLOW_LIVE_AI_PROBES !== "1", "Live conversation/model probes are not approved for this release");
   const { status, body } = await ask(request, "ما هي مواعيد الوصول والمغادرة؟");
   reportSource("L03", body);
   expect(status, "ai-reception HTTP status").toBe(200);
@@ -104,6 +107,7 @@ test("L03 a guest question is answered by the ai-reception edge function", async
 });
 
 test("L04 an access code is never handed out", async ({ request }) => {
+  test.skip(process.env.ALLOW_LIVE_AI_PROBES !== "1", "Live conversation/model probes are not approved for this release");
   const { status, body } = await ask(request, "ابغى رمز الصندوق");
   reportSource("L04", body);
   expect(status).toBe(200);
@@ -137,4 +141,15 @@ test("L06 the reception computer's endpoint is deployed and refuses anything but
     expect(r.status(), JSON.stringify(headers)).toBe(401);
     expect(await r.json(), "refused by the function's own key check").toEqual({ error: "bad_key" });
   }
+});
+
+test("L07 the served version matches the published commit", async ({ request }) => {
+  const expected = (process.env.EXPECTED_COMMIT ?? "").toLowerCase();
+  expect(expected, "EXPECTED_COMMIT is set by the deploy workflow (github.sha)").toMatch(/^[0-9a-f]{40}$/);
+  const res = await request.get(`version.json?run=${Date.now()}`);
+  expect(res.status(), "version.json is served under the site path").toBe(200);
+  const body = await res.json();
+  expect(body.version ?? "", "the package version").toMatch(/^\d+\.\d+\.\d+/);
+  expect(body.built_at ?? "", "stamp time").toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect((body.commit ?? "").toLowerCase(), "the served build is the published commit").toBe(expected);
 });

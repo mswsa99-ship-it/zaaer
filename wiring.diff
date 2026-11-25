@@ -1,0 +1,13 @@
+--- a/tests/sql/run.sh
++++ b/tests/sql/run.sh
+@@ -51,6 +51,10 @@
+ echo "== running rates tests (0030: price calendar, weekly/monthly, nights, discount limits)"
+ run_tests tests/sql/rates_tests.sql
+ run_tests tests/sql/phase4_money_controls_tests.sql
++echo "== running release-proof 4.6 six-rule anomaly tests (one red row expected until the imported-negative-cash gap is fixed)"
++run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
++echo "== running release-proof 4.13 finance role scenarios"
++run_tests tests/release-proof/finance_role_scenarios_tests.sql
+ echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
+ run_tests tests/sql/stay_cycle_tests.sql
+ echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"

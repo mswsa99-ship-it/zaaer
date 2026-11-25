@@ -5,19 +5,20 @@
 import { useAuth } from "./auth";
 import { useBranchQuery } from "./useBranchQuery";
 import { opsApi } from "./api";
-import { readsUnitLicense } from "./unitLicenseRoles";
+import { readsUnitLicenseFor, setsUnitLicenseOnCreate } from "./unitLicenseRoles";
 
-export { UNIT_LICENSE_READERS, readsUnitLicense } from "./unitLicenseRoles";
+export { UNIT_LICENSE_READERS, readsUnitLicense, readsUnitLicenseFor, setsUnitLicenseOnCreate } from "./unitLicenseRoles";
 
 const NONE: ReadonlyMap<string, string> = new Map();
 
 /** room id → licence number for the active branch; an empty map for a role that does not read it (no request sent). */
 export function useUnitLicenses() {
-  const role = useAuth().profile?.role;
-  const reads = readsUnitLicense(role);
+  const { profile, permissions } = useAuth();
+  const reads = readsUnitLicenseFor(profile?.role, permissions.pageAccess);
+  const onCreate = setsUnitLicenseOnCreate(profile?.role, permissions.pageAccess);
   const q = useBranchQuery<ReadonlyMap<string, string>>(async (b) => {
     if (!reads) return NONE;
     return new Map((await opsApi.roomLicenses(b)).map((l) => [l.room_id, l.license_number]));
   }, [reads], NONE);
-  return { reads, licenses: q.data, reload: q.reload, error: q.error };
+  return { reads, onCreate, licenses: q.data, reload: q.reload, error: q.error };
 }

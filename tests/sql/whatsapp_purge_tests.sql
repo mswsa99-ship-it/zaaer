@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- WhatsApp per branch (WA01–WA08, migration 0021) and data purge (DP01–DP12, migration 0022).
 -- Runs LAST on the shared suite DB: the purge deletes data the other files rely on.
@@ -53,7 +54,7 @@ select t_record('WA05 secrets are stored encrypted and the audit holds no secret
   -- (a byte search: the ciphertext is random bytes, and a text conversion fails whenever it holds a zero byte)
   (select access_token_encrypted is not null and position(convert_to('EAAGtesttoken', 'UTF8') in access_token_encrypted) = 0
      and position(convert_to('abcdef0123', 'UTF8') in app_secret_encrypted) = 0 from branch_whatsapp_channels where branch_id = t_branch())
-  and not exists (select 1 from audit_events where action = 'whatsapp_channel_updated' and (details::text like '%EAAG%' or details::text like '%abcdef0123%' or details::text like '%' || (select v from kv where k = 'verify') || '%')));
+  and not exists (select 1 from t_audit_all() where action = 'whatsapp_channel_updated' and (details::text like '%EAAG%' or details::text like '%abcdef0123%' or details::text like '%' || (select v from kv where k = 'verify') || '%')));
 
 set role service_role;
 do $$ declare ch jsonb; begin
@@ -84,12 +85,12 @@ reset role;
 -- the WhatsApp sender is the proof: a session for the sender lists that number's bookings and opens one
 set role service_role;
 do $$ declare t text; l jsonb; o jsonb; begin
-  t := fn_whatsapp_phone_session('+966500000111');
+  t := fn_whatsapp_phone_session('+966500000111','00000000-0000-0000-0000-000000000010');
   l := fn_guest_phone_reservations(t);
   o := fn_guest_phone_open(t, l->'reservations'->0->>'internal_ref');
   perform t_record('WA10 a WhatsApp sender session lists the sender''s bookings and opens one (audited as whatsapp)',
     jsonb_array_length(l->'reservations') >= 1 and o->>'status' = 'ok'
-    and exists (select 1 from audit_events where action = 'guest_verified_lookup' and details->>'channel' = 'whatsapp'), l::text);
+    and exists (select 1 from t_audit_all() where action = 'guest_verified_lookup' and details->>'channel' = 'whatsapp'), l::text);
 end $$;
 reset role;
 
@@ -162,7 +163,7 @@ select t_record('DP09 in-house stays, money and the other organization are untou
   'deleted=' || (select v from kv where k = 'res1') || ' skipped=' || (select v from kv where k = 'skipped1'));
 
 select t_record('DP10 the purge is audited with its period, kinds and counts',
-  exists (select 1 from audit_events where action = 'data_purge_executed' and details->'categories' = '["conversations","reservations"]'::jsonb and details ? 'counts'));
+  exists (select 1 from t_audit_all() where action = 'data_purge_executed' and details->'categories' = '["conversations","reservations"]'::jsonb and details ? 'counts'));
 
 -- purging the audit log of the period keeps the record of that very purge (written after the deletion)
 select t_wlogin('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
@@ -171,8 +172,8 @@ do $$ declare p jsonb; r jsonb; begin
   p := fn_admin_purge_preview(null, current_date - 3650, current_date, array['audit', 'reservations', 'finance', 'guests', 'operations', 'logs']);
   r := fn_admin_purge_execute(p->>'token', 'احذف نهائيا');
   perform t_record('DP11 an audit purge leaves exactly its own record behind; finance with stays removes the skipped ones too',
-    t_q('select count(*) from audit_events where organization_id = ''00000000-0000-0000-0000-000000000001''') = 1
-    and exists (select 1 from audit_events where action = 'data_purge_executed' and details->'counts' ? 'audit_events')
+    t_q('select count(*) from t_audit_all() where organization_id = ''00000000-0000-0000-0000-000000000001''') = 1
+    and exists (select 1 from t_audit_all() where action = 'data_purge_executed' and details->'counts' ? 'audit_events')
     and t_q('select count(*) from reservations where status = ''checked_in''')::text = (select v from kv where k = 'checked_in'), r::text);
   perform t_record('DP12 the history lists both purges', jsonb_array_length(fn_admin_purge_history()) = 2, fn_admin_purge_history()::text);
 end $$;

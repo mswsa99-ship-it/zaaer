@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { branchMediaApi, branchGuideApi, toArabicError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, Spinner, ErrorBanner } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, Spinner, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { Link2, Percent, Plus, Pencil } from "lucide-react";
 import { bpToPercent, percentToBp } from "../../lib/money";
@@ -31,7 +31,8 @@ export default function AdminBookingSources() {
 
   const load = useCallback(async () => {
     const { data, error: e } = await supabase.from("booking_sources").select("id, name, code, kind, external_reference_required, is_active, commission_bp").order("kind").order("name");
-    if (e) setError(toArabicError(e));
+    if (e) { setError(toArabicError(e)); setSources([]); setLoading(false); return; }
+    setError(null);
     setSources((data as SourceRow[]) ?? []);
     setLoading(false);
   }, []);
@@ -49,8 +50,8 @@ export default function AdminBookingSources() {
     <div>
       <SectionTitle title="مصادر الحجز" subtitle={`مصادر الحجز: ${sources.length} — الإضافة والتعديل والتفعيل والإيقاف ونسبة العمولة`}
         action={canToggle ? <button className="btn-primary text-sm" data-testid="new-source" onClick={() => setDraft({ name: "", kind: "external", ref: true, pct: "0" })}><Plus className="h-4 w-4" /> مصدر جديد</button> : undefined} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      {sources.length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا توجد مصادر" /> : (
+      {error && sources.length > 0 && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {error && sources.length === 0 ? <LoadErrorCard message={error} onRetry={() => { setLoading(true); load(); }} /> : sources.length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا توجد مصادر" /> : (
         <div className="grid gap-3 md:grid-cols-2">
           {sources.map((s) => (
             <Card key={s.id} className="flex flex-wrap items-center justify-between gap-3" data-testid={`source-${s.code}`}>

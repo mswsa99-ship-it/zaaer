@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Post-deploy smoke for a hosted environment (staging / production). Read-only: it creates at most one
-# guest conversation ("مرحبا") and never touches reservations, money or staff data.
+# Post-deploy smoke defaults to read-only. Live conversation/model calls require ALLOW_LIVE_AI_PROBES=1.
 # Needs: APP_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 # STATIC_HOST=github-pages: the host has no rewrites and no custom headers (the staging site). Deep links are then
 # answered by 404.html — which is the app itself — so status 404 with the app shell counts as served, and the
@@ -47,11 +46,17 @@ if [[ -n "$branch" ]]; then
   [[ "$code" == "401" || "$code" == "403" ]] && ok "fn_public_knowledge closed to visitors → $code" || bad "fn_public_knowledge open to visitors → $code"
 fi
 
+# 5. Live writes and model requests require a separate explicit opt-in.
+if [[ "${ALLOW_LIVE_AI_PROBES:-0}" == "1" ]]; then
 # 5. the AI reception edge function answers (deterministic path works without any model key)
 payload='{"message":"مرحبا","channel":"screen"}'
 [[ -n "$branch" ]] && payload="{\"message\":\"مرحبا\",\"channel\":\"screen\",\"branch_id\":\"$branch\"}"
 code=$(curl -s -o /tmp/rec.json -w "%{http_code}" "$api/functions/v1/ai-reception" -X POST -H "apikey: $key" -H "Authorization: Bearer $key" -H "Content-Type: application/json" -d "$payload")
 if [[ "$code" == "200" ]] && grep -q '"reply"' /tmp/rec.json; then ok "ai-reception → 200 with a reply"; else bad "ai-reception → $code $(head -c 200 /tmp/rec.json)"; fi
+
+else
+  echo "SKIP ai-reception conversation probe: no live AI/message authority"
+fi
 
 [[ $fail -eq 0 ]] && echo "SMOKE: PASS" || echo "SMOKE: FAIL"
 exit $fail

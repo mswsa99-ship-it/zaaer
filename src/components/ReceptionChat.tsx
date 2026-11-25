@@ -22,8 +22,8 @@ const WELCOME = (name: string): Message => ({
   content: `أهلًا وسهلًا في ${name}. كيف أخدمك؟`,
   actions: [{ label: "احجز الآن", value: "أرغب بحجز جديد" }, { label: "حجوزاتي", route: "/booking/lookup" }, { label: "مواعيد الوصول والمغادرة", value: "ما هي مواعيد الوصول والمغادرة؟" }],
 });
-const CONV_KEY = "reception_conversation_id";
-const CONV_AT_KEY = "reception_conversation_at";
+const CONV_KEY_PREFIX = "reception_conversation_id";
+const CONV_AT_KEY_PREFIX = "reception_conversation_at";
 const CONV_MAX_AGE_MS = 6 * 60 * 60 * 1000;   // a conversation older than 6h starts fresh: the guest's situation has usually changed
 // four shortcuts only — everything else is one question away in the chat
 const QUICK = [
@@ -38,6 +38,8 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   const [params] = useSearchParams();
   const { branchId, branch } = useBranch();
   const propertyName = useOrganizationName();
+  const CONV_KEY = `${CONV_KEY_PREFIX}:${branchId ?? "none"}`;
+  const CONV_AT_KEY = `${CONV_AT_KEY_PREFIX}:${branchId ?? "none"}`;
   const [messages, setMessages] = useState<Message[]>([WELCOME(propertyName)]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -56,6 +58,9 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
   const kiosk = params.get("kiosk") === "1";
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages, thinking]);
+
+  const previousBranch = useRef(branchId);
+  useEffect(() => { if (previousBranch.current !== branchId) { previousBranch.current = branchId; resetConversation(); } }, [branchId]);
 
   // Supervisor replies after a hand-off arrive live
   useEffect(() => {
@@ -121,7 +126,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
           {!kiosk && !embedded && <button onClick={() => navigate("/")} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100" aria-label="رجوع"><ArrowLeft className="h-5 w-5" /></button>}
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-600 text-white lg:hidden"><Hotel className="h-5 w-5" /></div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-ink-800">مساعد الاستقبال الذكي</p>
+            <p className="text-sm font-semibold text-ink-800">مساعد RoomAI</p>
             <p className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
               {status.handedOff ? <span className="inline-flex items-center gap-1 text-warning-700"><UserRound className="h-3 w-3" /> تم التحويل إلى موظف الاستقبال — سيرد هنا</span>
                 : status.mode === "ai" ? <span className="inline-flex items-center gap-1 text-accent-700"><Bot className="h-3 w-3" /> مساعد رقمي</span>
@@ -138,7 +143,7 @@ export default function ReceptionChat({ embedded = false }: { embedded?: boolean
             <button onClick={resetConversation} className="font-medium underline-offset-2 hover:underline">بدء محادثة جديدة</button>
           </div>
         )}
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-ink-100 bg-white p-4 scrollbar-thin" aria-live="polite">
+        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-2xl bg-white p-4 scrollbar-thin" aria-live="polite">
           {messages.map((m) => (
             <div key={m.id} className={cn("flex flex-col gap-2", m.sender === "guest" ? "items-start" : "items-end")}>
               <div className={cn("max-w-[88%] whitespace-pre-line rounded-2xl px-4 py-2.5 leading-relaxed", kiosk ? "text-base" : "text-sm", m.sender === "guest" ? "bg-brand-600 text-white" : "bg-ink-50 text-ink-800")}>{m.content}</div>

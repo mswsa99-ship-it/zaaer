@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Guests, platforms and the website (Phase 5, migrations 0038–0039): decisions 2, 4, 19, 21, 22, 23, 31, 69.
 -- GD01–GD10 guest data on two paths, corrections with masked values, profiles and the owner's identity report.
@@ -113,7 +114,7 @@ do $$ declare res uuid; r jsonb; g reservation_guests%rowtype; a jsonb; begin
        'identity_type', 'national_id', 'identity_number', '1023456781', 'nationality', 'سعودي', 'birth_date', '1990-01-01')), '%document_matched%') = 'ok');
   r := t_doc(res, t_primary(res), 'محمد عبدالله الحربي', '1023456781');
   g := t_guest(t_primary(res));
-  select details into a from audit_events where entity_id = res and action = 'guest.entered_from_document' order by created_at desc limit 1;
+  select details into a from t_audit_all() where entity_id = res and action = 'guest.entered_from_document' order by created_at desc limit 1;
   perform t_record('GD01 the supervisor enters the main guest from the document: verified at once, office path, who and when kept, profile linked, audit masked',
     g.verification_status = 'verified' and g.entry_path = 'office' and g.entered_by is not null and g.verified_by = g.entered_by and g.identity_fingerprint is not null
     and g.identity_number_last4 = '6781' and g.guest_profile_id is not null and (t_profile(g.guest_profile_id)).identity_fingerprint = g.identity_fingerprint
@@ -138,7 +139,7 @@ do $$ declare res uuid := t_id('resGD'); r jsonb; g0 reservation_guests%rowtype;
   n := t_count('select count(*) from review_items where kind = ''guest_corrected''');
   r := t_doc(res, t_primary(res), 'محمد عبدالله الحربي', '', jsonb_build_object('birth_date', '1991-02-02', 'reason', 'تاريخ الميلاد خطأ في الإدخال'));
   g := t_guest(t_primary(res));
-  select details into a from audit_events where entity_id = res and action = 'guest.corrected' order by created_at desc limit 1;
+  select details into a from t_audit_all() where entity_id = res and action = 'guest.corrected' order by created_at desc limit 1;
   perform t_record('GD03 a correction with a reason: masked before and after (birth year, last four), into the owner''s review list',
     a->'before'->>'birth_year' = '1990' and a->'after'->>'birth_year' = '1991' and a->>'reason' = 'تاريخ الميلاد خطأ في الإدخال' and a::text not like '%1023456781%'
     and a::text not like '%1991-02-02%' and t_count('select count(*) from review_items where kind = ''guest_corrected''') = n + 1, a::text);
@@ -312,7 +313,7 @@ do $$ declare res uuid := t_id('resDup1'); r jsonb; lift text; begin
   perform t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
   r := fn_staff_set_hold(jsonb_build_object('reservation_id', res, 'hold', false, 'reason', 'تواصلنا مع الضيف'));
   perform t_record('BN07b a manager lifts the hold with a reason (kept in the trail)',
-    not (t_res(res)).security_hold and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''reservation.hold_lifted''', res)) = 1, r::text);
+    not (t_res(res)).security_hold and t_count(format('select count(*) from t_audit_all() where entity_id = %L and action = ''reservation.hold_lifted''', res)) = 1, r::text);
 end $$;
 
 -- =====================================================================
@@ -349,7 +350,7 @@ do $$ declare res uuid := t_id('resPF1'); r1 jsonb; r2 jsonb; n text; lst jsonb;
     n = 'ok' and (r1->>'cancelled')::int = 1 and (r2->>'duplicate')::boolean and (t_res(res)).status = 'cancelled' and (t_res(res)).cancel_reference = 'CXL-PF-1'
     and (t_res(res)).cancel_source = 'platform' and (r1->>'platform_collected')::boolean
     and t_count(format('select count(*) from financial_vouchers where reservation_id = %L and kind = ''refund''', res)) = 0
-    and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''reservation.cancelled''', res)) = 1
+    and t_count(format('select count(*) from t_audit_all() where entity_id = %L and action = ''reservation.cancelled''', res)) = 1
     and (lst->>'total')::int = 1, r1::text || r2::text);
 end $$;
 
@@ -473,7 +474,7 @@ end $$;
 set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare res uuid := t_id('resDup2'); begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'ss03-pay'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'cash', 'idempotency_key', 'ss03-pay'));
 end $$;
 set role anon;
 do $$ declare tok text := current_setting('test.tok'); s jsonb := fn_guest_stay_summary(tok); begin
@@ -511,7 +512,7 @@ do $$ declare png text := encode('\x89504e470d0a1a0a0000000d49484452'::bytea, 'b
   s3 := (fn_admin_set_branch_media(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'kind', 'logo', 'data_base64', jpg))->'media'->>'mime')
      || ',' || (fn_admin_set_branch_media(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'kind', 'logo', 'data_base64', webp))->'media'->>'mime');
   r := fn_admin_set_branch_media(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'kind', 'logo', 'data_base64', 'data:image/png;base64,' || png));
-  select details into a from audit_events where entity_id = '00000000-0000-0000-0000-000000000010' and action = 'branch.logo_changed' order by created_at desc limit 1;
+  select details into a from t_audit_all() where entity_id = '00000000-0000-0000-0000-000000000010' and action = 'branch.logo_changed' order by created_at desc limit 1;
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
   sup := t_fails(format('select fn_admin_set_branch_media(%L::jsonb)', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'kind', 'logo', 'data_base64', png)), 'FORBIDDEN%');
   perform t_record('BR04 the logo: PNG, JPG or WebP read from the file itself, an SVG refused, over 200 KB refused (the image takes up to 1 MB); the trail keeps its fingerprint, not the file; a supervisor cannot set it',
@@ -547,7 +548,7 @@ do $$ declare r jsonb; res uuid; dup text; u jsonb; begin
   u := fn_staff_update_platform(res, jsonb_build_object('external_ref', 'PF-FIX-2', 'platform_booked_on', t_today() - 3), 'خطأ في رقم المنصة', (t_res(res)).version);
   perform t_record('PF09 the supervisor corrects the platform''s number and booking day before arrival, with a reason; a number of another booking is refused',
     dup = 'ok' and (u->>'units')::int = 1 and (t_res(res)).external_ref = 'PF-FIX-2' and (t_res(res)).platform_booked_on = t_today() - 3
-    and t_count(format('select count(*) from audit_events where entity_id = %L and action = ''reservation.platform_updated''', res)) = 1, dup || ' / ' || u::text);
+    and t_count(format('select count(*) from t_audit_all() where entity_id = %L and action = ''reservation.platform_updated''', res)) = 1, dup || ' / ' || u::text);
 exception when others then perform t_record('PF09 the supervisor corrects the platform''s number and booking day before arrival, with a reason; a number of another booking is refused', false, sqlerrm); end $$;
 
 do $$ declare res uuid := t_id('resFix'); u jsonb; f jsonb; u2 jsonb; f2 jsonb; begin

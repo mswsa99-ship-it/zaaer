@@ -1,0 +1,25 @@
+{
+  "rule": "Plan item 2.4 (owner's decisions of 23 Nov 2026: many hotels, many branches in each, isolation by hotel then by branch). Every SECURITY DEFINER function in public that a visitor or a signed-in user may call (anon or authenticated holds EXECUTE), other than a trigger function, keeps to the hotel and the branch: it calls fn_user_org_id, fn_user_branch_ids, fn_require_branch or fn_staff_id (the caller's own hotel, branches or profile), or fn_token_reservation (a guest's link), or a check that returns nothing and calls one of them (fn_accounts_check), or reads auth.uid() (the caller's own account); or it touches no table, directly or through the functions it calls. «helpers» touch a table but answer nothing of a hotel's own data, so calling them does not count as touching data. A function that does none of this is in «exceptions» with its reason, or tests/sql/function_scope_tests.sql FS01 fails; an entry no longer needed fails FS02. The same file probes every such function as another hotel's owner and as another branch's supervisor, with this hotel's and this branch's ids, and fails on any answer or change of theirs (FS10–FS13). Since 0078 a row cannot point to a row of another hotel (fn_hotel_pointers, FS03–FS04).",
+  "helpers": {
+    "fn_branch_today": "The date today in a branch's time zone: a calendar date, nothing of the branch's data; the functions that call it check the branch themselves.",
+    "fn_permission_catalog": "The list of capabilities as the code defines it (a fixed list of values), the same for every hotel; each hotel's choices live in role_permissions, which fn_can reads by fn_user_org_id."
+  },
+  "exceptions": {
+    "fn_guest_lookup(p_external_ref text, p_phone_last4 text, p_source_id uuid, p_fingerprint text)": "Guest side: finds a booking by its platform number and the last four digits of the guest's phone, five tries in 15 minutes per number, and opens only that booking's link. Which hotel's bookings it searches comes from the site's address in item 2.6.",
+    "fn_guest_phone_open(p_token text, p_internal_ref text)": "Guest side: opens one booking from the phone session of a guest who proved the phone by a WhatsApp code; only bookings of that phone. Bound to the hotel of the site's address in item 2.6.",
+    "fn_guest_phone_reservations(p_token text)": "Guest side: the bookings of the phone a guest proved by a WhatsApp code (its session token), and nothing else. Bound to the hotel of the site's address in item 2.6.",
+    "fn_guest_phone_verify(p_phone text, p_code text, p_fingerprint text)": "Guest side: checks the WhatsApp code sent to a phone (five tries) and opens a phone session; it answers only the session token. Bound to the hotel of the site's address in item 2.6.",
+    "fn_guest_phone_verify_ref(p_phone text, p_ref text, p_fingerprint text)": "Guest side: a phone and one of its bookings' numbers open a phone session (tries limited per number); it answers only the session token. Bound to the hotel of the site's address in item 2.6.",
+    "fn_public_review(p_token text)": "Guest side: the review page of one stay, reached by the review link's token (stored hashed, 14 days); it answers the branch's name, the stay's dates and whether it was sent.",
+    "fn_public_submit_review(p_token text, p jsonb)": "Guest side: sends the review of the one stay its link's token names (stored hashed, 14 days, once).",
+    "fn_guest_org_id()": "Public site selector from the explicit hotel slug, a valid guest link, or the only active hotel. Returns only its public identifier, never private data or a permission grant.",
+    "fn_guest_site(p_slug text)": "Public hotel address resolver. Exact slug lookup returns public hotel identity only. No hotel directory and no private data.",
+    "fn_guest_branches()": "Returns only active public branch fields of the explicit hotel address. No private data or cross-hotel fallback.",
+    "fn_platform_hotels()": "Plan2.8 operator-only metadata registry: hotel identity, lifecycle, branch count and invitation state only. No guest, financial or secret fields.",
+    "fn_platform_set_hotel_status(p_org uuid, p_status text, p_reason text)": "Plan2.8 active operator only, lifecycle control with required reason and immutable audit. Not callable by hotel roles without operator allowlist.",
+    "fn_platform_support_guests(p_grant uuid)": "Plan2.8 active operator and current unrevoked owner-approved grant for this hotel, max24h, active hotel, audit on every read. Returns at most100 IDs/names, no broad RLS grant.",
+    "fn_hotel_exit_export(p_org uuid)": "Owner-only full hotel export, guarded by same-hotel owner and active session; exports tenant tables for hotel exit.",
+    "fn_hotel_exit_suspend(p_org uuid)": "Owner-only hotel exit suspension after verified completed export.",
+    "fn_hotel_exit_delete(p_org uuid, p_confirm_name text, p_confirm_id text)": "Owner-only hotel deletion after suspension, confirmed hotel name and ID, verified fresh export."
+  }
+}

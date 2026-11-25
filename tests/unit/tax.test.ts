@@ -54,7 +54,7 @@ const order = (res: string, items: unknown[]) => rpc<any>("fn_staff_create_produ
 const pay = (o: { id: string; version: number }, key: string) => rpc<any>("fn_staff_pay_product_order", { p: { order_id: o.id, method: "cash", idempotency_key: key, expected_version: o.version } }); // eslint-disable-line @typescript-eslint/no-explicit-any
 const orderRows = async (id: string) => ((await db().from("reservation_charges").select("kind, total_halalas").eq("product_order_id", id)).data ?? []) as Array<{ kind: string; total_halalas: number }>;
 async function inHouse(): Promise<{ token: string; reservation: string }> {
-  const ps = await service<string>("fn_whatsapp_phone_session", { p_phone: IN_HOUSE });
+  const ps = await service<string>("fn_whatsapp_phone_session", { p_phone: IN_HOUSE,p_branch: "00000000-0000-0000-0000-000000000010" });
   const list = await service<{ reservations: Array<{ internal_ref: string; status: string }> }>("fn_guest_phone_reservations", { p_token: ps });
   const b = list.reservations.find((r) => r.status === "checked_in")!;
   const { token } = await service<{ token: string }>("fn_guest_phone_open", { p_token: ps, p_internal_ref: b.internal_ref });

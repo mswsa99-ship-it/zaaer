@@ -2,6 +2,17 @@
 # Shared by tests/sql/run.sh and scripts/migration-check.sh: a throwaway database shaped like a hosted Supabase
 # project (extensions schema, auth shim, API roles and default grants, property time zone, test keys).
 # Usage: source tests/sql/bootstrap.sh; bootstrap_db <name>
+# The settings the suites depend on live on the DATABASE (ALTER DATABASE ... SET), and CREATE DATABASE ... TEMPLATE does NOT copy them.
+# Every caller that clones a bootstrapped database must call this on the clone; assert_db_settings fails closed when one is missing.
+apply_db_settings() {
+local DB="$1"
+psql -d "$DB" -v ON_ERROR_STOP=1 -q -c "alter database $DB set app.keybox_key = 'test-keybox-key'; alter database $DB set app.identity_key = 'test-identity-key';" -c "alter database $DB set search_path = \"\$user\", public, extensions;" -c "alter database $DB set timezone = 'Asia/Riyadh'; alter database $DB set request.headers = '{\"x-hotel-slug\":\"00000000-0000-0000-0000-000000000001\"}';"
+}
+assert_db_settings() {
+local DB="$1" n
+n=$(psql -Atq -d postgres -c "select count(*) from pg_db_role_setting s join pg_database d on d.oid=s.setdatabase, unnest(s.setconfig) c where d.datname='$DB' and s.setrole=0 and split_part(c,'=',1) in ('app.keybox_key','app.identity_key','search_path','TimeZone','request.headers')")
+[ "$n" = 5 ] || { echo "DB SETTINGS MISSING on $DB: found $n of 5 (app.keybox_key, app.identity_key, search_path, TimeZone, request.headers)"; return 1; }
+}
 bootstrap_db() {
 local DB="$1"
 psql -v ON_ERROR_STOP=1 -q -c "drop database if exists $DB;" -c "create database $DB;"
@@ -56,5 +67,5 @@ EOF
 # Fixtures write "today" as current_date and mean the property's day, so suite sessions run in the property's zone
 # (set here, not taken from the machine: CI runners are UTC). The product itself must not depend on the session zone
 # (UTC on a hosted project): PL09 keeps session-zone dates out of every function, and local_date_tests.sql runs in UTC.
-psql -d "$DB" -v ON_ERROR_STOP=1 -q -c "alter database $DB set app.keybox_key = 'test-keybox-key'; alter database $DB set app.identity_key = 'test-identity-key';" -c "alter database $DB set search_path = \"\$user\", public, extensions;" -c "alter database $DB set timezone = 'Asia/Riyadh';"
+apply_db_settings "$DB"
 }

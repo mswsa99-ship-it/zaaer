@@ -1,3 +1,7 @@
+@import "./tokens.css";
+@import "./roomai.css";
+@import "./fonts.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -26,8 +30,8 @@ body,
 body {
   margin: 0;
   font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic", system-ui, sans-serif;
-  background-color: #f5f7fa;
-  color: #18233d;
+  background-color: theme('colors.ink.50');
+  color: theme('colors.ink.800');
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -47,14 +51,23 @@ textarea {
 }
 
 ::selection {
-  background: #a8d3df;
-  color: #14333f;
+  background: theme('colors.brand.200');
+  color: theme('colors.brand.900');
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-ink-100 bg-white shadow-sm;
+    @apply rounded-2xl bg-white shadow-sm;
     overflow-wrap: anywhere; /* SETUP-22: a long unbroken name never widens the page on a phone */
+  }
+  /* a table inside a sideways-scrolling area keeps its words whole (the card's anywhere-wrap would shrink every column to one letter on a phone) */
+  .overflow-x-auto table {
+    overflow-wrap: normal;
+    min-width: 40rem;
+  }
+  /* ids (receipt, reservation, trace codes) stay on one line; the table scrolls sideways instead */
+  .overflow-x-auto table td.font-mono {
+    white-space: nowrap;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500;
@@ -107,6 +120,20 @@ textarea {
   height: 6px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #cdd6e4;
+  background: theme('colors.ink.200');
   border-radius: 9999px;
+}
+
+/* U10 (6.14, SC 2.3.3): the system «تقليل الحركة» preference is honored everywhere — animations end instantly,
+   transitions do not tween, and programmatic smooth scrolling falls back to instant */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }

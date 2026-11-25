@@ -1,0 +1,31 @@
+/* Staff login only. Same midpoint typography roles as Operations Center. */
+.login-type-midpoint {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 23px;
+  font-variant-numeric: tabular-nums;
+}
+.login-type-midpoint h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 600;
+}
+.login-type-midpoint .text-sm { font-size: 14px; line-height: 22.2px; }
+.login-type-midpoint .text-xs { font-size: 12.5px; line-height: 18.6px; }
+.login-type-midpoint .text-\[11px\] { font-size: 12px; line-height: 17.25px; }
+.login-type-midpoint button,
+.login-type-midpoint .input,
+.login-type-midpoint .label,
+.login-type-midpoint .btn,
+.login-type-midpoint .btn-primary,
+.login-type-midpoint .btn-outline {
+  font-size: 13.5px;
+  line-height: 20.2px;
+  font-weight: 500;
+}
+.login-type-midpoint .btn-outline.text-xs,
+.login-type-midpoint button.text-xs {
+  font-size: 12.5px;
+  line-height: 18.6px;
+}

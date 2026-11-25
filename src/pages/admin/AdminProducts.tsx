@@ -10,12 +10,19 @@ import { productsApi, toArabicError, type ProductsAdmin, type ProductRow, type P
 import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, EmptyState } from "../../components/ui";
 import { Field, Modal, ActionForm, Submit, Toggle, MoneyInput } from "../../components/forms";
 import { formatCurrency, COUNT } from "../../lib/utils";
+import { useAuth } from "../../lib/auth";
+import { individualAllows } from "../../lib/individualPermissions";
 import { parseProductList } from "../../lib/productImport";
 
 const sar = (h: number) => formatCurrency(h / 100);
 
 
 export default function AdminProducts() {
+  const { permissions } = useAuth();
+  // 0138: import and a new product follow Add on this page, a product edit (incl. price and branches) follows Edit; legacy accounts unchanged
+  const ind = permissions.pageAccess?.mode === "individual" ? permissions.pageAccess : null;
+  const canAdd = !ind || individualAllows(ind, "/admin/products", "add");
+  const canEdit = !ind || individualAllows(ind, "/admin/products", "edit");
   const [data, setData] = useState<ProductsAdmin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -44,10 +51,10 @@ export default function AdminProducts() {
     <div>
       <SectionTitle title="المنتجات" subtitle="منتجات بلا مخزون يطلبها النزيل المقيم من واتساب أو يطلبها له الاستقبال، ويُتاح كل منتج في الفروع التي تختارها" action={
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="btn-outline text-sm" onClick={() => setImporting(true)}><ListPlus className="h-4 w-4" /> استيراد قائمة</button>
-          <button type="button" className="btn-outline text-sm" onClick={() => setCategory({ name: "" })}><Tags className="h-4 w-4" /> فئة جديدة</button>
-          <button type="button" className="btn-primary text-sm" disabled={categories.length === 0} title={categories.length === 0 ? "أضف فئة أولًا" : undefined}
-            onClick={() => setProduct({ name: "", category_id: categories.find((c) => c.is_active)?.id ?? categories[0]?.id, taxable: true, price_halalas: null as unknown as number })}><Plus className="h-4 w-4" /> منتج جديد</button>
+          {canAdd && <button type="button" className="btn-outline text-sm" onClick={() => setImporting(true)}><ListPlus className="h-4 w-4" /> استيراد قائمة</button>}
+          {canAdd && <button type="button" className="btn-outline text-sm" onClick={() => setCategory({ name: "" })}><Tags className="h-4 w-4" /> فئة جديدة</button>}
+          {canAdd && <button type="button" className="btn-primary text-sm" disabled={categories.length === 0} title={categories.length === 0 ? "أضف فئة أولًا" : undefined}
+            onClick={() => setProduct({ name: "", category_id: categories.find((c) => c.is_active)?.id ?? categories[0]?.id, taxable: true, price_halalas: null as unknown as number })}><Plus className="h-4 w-4" /> منتج جديد</button>}
         </div>} />
       <p className="mb-4 rounded-xl border border-ink-100 bg-ink-50 p-3 text-sm text-ink-700" role="note">
         يطلب النزيل بإرسال «المنتجات» في واتساب الفرع، ويدفع لدى الاستقبال؛ عند الدفع يُصدر سند القبض وتُنشأ مهمة التسليم لغرفته. إيراد الطلبات في حساب «إيراد المنتجات».
@@ -73,7 +80,7 @@ export default function AdminProducts() {
                     {!c.is_active && <Badge className="bg-warning-500/10 text-warning-700">موقوفة — لا تظهر للنزلاء</Badge>}
                     {c.is_sample && <Badge className="bg-accent-500/10 text-accent-700" title="من القائمة المثال: تُمسح مع بيانات التجربة ما لم تعدّلها">تجريبية</Badge>}
                   </div>
-                  <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => setCategory(c)} aria-label={`تعديل الفئة ${c.name}`}><Pencil className="h-3.5 w-3.5" /> تعديل الفئة</button>
+                  {canEdit && <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => setCategory(c)} aria-label={`تعديل الفئة ${c.name}`}><Pencil className="h-3.5 w-3.5" /> تعديل الفئة</button>}
                 </div>
                 {items.length === 0 ? <p className="rounded-xl border border-dashed border-ink-200 p-3 text-sm text-ink-500">لا منتجات في هذه الفئة.</p> : (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -85,7 +92,7 @@ export default function AdminProducts() {
                             <p className="text-sm text-ink-700"><span dir="ltr" className="tabular-nums">{sar(p.price_halalas)}</span> <span className="text-xs text-ink-400">· {p.taxable ? "خاضع للضريبة" : "بدون ضريبة"}</span></p>
                             {p.description && <p className="mt-1 text-xs text-ink-500">{p.description}</p>}
                           </div>
-                          <button type="button" onClick={() => setProduct(p)} className="btn-ghost min-h-[44px] min-w-[44px] justify-center p-0" aria-label={`تعديل ${p.name}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
+                          {canEdit && <button type="button" onClick={() => setProduct(p)} className="btn-ghost min-h-[44px] min-w-[44px] justify-center p-0" aria-label={`تعديل ${p.name}`} title="تعديل"><Pencil className="h-4 w-4" /></button>}
                         </div>
                         <fieldset className="mt-3 border-t border-ink-50 pt-2">
                           <legend className="sr-only">إتاحة {p.name} في الفروع</legend>
@@ -187,7 +194,7 @@ function ImportForm({ data, onDone }: { data: ProductsAdmin; onDone: () => void 
         let cid = cats.get(l.category.toLowerCase());
         if (!cid) { cid = (await productsApi.upsertCategory({ name: l.category })).id; cats.set(l.category.toLowerCase(), cid); made.current.cats.set(l.category.toLowerCase(), cid); }
         let pid = made.current.products.get(l.n);
-        if (!pid) { pid = (await productsApi.upsertProduct({ category_id: cid, name: l.name, price_halalas: l.price!, description: l.description, taxable: true })).id; made.current.products.set(l.n, pid); }
+        if (!pid) { pid = (await productsApi.upsertProduct({ category_id: cid, name: l.name, price_halalas: l.price!, description: l.description, taxable: true, branches })).id; made.current.products.set(l.n, pid); for (const b of branches) made.current.branches.add(`${pid}:${b}`); }
         for (const b of branches) if (!made.current.branches.has(`${pid}:${b}`)) { await productsApi.setBranch(pid, b, true); made.current.branches.add(`${pid}:${b}`); }
         out[l.n] = true;
       } catch (e) { out[l.n] = toArabicError(e); }

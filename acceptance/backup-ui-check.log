@@ -1,0 +1,4 @@
+PASS acceptance/backup-ui-1366.png horizontal-overflow-px: 0
+PASS acceptance/backup-ui-390.png horizontal-overflow-px: 0
+PASS acceptance/backup-ui-failed-1366.png horizontal-overflow-px: 0
+PASS acceptance/backup-ui-empty-1366.png horizontal-overflow-px: 0

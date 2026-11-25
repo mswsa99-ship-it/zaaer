@@ -6,6 +6,8 @@
  * purpose (the gallery, a unit's way in, its way out) and the approval a unit's photos need before a guest sees them.
  */
 import { uid, nowISO, ORG, type Row } from "./data";
+import { validIban } from "../lib/identityChecks";
+export { validIban } from "../lib/identityChecks";
 import { latinDigits } from "../lib/validation";
 import { normalizeArabic } from "../../supabase/functions/_shared/guardrails";
 
@@ -22,15 +24,6 @@ export interface Phase2Ctx {
   validHttpsUrl: (u: string) => boolean;
   /** 0071: a unit's photo is approved by the owner or the manager */
   hasRole: (...roles: string[]) => boolean;
-}
-
-/** fn_valid_iban: SA, two check digits, 20 more; the ISO 13616 check (mod 97 = 1) */
-export function validIban(p: string | null | undefined): boolean {
-  const s = String(p ?? "").replace(/\s/g, "").toUpperCase();
-  if (!/^SA\d{2}[0-9A-Z]{20}$/.test(s)) return false;
-  const moved = s.slice(4) + s.slice(0, 4);
-  let r = 0; for (const ch of moved) { const d = /\d/.test(ch) ? ch : String(ch.charCodeAt(0) - 55); for (const x of d) r = (r * 10 + Number(x)) % 97; }
-  return r === 1;
 }
 
 const imageMime = (b64: string): string | null => {

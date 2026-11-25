@@ -1,12 +1,14 @@
 import { DemoBanner } from "../components/DemoBanner";
+import { PRODUCT_NAME, roomaiAsset } from "../lib/brand";
 import { LoadingScreen } from "../components/ui";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useFocusTrap, useMainFocusOnRoute, useScrollOnRoute, focusMain } from "../lib/useFocusTrap";
+import { useGlobalShortcuts } from "../lib/shortcuts";
 import { Outlet, NavLink, Link, useNavigate, useLocation, useNavigationType } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
 import { adminNav, firstAdminPath } from "../lib/nav";
-import { LogOut, Hotel, Menu, X, BellRing } from "lucide-react";
+import { LogOut, Menu, X, BellRing } from "lucide-react";
 import { ROLE_LABELS } from "../lib/types";
 import { OpsCopilot } from "../components/OpsCopilot";
 import { KeyboxAlertBanner } from "../components/KeyboxAlert";
@@ -38,6 +40,7 @@ export default function AdminLayout() {
   useMainFocusOnRoute(location.pathname);
   useScrollOnRoute(location.key, location.pathname, useNavigationType());
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useGlobalShortcuts();   // 6.15
   const drawer = useRef<HTMLElement>(null);
   useFocusTrap(menuOpen, drawer, () => setMenuOpen(false));   // A11Y-03
 
@@ -49,12 +52,10 @@ export default function AdminLayout() {
   const menu = (
     <>
         <div className="flex items-center gap-2.5 border-b border-ink-100 px-5 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink-800 text-white">
-            <Hotel className="h-5 w-5" />
-          </div>
+          <img src={roomaiAsset("roomai-mark.svg")} alt="RoomAI" className="h-9 w-9" />
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-ink-800">{orgName}</p>
-            <p className="text-[11px] text-ink-400">لوحة الإدارة</p>
+            <p className="text-sm font-semibold text-ink-800">{PRODUCT_NAME}</p>
+            <p className="text-[11px] text-ink-400">{orgName || "لوحة الإدارة"}</p>
           </div>
         </div>
         <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4 scrollbar-thin">
@@ -123,7 +124,7 @@ export default function AdminLayout() {
             <button type="button" onClick={() => setMenuOpen(true)} className="flex min-h-[44px] items-center gap-2 rounded-xl px-3 text-sm font-medium text-ink-700 hover:bg-ink-50" aria-expanded={menuOpen} data-testid="admin-menu-button">
               <Menu className="h-5 w-5" /> القائمة
             </button>
-            <Link to={adminHome} className="text-sm font-semibold text-ink-800">لوحة الإدارة{orgName ? ` — ${orgName}` : ""}</Link>
+            <Link to={adminHome} className="text-sm font-semibold text-ink-800">{PRODUCT_NAME} — لوحة الإدارة</Link>
           </header>
         </div>
         {/* IX-03: the code alert scrolls away with the page instead of pinning a tall block on a phone */}

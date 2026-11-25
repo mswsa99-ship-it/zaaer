@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { aiHealth, staffApi, toArabicError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -27,6 +27,12 @@ interface AiSettings {
   guard_burst_messages: number;
   guard_burst_minutes: number;
   guard_conversation_tokens: number;
+  guest_otp_after_messages: number;
+  guest_device_daily_message_limit: number;
+  guest_branch_daily_message_limit: number;
+  guest_otp_device_hourly_limit: number;
+  guest_otp_phone_hourly_limit: number;
+  guest_otp_cooldown_seconds: number;
   extra_instructions: string | null;
   updated_at?: string | null;
 }
@@ -34,6 +40,12 @@ interface AiSettings {
 const DEFAULTS: AiSettings = {
   enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000,
   daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: "", ops_enabled: true, ops_daily_request_limit: 500, briefing_with_insights: true,
+  guest_otp_after_messages: 10,
+  guest_device_daily_message_limit: 30,
+  guest_branch_daily_message_limit: 500,
+  guest_otp_device_hourly_limit: 3,
+  guest_otp_phone_hourly_limit: 6,
+  guest_otp_cooldown_seconds: 60,
   guard_repeat_limit: 3, guard_burst_messages: 15, guard_burst_minutes: 10, guard_conversation_tokens: 40000,
 };
 
@@ -61,8 +73,8 @@ function parseModelList(text: string): string[] {
 }
 
 export default function AdminAiSettings() {
-  const { can } = useAuth();
-  const isOwner = can("security");
+  const { can, profile } = useAuth();
+  const isOwner = profile?.role === "owner" && can("security");
   const [form, setForm] = useState<AiSettings>(DEFAULTS);
   const [usage, setUsage] = useState<UsageRow[]>([]);
   const [guards, setGuards] = useState<GuardEvent[]>([]);
@@ -117,12 +129,15 @@ export default function AdminAiSettings() {
   const fallbackList = parseModelList(fallbackText);
   const fallbackError = fallbackList.length > 3 ? "ثلاثة نماذج احتياطية كحد أقصى." : fallbackList.some((m) => !MODEL_ID.test(m)) ? "اكتب معرّفات نماذج فقط (حروف لاتينية صغيرة وأرقام و . -) مفصولة بفواصل." : null;
 
+  const saveLock = useRef(false);
   async function save() {
+    if (saveLock.current) return;
     if (!isOwner) return;
     if (fallbackError) { setError(fallbackError); return; }
     // OWNER-19: every number within the range its field states, before anything is sent
-    const bad = (Object.entries(NUMBER_RANGES) as Array<[keyof AiSettings, [number, number, string]]>).find(([k, [lo, hi]]) => { const v = Number(form[k]); return !Number.isFinite(v) || v < lo || v > hi; });
+    const bad = (Object.entries(NUMBER_RANGES) as Array<[keyof AiSettings, [number, number, string]]>).find(([k, [lo, hi]]) => { const v = Number(form[k]); return !Number.isFinite(v) || (k !== "temperature" && !Number.isInteger(v)) || v < lo || v > hi; });
     if (bad) { setError(`«${bad[1][2]}» خارج النطاق المسموح (${bad[1][0].toLocaleString("en-US")}–${bad[1][1].toLocaleString("en-US")}).`); return; }
+    saveLock.current = true;
     setSaving(true); setError(null); setSaved(false);
     try {
       const patch: Record<string, unknown> = {
@@ -133,12 +148,19 @@ export default function AdminAiSettings() {
         ops_enabled: form.ops_enabled, ops_daily_request_limit: form.ops_daily_request_limit, briefing_with_insights: form.briefing_with_insights,
         guard_repeat_limit: form.guard_repeat_limit, guard_burst_messages: form.guard_burst_messages, guard_burst_minutes: form.guard_burst_minutes,
         guard_conversation_tokens: form.guard_conversation_tokens,
+        guest_otp_after_messages: form.guest_otp_after_messages,
+        guest_device_daily_message_limit: form.guest_device_daily_message_limit,
+        guest_branch_daily_message_limit: form.guest_branch_daily_message_limit,
+        guest_otp_device_hourly_limit: form.guest_otp_device_hourly_limit,
+        guest_otp_phone_hourly_limit: form.guest_otp_phone_hourly_limit,
+        guest_otp_cooldown_seconds: form.guest_otp_cooldown_seconds,
+
       };
       await staffApi.updateAiSettings(patch);
       setSaved(true); setDirty(false);
       await load();
     } catch (e) { setError(toArabicError(e)); }
-    setSaving(false);
+    saveLock.current = false; setSaving(false);
   }
 
   async function test() {
@@ -156,7 +178,7 @@ export default function AdminAiSettings() {
     <div>
       <SectionTitle title="إعدادات الذكاء الاصطناعي" subtitle="محرك مساعد الاستقبال (Gemini عبر Edge Function). عند التعطيل أو الفشل يعمل المسار الحواري التقليدي تلقائيًا." />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      {!isOwner && <div className="mb-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-500">العرض فقط — يحفظ الإعدادات من يملك صلاحية «السجل الأمني ومسح البيانات وإعدادات المساعد».</div>}
+      {!isOwner && <div className="mb-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-500">العرض فقط — يغيّر هذه الإعدادات مالك الفندق فقط.</div>}
 
       <div className="grid gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         {/* Settings form */}
@@ -195,6 +217,18 @@ export default function AdminAiSettings() {
             <NumberField label="الحد اليومي للوحدات النصية" value={form.daily_token_budget} min={0} step={1000} onChange={(v) => set("daily_token_budget", v)} disabled={!isOwner} />
             <NumberField label="حد الرسائل لكل جلسة" value={form.per_session_message_limit} min={1} max={500} step={1} onChange={(v) => set("per_session_message_limit", v)} disabled={!isOwner} />
             {/* 0052 (SEC-02): the conversation's rhythm — past any of these the AI stops on that conversation and the supervisor gets it */}
+            <section className="sm:col-span-2 rounded-xl border border-ink-100 p-3" data-testid="guest-ai-limits">
+              <h3 className="mb-2 font-semibold">حدود مساعد الضيوف والتحقق</h3>
+              <p className="mb-3 text-xs text-ink-500">قيم بداية قابلة للزيادة والنقص. تُطبّق على هذا الفندق فقط، ويُسجّل كل تعديل في سجل الإجراءات.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <NumberField label="طلب التحقق بعد رسائل الجهاز" value={form.guest_otp_after_messages} min={1} max={100} step={1} onChange={(v) => set("guest_otp_after_messages", v)} disabled={!isOwner} />
+                <NumberField label="حد رسائل الجهاز يوميًا" value={form.guest_device_daily_message_limit} min={1} max={1000} step={1} onChange={(v) => set("guest_device_daily_message_limit", v)} disabled={!isOwner} />
+                <NumberField label="حد رسائل الفرع يوميًا" value={form.guest_branch_daily_message_limit} min={1} max={100000} step={1} onChange={(v) => set("guest_branch_daily_message_limit", v)} disabled={!isOwner} />
+                <NumberField label="حد رموز الجهاز للرقم في الساعة" value={form.guest_otp_device_hourly_limit} min={1} max={100} step={1} onChange={(v) => set("guest_otp_device_hourly_limit", v)} disabled={!isOwner} />
+                <NumberField label="حد رموز الهاتف في الساعة" value={form.guest_otp_phone_hourly_limit} min={1} max={200} step={1} onChange={(v) => set("guest_otp_phone_hourly_limit", v)} disabled={!isOwner} />
+                <NumberField label="الفاصل بين الرموز بالثواني" value={form.guest_otp_cooldown_seconds} min={10} max={3600} step={1} onChange={(v) => set("guest_otp_cooldown_seconds", v)} disabled={!isOwner} />
+              </div>
+            </section>
             <div className="sm:col-span-2 rounded-xl border border-ink-100 bg-ink-50/50 p-3" data-testid="ai-guard">
               <p className="text-sm font-semibold text-ink-800">إيقاف المساعد عند نمط غير طبيعي</p>
               <p className="mb-3 mt-0.5 text-xs text-ink-500">إذا تجاوزت المحادثة أيًّا من هذه الحدود يتوقف الذكاء الاصطناعي عليها، وتُحوَّل إلى المشرف بطلب تحويل واحدة، ويُسجَّل السبب.</p>
@@ -259,7 +293,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
       <Card className="mt-4">
         <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink-700"><Gauge className="h-4 w-4 text-brand-600" /> الاستهلاك — آخر 14 يومًا</h3>
         <p className="-mt-2 mb-3 text-xs text-ink-500">«طلبات» كل ما وصل إلى المساعد، و«تقليدي» ما أُجيب بالمسار الثابت دون الذكاء الاصطناعي (وهو كل الطلبات حين يكون المساعد متوقفًا).</p>
-        {usage.length === 0 ? <p className="text-sm text-ink-400">لا يوجد استهلاك مسجّل بعد.</p> : (
+        {usage.length === 0 ? (error ? null : <p className="text-sm text-ink-400">لا يوجد استهلاك مسجّل بعد.</p>) : (
           <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={usageChart}>
@@ -307,7 +341,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <div>
             <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-600"><ShieldCheck className="h-3.5 w-3.5" /> آخر 30 حدثًا أمنيًا</h4>
-            {guards.length === 0 ? <p className="text-xs text-ink-400">لا توجد أحداث.</p> : (
+            {guards.length === 0 ? (error ? null : <p className="text-xs text-ink-400">لا توجد أحداث.</p>) : (
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">المرحلة</th><th className="py-1.5 text-right font-medium">القاعدة</th><th className="py-1.5 text-right font-medium">الوقت</th></tr></thead>
@@ -320,7 +354,7 @@ supabase secrets set APP_BASE_URL=https://your-domain`}</pre>
           </div>
           <div>
             <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink-600"><Activity className="h-3.5 w-3.5" /> آخر 30 تنفيذ أداة</h4>
-            {tools.length === 0 ? <p className="text-xs text-ink-400">لا توجد تنفيذات.</p> : (
+            {tools.length === 0 ? (error ? null : <p className="text-xs text-ink-400">لا توجد تنفيذات.</p>) : (
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">الأداة</th><th className="py-1.5 text-right font-medium">النتيجة</th><th className="py-1.5 text-center font-medium">ms</th></tr></thead>
@@ -352,6 +386,12 @@ function Toggle({ label, checked, onChange, disabled, hint }: { label: string; c
 
 /** OWNER-19: the ranges the server keeps (0005), checked before saving; the field names them */
 const NUMBER_RANGES: Partial<Record<keyof AiSettings, [number, number, string]>> = {
+  guest_otp_after_messages: [1, 100, "طلب التحقق بعد رسائل الجهاز"],
+  guest_device_daily_message_limit: [1, 1000, "حد رسائل الجهاز يوميًا"],
+  guest_branch_daily_message_limit: [1, 100000, "حد رسائل الفرع يوميًا"],
+  guest_otp_device_hourly_limit: [1, 100, "حد رموز الجهاز للرقم في الساعة"],
+  guest_otp_phone_hourly_limit: [1, 200, "حد رموز الهاتف في الساعة"],
+  guest_otp_cooldown_seconds: [10, 3600, "الفاصل بين الرموز بالثواني"],
   temperature: [0, 1, "تنوّع الردود"], max_output_tokens: [50, 2000, "أقصى طول للرد"], timeout_ms: [2000, 60000, "مهلة الرد"],
   daily_request_limit: [0, 1000000, "حد الطلبات اليومي"], ops_daily_request_limit: [0, 1000000, "حد طلبات مساعد العمليات اليومي"],
   daily_token_budget: [0, 1000000000, "الحد اليومي للوحدات النصية"], per_session_message_limit: [1, 500, "حد الرسائل لكل جلسة"],

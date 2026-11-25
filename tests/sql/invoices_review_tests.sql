@@ -63,7 +63,7 @@ begin
   f := t_fin(p);
   d := t_due(p, now());
   return fn_staff_check_in(jsonb_build_object('reservation_id', p,
-    'rent', jsonb_build_object('amount_halalas', (f->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', p_key || '-rent'),
+    'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', (f->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', p_key || '-rent'),
     'deposit', jsonb_build_object('amount_halalas', (d->>'deposit_required')::bigint, 'method', 'cash', 'idempotency_key', p_key || '-dep')));
 end $$;
 -- the shares an issued invoice carries, by kind
@@ -209,7 +209,7 @@ do $$ declare res uuid; r jsonb; co jsonb; inv invoices%rowtype; begin
   r := t_arrive_paid(res, 'iv06');
   if not (r->>'ok')::boolean then raise exception 'arrival refused: %', r; end if;
   perform fn_staff_add_service(res, t_id('svc'), 1, null);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 1500, 'method', 'cash', 'idempotency_key', 'iv06-svc'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1500, 'method', 'cash', 'idempotency_key', 'iv06-svc'));
   co := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   select * into inv from invoices where reservation_id = res and status = 'issued';
   perform t_record('IV06 the check-out invoices everything not yet invoiced in the same operation',
@@ -227,7 +227,7 @@ do $$ declare res uuid := t_id('resD'); r jsonb; n0 bigint; inv invoices%rowtype
   perform t_record('IV07 a damage after the departure is invoiced when the deposit is settled, on its own invoice',
     (r->>'invoice') = inv.number and inv.total_halalas = 7000 and t_count(format('select count(*) from invoices where reservation_id = %L', res)) = n0 + 1
     and t_uninv(res) = 0 and (t_fin(res)->>'balance_due')::bigint = 2000, r::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 2000, 'method', 'cash', 'idempotency_key', 'iv07-pay'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 2000, 'method', 'cash', 'idempotency_key', 'iv07-pay'));
   perform t_record('IV07b paid in full, the stay closes by itself («مغلق»)', (t_res(res)).status = 'closed', (t_res(res)).status::text);
 exception when others then perform t_record('IV07 a damage after the departure is invoiced when the deposit is settled, on its own invoice', false, sqlerrm); end $$;
 
@@ -314,7 +314,7 @@ select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare res uuid; d0 date := t_today() + 90; v jsonb; c jsonb; o financial_vouchers%rowtype; n financial_vouchers%rowtype; begin
   res := t_stay(t_id('u3'), d0, d0 + 2, 'ضيف التصحيح');
   insert into ids values ('resV', res);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 15000, 'method', 'cash', 'idempotency_key', 'vc01-v'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 15000, 'method', 'cash', 'idempotency_key', 'vc01-v'));
   insert into ids values ('v1', (v->>'voucher_id')::uuid);
   c := fn_staff_correct_voucher(jsonb_build_object('voucher_id', (v->>'voucher_id')::uuid, 'reason', 'المبلغ المقبوض 120 لا 150', 'amount_halalas', 12000, 'idempotency_key', 'vc01-c'));
   select * into o from financial_vouchers where id = (v->>'voucher_id')::uuid;
@@ -378,11 +378,11 @@ exception when others then perform t_record('VC07 a correction that would leave 
 do $$ declare res uuid; d0 date := t_today() + 95; v jsonb; c jsonb; m text; begin
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
   res := t_stay(t_id('u4'), d0, d0 + 1, 'ضيف الإلغاء');
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 3000, 'method', 'cash', 'idempotency_key', 'vc09-v'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 3000, 'method', 'cash', 'idempotency_key', 'vc09-v'));
   c := fn_cancel_voucher((v->>'voucher_id')::uuid, 'سند مكرر');
   perform t_record('VC09 cancelling a voucher waits in the review list too',
     (c->>'ok')::boolean and t_count(format('select count(*) from review_items where entity_id = %L and kind = %L', (v->>'voucher_id')::uuid, 'voucher_cancelled')) = 1, c::text);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 3000, 'method', 'ota_deferred', 'reference', 'OTA-9', 'idempotency_key', 'vc09-w'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 3000, 'method', 'ota_deferred', 'reference', 'OTA-9', 'idempotency_key', 'vc09-w'));
   perform t_payout((v->>'voucher_id')::uuid);
   m := t_fails(format('select fn_cancel_voucher(%L::uuid, %L)', (v->>'voucher_id')::uuid, 'x'), 'VOUCHER_IN_PAYOUT%');
   perform t_record('VC09b a voucher already in a platform payout is neither cancelled nor corrected',

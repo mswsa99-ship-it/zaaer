@@ -1,3 +1,5 @@
+import { emptyStaffBranchesLabel, changedStaffBranches } from "../../lib/staffBranchMetadata";
+import { IndividualPermissionDraft } from "../../components/IndividualPermissionDraft";
 /**
  * «الموظفون» (decisions 34, 35): the list from fn_admin_staff_list; «تعديل موظف» for the owner only — name, phone, role
  * and branches, with a reason, before and after in the log (the email is the login identity: corrected only until the
@@ -17,7 +19,7 @@ import { UserCog, UserPlus, Pencil, LogOut, Power, KeyRound, Mail } from "lucide
 import { ROLE_LABELS } from "../../lib/types";
 import { formatDateTime, COUNT } from "../../lib/utils";
 
-const INVITE_ROLES = ["owner", "manager", "supervisor", "finance", "housekeeping"] as const;
+const INVITE_ROLES = ["manager", "supervisor", "finance", "housekeeping"] as const;
 
 export default function AdminStaff() {
   const { profile, can, canFull, requestPasswordReset } = useAuth();
@@ -25,8 +27,9 @@ export default function AdminStaff() {
   // the permissions matrix decides (decision 71): «دعوة موظف وتعديله…» and «خروج إجباري»; no one but the owner touches an owner (decision 44)
   const canManage = can("staff.manage");
   const touches = (s: StaffListRow) => isOwner || s.role !== "owner";
-  const roleChoices = INVITE_ROLES.filter((r) => isOwner || r !== "owner");
+  const roleChoices = INVITE_ROLES;
   const { branches } = useBranch();
+  const [grantTarget, setGrantTarget] = useState<{id:string;name:string}|null>(null);
   const [staff, setStaff] = useState<StaffListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +143,7 @@ export default function AdminStaff() {
         </Card>
       )}
 
+      {isOwner && grantTarget && <IndividualPermissionDraft key={grantTarget.id} staffId={grantTarget.id} name={grantTarget.name} />}
       {staff.length === 0 ? (
         <EmptyState icon={<UserCog className="h-10 w-10" />} title="لا يوجد موظفون" />
       ) : (
@@ -148,12 +152,13 @@ export default function AdminStaff() {
             <Card key={s.id} className={`flex flex-col gap-2 ${s.is_active ? "" : "opacity-70"}`} data-testid="staff-card" data-email={s.email}>
               <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
+                {isOwner && s.role !== "owner" && <button type="button" className="btn-outline mb-2 text-xs" onClick={() => setGrantTarget({id:s.id,name:s.full_name})}>مسودة صلاحيات فردية</button>}
                 <p className="text-sm font-semibold text-ink-800">{s.full_name}{s.is_me && <span className="mr-1 text-xs font-normal text-ink-400">(أنا)</span>}</p>
                 <p className="truncate text-xs text-ink-400" dir="ltr">{s.email}</p>
                 {s.phone && <p className="text-xs text-ink-500" dir="ltr">{s.phone}</p>}
                 <div className="mt-1 flex flex-wrap gap-1">
                   <Badge className={s.linked ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{s.linked ? "مرتبط" : "بانتظار تسجيل الدخول"}</Badge>
-                  {s.role === "owner" ? <Badge className="bg-ink-100 text-ink-600">كل الفروع</Badge> : s.branch_ids.length === 0 ? <Badge className="bg-danger-500/10 text-danger-600">بلا فرع</Badge> : s.branch_ids.map((b) => <Badge key={b} className="bg-ink-100 text-ink-600">{branchName(b)}</Badge>)}
+                  {s.role === "owner" ? <Badge className="bg-ink-100 text-ink-600">كل الفروع</Badge> : s.branch_ids.length === 0 ? <Badge className="bg-rai-surface-sunken text-rai-ink-muted">{emptyStaffBranchesLabel(isOwner)}</Badge> : s.branch_ids.map((b) => <Badge key={b} className="bg-ink-100 text-ink-600">{branchName(b)}</Badge>)}
                 </div>
                 {s.sessions_ended_at && <p className="mt-1 text-[11px] text-ink-400">أُنهيت جلساته {formatDateTime(s.sessions_ended_at)}</p>}
                 {authStatus[s.id] && (
@@ -190,7 +195,7 @@ export default function AdminStaff() {
             if (edit.phone.trim() && !normalizePhone(edit.phone)) throw new Error("VALIDATION: phone");
             const emailChanged = !edit.s.linked && edit.email.trim().toLowerCase() !== edit.s.email;
             if (emailChanged && !validEmail(edit.email)) throw new Error("VALIDATION: email");
-            const r = await staffAdminApi.update({ staff_id: edit.s.id, reason: edit.reason.trim(), ...(emailChanged ? { email: edit.email.trim() } : {}), full_name: edit.full_name.trim(), phone: edit.phone.trim() || null, ...(edit.s.is_me ? {} : edit.role === "owner" ? { role: edit.role } : { role: edit.role, branch_ids: edit.branch_ids }) });
+            const r = await staffAdminApi.update({ staff_id: edit.s.id, reason: edit.reason.trim(), ...(emailChanged ? { email: edit.email.trim() } : {}), full_name: edit.full_name.trim(), phone: edit.phone.trim() || null, ...(edit.s.is_me ? {} : edit.role === "owner" ? { role: edit.role } : { role: edit.role, ...changedStaffBranches(edit.s.branch_ids, edit.branch_ids) }) });
             setEdit(null); setNotice(r.unchanged ? "لا تغيير." : `حُفظ التعديل (${(r.changed ?? []).map((c) => ({ email: "البريد", full_name: "الاسم", phone: "الهاتف", role: "الدور", branches: "الفروع" })[c] ?? c).join("، ")}). يسري تغيير الدور أو الفروع من العملية التالية للموظف.`); await load();
           }}>
             <div className="space-y-3">
@@ -205,7 +210,7 @@ export default function AdminStaff() {
                 <select className="input" value={edit.role} disabled={edit.s.is_me} onChange={(e) => setEdit({ ...edit, role: e.target.value })} data-testid="edit-role">{roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
               </Field>
               {edit.role !== "owner" && (
-                <Field label="الفروع" hint={edit.s.is_me ? "لا يغيّر أحد فروعه بنفسه." : "إزالة فرع تسري من العملية التالية للموظف؛ تاريخ عضويته يبقى."}>
+                <Field label="الفروع" hint={edit.s.is_me ? "لا يغيّر أحد فروعه بنفسه." : isOwner ? "إزالة فرع تسري من العملية التالية للموظف؛ تاريخ عضويته يبقى." : "تعرض القائمة الفروع المسموحة لك فقط، ولا تعني القائمة الفارغة أن الموظف بلا فرع. لا يُستبدل ارتباطه بالفروع دون تغيير صريح ومسموح."}>
                   <div className="flex flex-wrap gap-2 rounded-xl border border-ink-100 p-2" data-testid="edit-branches">
                     {branches.map((b) => (
                       <label key={b.id} className="flex items-center gap-1.5 text-xs text-ink-700">

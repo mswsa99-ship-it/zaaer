@@ -41,7 +41,7 @@ update cash_accounts set account_prefix = '605', account_suffix = '4321'
  where id = (select a.id from cash_accounts a join bank_mail_settings s on s.organization_id = a.organization_id
               where a.kind = 'bank_account' and a.archived_at is null order by a.created_at limit 1);
 set local role service_role;
-select set_config('rl.r', fn_bank_ingest(jsonb_build_object('message_id', '<rl11@example.com>', 'from', 'relay.test@example.com', 'date', '2026-11-13T06:12:00Z',
+select set_config('rl.r', fn_bank_ingest((select organization_id from bank_mail_settings order by organization_id limit 1), jsonb_build_object('message_id', '<rl11@example.com>', 'from', 'relay.test@example.com', 'date', '2026-11-13T06:12:00Z',
                                                             'subject', 'FIVEHOURS-RELAY', 'body', :'body'))::text, true) is not null;
 reset role;
 select (r->>'status') || '|' || coalesce((select amount_halalas::text || '|' || direction || '|' || coalesce(reference, '') from bank_movements where id = (r->>'movement_id')::uuid), '')

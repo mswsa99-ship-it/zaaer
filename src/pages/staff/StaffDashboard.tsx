@@ -1,3 +1,4 @@
+import "./StaffDashboard.typography.css";
 import { COUNT, arabicCount } from "../../lib/utils";
 import { canOpen } from "../../lib/nav";
 import { useReservations } from "../../lib/hooks";
@@ -11,6 +12,7 @@ import { useBranchQuery } from "../../lib/useBranchQuery";
 import { opsApi, stayApi, type DailySummary, type StayFollowups } from "../../lib/api";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { useAuth } from "../../lib/auth";
+import { ShiftBoard, type BoardTile, type BoardRow } from "../../components/ShiftBoard";
 import { ReviewBanner } from "../../components/ReviewBanner";
 import { useReviewSummary } from "../../lib/reviewAlerts";
 
@@ -31,7 +33,7 @@ export default function StaffDashboard() {
   const listError = e1 ?? e2;
   if (listError && all.length === 0 && arrivals.length === 0) {
     return (
-      <div>
+      <div className="ops-type-trial">
         <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
         <LoadErrorCard message={listError} onRetry={() => { r1(); r2(); sumQ.reload(); }} />
       </div>
@@ -54,9 +56,42 @@ export default function StaffDashboard() {
     { label: "إجمالي الحجوزات", value: all.length, icon: BookCheck, to: "/staff/reservations", color: "bg-ink-100 text-ink-600" },
   ];
 
+  // 6.1 (U14): the day starts with what waits for this role
+  const role = profile?.role ?? "";
+  const open = (to: string) => canOpen(role, to, { can, canFull });
+  const toArriveRows = (list: typeof all): BoardRow[] => list.slice(0, 6).map((r) => ({ r, action: permissions.seesMoney && r.payment_status && r.payment_status !== "paid" ? "collect" : "arrive" }));
+  const followCount = fu ? fu.overdue.length + fu.departed_open.length + fu.late_departures.length : 0;
+  const tiles: BoardTile[] = [];
+  let board: { title: string; subtitle: string; rowsTitle: string; rows: BoardRow[] };
+  if (role === "housekeeping") {
+    board = { title: "مهام اليوم", subtitle: "الوحدات التي تنتظر التنظيف", rowsTitle: "وصول اليوم", rows: [] };
+    if (sum) tiles.push({ key: "dirty", label: "وحدات للتنظيف", value: sum.units.dirty, to: "/staff/housekeeping", tone: sum.units.dirty > 0 ? "warning" : undefined },
+      { key: "hk-open", label: "مهام مفتوحة", value: sum.housekeeping.open, to: "/staff/housekeeping" },
+      { key: "hk-unassigned", label: "بلا مكلّف", value: sum.housekeeping.unassigned, to: "/staff/housekeeping" });
+  } else if (role === "finance") {
+    board = { title: "المراجعة والإقفال", subtitle: "ما ينتظر المالية اليوم", rowsTitle: "بانتظار الدفع", rows: pendingPayment.slice(0, 6).map((r) => ({ r, action: "collect" as const })) };
+    tiles.push({ key: "unpaid", label: "بانتظار الدفع", value: pendingPayment.length, to: "/staff/payments", tone: pendingPayment.length > 0 ? "warning" : undefined },
+      { key: "followups", label: "متابعة الإقامات", value: followCount, to: "/staff/followups" },
+      { key: "day-close", label: "إقفال اليوم", value: "افتح", to: "/staff/day-close" });
+  } else if (role === "owner" || role === "manager") {
+    board = { title: "الاعتمادات والتنبيهات", subtitle: "ما ينتظر قرارك اليوم", rowsTitle: "جاهز لتسجيل الوصول", rows: toArriveRows(readyForApproval) };
+    tiles.push({ key: "approvals", label: "جاهز لتسجيل الوصول", value: readyForApproval.length, to: "/staff/access-approvals" },
+      { key: "identity", label: "بانتظار المطابقة", value: pendingIdentity.length, to: "/staff/identity-verification", tone: pendingIdentity.length > 0 ? "warning" : undefined },
+      { key: "alerts", label: "تنبيهات الإقامات", value: followCount, to: "/staff/followups", tone: followCount > 0 ? "danger" : undefined },
+      { key: "review", label: "بحاجة لمراجعة", value: review?.open ?? 0, to: "/admin/review" });
+  } else {
+    board = { title: "بداية الوردية", subtitle: "ما ينتظر الاستقبال اليوم", rowsTitle: "وصول اليوم", rows: toArriveRows(arrivals) };
+    tiles.push({ key: "arrivals", label: "الوصول اليوم", value: arrivals.length, to: "/staff/arrivals" },
+      { key: "departures", label: "المغادرة اليوم", value: sum ? `${sum.departures.done}/${sum.departures.expected + sum.departures.done}` : "—", to: "/staff/journey" },
+      { key: "unpaid", label: "غير مدفوع", value: pendingPayment.length, to: "/staff/payments", tone: pendingPayment.length > 0 ? "warning" : undefined },
+      { key: "dirty", label: "وحدات للتنظيف", value: sum ? sum.units.dirty : "—", to: "/staff/housekeeping" });
+  }
+  const shownTiles = tiles.filter((t) => open(t.to));
+
   return (
-    <div>
+    <div className="ops-type-trial">
       <SectionTitle title="مركز العمليات" subtitle="نظرة سريعة على حالات اليوم" action={<BranchPicker />} />
+      <ShiftBoard role={role} title={board.title} subtitle={board.subtitle} tiles={shownTiles} rowsTitle={board.rowsTitle} rows={board.rows} />
       <ReviewBanner summary={review} />
       {listError && <div className="mb-4"><ErrorBanner message={listError} /></div>}
       {fu && fu.overdue.length + fu.departed_open.length + fu.late_departures.length > 0 && (
@@ -69,7 +104,7 @@ export default function StaffDashboard() {
       )}
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><DailyBriefing /></div>
+        <div className="ops-briefing lg:col-span-2"><DailyBriefing /></div>
         <div className="grid grid-cols-2 gap-3 content-start">
           {!sum && sumQ.error && <div className="col-span-2"><LoadErrorCard message={sumQ.error} onRetry={sumQ.reload} /></div>}
           {sum && [
@@ -83,7 +118,7 @@ export default function StaffDashboard() {
               { l: "متبقٍ على المقيمين", v: formatCurrency(sum.finance.outstanding_in_house / 100), to: "/staff/reservations" },
               { l: "تأمينات محتجزة", v: formatCurrency(sum.finance.deposits_held / 100), to: "/admin/finance" },
             ] : []),
-          ].map((t) => <Link key={t.l} to={t.to} className="card p-3 hover:shadow-md"><p className="text-lg font-bold text-ink-800" dir="ltr">{t.v}</p><p className="text-[11px] text-ink-400">{t.l}</p></Link>)}
+          ].map((t) => <Link key={t.l} to={t.to} className="card p-3 hover:shadow-md"><p className="text-lg font-bold text-ink-800" dir="ltr">{t.v}</p><p className="ops-summary-label text-[11px] text-ink-400">{t.l}</p></Link>)}
         </div>
       </div>
 
@@ -94,7 +129,7 @@ export default function StaffDashboard() {
               <s.icon className="h-5 w-5" />
             </div>
             <p className="min-w-0 break-words text-xl font-bold tabular-nums text-ink-800 sm:text-2xl">{s.value}</p>
-            <p className="text-xs text-ink-400">{s.label}</p>
+            <p className="ops-stat-label text-xs text-ink-400">{s.label}</p>
           </Link>
         ))}
       </div>
@@ -103,7 +138,7 @@ export default function StaffDashboard() {
       {arrivals.length === 0 ? (
         <EmptyState icon={<CalendarClock className="h-10 w-10" />} title="لا توجد وصولات اليوم" />
       ) : (
-        <div className="space-y-3">
+        <div className="ops-reservations space-y-3">
           {arrivals.map((r) => <ReservationCardRow key={r.id} r={r} />)}
         </div>
       )}
@@ -112,7 +147,7 @@ export default function StaffDashboard() {
         <>
           <div className="mt-8" />
           <SectionTitle level={2} title="جاهز لتسجيل الوصول" subtitle={`اكتملت هويته وشموس: ${readyForApproval.length}`} action={<Link to="/staff/access-approvals" className="text-sm text-brand-600">عرض الكل</Link>} />
-          <div className="space-y-3">
+          <div className="ops-reservations space-y-3">
             {readyForApproval.slice(0, 5).map((r) => <ReservationCardRow key={r.id} r={r} />)}
           </div>
         </>

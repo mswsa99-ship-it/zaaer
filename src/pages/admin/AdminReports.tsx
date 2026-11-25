@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, Spinner, LoadErrorCard } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, Spinner, LoadErrorCard } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ExportMenu } from "../../components/ExportMenu";
 import { BarChart3, Info, Filter, X } from "lucide-react";
@@ -90,7 +90,7 @@ export default function AdminReports() {
   const problem = periodProblem(period.from, period.to);
   const fin = useBranchQuery<ReportsFinance | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsFinance(branchId, period.from, period.to, filters)), [period.from, period.to, filters], null);
   const opsQ = useBranchQuery<OpsData | null>(loadOps, [], null);
-  const platQ = useBranchQuery<ReportsPlatforms | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsPlatforms(branchId, period.from, period.to).catch(() => null)), [period.from, period.to], null);
+  const platQ = useBranchQuery<ReportsPlatforms | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsPlatforms(branchId, period.from, period.to)), [period.from, period.to], null);
   const branchId = fin.branchId;
   // OWNER-08: after an error nothing from an earlier period stays on screen, and nothing can be exported
   const reportError = problem ?? fin.error;
@@ -215,7 +215,7 @@ export default function AdminReports() {
         {words.length > 0 && <p className="text-[11px] text-ink-500" data-testid="report-filter-words">المرشحات: {words.join(" · ")}</p>}
       </Card>
 
-      {reportError && <div className="mb-4"><ErrorBanner message={`تعذّر تحميل المؤشرات المالية: ${reportError}`} /></div>}
+      {reportError && <div className="mb-4"><LoadErrorCard message={`تعذّر تحميل المؤشرات المالية: ${reportError}`} onRetry={problem ? undefined : fin.reload} /></div>}
 
       {report && (
         <>
@@ -237,7 +237,8 @@ export default function AdminReports() {
       )}
 
       {/* 0054 (MONEY-05): the platforms — what came into the accounts, the commission, the difference, what is still owed */}
-      {platQ.data && (
+      {platQ.error && <LoadErrorCard message={platQ.error} onRetry={platQ.reload} />}
+      {!platQ.error && !problem && platQ.data && (
         <Card className="mb-6" data-testid="report-platforms">
           <h2 className="mb-2 text-sm font-semibold text-ink-700">المنصات في الفترة</h2>
           <div className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
@@ -355,7 +356,7 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
         <h2 className="text-sm font-semibold text-ink-700">حجوزات المنصات المتأخرة الإدخال (من {from} إلى {to})</h2>
         <div className="flex flex-wrap items-center gap-2">{d && <p className="text-sm text-ink-600">{d.late} من {arabicCount(d.platform_bookings, ["حجز منصة واحد", "حجزي منصة", "حجوزات منصات", "حجز منصة"])} أُدخل بعد يوم أو أكثر{d.after_arrival ? ` · ${d.after_arrival} بعد موعد الوصول` : ""}</p>}<ExportMenu allOnly source={{ statement: statementFor("حجوزات المنصات المتأخرة الإدخال"), table, pageCount: d?.late ?? 0, total: d?.late ?? 0 }} /></div>
       </div>
-      {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.late === 0 ? <p className="text-sm text-ink-400">لا حجوزات متأخرة الإدخال في هذه الفترة.</p> : (
+      {q.error ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.late === 0 ? <p className="text-sm text-ink-400">لا حجوزات متأخرة الإدخال في هذه الفترة.</p> : (
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <p className="mb-1 text-xs font-medium text-ink-500">حسب الموظف</p>
@@ -400,7 +401,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
           <ExportMenu allOnly source={{ statement: statementFor("الهويات المعتمدة", [`المسار: ${pathWord}`]), table, pageCount: d?.count ?? 0, total: d?.count ?? 0 }} />
         </div>
       </div>
-      {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.count === 0 ? <p className="text-sm text-ink-400">لا هويات معتمدة بهذا المسار في الفترة.</p> : (
+      {q.error ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.count === 0 ? <p className="text-sm text-ink-400">لا هويات معتمدة بهذا المسار في الفترة.</p> : (
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <p className="mb-1 text-xs font-medium text-ink-500">حسب من اعتمد</p>
@@ -443,7 +444,7 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
           <ExportMenu allOnly source={{ statement: statementFor("تقرير الخصومات", afterArrival ? ["بعد الوصول فقط"] : []), table, pageCount: d?.rows?.length ?? 0, total: d?.rows?.length ?? 0 }} />
         </div>
       </div>
-      {q.error ? <ErrorBanner message={q.error} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.count === 0 ? <p className="text-sm text-ink-400">لا خصومات في هذه الفترة.</p> : (
+      {q.error ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : !d ? <div className="py-6 text-center"><Spinner /></div> : d.count === 0 ? <p className="text-sm text-ink-400">لا خصومات في هذه الفترة.</p> : (
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <p className="mb-1 text-xs font-medium text-ink-500">حسب الموظف</p>

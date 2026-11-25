@@ -1,3 +1,4 @@
+import type { IndividualPermissions } from "./individualPermissions";
 /**
  * The permissions matrix the owner approved (decision 71) — a copy of fn_permission_catalog() in migration 0043, kept
  * identical by tests/unit/permissions.test.ts. The server decides every operation (fn_can); the screens and the demo
@@ -69,6 +70,7 @@ export const PERMISSION_CATALOG: readonly PermissionRow[] = [
   { code: "staff.manage", label: "دعوة موظف وتعديله وتفعيله وتعطيله", area: "الموظفون والأمان", sort: 480, defaultRoles: ["owner"], fullRoles: ["owner"], limitNote: "لا يمسّ حساب المالك", locked: false },
   { code: "staff.force_logout", label: "خروج إجباري", area: "الموظفون والأمان", sort: 490, defaultRoles: ["owner", "manager"], fullRoles: ["owner"], limitNote: "غير المالك والمدير", locked: false },
   { code: "security", label: "السجل الأمني ومسح البيانات وإعدادات المساعد وواتساب", area: "الموظفون والأمان", sort: 500, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
+  { code: "payment.settings", label: "إعدادات مزوّد الدفع الإلكتروني (للحسابات الفردية فقط، بمنحة صريحة من المالك)", area: "الموظفون والأمان", sort: 502, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "admin.permissions", label: "تعديل مصفوفة الصلاحيات", area: "الموظفون والأمان", sort: 505, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: true },
   { code: "review.list", label: "قائمة «بحاجة لمراجعة وتدقيق» والتأشير عليها", area: "التقارير والسجل", sort: 510, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "reports.finance", label: "التقارير المالية وتقرير الخصومات", area: "التقارير والسجل", sort: 520, defaultRoles: ["owner", "manager", "supervisor", "finance"], fullRoles: ["owner", "manager", "finance"], limitNote: "ملخص الخصومات فقط", locked: false },
@@ -78,6 +80,7 @@ export const PERMISSION_CATALOG: readonly PermissionRow[] = [
   { code: "bank.manage", label: "بريد البنك وقواعد قراءة الرسائل وإعادة قراءتها", area: "التقارير والسجل", sort: 528, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "reports.identities_usage", label: "تقرير الهويات المعتمدة من المكتب وتقرير الاستعمال", area: "التقارير والسجل", sort: 530, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
   { code: "audit.log", label: "سجل الإجراءات", area: "التقارير والسجل", sort: 540, defaultRoles: ["owner", "manager", "supervisor"], fullRoles: ["owner", "manager"], limitNote: "بلا تفاصيل التغييرات", locked: false },
+  { code: "history.details", label: "تفاصيل قبل وبعد التعديل في سجل الإجراءات وتاريخ الحجز (للحسابات الفردية فقط، بمنحة صريحة)", area: "التقارير والسجل", sort: 545, defaultRoles: ["owner"], fullRoles: null, limitNote: null, locked: false },
 ];
 
 /** the roles the owner edits (the owner's column is always allowed) */
@@ -87,7 +90,7 @@ export const MONEY_PERMISSIONS: readonly string[] = ["voucher.receipt", "voucher
 export const permissionRow = (code: string) => PERMISSION_CATALOG.find((r) => r.code === code);
 
 /** What the person may do (decision 71): the server's fn_my_permissions(); the server decides every operation anyway. */
-export interface Permissions { allowed: ReadonlySet<string>; full: ReadonlySet<string>; seesMoney: boolean }
+export interface Permissions { pageAccess?: IndividualPermissions; allowed: ReadonlySet<string>; full: ReadonlySet<string>; seesMoney: boolean }
 
 /** The approved matrix for a role — used until the server has answered, or when it cannot (an older server). */
 export function defaultPermissions(role: string | null | undefined): Permissions {

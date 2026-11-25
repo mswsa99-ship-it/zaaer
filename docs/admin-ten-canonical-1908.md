@@ -1,0 +1,5 @@
+# Admin ten qualification
+
+PG16.6 canonical iso_credit1745:40actualengineownercontrols exact2row/2tableeffects,40foreignownerdenials on4targets. IncomingPGlite shortsalt proof hid fullengineinvalidroom/license payloads: initial8failures, corrected boundedASCII MD5names. Canonical40positiveexplicitfalse->trueeffect andproved-rowlevelnon-target;40foreignNOT_FOUND/FORBIDDEN no-write throughrollback, existingauditcontentpreserved.
+
+138adapterrows,88control-valid,204unadaptedcatalogrecords. These areadapterinventorylabels, notfullmatrixacceptance. No manager/individual-page exhaustivepositives, update-existing/newdefinitionduplicates, historicalsame-entityauditdecoys orwarmlicensepathclaim. Auditlocatorscanmatchhistoricalsameentityrows, causingfalse RED ratherthanfalse PASS, finitefollow-up. Proofrequiresminimaliso.createdbooking_sources/rooms/blocks/categories presentin focusedDB; nofreshfixturedependencyproofyet, donotbroadpreload.

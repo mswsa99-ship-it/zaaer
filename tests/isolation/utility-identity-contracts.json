@@ -1,0 +1,1046 @@
+{
+  "baseline": "48c6635",
+  "signatures": [
+    {
+      "signature": "fn_alert_event_label(p_event text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261115100000_0070_guest_journey.sql",
+      "definition_sha256": "84d61410c6daa4b53c39271799e1fc0befe237a0af82966aca1d9b331217efd6",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_ar_hours(n integer)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261115100000_0070_guest_journey.sql",
+      "definition_sha256": "b21cdb19cad17f13c8ef0c6a30d858d7331e105b78760c3f206cdfe786609a57",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_ar_nights(n integer)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261107030000_0061_polish.sql",
+      "definition_sha256": "173b267238740b2efb6d3553f0894902828ac6ef97fc46e02aa87b6b06ef9ba4",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_audit_account_label(p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261123100000_0074_accounts.sql",
+      "definition_sha256": "bfc88d261fa0cdce79595f1cc2442a6d43360691ad3fb917a1989f268fd677ca",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_audit_accounting_label(p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261115100000_0070_guest_journey.sql",
+      "definition_sha256": "f970989a6d3409c4c8d7095037235205b2499a2df3dbad8cbc629b22f217c7cc",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_audit_action_label(p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261031030000_0051_source_commission.sql",
+      "definition_sha256": "e373e3179a17f8c21e901cddc9998edb7d383cdd35aec8f7194decdf87710379",
+      "direct_function_dependencies": [
+        "fn_audit_entity_label",
+        "fn_audit_removal_label"
+      ],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_audit_entity_label(p_entity text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029030000_0044_permissions_paste.sql",
+      "definition_sha256": "7098f7423d488f264b9ec70810e5af8edb10ca44d214d7143e5fb29e689f34dc",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_audit_removal_label(p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029030000_0044_permissions_paste.sql",
+      "definition_sha256": "19d66047faca4107fd775567abc6a013bd7eedaf8df088ea1a95f3187ef70c0e",
+      "direct_function_dependencies": [
+        "fn_audit_entity_label"
+      ],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_audit_unit_label(p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261123110000_0075_unit_license.sql",
+      "definition_sha256": "9f3953eeed04f805ec77b1c43ed06349b8da85ca6390692f22d80ebd884c8c48",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_can(p_code text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125040000_0111_fn_can_individual_mode.sql",
+      "definition_sha256": "ec840f6ad52216a0b4901062d8323051fe76c84e9cf562fd404bccd4085fb975",
+      "direct_function_dependencies": [
+        "fn_can_role_matrix",
+        "fn_current_role",
+        "fn_staff_id",
+        "fn_user_access_mode",
+        "fn_user_org_id",
+        "fn_user_page_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_can_write(p_code text, p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125040000_0111_fn_can_individual_mode.sql",
+      "definition_sha256": "ad7b97d9a71d7a49112012d4b7b629b0e4fffb7f3164ee89aeaabf5f5ccfeb28",
+      "direct_function_dependencies": [
+        "fn_can_role_matrix",
+        "fn_current_role",
+        "fn_staff_id",
+        "fn_user_access_mode",
+        "fn_user_org_id",
+        "fn_user_page_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_canonical_user_page(p_page text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125020000_0109_individual_page_guard_foundation.sql",
+      "definition_sha256": "1d6368dc55aaeaf421a5ebf754de8de9ad98c77b4c7223aa0879bd2ea7c285c1",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_cap_full(p_code text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029020000_0043_permissions_matrix.sql",
+      "definition_sha256": "7d9423968a609310148209ff004ee91bf15d28614f317bab7af5fc38b2ca73e6",
+      "direct_function_dependencies": [
+        "fn_can",
+        "fn_current_role",
+        "fn_permission_catalog"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_capability_catalog()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029030000_0044_permissions_paste.sql",
+      "definition_sha256": "f05d8015d0c0276df2b793bbeb2b244005933cee65c3ec5270000f8c54f2a807",
+      "direct_function_dependencies": [
+        "fn_capability_removal_actions"
+      ],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_capability_removal_actions(p_code text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029030000_0044_permissions_paste.sql",
+      "definition_sha256": "62a80bf7047d45fdda33c9e1a4faebca09d5e3c4a01fd819b3a9c60341805028",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_check_payment_reference(p_method text, p_reference text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261025010000_0028_money_core.sql",
+      "definition_sha256": "d8bbcd55e5e27126eaff67da2ca02e119aa967fb3d2ef7343e1e1327f5e929d6",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_check_version(p_current integer, p_expected integer)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261022090100_0007b_property_core.sql",
+      "definition_sha256": "36d7c53106a19d9f861374cd838a085da1a459a9431fef24d23568c6f330948d",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_check_version_strict(p_current integer, p_expected integer)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261022120000_0009_review_fixes.sql",
+      "definition_sha256": "b2094ee0d77fca4c2251cc9740ce16e26f9416ca0a068509946025a0f85bbcd7",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_current_role()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261028010000_0040_lists_reports_staff.sql",
+      "definition_sha256": "27030ff0ced40efc42aba5707707a7882f34f9651e4a45be02686be5790f1b0e",
+      "direct_function_dependencies": [
+        "fn_session_ok"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_day_closing_state(p_status text, p_edit_until timestamp with time zone)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261108020000_0063_day_closing.sql",
+      "definition_sha256": "5cd839cba7e0ea3f0a4a0cfac26a93d346871be3bb00dd649adb33fd6f330031",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_dependency_total(d jsonb)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261022090100_0007b_property_core.sql",
+      "definition_sha256": "1ad41a790f6415a535fc164e7f8cb3de222459a8d88fb209d2e46d17a5a733c0",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_guest_org_id()",
+      "api_grants": {
+        "anon": true,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261124010000_0082_platform_operator.sql",
+      "definition_sha256": "e0e0d9a09ffdb76cca6b47cf5a5e760ac8be2b1458e3625a5e97a001d6f024be",
+      "direct_function_dependencies": [],
+      "contract_class": "guest-org-selector",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": true
+      }
+    },
+    {
+      "signature": "fn_has_role(VARIADIC p_roles role_code[])",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261021140000_0005_security_hardening.sql",
+      "definition_sha256": "07d4e2f2a28783586993771c9e11ed03950220476482f85a1efb3b627efaabe3",
+      "direct_function_dependencies": [
+        "fn_current_role"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_is_staff()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261021091658_0002_rls_policies.sql",
+      "definition_sha256": "252cb0d24cafe31fb6387fe5828c7a11317da6bc303e335f1ba54f1cdea5733c",
+      "direct_function_dependencies": [],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_mask_phone(p text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261027010000_0038_guests_platforms.sql",
+      "definition_sha256": "41c5f0276ea330df39d75e0fb20bc51d7a5ee3560f005303db0a76da99fec9ff",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_name_closeness(p_name text, p_q text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261107020000_0060_owner_lists.sql",
+      "definition_sha256": "4149f7090d42871b5ece2056beb171c8a8ed17f04eed41c609fda5e64d812c9d",
+      "direct_function_dependencies": [
+        "fn_name_norm",
+        "fn_trigram_set"
+      ],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_name_norm(s text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261107020000_0060_owner_lists.sql",
+      "definition_sha256": "6cc04edcd3aa924e93a8adcdde2944778c75b1f5d4ebac1453d35123d62446e8",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_normalize_ar(p text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261022123000_0010_knowledge_base.sql",
+      "definition_sha256": "278042420c843ad577305e20b752688c9fa690ee68486d458f6a2d162b1f2d1a",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_normalize_phone(p text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261023010000_0020_phone_lookup.sql",
+      "definition_sha256": "f6910b832ecd6170b0ca37f8a6e29158240c718521a5010a52b65800b9af0225",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_page_read_gate(p_pages text[])",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125080000_0113_page_rls_direct_reads.sql",
+      "definition_sha256": "e94986cecbfab11cea8afceb054b4fe75fbaf7dab6aa25bc13b8c953f95c094f",
+      "direct_function_dependencies": [
+        "fn_user_access_mode",
+        "fn_user_page_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_page_read_grant(p_pages text[])",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125080000_0113_page_rls_direct_reads.sql",
+      "definition_sha256": "bb1811180600c88f2ae4c988957b0ae949960266e6b4db6e1599d63a1abb567a",
+      "direct_function_dependencies": [
+        "fn_user_access_mode",
+        "fn_user_page_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_page_write_gate(p_pages text[], p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125080000_0113_page_rls_direct_reads.sql",
+      "definition_sha256": "b64e95c45f61fad5239d9a0589f2caf9d91bc2c51c34db22e4fe84570514d574",
+      "direct_function_dependencies": [
+        "fn_user_access_mode",
+        "fn_user_page_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_parse_halalas(p_value text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261025010000_0028_money_core.sql",
+      "definition_sha256": "fbdf011400973c457fd7545cf05bc8b4491fefff75b9252cd0dbc467f58e3ce5",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_payment_method_active(p_method text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261025010000_0028_money_core.sql",
+      "definition_sha256": "6ac22d8b2a8d5addbe5b53388c5f362ee100dd113f431f4f7115be57f6f85134",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_any_cap(p_codes text[])",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029020000_0043_permissions_matrix.sql",
+      "definition_sha256": "72c44b410d0069e1c790392a60ecf5087aef9873392f3ec7d54683c9d4c7bd4e",
+      "direct_function_dependencies": [
+        "fn_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_branch(p_branch uuid)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261021140000_0005_security_hardening.sql",
+      "definition_sha256": "e40ab4adffe011d20879cc75d87d6d84bfb46a3605a7550da50a9cb3e9bffb89",
+      "direct_function_dependencies": [
+        "fn_user_branch_ids"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_cap(p_code text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029020000_0043_permissions_matrix.sql",
+      "definition_sha256": "a09b86466af96bcb7db303edbba86ae1650b41e168105c7259c5a24f2e66f50c",
+      "direct_function_dependencies": [
+        "fn_can",
+        "fn_permission_catalog"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_cap_full(p_code text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029020000_0043_permissions_matrix.sql",
+      "definition_sha256": "558843f079dd12728998107f293b69f034e76e524deac70b8fca409fa9738bc8",
+      "direct_function_dependencies": [
+        "fn_cap_full",
+        "fn_require_cap"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_money()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029020000_0043_permissions_matrix.sql",
+      "definition_sha256": "416ec9ae13fd93e4fe747a54a467ace3ef22afe2eaa3b5c83fec5415c283b6a0",
+      "direct_function_dependencies": [
+        "fn_sees_money"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_role(VARIADIC p_roles role_code[])",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261021140000_0005_security_hardening.sql",
+      "definition_sha256": "ddba6554c13b1210d5b15d9a79ecd6d1aceb00671473cb50c8ca0eddcd98d8f4",
+      "direct_function_dependencies": [
+        "fn_has_role"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_require_user_page(p_page text, p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125020000_0109_individual_page_guard_foundation.sql",
+      "definition_sha256": "8c6e42c33ecc7119d7db5602f13f25b2fe219a8d6aee012a97fe584fcab42f0e",
+      "direct_function_dependencies": [
+        "fn_staff_id",
+        "fn_user_page_can"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_review_aspects()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261115100000_0070_guest_journey.sql",
+      "definition_sha256": "321fe69e12c08077abd16c4870916e149fae6bd6160a4efc496fc8634b927c9b",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_sees_money()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261029020000_0043_permissions_matrix.sql",
+      "definition_sha256": "42b58f209b44de845f67ca6d1a753279a2a2ddcfa2c0d81bec43a11196b97a03",
+      "direct_function_dependencies": [
+        "fn_can",
+        "fn_current_role"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_staff_id()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261028010000_0040_lists_reports_staff.sql",
+      "definition_sha256": "5f8c05abb16bb11fd5ce3dde31f7838d5d3337c44a0a8089b932e565545ef1d7",
+      "direct_function_dependencies": [
+        "fn_session_ok"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_trigram_set(s text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261107020000_0060_owner_lists.sql",
+      "definition_sha256": "0a1014c00f8387b4cf3dea40f6bb64859adec26607df53f61f1bde5b525208a6",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_user_access_mode()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125020000_0109_individual_page_guard_foundation.sql",
+      "definition_sha256": "dbc269b59e8892d3349c0dcd63991a5e0147214a7ef35a3a9aa4e0b6a8050f9d",
+      "direct_function_dependencies": [
+        "fn_staff_id",
+        "fn_user_org_id"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_user_branch_ids()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261028010000_0040_lists_reports_staff.sql",
+      "definition_sha256": "8293a4771901230dbfb090f93a1a065e2a642f6bc5d264221a8bb95b642b85b3",
+      "direct_function_dependencies": [
+        "fn_has_role",
+        "fn_staff_id",
+        "fn_user_org_id"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_user_org_id()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261028010000_0040_lists_reports_staff.sql",
+      "definition_sha256": "e4e9886eff9ed381fc56315241b3035fd36656946f36e36bcadb5da618218eb8",
+      "direct_function_dependencies": [
+        "fn_session_ok"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_user_page_can(p_page text, p_action text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125020000_0109_individual_page_guard_foundation.sql",
+      "definition_sha256": "91356d35ad6ac9a07cc59b4cdb5845405d5d47e7cd7b0a98de224600e778a7e2",
+      "direct_function_dependencies": [
+        "fn_canonical_user_page",
+        "fn_current_role",
+        "fn_staff_id",
+        "fn_user_org_id",
+        "fn_user_page_catalog"
+      ],
+      "contract_class": "actor-permission-identity",
+      "proof_file": "tests/isolation/utility-identity-proof.sql",
+      "tenant_cell_treatment": "NOT N_A: current actor, org, branch, page and grant response must be qualified",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_user_page_catalog()",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261125020000_0109_individual_page_guard_foundation.sql",
+      "definition_sha256": "bc8cc5b8bf97279f7cdf0e6fa4316a65316d3b5d5711a42a3da6a6de255b40ee",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_valid_https_url(p text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261027010000_0038_guests_platforms.sql",
+      "definition_sha256": "846ae90da24621ce940ad6760d2369981c7b07a960b2aea7d1a90972bf23bc3b",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_valid_map_url(p text)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261027010000_0038_guests_platforms.sql",
+      "definition_sha256": "f5cdbdbc6ab0ac0946ac1377b9249e0bb76b6beaaddcf8096bb2113b1798df31",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    },
+    {
+      "signature": "fn_whatsapp_status(c branch_whatsapp_channels)",
+      "api_grants": {
+        "anon": false,
+        "authenticated": true
+      },
+      "latest_definition": "supabase/migrations/20261024010000_0023_whatsapp_web_bridge.sql",
+      "definition_sha256": "1eec58b175b1beff56b9dfc07c071db98529af10dba0453cdaf77be5686d6fa1",
+      "direct_function_dependencies": [],
+      "contract_class": "literal-input-transform/catalog",
+      "proof_file": "tests/isolation/utility-literal-proof.sql",
+      "tenant_cell_treatment": "proposed N_A only for cross-tenant target/CRUD cells: definition consumes only literal inputs or embedded catalog, no tenant data; API execute and output contract remain required",
+      "status": "PG16.6 standalone contract passed; representative only, no endpoint matrix credit",
+      "canonical_effective_grants": {
+        "authenticated": true,
+        "anon": false
+      }
+    }
+  ],
+  "qualification_limits": [
+    "Manifest grant facts came from assigned TSV; canonical PG16 must recheck current pg_proc grants and function definitions.",
+    "Literal proof covers representative inputs, null/error boundaries, not exhaustive strings/branches.",
+    "Identity proof is proposed SQL, not yet executed. No broad tenant matrix acceptance.",
+    "fn_guest_org_id is a public selector, not authorization; token/review fallback and inactive/expired cases remain uncovered here.",
+    "Identity tests omit session revocation, inactive profiles, sensitive_grants toggles, legacy role override denial and owner-only full-role limit contrasts.",
+    "fn_is_staff checks active profile but unlike staff_id/current_role/org_id does not call fn_session_ok; source semantic difference, no authorization fix proposed.",
+    "Pure data-independent functions get proposed tenant-target/CRUD N_A only; their executable API and literal response contracts remain explicit."
+  ]
+}

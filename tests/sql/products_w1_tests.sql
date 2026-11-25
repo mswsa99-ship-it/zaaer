@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Guest journey, task W1 (PR*; migration 0068): products and ordering. A catalogue of products in categories, without
 -- stock, each one offered or not in each branch; a guest in their room orders (WhatsApp, with the verified token) or
@@ -31,7 +32,7 @@ exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
 create or replace function tp_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
-create or replace function tp_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tp_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 create or replace function tp_bal(p_branch uuid, p_key text) returns bigint language sql security definer as $$
   select coalesce(sum(l.credit_halalas - l.debit_halalas), 0)::bigint from journal_lines l join journal_entries e on e.id = l.entry_id join gl_accounts g on g.id = l.account_id
   where e.branch_id = p_branch and g.system_key = p_key $$;
@@ -58,7 +59,7 @@ do $$ declare r jsonb; b uuid; b2 uuid; b3 uuid; cat uuid; cat2 uuid; cat3 uuid;
          'guest_phone', '0551000096', 'guest_name', 'نزيل المنتجات', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('b', b), ('res1', (r->>'id')::uuid);
   -- an ordinary receipt of the stay (not an order's)
-  perform fn_create_voucher(jsonb_build_object('reservation_id', (r->>'id')::uuid, 'kind', 'receipt', 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'pr-base'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', (r->>'id')::uuid, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'pr-base'));
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', b, 'category_id', cat, 'check_in', (tp_today(b) + 5)::text, 'check_out', (tp_today(b) + 6)::text,
          'guest_phone', '0551000097', 'guest_name', 'نزيل لم يصل', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('res2', (r->>'id')::uuid);
@@ -460,6 +461,29 @@ select tp_record('PD14 an order whose stay the trial-data purge removed is not l
 reset role;
 select tp_record('PD14b its own reading gives the order without a stay, not nothing',
   (select fn_product_order_json(id)->>'number' from product_orders where number = 'ORD-PURGED-1') = 'ORD-PURGED-1');
+
+select tp_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+-- the products branch list is a selection list: an archived branch never appears in it, a restored one returns (7.2)
+do $$ declare r jsonb; b3 uuid; begin
+  r := fn_admin_upsert_branch('{"name_ar":"فرع الأرشفة","name_en":"Archive branch","tax_rate_bp":0}'); b3 := (r->>'id')::uuid;
+  insert into ids values ('b3', b3) on conflict (k) do update set v = excluded.v;
+  perform fn_admin_archive_definition('branch', b3, 'اختبار 7.2', true);
+  r := fn_admin_products();
+  perform tp_record('PD20 the archived branch is not in the products branch list',
+    not exists (select 1 from jsonb_array_elements(r->'branches') x where (x->>'id')::uuid = b3),
+    (select string_agg(x->>'name', '، ') from jsonb_array_elements(r->'branches') x));
+  perform tp_record('PD21 the active branches stay in the products branch list',
+    exists (select 1 from jsonb_array_elements(r->'branches') x where (x->>'id')::uuid = tp_id('b')),
+    (select string_agg(x->>'name', '، ') from jsonb_array_elements(r->'branches') x));
+  perform fn_admin_archive_definition('branch', b3, 'استعادة', false);
+  r := fn_admin_products();
+  perform tp_record('PD22 the restored branch returns to the products branch list',
+    exists (select 1 from jsonb_array_elements(r->'branches') x where (x->>'id')::uuid = b3),
+    (select string_agg(x->>'name', '، ') from jsonb_array_elements(r->'branches') x));
+end $$;
+
+reset role;
 
 -- ---------------------------------------------------------------- results
 \set ON_ERROR_STOP on

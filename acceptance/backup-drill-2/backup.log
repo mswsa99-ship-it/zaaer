@@ -1,0 +1,2 @@
+2026-11-24T06:10:09Z backup backup-20261124-061009-scheduled.tar.gpg started (reason: scheduled)
+2026-11-24T06:10:09Z backup backup-20261124-061009-scheduled.tar.gpg done: 111 tables, 2102 rows, 469763 bytes, sha256 1410123bf743… (local-only (offsite upload not configured))

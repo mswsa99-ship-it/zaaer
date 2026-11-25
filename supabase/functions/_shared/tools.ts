@@ -109,6 +109,8 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
       return { payment_status: s.reservation.payment_status, balance_due_sar: halalasToSar((s.reservation.total_halalas ?? 0) - (s.reservation.paid_halalas ?? 0)) };
     }
     case "submit_checkin_request": {
+      const s = await session(ctx);
+      if (!s) return { error: "انتهت صلاحية جلسة التحقق" };
       const { data, error } = await ctx.db.rpc("fn_guest_submit_checkin", { p_token: ctx.guestToken });
       if (error) return { error: "تعذر إرسال طلب الوصول" };
       return { ok: true, access_status: data?.access_status, note: "سيراجع المشرف الطلب؛ يظهر الرمز في صفحة الحجز بعد الاعتماد." };
@@ -164,6 +166,6 @@ export async function executeTool(name: ToolName, args: Record<string, unknown>,
 async function session(ctx: ToolContext): Promise<any | null> { // deno-lint-ignore no-explicit-any
   if (!ctx.guestToken) return null;
   const { data, error } = await ctx.db.rpc("fn_guest_session", { p_token: ctx.guestToken });
-  if (error || !data) return null;
+  if (error || !data || data.reservation?.branch_id !== ctx.branchId) return null;
   return data;
 }

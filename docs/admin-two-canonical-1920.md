@@ -1,0 +1,3 @@
+# Admin follow-on2
+
+PG16.6actualengine8ownercontrolsfalse->trueexact2rows+8foreigncontrasts. Archive_media4foreignFORBIDDENdenials. Upsert_product4foreignVALIDATIONproduct_category isattributedonlytopayloadcategoryscoping, NOTpermissiondenialcredit; explicitnegativeoraclelabelretained. Productcreateonly1234price/mediaarchiveonly, norestore/warm/historicalauditdecoyclaim. Genericinventory143adapterrows,93control-validlabels,199unadapted; labelsarenotmatrixcoverage. Nofullmatrix/releasePASS.

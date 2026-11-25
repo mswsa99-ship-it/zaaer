@@ -1,0 +1,41 @@
+-[ RECORD 1 ]+------------------------------------------------------------
+kind         | backup
+reason       | scheduled
+status       | success
+run_ref      | backup-20261124-061009-scheduled.tar.gpg
+size_bytes   | 469763
+tables_count | 111
+rows_total   | 2102
+verification | manifest+sha256; local-only (offsite upload not configured)
+error        |
+-[ RECORD 2 ]+------------------------------------------------------------
+kind         | backup
+reason       | pre-deploy
+status       | success
+run_ref      | backup-20261124-061009-pre-deploy.tar.gpg
+size_bytes   | 469969
+tables_count | 111
+rows_total   | 2103
+verification | manifest+sha256; local-only (offsite upload not configured)
+error        |
+-[ RECORD 3 ]+------------------------------------------------------------
+kind         | restore_drill
+reason       | drill
+status       | success
+run_ref      | drill-backup-20261124-061009-pre-deploy.tar.gpg
+size_bytes   |
+tables_count |
+rows_total   |
+verification | restore:counts+hashes identical
+error        |
+-[ RECORD 4 ]+------------------------------------------------------------
+kind         | restore_drill
+reason       | drill
+status       | success
+run_ref      | drill-backup-20261124-061009-pre-deploy.tar.gpg
+size_bytes   |
+tables_count |
+rows_total   |
+verification | restore:counts+hashes identical
+error        |
+

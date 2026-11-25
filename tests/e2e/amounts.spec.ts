@@ -2,12 +2,13 @@
  * The money field and the amount boxes (correction batch 2, the owner's notes 2 and 7; tasks B2 and B6).
  * AM01 is the unit facet (tests/unit/amount_input.test.ts); these are the screen facets.
  */
-import { test, expect, createReservation } from "./fixtures";
+import { test, expect, createReservation, reachPrice } from "./fixtures";
 
 test.describe("amounts (correction batch 2)", () => {
   test("AM02 typing 2 in a money field gives 2 riyals, Arabic digits are read, halalas only after the point", async ({ page, loginAs }) => {
     await loginAs("supervisor");
     await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+    await reachPrice(page);
     const discount = page.locator("div:has(> label:has-text('خصم (إجمالي)')) input[data-money]");
     await expect(discount).toHaveValue("");                       // starts empty, not 0.00
     await discount.fill("2");

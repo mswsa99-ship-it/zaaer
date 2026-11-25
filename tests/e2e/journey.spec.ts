@@ -12,7 +12,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
 async function signOut(page: Page) {
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
 }
 /** the stay's reference of a unit leaving today, as the reception sees it in «رحلة الضيف» */
 async function departingRef(page: Page, go: (p: string) => Promise<void>, room: string) {
@@ -196,7 +196,7 @@ test.describe("the guest journey after the stay", () => {
     await expect(page.getByTestId("product-sample")).toHaveCount(12);
     await go("/admin/data-purge");
     const card = page.getByTestId("trial-purge");
-    await expect(card).toContainText("نزلاء زائر المستوردون (لا يُمسحون)");
+    await expect(card).toContainText("النزلاء المستوردون المحميون (لا يُمسحون)");
     await expect(card).toContainText("لا تُمسح أبدًا");
     await card.getByTestId("choose-all-trial").click();
     await expect(page.getByTestId("purge-branch")).toHaveValue("");

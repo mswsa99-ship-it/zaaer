@@ -17,6 +17,7 @@ async function workbook(download: Download) {
   return { statement: rows.slice(0, blank).map((r) => r[0] ?? ""), header: rows[blank + 1] ?? [], data: rows.slice(blank + 2).filter((r) => r.some((c) => c !== "")) };
 }
 async function exportAll(page: Page, scope: "all" | "page" = "all") {
+  await page.getByTestId("export-trigger").first().click();
   await page.getByTestId("export-xlsx").first().click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`export-scope-${scope}`).click()]);
   return workbook(download);
@@ -101,7 +102,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     expect(pageScope.statement[4]).toBe(`النطاق: هذه الصفحة فقط (${Math.min(cancelled, 25)} من ${cancelled})`);
     expect(pageScope.data.length).toBe(Math.min(cancelled, 25));
     // the print document takes the same statement (the dialog itself cannot be asserted here)
-    await expect(page.getByTestId("export-print")).toBeEnabled();
+    await expect(page.getByTestId("export-trigger")).toBeEnabled();
   });
 
   test("LE03 «تقويم الحجوزات»: the units against the days, each stay a bar that opens the booking; the type and floor filters", async ({ page, loginAs, go }) => {
@@ -211,6 +212,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await page.getByTestId("filter-method").selectOption("");
     await page.getByTestId("filter-staff").selectOption({ index: 1 });
     await expect(page.getByTestId("report-filter-words")).toContainText("الموظف:");
+    await page.getByTestId("export-trigger").first().click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-xlsx").first().click()]);
     const wb = await workbook(download);
     expect(wb.statement[0]).toBe("التقرير المالي");
@@ -279,7 +281,9 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     const row = page.locator("[data-testid=audit-row]").first();
     await expect(row).toContainText("تعديل بيانات موظف");
     await expect(row).toContainText("انتقل إلى فرع آخر");
-    await row.click();
+    // The row's centre falls on the «كل أحداثه» filter button in the reference cell, which pins a filter instead of opening the detail.
+    // Open the detail from the action cell, which has no nested control.
+    await row.getByText("تعديل بيانات موظف").click();
     const detail = page.getByTestId("audit-detail");
     await expect(detail).toContainText("فهد الاستقبال (معدّل)");
     await expect(detail).toContainText("••••1234");
@@ -311,7 +315,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await page.bringToFront();
     const link = page.getByRole("link", { name: "لوحة الوحدات" }).first();
     if (await link.isVisible().catch(() => false)) await link.click({ timeout: 3_000 }).catch(() => undefined);
-    await expect(page).toHaveURL(/#\/staff\/login/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/#\/login(?:\?|$)/, { timeout: 20_000 });
     await expect(page.getByTestId("revoked-notice")).toBeVisible();
     // a fresh sign-in works: the account is active
     await page.getByRole("button", { name: "مشرف الاستقبال" }).click();
@@ -340,6 +344,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await expect(page.locator("[data-testid=usage-row][data-status='idle']")).toHaveCount(0);
     await page.getByTestId("weeks-1").click();
     await expect(page.getByTestId("usage-summary")).toBeVisible();
+    await page.getByTestId("export-trigger").first().click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-xlsx").first().click()]);
     const wb = await workbook(download);
     expect(wb.statement[0]).toBe("استعمال القدرات");

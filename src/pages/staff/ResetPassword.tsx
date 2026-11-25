@@ -53,10 +53,10 @@ export default function ResetPassword() {
   }
 
   const shell = (body: React.ReactNode) => (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-800 to-brand-800 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-rai-canvas text-rai-ink px-4">
       <div className="w-full max-w-md">
-        <div className="mb-6 text-center text-white">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15"><KeyRound className="h-7 w-7" aria-hidden="true" /></div>
+        <div className="mb-6 text-center text-rai-ink">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-rai-shell"><KeyRound className="h-7 w-7" aria-hidden="true" /></div>
           <h1 className="text-xl font-bold">تعيين كلمة المرور</h1>
         </div>
         <div className="card p-6" data-testid="reset-password">{body}</div>
@@ -67,8 +67,8 @@ export default function ResetPassword() {
   if (done) {
     return shell(
       <div className="space-y-4 text-center" role="status" data-testid="reset-done">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-success-600" aria-hidden="true" />
-        <p className="text-sm text-ink-700">تم تعيين كلمة المرور الجديدة، وخرجت أجهزتك الأخرى. ادخل بها من الآن.</p>
+        <CheckCircle2 className="mx-auto h-10 w-10 text-rai-success" aria-hidden="true" />
+        <p className="text-sm text-rai-ink">تم تعيين كلمة المرور الجديدة، وخرجت أجهزتك الأخرى. ادخل بها من الآن.</p>
         <button type="button" className="btn-primary w-full" onClick={() => navigate(homeFor(profile?.role), { replace: true })}>متابعة إلى النظام</button>
       </div>,
     );
@@ -77,8 +77,8 @@ export default function ResetPassword() {
   if (!session && (badLink || (!loading && waited))) {
     return shell(
       <div className="space-y-4 text-center" data-testid="reset-invalid">
-        <p className="text-sm text-ink-700">{badLink ? "انتهت صلاحية الرابط أو استُعمل من قبل." : "افتح هذه الصفحة من الرابط الذي وصلك على البريد."}</p>
-        <p className="text-xs text-ink-500">اطلب رابطًا جديدًا من صفحة الدخول ← «نسيت كلمة المرور؟».</p>
+        <p className="text-sm text-rai-ink">{badLink ? "انتهت صلاحية الرابط أو استُعمل من قبل." : "افتح هذه الصفحة من الرابط الذي وصلك على البريد."}</p>
+        <p className="text-xs text-rai-ink-muted">اطلب رابطًا جديدًا من صفحة الدخول ← «نسيت كلمة المرور؟».</p>
         <Link to="/staff/login" className="btn-primary w-full justify-center">إلى صفحة الدخول</Link>
       </div>,
     );
@@ -88,11 +88,11 @@ export default function ResetPassword() {
 
   return shell(
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <p className="text-sm text-ink-600">الحساب: <span dir="ltr" className="font-medium">{session.user?.email}</span></p>
+      <p className="text-sm text-rai-ink-muted">الحساب: <span dir="ltr" className="font-medium">{session.user?.email}</span></p>
       <div>
         <label className="label" htmlFor="new-password">كلمة المرور الجديدة</label>
         <input id="new-password" type="password" className="input" dir="ltr" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} required />
-        <p className="mt-1 text-xs text-ink-400">{PASSWORD_HINT}</p>
+        <p className="mt-1 text-xs text-rai-ink-muted">{PASSWORD_HINT}</p>
       </div>
       <div>
         <label className="label" htmlFor="confirm-password">أعد كتابتها</label>

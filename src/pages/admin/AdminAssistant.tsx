@@ -1,3 +1,4 @@
+import { BranchPicker } from "../../components/BranchPicker";
 import ReceptionChat from "../../components/ReceptionChat";
 import { SectionTitle } from "../../components/ui";
 
@@ -9,6 +10,7 @@ export default function AdminAssistant() {
   return (
     <div>
       <SectionTitle title="تجربة المساعد" subtitle="نفس المساعد الذي يرد على النزلاء في واتساب — جرّب الأسئلة قبل ربط الرقم أو بعد تعديل قاعدة المعرفة" />
+      <div className="mb-3"><BranchPicker /></div>
       <ReceptionChat embedded />
     </div>
   );

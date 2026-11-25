@@ -16,6 +16,7 @@ import { ExportMenu } from "../../components/ExportMenu";
 import { ROLE_LABELS, type Role } from "../../lib/types";
 import { formatDateTime } from "../../lib/utils";
 import type { ExportScope, ExportStatement, ExportTable } from "../../lib/exports";
+import { DisabledReason } from "../../components/DisabledReason";
 
 const key = (code: string, role: string) => `${code}|${role}`;
 
@@ -71,9 +72,10 @@ export default function AdminRoles() {
 
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-3 text-xs text-ink-600">
         <Info className="h-4 w-4 shrink-0 text-ink-400" />
+        <span id="dr-roles-fixed">الخانات المقفلة (عمود المالك، والصلاحيات المخصّصة للمالك وحده) لا تُعدَّل.</span>
         <span data-testid="perm-changed-count">{m.changed === 0 ? "مطابقة للمصفوفة المعتمدة" : `${m.changed} خانة تختلف عن المصفوفة المعتمدة`}</span>
         {m.last_change && <span className="text-ink-400" data-testid="perm-last-change">آخر تعديل {formatDateTime(m.last_change.at)}{m.last_change.by ? ` · ${m.last_change.by}` : ""}{m.last_change.reason ? ` · «${m.last_change.reason}»` : ""}</span>}
-        <button type="button" className="btn-ghost mr-auto px-2 py-1 text-xs" disabled={m.changed === 0} onClick={() => { setReason(""); setSaving("reset"); }} data-testid="perm-reset"><RotateCcw className="h-3 w-3" /> استعادة المصفوفة المعتمدة</button>
+        <button type="button" className="btn-ghost mr-auto px-2 py-1 text-xs" disabled={m.changed === 0} aria-describedby={m.changed === 0 ? "dr-roles-reset" : undefined} onClick={() => { setReason(""); setSaving("reset"); }} data-testid="perm-reset"><RotateCcw className="h-3 w-3" /> استعادة المصفوفة المعتمدة</button><DisabledReason id="dr-roles-reset" show={m.changed === 0} text="لا توجد تعديلات لاستعادتها" />
       </Card>
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/5 p-3 text-sm text-success-700" data-testid="perm-notice">{notice}</div>}
 
@@ -151,7 +153,7 @@ function AreaRows({ area, m, value, draft, toggle }: { area: string; m: Permissi
             return (
               <td key={role} className={`px-2 py-2 text-center ${pending ? "bg-brand-50" : ""}`}>
                 <label className="inline-flex flex-col items-center gap-0.5">
-                  <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={v} disabled={fixed} onChange={() => toggle(r.code, role)}
+                  <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={v} disabled={fixed} aria-describedby="dr-roles-fixed" title={fixed ? (role === "owner" ? "صلاحية المالك ثابتة ولا تُعدَّل" : "هذه الصلاحية مقفلة ولا تُعدَّل") : undefined} onChange={() => toggle(r.code, role)}
                     aria-label={`${r.label} — ${ROLE_LABELS[role as Role] ?? role}`} data-testid="perm-cell" data-code={r.code} data-role={role} data-default={cell?.default ? "yes" : "no"} />
                   <span className="flex h-3 items-center gap-0.5">
                     {limited && <Badge className="bg-warning-500/10 px-1 py-0 text-[9px] text-warning-700" title={r.limit_note ?? ""}>بقيد</Badge>}

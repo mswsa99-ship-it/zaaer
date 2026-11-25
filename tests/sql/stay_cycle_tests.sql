@@ -23,6 +23,8 @@ $$;
 create or replace function t_id(p_k text) returns uuid language sql security definer as $$ select v from ids where k = p_k $$;
 create or replace function t_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function t_unit(p uuid) returns rooms language sql security definer as $$ select * from rooms where id = p $$;
+-- what stands before a booking's code, as the server's own functions ask it (since 0078 no one signed in may call fn_evaluate_access)
+create or replace function t_evaluate(p uuid) returns table(allowed boolean, reasons text[]) language sql security definer as $$ select allowed, reasons from fn_evaluate_access(p, false) $$;
 create or replace function t_box(p uuid) returns keyboxes language sql security definer as $$ select * from keyboxes where room_id = p $$;
 create or replace function t_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;
 create or replace function t_due(p uuid, p_at timestamptz) returns jsonb language sql security definer as $$ select fn_stay_due_internal(p, p_at) $$;
@@ -78,7 +80,7 @@ declare d jsonb;
 begin
   d := t_due(p, now());
   return fn_staff_check_in(jsonb_build_object('reservation_id', p,
-    'rent', case when (d->>'first_night')::bigint > (d->>'collected')::bigint then jsonb_build_object('amount_halalas', (d->>'first_night')::bigint - (d->>'collected')::bigint,
+    'rent', case when (d->>'first_night')::bigint > (d->>'collected')::bigint then jsonb_build_object('received_confirmed', true, 'amount_halalas', (d->>'first_night')::bigint - (d->>'collected')::bigint,
                                                                                                     'method', 'cash', 'idempotency_key', p_key || '-rent') end,
     'deposit', jsonb_build_object('amount_halalas', (d->>'deposit_required')::bigint, 'method', 'cash', 'idempotency_key', p_key || '-dep')));
 end $$;
@@ -159,24 +161,24 @@ exception when others then perform t_record('SC02d a change in the number of gue
 -- ---------------------------------------------------------------- SC03–SC05: the arrival's two entries, the deposit's reason
 do $$ declare res uuid := t_id('resA'); r jsonb; r2 jsonb; n int; begin
   r := fn_staff_check_in(jsonb_build_object('reservation_id', res,
-         'rent', jsonb_build_object('amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sc03-rent-part'),
+         'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sc03-rent-part'),
          'deposit', jsonb_build_object('amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sc03-dep-part')));
   perform t_record('SC05a part of the first night is not enough: refused with what remains, and neither entry is recorded',
     (r->>'ok')::boolean = false and r->>'reasons' like '%المتبقي 50.00%' and t_count(format('select count(*) from financial_vouchers where reservation_id = %L', res)) = 0, r::text);
   perform t_record('SC05b an entry that fails its own rule (a terminal payment without its transaction number) records nothing at all',
     t_fails(format('select fn_staff_check_in(%L)', jsonb_build_object('reservation_id', res,
-      'rent', jsonb_build_object('amount_halalas', 10000, 'method', 'pos', 'idempotency_key', 'sc03-rent-pos'),
+      'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', 10000, 'method', 'pos', 'idempotency_key', 'sc03-rent-pos'),
       'deposit', jsonb_build_object('amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sc03-dep-pos'))), '%reference_required%') = 'ok'
     and t_count(format('select count(*) from financial_vouchers where reservation_id = %L', res)) = 0 and (t_res(res)).status = 'confirmed');
   r := fn_staff_check_in(jsonb_build_object('reservation_id', res,
-         'rent', jsonb_build_object('amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc03-rent'),
+         'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc03-rent'),
          'deposit', jsonb_build_object('amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sc03-dep')));
   perform t_record('SC03a the arrival records the rent receipt and the deposit receipt as two vouchers, in one step; the unit is occupied and its code awaits delivery',
     (r->>'ok')::boolean and r->>'rent_voucher' like 'RCP-%' and r->>'deposit_voucher' like 'DEP-%' and (t_res(res)).status = 'checked_in'
     and (t_res(res)).actual_check_in is not null and (t_res(res)).checked_in_by = '10000000-0000-0000-0000-000000000002' and (t_res(res)).access_status = 'approved'
     and (t_unit(t_id('k1'))).status = 'occupied' and (t_fin(res)->>'net_collected')::bigint = 10000 and (t_fin(res)->>'deposit_balance')::bigint = 5000, r::text);
   r2 := fn_staff_check_in(jsonb_build_object('reservation_id', res,
-         'rent', jsonb_build_object('amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc03-rent-again')));
+         'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc03-rent-again')));
   n := t_count(format('select count(*) from financial_vouchers where reservation_id = %L', res));
   perform t_record('SC03b registering the arrival again changes nothing: one transition, one arrival time, no new voucher (R13)',
     (r2->>'duplicate')::boolean and n = 2 and t_count(format('select count(*) from audit_events where entity_id = %L and action = %L', res, 'reservation.checked_in')) = 1, r2::text);
@@ -184,11 +186,11 @@ exception when others then perform t_record('SC03a the arrival records the rent 
 
 do $$ declare res uuid := t_id('resN'); r jsonb; begin
   r := fn_staff_check_in(jsonb_build_object('reservation_id', res,
-         'rent', jsonb_build_object('amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc04-rent'),
+         'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc04-rent'),
          'deposit', jsonb_build_object('amount_halalas', 3000, 'method', 'cash', 'idempotency_key', 'sc04-dep')));
   perform t_record('SC04a a deposit under the branch''s amount needs the reason', (r->>'ok')::boolean = false and r->>'reasons' like '%التأمين%' and jsonb_array_length(r->'reasons') = 1, r::text);
   r := fn_staff_check_in(jsonb_build_object('reservation_id', res, 'deposit_reason', 'ضيف دائم؛ يكمل التأمين مساءً',
-         'rent', jsonb_build_object('amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc04-rent'),
+         'rent', jsonb_build_object('received_confirmed', true, 'amount_halalas', 10000, 'method', 'cash', 'idempotency_key', 'sc04-rent'),
          'deposit', jsonb_build_object('amount_halalas', 3000, 'method', 'cash', 'idempotency_key', 'sc04-dep')));
   perform t_record('SC04b with the reason the arrival goes ahead; the reason, who and when are on the stay and in the audit with the shortfall',
     (r->>'ok')::boolean and (t_res(res)).deposit_waiver_reason = 'ضيف دائم؛ يكمل التأمين مساءً' and (t_res(res)).deposit_waiver_by is not null
@@ -304,7 +306,7 @@ do $$ declare res uuid := t_id('resLate'); r jsonb; r2 jsonb; due bigint; begin
   perform t_record('SC10a nothing owed, for anyone: the supervisor and the owner (even with the old override''s reason) are refused, with how to settle it',
     (r->>'ok')::boolean = false and (r2->>'ok')::boolean = false and r->>'reasons' like '%يُصفَّر بسند قبض%' and (t_res(res)).status = 'checked_in' and due > 0, r::text);
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', due - 3000, 'method', 'cash', 'idempotency_key', 'sc10-pay'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', due - 3000, 'method', 'cash', 'idempotency_key', 'sc10-pay'));
   -- the supervisor zeroes the rest from the deposit, with a reason (§16: «خصم من التأمين بسبب لتصفير الرصيد»)
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'deposit_apply', 'amount_halalas', 3000, 'reason', 'تسوية الباقي من التأمين', 'idempotency_key', 'sc10-apply'));
   r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
@@ -408,7 +410,7 @@ exception when others then perform t_record('SC14a undoing an arrival: not the s
 
 do $$ declare res uuid := t_id('resC'); r jsonb; other uuid; m text; begin
   perform t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'sc14c-pay'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (t_fin(res)->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'sc14c-pay'));
   r := fn_staff_check_out(jsonb_build_object('early_departure', 'keep', 'reason', 'اختبار المغادرة', 'reservation_id', res));
   m := t_fails(format('select fn_staff_reopen_stay(%L)', jsonb_build_object('reservation_id', res, 'reason', 'خطأ')), 'FORBIDDEN%');
   perform t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
@@ -537,7 +539,7 @@ exception when others then perform t_record('SC19a finance and housekeeping do n
 -- ---------------------------------------------------------------- SC20: the guest's page
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare e record; begin
-  select * into e from fn_evaluate_access(t_id('resDirty'), false);
+  select * into e from t_evaluate(t_id('resDirty'));
   perform t_record('SC20 before the arrival, what stands before the code is the arrival itself at reception',
     not e.allowed and array_to_string(e.reasons, ' | ') like '%يُسجَّل الوصول في الاستقبال%', array_to_string(e.reasons, ' | '));
 exception when others then perform t_record('SC20 before the arrival, what stands before the code is the arrival itself at reception', false, sqlerrm); end $$;

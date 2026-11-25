@@ -22,7 +22,7 @@ async function openByRoom(page: Page, go: (p: string) => Promise<void>, room: st
 
 async function signOut(page: Page) {
   await page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first().click();
-  await expect(page).toHaveURL(/#\/staff\/login/);
+  await expect(page).toHaveURL(/#\/login(?:\?|$)/);
 }
 
 test.describe("the stay cycle (phase 3)", () => {
@@ -37,8 +37,9 @@ test.describe("the stay cycle (phase 3)", () => {
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
     await expect(page.getByTestId("reasons").first()).toContainText("التأمين لم يُستلم كاملًا");
     await expect(arrival).toBeVisible();
-    // the branch's deposit, on its own voucher
+    // the branch's deposit, on its own voucher, with its «استلمت» confirmation
     await deposit.locator("input[data-money]").fill("50");
+    await deposit.getByLabel(/استلمت المبلغ/).check();
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
     await expect(page.getByTestId("stay-notice")).toContainText("سُجِّل الوصول");
     await expect.poll(() => financeCell(page, "رصيد التأمين")).toBe(50);
@@ -180,7 +181,7 @@ test.describe("the stay cycle (phase 3)", () => {
   test("SU07 the guest's page: the arrival at reception first, then the code — or, in the annex, the key", async ({ page, go }) => {
     const open = async (phone: string, ref: string) => {
       // «حجوزاتي» keeps a verified phone's list for the tab; another guest starts from the phone
-      await page.evaluate(() => { try { sessionStorage.removeItem("guest_phone_session"); } catch { /* storage blocked */ } });
+      await page.evaluate(() => { try { for (const k of Object.keys(sessionStorage)) if (k === "guest_phone_session" || k.startsWith("guest_phone_session:")) sessionStorage.removeItem(k); } catch { /* storage blocked */ } });
       await go("/booking/lookup");
       await page.getByPlaceholder("05xxxxxxxx").fill(phone);
       await page.getByRole("button", { name: "متابعة" }).click();

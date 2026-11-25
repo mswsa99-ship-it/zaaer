@@ -1,0 +1,11 @@
+-[ RECORD 1 ]+------------------------------------------------------------
+kind         | backup
+reason       | drill
+status       | success
+run_ref      | backup-20261124-061004-drill.tar.gpg
+size_bytes   | 410871
+tables_count | 102
+rows_total   | 974
+verification | manifest+sha256; local-only (offsite upload not configured)
+error        |
+

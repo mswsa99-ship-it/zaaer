@@ -200,3 +200,23 @@ export function toWhatsAppMessage(to: string, reply: string, actions: AssistantA
 
 /** Saudi date for a booking line: 2026-10-23 → 23/10 */
 export const shortDate = (d: string) => { const [, m, day] = String(d).split("-"); return day && m ? `${Number(day)}/${Number(m)}` : String(d); };
+
+/**
+ * «إيقاف» / «استئناف» (0083): a whole-message stop/start command for the phone-code messages, honored on the
+ * channel it arrived on (whatsapp-webhook and wa-bridge both read it before the conversation flow). Only the exact
+ * command matches — a sentence that merely contains the word is a normal guest message.
+ */
+export function guestOptCommand(text: string | null | undefined): "optout" | "optin" | null {
+  const t = String(text ?? "").trim().toLowerCase()
+    .replace(/[أإآ]/g, "ا")    // alef forms
+    .replace(/ـ/g, "");          // tatweel
+  if (t === "ايقاف" || t === "stop") return "optout";
+  if (t === "استئناف" || t === "start") return "optin";
+  return null;
+}
+
+/** the short confirmations for guestOptCommand (the same words on the Cloud API and the reception computer) */
+export const WA_OPT_CONFIRM: Record<"optout" | "optin", string> = {
+  optout: "تم إيقاف رسائل رمز التحقق إلى هذا الرقم. أرسل «استئناف» لإعادة تفعيلها.",
+  optin: "تم استئناف رسائل رمز التحقق إلى هذا الرقم.",
+};

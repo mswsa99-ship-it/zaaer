@@ -1,0 +1,60 @@
+/**
+ * Plan 3.2 — the single token file carries the approved values verbatim (tokens.json v1 of the approved RoomAI
+ * system). These assertions pin the load-bearing values so a typo or a silent edit fails loudly. Descriptive
+ * names, no test codes: prefix registration is left to the integrator.
+ */
+import { describe, it, expect } from "vitest";
+import {readFileSync} from "node:fs";
+import { colors, textStyles, spacing, radii, shadows, sizes, fontFamilies, declaredPairs, PRODUCT_NAME, POWERED_BY } from "../../src/lib/designTokens";
+
+describe("the single token file (plan 3.2)", () => {
+  it("carries the approved identity colours verbatim, نهار وليل", () => {
+    expect(colors.night).toMatchObject({ light: "#e5edf0", dark: "#183b47" });
+    expect(colors.spark).toMatchObject({ light: "#095865", dark: "#daf8fb" });
+    expect(colors.saffron).toMatchObject({ light: "#624000", dark: "#fff0d3" });
+    expect(colors.sand).toMatchObject({ light: "#f5f7fa", dark: "#091c24" });
+    expect(colors.paper).toMatchObject({ light: "#f5f7fa", dark: "#091c24" });
+    expect(Object.keys(colors)).toHaveLength(30);
+  });
+
+  it("uses the unified selected surface and canvas values", () => {
+    expect(colors["surface-sunken"].light).toBe("#e5edf0");
+    expect(colors["sand-sheer"].light).toBe("#f5f7fa");
+  });
+
+  it("carries the type, spacing, radius, shadow and size scales verbatim", () => {
+    expect(fontFamilies.display).toContain("Readex Pro");
+    expect(fontFamilies.sans).toContain("IBM Plex Sans Arabic");
+    expect(fontFamilies.mono).toContain("IBM Plex Mono");
+    expect(textStyles["display-l"]).toMatchObject({ fontSize: "40px", lineHeight: "48px" });
+    expect(textStyles.caption).toMatchObject({ fontSize: "12px", lineHeight: "16px" });
+    expect(Object.values(spacing)).toEqual(["4px", "8px", "12px", "16px", "24px", "32px", "48px"]);
+    expect(radii).toMatchObject({ "radius-md": "10px", "radius-lg": "16px", "radius-xl": "28px", "radius-pill": "999px" });
+    expect(sizes).toEqual({ "target-min": "44px", "field-height": "40px" });
+    expect(shadows["shadow-1"].light).toContain("rgba(16,38,45,0.04)");
+  });
+
+  it("the name is one word, R and A and I capital; the guest footer line is fixed", () => {
+    expect(PRODUCT_NAME).toBe("RoomAI");
+    expect(POWERED_BY).toBe("يعمل بـ RoomAI");
+  });
+
+  it("every declared pair references real token values (no orphan strings)", () => {
+    const all = new Set(Object.values(colors).flatMap((c) => [c.light, c.dark]));
+    for (const p of declaredPairs) {
+      const composite = ["#f7f3ed", "#faf6f0"].includes(p.background);
+      expect(all.has(p.text), `${p.label}: text`).toBe(true);
+      expect(all.has(p.background) || composite, `${p.label}: background`).toBe(true);
+    }
+  });
+});
+
+
+describe("borderless shared cards", () => {
+  it("does not restore a light decorative outline in either theme", () => {
+    const css=readFileSync("src/index.css","utf8");
+    const card=css.match(/\.card\s*\{([^}]+)\}/)?.[1];
+    expect(card).toBeDefined();
+    expect(card).not.toMatch(/\bborder\b/);
+  });
+});

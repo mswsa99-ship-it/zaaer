@@ -130,4 +130,18 @@ describe("bank mailbox (A6)", () => {
     expect(calls.find((c) => c.fn === "fn_bank_ingest_failed")?.args).toEqual({ p_uid: 1, p_error: "boom" });
     expect(calls.at(-1)?.args?.p_last_uid).toBe(2);
   });
+  it("BK26 each mailbox reading carries its hotel through config, ingest and checkpoint", async()=>{
+    for(const hotel of ["hotel-a","hotel-b"]){
+      const calls:Array<{fn:string,args?:Record<string,unknown>}>=[];
+      const db={rpc:async(fn:string,args?:Record<string,unknown>)=>{
+        calls.push({fn,args});
+        if(fn==="fn_bank_mail_poll_config")return{data:{configured:true,host:"h",port:993,user:"u",password:"p",last_uid:0,uid_validity:9},error:null};
+        return{data:{ok:true,status:"parsed"},error:null};
+      }};
+      const s=server({1:mail(RELAY)});await pollMailbox(db,async()=>s.wire,25,hotel);
+      expect(calls.map(c=>c.args?.p_org)).toEqual([hotel,hotel,hotel]);
+      expect(calls.map(c=>c.fn)).toEqual(["fn_bank_mail_poll_config","fn_bank_ingest","fn_bank_mail_poll_done"]);
+    }
+  });
+
 });

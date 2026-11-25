@@ -18,11 +18,11 @@ const MARKS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 function MarkPicker({ name, label, value, onChange, big }: { name: string; label: string; value: number | null; onChange: (n: number) => void; big?: boolean }) {
   return (
     <fieldset className="min-w-0" data-testid={`mark-${name}`}>
-      <legend className={big ? "mb-2 text-base font-semibold text-ink-800" : "mb-1.5 text-sm font-medium text-ink-700"}>{label}</legend>
+      <legend className={big ? "mb-2 text-base font-semibold text-rai-ink" : "mb-1.5 text-sm font-medium text-rai-ink"}>{label}</legend>
       <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-10" role="radiogroup" aria-label={label}>
         {MARKS.map((n) => (
           <button key={n} type="button" role="radio" aria-checked={value === n} onClick={() => onChange(n)}
-            className={`min-h-[44px] rounded-xl border text-sm font-semibold tabular-nums transition ${value === n ? "border-brand-600 bg-brand-600 text-white" : "border-ink-200 bg-white text-ink-700 hover:border-brand-300"}`}>{n}</button>
+            className={`min-h-[44px] rounded-xl border text-sm font-semibold tabular-nums transition ${value === n ? "border-rai-line-strong bg-rai-action text-rai-action-ink" : "border-rai-line bg-rai-shell text-rai-ink hover:border-rai-line"}`}>{n}</button>
         ))}
       </div>
     </fieldset>
@@ -65,17 +65,17 @@ export default function GuestReview() {
     <div className="mx-auto max-w-lg px-4 py-8" data-testid="guest-review">
       <Card className="space-y-5">
         <div>
-          <p className="text-sm font-semibold text-brand-700" dir="auto">{info.branch_name}</p>
-          <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-ink-800"><Star className="h-5 w-5 text-accent-600" /> {t("تقييم إقامتك", "Rate your stay")}</h1>
-          {info.check_in && <p className="mt-1 text-sm text-ink-500"><span dir="ltr">{info.check_in} → {info.check_out}</span></p>}
+          <p className="text-sm font-semibold text-rai-action-ink" dir="auto">{info.branch_name}</p>
+          <h1 className="mt-1 flex items-center gap-2 text-xl font-bold text-rai-ink"><Star className="h-5 w-5 text-rai-spark-text" /> {t("تقييم إقامتك", "Rate your stay")}</h1>
+          {info.check_in && <p className="mt-1 text-sm text-rai-ink-muted"><span dir="ltr">{info.check_in} → {info.check_out}</span></p>}
         </div>
 
         {done || info.submitted ? (
           <div className="space-y-3" role="status" data-testid="review-thanks">
-            <p className="flex items-center gap-2 rounded-xl bg-success-500/10 p-3 text-sm font-semibold text-success-700"><CheckCircle2 className="h-4 w-4" /> {t("شكرًا لك، وصل تقييمك.", "Thank you — your review has been received.")}</p>
+            <p className="flex items-center gap-2 rounded-xl bg-rai-success-tint p-3 text-sm font-semibold text-rai-success"><CheckCircle2 className="h-4 w-4" /> {t("شكرًا لك، وصل تقييمك.", "Thank you — your review has been received.")}</p>
             {info.reply && (
-              <div className="rounded-xl bg-ink-50 p-3 text-sm text-ink-700" data-testid="review-reply">
-                <p className="mb-1 flex items-center gap-1.5 font-semibold text-ink-800"><MessageSquareText className="h-4 w-4" /> {t("رد الإدارة", "The management's reply")}</p>
+              <div className="rounded-xl bg-rai-canvas p-3 text-sm text-rai-ink" data-testid="review-reply">
+                <p className="mb-1 flex items-center gap-1.5 font-semibold text-rai-ink"><MessageSquareText className="h-4 w-4" /> {t("رد الإدارة", "The management's reply")}</p>
                 <p className="whitespace-pre-line" dir="auto">{info.reply}</p>
               </div>
             )}
@@ -83,8 +83,8 @@ export default function GuestReview() {
         ) : (
           <form className="space-y-5" onSubmit={submit} noValidate>
             <MarkPicker name="overall" big label={t("تقييمك العام للإقامة من 10", "Your overall rating of the stay, out of 10")} value={marks.overall ?? null} onChange={(n) => setMarks({ ...marks, overall: n })} />
-            <div className="space-y-4 border-t border-ink-100 pt-4">
-              <p className="text-sm text-ink-500">{t("ثم قيّم كل جانب من 1 إلى 10:", "Then rate each aspect from 1 to 10:")}</p>
+            <div className="space-y-4 border-t border-rai-line pt-4">
+              <p className="text-sm text-rai-ink-muted">{t("ثم قيّم كل جانب من 1 إلى 10:", "Then rate each aspect from 1 to 10:")}</p>
               {info.aspects.map((a) => (
                 <MarkPicker key={a.key} name={a.key} label={en ? ASPECT_EN[a.key] ?? a.label : a.label} value={marks[a.key] ?? null} onChange={(n) => setMarks({ ...marks, [a.key]: n })} />
               ))}

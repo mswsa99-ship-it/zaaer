@@ -1,0 +1,36 @@
+import {beforeAll,describe,it,expect,vi} from 'vitest';
+import {DEMO_OPERATOR} from '../../src/demo/platform';
+let client:ReturnType<typeof import('../../src/demo/client')['createDemoClient']>;
+const storage=()=>{const m=new Map<string,string>();return{getItem:(k:string)=>m.get(k)??null,setItem:(k:string,v:string)=>m.set(k,v),removeItem:(k:string)=>m.delete(k)};};
+beforeAll(async()=>{vi.stubGlobal('window',globalThis);vi.stubGlobal('localStorage',storage());vi.stubGlobal('sessionStorage',storage());const d=await import('../../src/demo/client');d.resetDemo();client=d.createDemoClient();});
+describe('platform identity and narrow onboarding demo parity',()=>{
+ it('denies operator creation and scopes a self-registered owner',async()=>{
+  await client.auth.signInWithPassword({email:'owner@demo.sa',password:'demo'});
+  expect((await client.rpc('fn_platform_hotels')).error).not.toBeNull();
+  await client.auth.signInWithPassword({email:DEMO_OPERATOR.email,password:'demo'});
+  expect((await client.rpc('fn_claim_staff_profile')).data.error).toBe('PLATFORM_ACCOUNT');
+  expect((await client.from('guest_profiles').select('*')).data).toEqual([]);
+  expect((await client.rpc('fn_platform_create_hotel',{p:{}})).error).not.toBeNull();
+  expect((await client.functions.invoke('platform-invite',{body:{}})).data.ok).toBe(false);
+  await client.auth.signUp({email:'new-owner@example.test',password:'demo12345'});
+  const captured=JSON.parse(sessionStorage.getItem('roomai.demo.mail-capture')!);
+  expect((await client.auth.signInWithPassword({email:captured.email,password:'demo12345'})).error).not.toBeNull();
+  expect((await client.auth.verifyOtp({email:captured.email,token:'invalid',type:'signup'})).error).not.toBeNull();
+  await client.auth.verifyOtp({email:captured.email,token:captured.code,type:'signup'});
+  expect((await client.auth.verifyOtp({email:captured.email,token:captured.code,type:'signup'})).error).not.toBeNull();
+  expect((await client.auth.signInWithPassword({email:captured.email,password:'wrong'})).error).not.toBeNull();
+  expect((await client.auth.signInWithPassword({email:captured.email,password:'demo12345'})).error).toBeNull();
+  const created=await client.rpc('fn_owner_register_hotel',{p:{name_ar:'فندق جديد اختباري',branch_name:'فرع جديد',full_name:'مالك اختباري جديد',slug:'new-platform-hotel',organization_id:'forged',email:'forged@example.test'}});
+  expect(created.error).toBeNull();
+  expect((await client.rpc('fn_owner_register_hotel',{p:{}})).data).toMatchObject({id:created.data.id,existing:true});
+  expect((await client.rpc('fn_admin_invite_staff',{p:{email:'another-owner@example.test',full_name:'ممنوع',role:'owner'}})).error).not.toBeNull();
+  const rows=await client.from('branches').select('*');expect(rows.data).toHaveLength(0);
+  expect((await client.rpc('fn_platform_hotels')).error).not.toBeNull();
+  await client.auth.signInWithPassword({email:'owner@demo.sa',password:'demo'});
+  expect((await client.from('branches').select('*')).data.every((b:any)=>b.organization_id!==created.data.id)).toBe(true);
+  await client.auth.signInWithPassword({email:DEMO_OPERATOR.email,password:'demo'});
+  await client.rpc('fn_platform_set_hotel_status',{p_org:created.data.id,p_status:'suspended',p_reason:'اختبار إيقاف الفندق'});
+  await client.auth.signInWithPassword({email:'new-owner@example.test',password:'demo12345'});
+  expect((await client.rpc('fn_staff_id')).data).toBeNull();
+ });
+});

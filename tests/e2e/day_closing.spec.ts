@@ -13,14 +13,17 @@ test.describe("day closing", () => {
     await expect(page.getByTestId("closing-state")).toContainText("لم يبدأ");
     const cash = page.getByTestId("closing-box-cash");
     const pos = page.getByTestId("closing-box-pos");
-    await expect(cash).toContainText("سجّل النظام");
-    // a difference shows at once; sending without its reason is stopped at the review
+    // M4 (plan 4.4): the blind count — no system figure and no live difference before sending
+    await expect(cash).not.toContainText("سجّل النظام");
     await cash.getByLabel("النقد: المُدخل").fill("1");
-    await expect(page.getByTestId("closing-diff-cash")).toContainText("الفرق");
+    await expect(page.getByTestId("closing-diff-cash")).toHaveCount(0);
     await pos.getByLabel("الشبكة: المُدخل").fill("0");
+    // the review reveals the system's figures and the difference; sending without its reason is stopped there
     await page.getByRole("button", { name: "مراجعة وإرسال" }).click();
     const dlg = page.getByRole("dialog");
     await expect(dlg.getByTestId("closing-review")).toBeVisible();
+    await expect(dlg.getByTestId("closing-review")).toContainText("النظام");
+    await expect(dlg.getByTestId("closing-review")).toContainText("الفرق");
     await expect(dlg.getByText(/فرق بلا سبب: النقد/)).toBeVisible();
     await dlg.getByRole("button", { name: "إغلاق" }).first().click();
     await cash.getByLabel("النقد: سبب الفرق").fill("عُدّ قبل تسليم الوردية");
@@ -32,6 +35,9 @@ test.describe("day closing", () => {
     await expect(dlg).toBeHidden();
     await expect(page.getByTestId("closing-state")).toContainText("أُرسل — التعديل مفتوح");
     await expect(page.getByText(/أُرسل الإقفال. يمكن تعديله حتى/)).toBeVisible();
+    // after sending, the system's figures are visible
+    await expect(cash).toContainText("سجّل النظام");
+    await expect(page.getByTestId("closing-matrix")).toBeVisible();
     // inside the window the edit asks for its reason
     await page.getByRole("button", { name: "تعديل الإقفال" }).click();
     await expect(page.getByTestId("closing-amend")).toBeVisible();

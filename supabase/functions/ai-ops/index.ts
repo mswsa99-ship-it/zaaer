@@ -14,11 +14,12 @@
  *   - Secrets: GEMINI_API_KEY (Edge secret). Never returned.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { budgetReadAvailable } from "../_shared/budget_reads.ts";
 import { projectKey } from "../_shared/keys.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
-import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs } from "../_shared/ops.ts";
+import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs, applyVerbatimNote, withAnomalyNotice, type AnomalySummary, opsModelOrder } from "../_shared/ops.ts";
 
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
 const MAX_TOOL_ROUNDS = 4;
 const HISTORY_TURNS = 16;
@@ -58,6 +59,9 @@ Deno.serve(async (req) => {
   const { data: staff } = await user.from("staff_profiles").select("id, full_name, role, organization_id").eq("id", staffId).maybeSingle();
   const { data: branch } = await user.from("branches").select("id, name_ar, timezone").eq("id", branchId).maybeSingle();
   if (!staff || !branch) return json({ error: "forbidden" }, 403);
+  // page guard (0109/0110): the assistant lives on the staff dashboard; an individual account needs that page, fail closed on any error
+  { const { data: pageOk, error: pageErr } = await user.rpc("fn_user_page_can", { p_page: "/staff/dashboard", p_action: "view" });
+    if (pageErr || pageOk !== true) return json({ error: "forbidden" }, 403); }
   const { data: org } = await admin.from("organizations").select("name_ar").eq("id", staff.organization_id).maybeSingle();
   const today = localDay(branch.timezone);
 
@@ -71,7 +75,7 @@ Deno.serve(async (req) => {
   const provider = s.enabled && s.ops_enabled ? createProvider(s.provider, s.model, Deno.env, s.fallback_models ?? []) : null;
   // a fallback model answered: logged once per request next to the provider errors
   const noteFallback = async (answeredBy: string | undefined, fellBack: string[]) => {
-    if (fellBack.length) await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_provider_fallback:" + (answeredBy ?? "?"), detail: fellBack.join(" | ").slice(0, 300) });
+    if (fellBack.length) await admin.from("ai_guardrail_events").insert({ organization_id: staff.organization_id, branch_id: branchId, conversation_id: null, stage: "output", rule: "ops_provider_fallback:" + (answeredBy ?? "?"), detail: fellBack.join(" | ").slice(0, 300) });
   };
 
   // ---- context (always deterministic, always as the user) ----
@@ -82,7 +86,9 @@ Deno.serve(async (req) => {
   if (mode === "briefing") {
     const b = buildBriefing(ctxData);
     let insights: string | null = null; let aiStatus = provider ? "ok" : (s.enabled ? "awaiting_credentials" : "disabled");
-    if (provider && s.briefing_with_insights) {
+    const briefingUsage = await admin.from("ai_usage_daily").select("*").eq("organization_id", staff.organization_id).eq("day", dayKey).maybeSingle();
+    if (provider && !budgetReadAvailable(s, briefingUsage, true)) aiStatus = "budget_exhausted";
+    if (provider && s.briefing_with_insights && budgetReadAvailable(s, briefingUsage, true)) {
       try {
         const res = await provider.generate({
           system: buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, extra: s.extra_instructions }) + "\nالمطلوب الآن: من السياق المعطى اكتب 3 توصيات تشغيلية مرتبة بالأولوية لبداية اليوم، كل توصية سطر واحد يبدأ بفعل. لا تكرر الأرقام الموجودة في الملخص، ركز على ما يجب فعله ولماذا.",
@@ -95,7 +101,7 @@ Deno.serve(async (req) => {
         await bump({ requests: 1, tokens_in: res.usage.input, tokens_out: res.usage.output, guardrail_blocks: g.ok ? 0 : 1 });
       } catch (e) {
         aiStatus = "provider_error:" + (e instanceof ProviderError ? e.kind : "http"); await bump({ fallbacks: 1 });
-        await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_" + aiStatus, detail: String((e as Error).message ?? "").slice(0, 300) });
+        await admin.from("ai_guardrail_events").insert({ organization_id: staff.organization_id, branch_id: branchId, conversation_id: null, stage: "output", rule: "ops_" + aiStatus, detail: String((e as Error).message ?? "").slice(0, 300) });
       }
     }
     return json({ ...b, insights, mode: insights ? "ai" : "deterministic", ai_status: aiStatus, generated_at: ctxData.generated_at, date: ctxData.summary?.date });
@@ -127,8 +133,8 @@ Deno.serve(async (req) => {
 
   if (!provider) { await bump({ requests: 1, fallbacks: 1 }); return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: s.enabled ? (s.ops_enabled ? "awaiting_credentials" : "ops_disabled") : "disabled" }); }
 
-  const { data: usage } = await admin.from("ai_usage_daily").select("*").eq("organization_id", staff.organization_id).eq("day", dayKey).maybeSingle();
-  if ((usage?.requests ?? 0) >= Number(s.ops_daily_request_limit ?? 500) + Number(s.daily_request_limit ?? 0) || ((usage?.tokens_in ?? 0) + (usage?.tokens_out ?? 0)) >= Number(s.daily_token_budget ?? 500000)) {
+  const usageRead = await admin.from("ai_usage_daily").select("*").eq("organization_id", staff.organization_id).eq("day", dayKey).maybeSingle();
+  if (!budgetReadAvailable(s, usageRead, true)) {
     await bump({ fallbacks: 1 }); return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: "budget_exhausted" });
   }
 
@@ -137,12 +143,16 @@ Deno.serve(async (req) => {
   const system = buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, extra: s.extra_instructions });
   const toolCtx = { db: user, branchId, conversationId: conversationId!, today };
 
+  // 6.12 (U5): a simple question starts from the fastest approved model (flash-lite), the full chain still behind it
+  const order = opsModelOrder(message, s.model, s.fallback_models ?? []);
+  const chatProvider = (order[0] !== s.model ? createProvider(s.provider, order[0], Deno.env, order.slice(1)) : null) ?? provider;
+
   let tokensIn = 0, tokensOut = 0, finalText: string | null = null;
-  let answeredBy: string = s.model;
+  let answeredBy: string = order[0] ?? s.model;
   const fellBack: string[] = [];
   try {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      const res = await provider.generate({ system, history, tools: OPS_TOOL_DECLARATIONS, temperature: Number(s.temperature ?? 0.2), maxOutputTokens: Math.max(Number(s.max_output_tokens ?? 400), 600), timeoutMs: Number(s.timeout_ms ?? 15000) });
+      const res = await chatProvider.generate({ system, history, tools: OPS_TOOL_DECLARATIONS, temperature: Number(s.temperature ?? 0.2), maxOutputTokens: Math.max(Number(s.max_output_tokens ?? 400), 600), timeoutMs: Number(s.timeout_ms ?? 15000) });
       tokensIn += res.usage.input; tokensOut += res.usage.output;
       if (res.model) answeredBy = res.model;
       if (res.fallbackFrom?.length) fellBack.push(...res.fallbackFrom);
@@ -155,14 +165,14 @@ Deno.serve(async (req) => {
         if (!isOpsTool(call.name)) { status = "denied"; result = { denied: true }; }
         else {
           try {
-            const args = validateOpsArgs(call.name, call.args);
+            const args = call.name === "propose_action" ? applyVerbatimNote(validateOpsArgs(call.name, call.args), message) : validateOpsArgs(call.name, call.args);   // 6.13: the staff note is relayed as typed
             result = await executeOpsTool(call.name, args, toolCtx);
             if (call.name === "propose_action" && (result as { proposal_id?: string })?.proposal_id) {
               proposals.push({ id: (result as { proposal_id: string }).proposal_id, action: args.action, summary: args.summary, args: args.args });
             }
           } catch (e) { status = "error"; result = { error: String((e as Error).message).slice(0, 160) }; }
         }
-        await admin.from("ai_tool_executions").insert({ conversation_id: null, tool_name: "ops:" + call.name, args_redacted: redactArgs(call.args), result_status: status, latency_ms: Date.now() - started });
+        await admin.from("ai_tool_executions").insert({ organization_id: staff.organization_id, branch_id: branchId, conversation_id: null, tool_name: "ops:" + call.name, args_redacted: redactArgs(call.args), result_status: status, latency_ms: Date.now() - started });
         results.push({ name: call.name, id: call.id, result: shrink(result) });
       }
       // the model's step goes back exactly as it came (thought signatures), then all its results in one turn
@@ -172,7 +182,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const kind = e instanceof ProviderError ? e.kind : "http";
     await bump({ requests: 1, fallbacks: 1, tokens_in: tokensIn, tokens_out: tokensOut });
-    await admin.from("ai_guardrail_events").insert({ conversation_id: null, stage: "output", rule: "ops_provider_error:" + kind, detail: String((e as Error).message ?? "").slice(0, 300) });
+    await admin.from("ai_guardrail_events").insert({ organization_id: staff.organization_id, branch_id: branchId, conversation_id: null, stage: "output", rule: "ops_provider_error:" + kind, detail: String((e as Error).message ?? "").slice(0, 300) });
     return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: "provider_error:" + kind });
   }
   await noteFallback(answeredBy, fellBack);
@@ -180,5 +190,5 @@ Deno.serve(async (req) => {
   const out = finalText ? gateOpsOutput(finalText) : { ok: false, text: "", violations: ["no_text"] };
   await bump({ requests: 1, tokens_in: tokensIn, tokens_out: tokensOut, guardrail_blocks: out.ok ? 0 : 1 });
   if (!out.ok) return finish(fallbackOpsReply(message, ctxData), "deterministic", { ai_status: "output_blocked:" + out.violations.join(",") });
-  return finish(out.text, "ai", {}, { model: answeredBy });
+  return finish(withAnomalyNotice(out.text, (ctxData as { anomalies?: AnomalySummary }).anomalies), "ai", {}, { model: answeredBy });   // 6.13: figures never stand clean beside open anomaly items
 });

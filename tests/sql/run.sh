@@ -19,7 +19,7 @@ run_tests() {
 }
 for f in supabase/migrations/*.sql; do
   echo "== applying $f"
-  psql -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | grep -v NOTICE || true
+  psql -d "$DB" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | awk '!/NOTICE/'
 done
 echo "== running platform tests (hosted-Supabase compatibility)"
 run_tests tests/sql/platform_tests.sql
@@ -45,16 +45,20 @@ echo "== running key-box code tests («الرموز»)"
 run_tests tests/sql/keybox_codes_tests.sql
 echo "== running audit trace and mid-operation failure tests (G22, X08)"
 run_tests tests/sql/audit_trace_tests.sql
+run_tests tests/sql/audit_chain_tests.sql
 echo "== running core money tests (methods, accounts, settlements, tax zero — Phase 1)"
 run_tests tests/sql/money_core_tests.sql
 echo "== running rates tests (0030: price calendar, weekly/monthly, nights, discount limits)"
 run_tests tests/sql/rates_tests.sql
+run_tests tests/sql/phase4_money_controls_tests.sql
+run_tests tests/sql/opening_negative_cash_tests.sql
 echo "== running stay cycle tests (0032–0033: arrival, Shomoos, night-by-night payment, check-out, inspection, corrections, closing)"
 run_tests tests/sql/stay_cycle_tests.sql
 echo "== running invoice and review tests (0036: partial and automatic invoices, edits with versions, voucher correction, the review list)"
 run_tests tests/sql/invoices_review_tests.sql
 echo "== running monitoring tests (0037: the seven checks, once each, the owner's throttle)"
 run_tests tests/sql/monitors_tests.sql
+run_tests tests/sql/reserved_without_booking_tests.sql
 echo "== running guest and platform tests (0038–0039: two paths for guest data, bans, ratings, platform fields, groups, the stay summary, branch fields)"
 run_tests tests/sql/guests_platforms_tests.sql
 echo "== running lists, calendar, log, exports, report filters, task times, staff editor, forced sign-out and capability usage tests (0040–0041, Phase 6)"
@@ -101,7 +105,79 @@ echo "== running unit licence tests (0075: the licence number read by the owner,
 run_tests tests/sql/unit_license_tests.sql
 echo "== running tenancy tests (0076: every row says its hotel, every branch row its branch; a row naming another hotel is refused)"
 run_tests tests/sql/tenancy_tests.sql
+echo "== running function scope tests (0078: every function a visitor or a staff member may call keeps to the hotel and the branch; no row points to another hotel)"
+run_tests tests/sql/function_scope_tests.sql
+echo "== running guest hotel tests (0080: address and phone sessions isolate hotels)"
+run_tests tests/sql/guest_hotel_tests.sql
+echo "== running backend hotel tests (0081: monitor, bank jobs and budgets)"
+run_tests tests/sql/backend_hotel_tests.sql
+echo "== running platform operator and suspension tests (0082)"
+run_tests tests/sql/platform_operator_tests.sql
+echo "== running hotel settings tests (0079: independent defaults for each hotel)"
+run_tests tests/sql/hotel_settings_tests.sql
+run_tests tests/sql/phase4_voucher_closing_tests.sql
+run_tests tests/sql/phase4_controls_tests.sql
+echo "== running 0130 branch delete (journey-settings cleanup) and 0131 credit-note delete gate tests (fixtures of security_tests persist to here)"
+run_tests tests/sql/branch_delete_journey_0130_tests.sql
+run_tests tests/sql/credit_note_delete_gate_0131_tests.sql
+run_tests tests/sql/credit_note_real_invoice_0131_tests.sql
+run_tests tests/sql/finance_execution_settings_tests.sql
+run_tests tests/sql/finance_role_matrix_tests.sql
 echo "== running WhatsApp channel and data purge tests (the purge deletes data)"
 run_tests tests/sql/whatsapp_purge_tests.sql
+echo "== running purge tenant isolation tests (0083)"
+run_tests tests/sql/purge_scope_tests.sql
+echo "== running hotel exit tests (2.12: the owner's full export, suspension, confirmed deletion, restore)"
+run_tests tests/hotel-exit/hotel_exit_tests.sql
+echo "== running 0115-0120 and 0122 isolation gap suites (before the trial-data erase, they need the seed rows)"
+run_tests tests/sql/individual_read_gates_0115_0120_tests.sql
+run_tests tests/sql/review_platform_scope_0119_0120_tests.sql
+run_tests tests/sql/audit_direct_columns_0122_tests.sql
 echo "== running trial data tests (0072, 0073: the example catalogue, and erasing all the trial data — last of all: it erases what the others left)"
+run_tests tests/sql/guest_limits_settings_tests.sql
+run_tests tests/sql/guest_quota_tests.sql
+run_tests tests/sql/otp_limits_tests.sql
+bash tests/sql/guest_quota_race.sh "$DB"
+run_tests tests/sql/free_text_limits_tests.sql
+run_tests tests/sql/lookup_limits_tests.sql
 run_tests tests/sql/purge_trial_tests.sql
+
+run_tests tests/sql/owner_self_signup_tests.sql
+
+run_tests tests/sql/owner_registration_branches_tests.sql
+
+run_tests tests/sql/owner_hotel_only_tests.sql
+
+run_tests acceptance/backup-state-tests.sql
+
+run_tests tests/release-proof/phase4_anomaly_six_rules_tests.sql
+run_tests tests/release-proof/finance_role_scenarios_tests.sql
+
+run_tests tests/sql/individual_permission_drafts_tests.sql
+run_tests tests/sql/history_details_tests.sql
+run_tests tests/sql/page_rls_tests.sql
+
+run_tests tests/sql/branch_read_boundaries_tests.sql
+echo "== running 0126 locked-month expense approval tests"
+run_tests tests/sql/expense_lock_0126_tests.sql
+echo "== running 0128 inbox reply add-only candidate tests"
+run_tests tests/sql/inbox_reply_0128_tests.sql
+echo "== running 0132 archive follows Edit tests"
+run_tests tests/sql/archive_edit_0132_tests.sql
+run_tests tests/sql/archive_edit_owner_fixture_0132_tests.sql
+echo "== running 0133-0135 licence tests"
+run_tests tests/sql/licence_0133_0135_tests.sql
+echo "== running 0136 cash/knowledge/media archive tests"
+run_tests tests/sql/archive_other_0136_tests.sql
+run_tests tests/sql/archive_blockers_real_reservation_tests_v1.sql
+echo "== running 0137 payment settings sensitive tests"
+run_tests tests/sql/payment_settings_0137_tests.sql
+echo "== running 0138 product family tests"
+run_tests tests/sql/product_family_0138_tests.sql
+echo "== running 0139 expense category tests"
+run_tests tests/sql/expense_category_0139_tests.sql
+echo "== running client_errors audit-logs gate tests (0140, client_errors only)"
+run_tests tests/sql/client_errors_audit_gate_0140_tests.sql
+echo "== running 4.13 finance role gap and chain supplements"
+run_tests tests/sql/finance_role_gap_4_13_tests.sql
+run_tests tests/sql/finance_role_chain_4_13_tests.sql

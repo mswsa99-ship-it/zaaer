@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Branch-local dates (LD01–LD04, migration 0019). The hosted database runs sessions in UTC; between 00:00 and
 -- 03:00 in Riyadh the UTC date is still yesterday. These tests do not depend on the hour they run at:
@@ -28,9 +29,9 @@ do $$ declare r jsonb; res uuid; begin
   r := fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2033-03-10","check_out":"2033-03-12","guest_name":"تاريخ محلي","guest_phone":"0500004444","source_id":"00000000-0000-0000-0000-000000000021"}'::jsonb);
   res := (r->>'id')::uuid;
   insert into ld values ('res', res::text);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 2000, 'method', 'cash',
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 2000, 'method', 'cash',
     'idempotency_key', 'ld-before-midnight', 'occurred_at', '2033-03-10 20:30:00+00'));
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 1000, 'method', 'cash',
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method', 'cash',
     'idempotency_key', 'ld-after-midnight', 'occurred_at', '2033-03-10 21:30:00+00'));
 end $$;
 
@@ -53,15 +54,14 @@ declare res uuid := (select v::uuid from ld where k = 'res');
 begin
   insert into ld values ('tz_before', (select timezone from branches where id = '00000000-0000-0000-0000-000000000010'));
   update branches set timezone = tz where id = '00000000-0000-0000-0000-000000000010';
-  b_today := fn_branch_today('00000000-0000-0000-0000-000000000010');
+  b_today := t_today('00000000-0000-0000-0000-000000000010');
   insert into ld values ('b_today', b_today::text);
   update reservations set check_in = b_today, check_out = b_today + 1 where id = res;
   perform t_record('LD03 setup: the branch date differs from the session (UTC) date', b_today <> current_date,
     tz || ' branch=' || b_today || ' session=' || current_date);
 end $$;
 
-select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
-set role authenticated;
+-- asked as the server's own functions ask it (since 0078 no one signed in may call fn_evaluate_access)
 do $$ declare res uuid := (select v::uuid from ld where k = 'res'); rs text[]; begin
   select reasons into rs from fn_evaluate_access(res);
   perform t_record('LD04 a stay that starts on the branch''s today is inside the stay period, whatever the UTC date',

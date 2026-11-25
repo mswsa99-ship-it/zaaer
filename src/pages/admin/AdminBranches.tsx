@@ -4,9 +4,9 @@ import { Building2, Plus, Pencil, Image as ImageIcon, Trash2 } from "lucide-reac
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { opsApi, branchMediaApi, guestApi, toArabicError } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { formatCurrency, COUNT } from "../../lib/utils";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput} from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput, dropLegacyDrafts, useFormDraft, useEditDraft, DraftRestoreBanner} from "../../components/forms";
 
 interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean;
   // 0069 (W2): each of rent, services and products has its switch and its rate; tax_rate_bp is the rent rate in force
@@ -44,21 +44,37 @@ export default function AdminBranches() {
       supabase.from("branches").select("id, name_ar, name_en, city, address, phone, email, is_active, check_in_time, check_out_time, timezone, tax_rate_bp, prices_include_tax, tax_rent_enabled, tax_rent_rate_bp, tax_services_enabled, tax_services_rate_bp, tax_products_enabled, tax_products_rate_bp, default_deposit_halalas, supervisor_max_discount_bp, tax_number, commercial_register, archived_at, version, map_url, booking_platform_url, country_code, default_language").order("name_ar"),
       supabase.from("rooms").select("branch_id").is("archived_at", null),
     ]);
-    if (b.error) setError(toArabicError(b.error));
+    if (b.error) { setError(toArabicError(b.error)); setRows([]); setLoading(false); return; }
+    setError(null);
     const count = new Map<string, number>(); for (const x of (r.data ?? []) as { branch_id: string }[]) count.set(x.branch_id, (count.get(x.branch_id) ?? 0) + 1);
     setRows(((b.data ?? []) as Branch[]).map((x) => ({ ...x, rooms: count.get(x.id) ?? 0 })));
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // 6.5 (U4): a new branch's long form survives a reload — the draft is offered back, never applied silently
+  const isNew = !!draft && !draft.id;
+  useEffect(() => { dropLegacyDrafts(); }, []);   // drafts from before keys carried the user are discarded
+  const fd = useFormDraft<Partial<Branch>>({ storageKey: isNew && profile?.id && profile?.organization_id ? `zaaer:branch-draft:${profile.id}:${profile.organization_id}` : null, open: isNew, value: draft ?? {},
+    pristine: (d) => JSON.stringify(d) === JSON.stringify(EMPTY), apply: (v) => setDraft(v) });
+
+  // Keep business settings only. Contact/tax/registration identifiers and arbitrary URLs are not persisted.
+  const original = draft?.id ? rows.find((r) => r.id === draft.id) ?? null : null;
+  const ed = useEditDraft<Partial<Branch>>({
+    storageKey: draft?.id && profile?.id && profile.organization_id ? `zaaer:branch-edit:${profile.id}:${profile.organization_id}:${draft.id}` : null,
+    open: !!draft?.id, value: draft ?? {}, original, version: original?.version,
+    omit: ["phone", "email", "address", "tax_number", "commercial_register", "map_url", "booking_platform_url"],
+    apply: (v) => setDraft(v),
+  });
+
   if (loading) return <LoadingScreen />;
   const visible = rows.filter((b) => showArchived || !b.archived_at);
   return (
     <div>
       <SectionTitle title="الفروع" subtitle={`${COUNT.branch(visible.length)} — الضريبة والمنطقة الزمنية إعدادات معتمدة لكل فرع`} action={isOwner ? <button onClick={() => setDraft({ ...EMPTY })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> فرع جديد</button> : undefined} />
-      {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
+      {error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
-      {visible.length === 0 ? <EmptyState icon={<Building2 className="h-10 w-10" />} title="لا توجد فروع" /> : (
+      {error && rows.length === 0 ? <LoadErrorCard message={error} onRetry={() => { setLoading(true); load(); }} /> : visible.length === 0 ? <EmptyState icon={<Building2 className="h-10 w-10" />} title="لا توجد فروع" /> : (
         <div className="grid gap-3 md:grid-cols-2">
           {visible.map((b) => (
             <Card key={b.id} className={b.archived_at ? "opacity-60" : ""}>
@@ -78,7 +94,10 @@ export default function AdminBranches() {
       )}
       <Modal open={!!draft} title={draft?.id ? "تعديل فرع" : "فرع جديد"} onClose={() => setDraft(null)} wide>
         {draft && (
-          <ActionForm onSubmit={async () => { await opsApi.upsertBranch({ ...draft, rooms: undefined, tax_rate_bp: undefined }); setDraft(null); await load(); }}>
+          <ActionForm onSubmit={async () => { await opsApi.upsertBranch({ ...draft, rooms: undefined, tax_rate_bp: undefined }); fd.clearSaved(); ed.clearSaved(); setDraft(null); await load(); }}>
+            {fd.saved && <DraftRestoreBanner label="مسودة فرع لم تُحفظ" summary={fd.saved.name_ar?.trim() || null} onRestore={fd.restoreSaved} />}
+            {ed.saved && <DraftRestoreBanner label="تعديل إعدادات الفرع لم يُحفظ" summary={ed.saved.name_ar || null} onRestore={ed.restoreSaved} />}
+            {draft.id && <p className="mb-3 text-sm text-rai-ink-muted">مسودة التعديل لا تشمل الهاتف والبريد والعنوان والأرقام النظامية والروابط. أعد إدخال أي تعديل عليها بعد إعادة التحميل.</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="الاسم العربي (مطلوب)"><input className="input" maxLength={80} value={draft.name_ar ?? ""} onChange={(e) => setDraft({ ...draft, name_ar: e.target.value })} /></Field>
               <Field label="الاسم الإنجليزي (مطلوب)" hint="يظهر في مطبوعات النزيل بالإنجليزية"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} aria-label="الاسم الإنجليزي" /></Field>

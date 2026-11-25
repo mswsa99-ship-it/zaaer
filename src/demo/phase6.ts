@@ -261,7 +261,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       if (!(can("staff.manage") || can("staff.force_logout"))) return []; const owner = can("staff.manage"); const mine = staffId();
       return orgStaff().sort((x, y) => Number(!!y.is_active) - Number(!!x.is_active) || text(x.full_name, y.full_name)).map((s) => ({
         id: s.id, full_name: s.full_name, email: s.email, phone: owner ? s.phone ?? null : null, role: s.role, is_active: !!s.is_active, linked: s.auth_user_id != null, created_at: s.created_at,
-        sessions_ended_at: s.sessions_ended_at ?? null, updated_at: s.updated_at ?? null, branch_ids: liveBranches(s.id), is_me: s.id === mine }));
+        sessions_ended_at: s.sessions_ended_at ?? null, updated_at: s.updated_at ?? null, branch_ids: liveBranches(s.id).filter((b) => myBranches().includes(b)), is_me: s.id === mine }));
     },
     // «تعديل موظف»: the owner, with a reason; name, phone, role and branches. Never the email, never oneself's role or
     // branches, never the last owner's role. One audit row with before and after (the phone masked).

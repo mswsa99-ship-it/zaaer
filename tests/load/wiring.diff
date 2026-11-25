@@ -1,0 +1,15 @@
+diff --git a/tests/sql/run.sh b/tests/sql/run.sh
+index 102b7ee..93e0b7e 100755
+--- a/tests/sql/run.sh
++++ b/tests/sql/run.sh
+@@ -129,3 +129,10 @@ bash tests/sql/guest_quota_race.sh "$DB"
+ run_tests tests/sql/free_text_limits_tests.sql
+ run_tests tests/sql/lookup_limits_tests.sql
+ run_tests tests/sql/purge_trial_tests.sql
++
++# Optional item-2.10 load gate (off by default; needs ~9 GB free disk and a
++# local PostgreSQL 16 server). RUN_LOAD_GATE=1 tests/sql/run.sh
++if [[ "${RUN_LOAD_GATE:-0}" == "1" ]]; then
++  echo "== running 2.10 equivalence gate (fn_reservation_list: 0106 body vs 0040 body)"
++  scripts/load-roomai-equivalence.sh /tmp/load-roomai-equiv
++fi

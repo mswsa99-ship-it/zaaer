@@ -1,0 +1,5 @@
+sig	final_class	anon	authenticated	transitive_writes	dynamic_sql_in_closure	outbound_table_hits
+fn_bank_convert(p_movement uuid, p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,bank_match_items,bank_matches,bank_movements,document_sequences,expense_vouchers,gl_accounts,journal_entries,journal_lines,notifications,review_items	True	
+fn_bank_match(p_movement uuid, p_targets jsonb, p_reason text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,bank_match_items,bank_matches,bank_movements,document_sequences,gl_accounts,journal_entries,journal_lines	True	
+fn_bank_reparse(p_message uuid)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,bank_messages,bank_movements	True	
+fn_bank_unmatch(p_movement uuid, p_reason text)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,bank_match_items,bank_matches,bank_movements,document_sequences,journal_entries,journal_lines	True	

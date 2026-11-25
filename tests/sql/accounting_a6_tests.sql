@@ -44,7 +44,7 @@ create or replace function t_ingest(p_body text, p_from text default 'Bank Relay
 declare r jsonb;
 begin
   set local role service_role;
-  r := fn_bank_ingest(jsonb_build_object('message_id', '<' || md5(p_body || clock_timestamp()::text) || '@example.com>', 'from', p_from, 'date', '2026-11-07T18:00:00Z', 'subject', 'relay', 'body', p_body));
+  r := fn_bank_ingest('00000000-0000-0000-0000-000000000001'::uuid,jsonb_build_object('message_id', '<' || md5(p_body || clock_timestamp()::text) || '@example.com>', 'from', p_from, 'date', '2026-11-07T18:00:00Z', 'subject', 'relay', 'body', p_body));
   reset role;
   return r;
 end $$;
@@ -52,7 +52,7 @@ create or replace function t_mv(p jsonb) returns bank_movements language sql sec
 
 -- ---------------------------------------------------------------- BK01 the matrix
 select t_record('BK01 the permissions matrix has «bank.view» (owner, manager, finance) and «bank.manage» (owner)',
-  (select count(*) from fn_permission_catalog()) = 64
+  (select count(*) from fn_permission_catalog()) = 66  -- 0125 adds history.details; 0137 adds payment.settings
   and exists (select 1 from fn_permission_catalog() c where c.code = 'bank.view' and c.default_roles = '{owner,manager,finance}')
   and exists (select 1 from fn_permission_catalog() c where c.code = 'bank.manage' and c.default_roles = '{owner}'));
 
@@ -218,8 +218,8 @@ select t_record('BK11 anyone signed in cannot read the mailbox''s password throu
 reset role;
 do $$ declare c jsonb; begin
   set local role service_role;
-  c := fn_bank_mail_poll_config();
-  perform fn_bank_mail_poll_done(42, 7, null);
+  c := fn_bank_mail_poll_config('00000000-0000-0000-0000-000000000001');
+  perform fn_bank_mail_poll_done('00000000-0000-0000-0000-000000000001',42, 7, null);
   reset role;
   perform t_record('BK12 the edge function (service role) reads the mailbox settings with the password, and the poll moves the last message read forward',
     (c->>'configured')::boolean and c->>'password' = 'app-password-for-test' and c->>'user' = 'relay.test@example.com'
@@ -286,7 +286,7 @@ reset role;
 do $$ declare r jsonb; begin
   r := t_ingest(E'نص فيه' || chr(1) || ' رمز غريب', 'x@example.org');
   set local role service_role;
-  perform fn_bank_ingest_failed(77, 'too large');
+  perform fn_bank_ingest_failed('00000000-0000-0000-0000-000000000001',77, 'too large');
   reset role;
   perform t_record('BK18 whatever arrives is kept raw, and an email the reader could not hand over is kept as a placeholder so the reading moves on',
     r->>'status' = 'rejected' and t_count('select count(*) from bank_messages where raw_body like ''%رقمها في البريد 77%'' and status = ''rejected''') = 1, r::text);

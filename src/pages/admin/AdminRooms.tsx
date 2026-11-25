@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { DoorClosed, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../lib/auth";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi, VALIDATION_AR } from "../../lib/api";
 import { latinDigits, normalizeUnitLicense, fieldError } from "../../lib/validation";
+import { individualAllows } from "../../lib/individualPermissions";
 import { useUnitLicenses } from "../../lib/unitLicense";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
-import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
+import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, useFormDraft, useEditDraft, DraftRestoreBanner } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, type RoomStatus } from "../../lib/types";
 
@@ -16,6 +18,10 @@ interface Opt { id: string; name: string; block_id?: string }
 const NO_DATA: { rooms: RoomRow[]; cats: Opt[]; blocks: Opt[]; floors: Opt[] } = { rooms: [], cats: [], blocks: [], floors: [] };
 
 export default function AdminRooms() {
+  const { profile, permissions } = useAuth();
+  const ind = permissions.pageAccess?.mode === "individual" ? permissions.pageAccess : null;
+  const canAdd = !ind || individualAllows(ind, "/admin/rooms", "add");
+  const canEdit = !ind || individualAllows(ind, "/admin/rooms", "edit");
   const [filter, setFilter] = useState({ status: "all", block: "all", category: "all", archived: false, q: "" });
   // license: the unit's licence number as typed (0075; the owner, the manager and the supervisor only)
   const [draft, setDraft] = useState<(Partial<RoomRow> & { license?: string }) | null>(null);
@@ -36,6 +42,16 @@ export default function AdminRooms() {
     };
   }, [], NO_DATA);
   const { rooms, cats, blocks, floors } = q.data; const load = q.reload; const branchId = q.branchId;
+  // 6.5 (U4): a new unit's form survives a reload; the licence number is deliberately NOT stored in the draft
+  const roomPristine = (d: Partial<RoomRow>) => !d.room_number?.trim() && !d.notes?.trim();
+  const isNewRoom = !!draft && !draft.id;
+  const { license: _lic, ...roomDraftValue } = draft ?? {};
+  void _lic;
+  const fd = useFormDraft<Partial<RoomRow>>({ storageKey: isNewRoom && branchId ? `zaaer:room-draft:${profile?.id}:${branchId}` : null, open: isNewRoom, value: roomDraftValue, pristine: roomPristine, apply: (v) => setDraft({ ...v }) });
+
+  // 6.5 edit: an existing unit's unsaved edit survives a reload, tied to its version; the licence number is never stored
+  const roomOriginal = draft?.id ? (rooms.find((r) => r.id === draft.id) as Partial<RoomRow> | undefined) ?? null : null;
+  const ed = useEditDraft<Partial<RoomRow>>({ storageKey: draft?.id && profile?.id && profile?.organization_id && branchId ? `zaaer:room-edit:${profile.id}:${profile.organization_id}:${draft.id}` : null, open: !!draft?.id, value: draft ?? {}, original: roomOriginal, version: roomOriginal?.version, omit: ["license"], apply: (v) => setDraft({ ...v, license: draft?.license ?? "" }) });
 
   const visible = useMemo(() => rooms.filter((r) => (filter.archived || !r.archived_at) && (filter.status === "all" || r.status === filter.status) && (filter.block === "all" || r.block_id === filter.block) && (filter.category === "all" || r.category_id === filter.category) && (!filter.q || latinDigits(r.room_number).includes(latinDigits(filter.q).trim()))), [rooms, filter]);
   const counts = useMemo(() => ({ active: rooms.filter((r) => r.is_active && !r.archived_at).length, total: rooms.filter((r) => !r.archived_at).length }), [rooms]);
@@ -45,7 +61,7 @@ export default function AdminRooms() {
   return (
     <div>
       <SectionTitle title="الوحدات" subtitle={`${counts.active} فعالة من ${counts.total} — النشاط الإداري مستقل عن النظافة والإشغال`} action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id, license: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker />{canAdd && <button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id, license: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button>}</div>} />
       {q.error && rooms.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input w-36" aria-label="بحث برقم الوحدة" placeholder="بحث برقم الوحدة" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
@@ -63,7 +79,7 @@ export default function AdminRooms() {
                   <p className="text-base font-semibold text-ink-800">{r.room_number}</p>
                   <p className="text-xs text-ink-400">{r.category?.name_ar} · {r.block?.name ?? "—"} / {r.floor?.name ?? "—"}</p>
                 </div>
-                <button onClick={() => setDraft({ ...r, license: lic.licenses.get(r.id) ?? "" })} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>
+                {canEdit && <button onClick={() => setDraft({ ...r, license: lic.licenses.get(r.id) ?? "" })} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <Badge className={ROOM_STATUS_COLORS[r.status]}>{ROOM_STATUS_LABELS[r.status]}</Badge>
@@ -81,18 +97,22 @@ export default function AdminRooms() {
         {draft && (
           <ActionForm onSubmit={async () => {
             // the licence's rule is checked before anything is saved, so a wrong number saves nothing
-            const license = lic.reads ? normalizeUnitLicense(draft.license) : undefined;
-            const saved = await opsApi.upsertRoom({ id: draft.id, branch_id: branchId, room_number: draft.room_number, category_id: draft.category_id, block_id: draft.block_id || null, floor_id: draft.floor_id || null, notes: draft.notes, is_active: draft.is_active, version: draft.version });
-            if (license !== undefined && (license ?? "") !== (draft.id ? lic.licenses.get(draft.id) ?? "" : "")) await opsApi.setRoomLicense(saved.id, license);
-            setDraft(null); await load(); lic.reload();
+            const canLic = draft.id ? lic.reads : lic.onCreate;
+            const license = canLic ? normalizeUnitLicense(draft.license) : undefined;
+            // item 6: the licence travels with the unit in ONE call, so a refused licence saves nothing; on create a blank licence is not sent
+            const changed = license !== undefined && (draft.id ? (license ?? "") !== (lic.licenses.get(draft.id) ?? "") : license !== null);
+            await opsApi.upsertRoom({ id: draft.id, branch_id: branchId, room_number: draft.room_number, category_id: draft.category_id, block_id: draft.block_id || null, floor_id: draft.floor_id || null, notes: draft.notes, is_active: draft.is_active, version: draft.version, ...(changed ? { license } : {}) });
+            fd.clearSaved(); ed.clearSaved(); setDraft(null); await load(); lic.reload();
           }}>
+            {fd.saved && <DraftRestoreBanner label="مسودة وحدة لم تُحفظ" summary={fd.saved.room_number?.trim() || null} onRestore={fd.restoreSaved} />}
+            {ed.saved && <DraftRestoreBanner label="تعديل لم يُحفظ على هذه الوحدة" summary={ed.saved.room_number?.trim() || null} onRestore={ed.restoreSaved} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="رقم / اسم الوحدة (مطلوب)"><input className="input" value={draft.room_number ?? ""} onChange={(e) => setDraft({ ...draft, room_number: e.target.value })} dir="ltr" /></Field>
               <Field label="نوع الوحدة (مطلوب)"><select className="input" value={draft.category_id ?? ""} onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
               <Field label="البلوك"><select className="input" value={draft.block_id ?? ""} onChange={(e) => setDraft({ ...draft, block_id: e.target.value || null, floor_id: null })}><option value="">—</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
               <Field label="الطابق" hint={draft.block_id ? undefined : "اختر البلوك أولًا"}><select className="input" disabled={!draft.block_id} value={draft.floor_id ?? ""} onChange={(e) => setDraft({ ...draft, floor_id: e.target.value || null })}><option value="">—</option>{draftFloors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
               <Field label="ملاحظات" className="sm:col-span-2"><input className="input" value={draft.notes ?? ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></Field>
-              {lic.reads && <Field label="رقم الترخيص" className="sm:col-span-2" hint="يراه المالك والمدير والمشرف فقط، ولا يظهر للنزيل. اتركه فارغًا إن لم يكن للوحدة ترخيص."
+              {(draft.id ? lic.reads : lic.onCreate) && <Field label="رقم الترخيص" className="sm:col-span-2" hint="لا يظهر للنزيل. اتركه فارغًا إن لم يكن للوحدة ترخيص."
                 error={fieldError(() => normalizeUnitLicense(draft.license), VALIDATION_AR)}>
                 <input className="input" dir="ltr" value={draft.license ?? ""} onChange={(e) => setDraft({ ...draft, license: e.target.value })} data-testid="unit-license-input" maxLength={60} />
               </Field>}

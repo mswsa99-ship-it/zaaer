@@ -1,0 +1,17 @@
+NOTICE:  database "airec_green" does not exist, skipping
+== GREEN run: backup_state_tests.sql with 0103 applied
+ PASS   | BK-01 service tooling records a verified run  |
+ PASS   | BK-02 success without verification refused    |
+ PASS   | BK-03 owner sees the last successful backup   | {"last_run": {"error": null, "reason": "manual", "status": "running", "started_at": "2026-11-24T09:09:25.189422+03:00", "finished_at": null}, "last_success": {"reason": "scheduled", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "run_ref": "backup-20261124-090000.tar.gpg", "rows_total": 42311, "size_bytes": 1048576, "finished_at": "2026-11-24T09:09:25.189422+03:00", "tables_count": 100, "verification": "manifest-hashes+restore-counts"}, "last_restore_drill": {"error": null, "status": "success", "started_at": "2026-11-24T09:09:25.189422+03:00", "finished_at": "2026-11-24T09:09:25.189422+03:00", "verification": "restore:counts+hashes identical"}, "failures_since_last_success": 0}
+ PASS   | BK-04 manager refused by server               |
+ PASS   | BK-05 staff session cannot record a run       |
+ PASS   | BK-06 direct table read refused               |
+ PASS   | BK-07 failure surfaced, last success kept     | {"last_run": {"error": "upload failed", "reason": "scheduled", "status": "failed", "started_at": "2026-11-24T09:09:25.189422+03:00", "finished_at": "2026-11-24T09:09:25.189422+03:00"}, "last_success": {"reason": "scheduled", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "run_ref": "backup-20261124-090000.tar.gpg", "rows_total": 42311, "size_bytes": 1048576, "finished_at": "2026-11-24T09:09:25.189422+03:00", "tables_count": 100, "verification": "manifest-hashes+restore-counts"}, "last_restore_drill": {"error": null, "status": "success", "started_at": "2026-11-24T09:09:25.189422+03:00", "finished_at": "2026-11-24T09:09:25.189422+03:00", "verification": "restore:counts+hashes identical"}, "failures_since_last_success": 1}
+ PASS   | BK-08 malformed sha256 rejected               |
+ PASS   | BK-09 path-shaped run_ref rejected            |
+ PASS   | BK-10 forbidden role manager                  |
+ PASS   | BK-10 forbidden role supervisor               |
+ PASS   | BK-10 forbidden role finance                  |
+ PASS   | BK-10 forbidden role housekeeping             |
+ PASS   | BK-10 forbidden role guest                    |
+ PASS   | BK-11 other hotel owner sees no foreign state |

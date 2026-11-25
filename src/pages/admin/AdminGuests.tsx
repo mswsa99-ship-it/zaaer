@@ -58,7 +58,7 @@ function GuestList() {
           {FILTERS.map((f) => <button key={f.key} onClick={() => setFilter(f.key)} aria-pressed={filter === f.key} data-testid={`guest-filter-${f.key}`} className={`rounded-lg px-3 py-1.5 ${filter === f.key ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{f.label}</button>)}
         </div>
       </div>
-      {(rows ?? []).length === 0 ? <EmptyState icon={<Users className="h-10 w-10" />} title="لا يوجد نزلاء" /> : (
+      {(rows ?? []).length === 0 ? (error ? null : <EmptyState icon={<Users className="h-10 w-10" />} title="لا يوجد نزلاء" />) : (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-ink-100 text-xs text-ink-400">

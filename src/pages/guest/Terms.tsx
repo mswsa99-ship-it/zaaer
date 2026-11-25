@@ -39,31 +39,31 @@ export default function Terms() {
   const list = Object.values(branches);
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 lg:py-12">
-      <h1 className="text-2xl font-bold text-ink-800">شروط الاستخدام</h1>
-      <div className="mt-6 max-w-none text-sm leading-relaxed text-ink-600">
+      <h1 className="text-2xl font-bold text-rai-ink">شروط الاستخدام</h1>
+      <div className="mt-6 max-w-none text-sm leading-relaxed text-rai-ink-muted">
         <p>باستخدامك خدمات {org ? `«${org}»` : "المنشأة"} فإنك توافق على الشروط التالية.</p>
         {policies === null ? <Spinner className="mx-auto mt-8 h-6 w-6" /> : list.length === 0 ? (
-          <p className="mt-6 rounded-xl bg-ink-50 p-4">لم تُنشر شروط الإقامة بعد. للاستفسار تواصل مع الاستقبال.</p>
+          <p className="mt-6 rounded-xl bg-rai-canvas p-4">لم تُنشر شروط الإقامة بعد. للاستفسار تواصل مع الاستقبال.</p>
         ) : list.map((b) => {
           const own = policies.filter((p) => p.branch_id === b.id);
           return (
             <section key={b.id} className="mt-6" data-testid={`terms-branch-${b.id}`}>
-              {list.length > 1 && <h2 className="text-lg font-semibold text-ink-800">{b.name_ar}</h2>}
-              <h3 className="mt-4 text-base font-semibold text-ink-800">أوقات الإقامة</h3>
+              {list.length > 1 && <h2 className="text-lg font-semibold text-rai-ink">{b.name_ar}</h2>}
+              <h3 className="mt-4 text-base font-semibold text-rai-ink">أوقات الإقامة</h3>
               <ul className="mt-2 list-disc space-y-1 pr-5">
                 <li>وقت الوصول: {time12(b.check_in_time)}، وقت المغادرة: {time12(b.check_out_time)}.</li>
                 <li>تُسجَّل بيانات جميع النزلاء قبل الدخول، ويُطابق الاستقبال الهوية.</li>
               </ul>
               {own.map((p, i) => (
                 <div key={i}>
-                  <h3 className="mt-4 text-base font-semibold text-ink-800">{p.title}<span className="mr-2 text-xs font-normal text-ink-400">{policyTopic(p)}</span></h3>
+                  <h3 className="mt-4 text-base font-semibold text-rai-ink">{p.title}<span className="mr-2 text-xs font-normal text-rai-ink-muted">{policyTopic(p)}</span></h3>
                   <p className="mt-1 whitespace-pre-line">{p.content_ar}</p>
                 </div>
               ))}
             </section>
           );
         })}
-        <h2 className="mt-8 text-base font-semibold text-ink-800">المسؤولية</h2>
+        <h2 className="mt-8 text-base font-semibold text-rai-ink">المسؤولية</h2>
         <p className="mt-2">تسعى المنشأة لتقديم خدمة آمنة وموثوقة، ولا تتحمل مسؤولية تعطل الخدمات الخارجية (منصات الحجز، مزودي الدفع) الخارجة عن سيطرتها.</p>
       </div>
     </div>

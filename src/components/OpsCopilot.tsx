@@ -5,27 +5,75 @@
  *    confirmation calls fn_ai_ops_execute_proposal → the regular RPC under the user's own role.
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bot, Send, X, Check, XCircle, Sparkles, AlertTriangle } from "lucide-react";
 import { useBranch } from "../lib/branch";
-import { aiOpsChat, opsApi, toArabicError, type OpsProposal } from "../lib/api";
+import { aiOpsChat, opsApi, toArabicError, type OpsProposal, type OpsReply } from "../lib/api";
+import { withTimeout } from "../lib/async";
 import { Spinner } from "./ui";
+import { RoomAiFounding } from "./RoomAiFounding";
+import { useAuth } from "../lib/auth";
+import "../roomaiFounding.css";
 
 interface Msg { role: "staff" | "assistant"; text: string; mode?: string; proposals?: OpsProposal[]; aiStatus?: string }
 interface ProposalState { status: "proposed" | "executing" | "executed" | "rejected" | "failed"; detail?: string }
 
 const ACTION_LABELS: Record<string, string> = { create_task: "إنشاء مهمة", complete_task: "إتمام مهمة", assign_task: "إسناد مهمة", set_cleanliness: "تغيير حالة النظافة", amend_stay: "تغيير المغادرة", switch_room: "تبديل الوحدة", cancel_reservation: "إلغاء حجز", no_show: "عدم حضور", create_receipt: "سند قبض", create_deposit: "قبض تأمين", add_service: "إضافة خدمة", create_invoice: "إصدار فاتورة" };
+/** 6.12 (U5): the reply's upper bound (the server's own steps end long before it) and its clear message. */
+export const OPS_REPLY_TIMEOUT_MS = 90_000;
+const OPS_TIMEOUT_TEXT = "استغرق الرد وقتًا أطول من المعتاد (٩٠ ثانية) دون أن يصل. أعد المحاولة، أو اسأل بصيغة أبسط.";
 const SUGGESTIONS = ["ما وضع اليوم؟", "من يصل اليوم ومن لم يكمل الهوية؟", "أي وحدات تحتاج تنظيفًا وعليها وصول اليوم؟", "من عليه رصيد متبقٍ من المقيمين؟", "تأمينات لم تُسوَّ بعد المغادرة"];
 
 export function OpsCopilot() {
   const { branchId, branch } = useBranch();
   const [open, setOpen] = useState(false);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const breakpoint = window.matchMedia("(min-width: 1024px)");
+    const place = () => setDock(document.getElementById(breakpoint.matches ? "ops-assistant-desktop-dock" : "ops-assistant-phone-dock"));
+    place(); breakpoint.addEventListener("change", place);
+    return () => breakpoint.removeEventListener("change", place);
+  }, []);
+  const { profile } = useAuth();
+  const canFound = profile?.role === "owner" || profile?.role === "manager";
+  const [tab, setTab] = useState<"chat" | "founding">("chat");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [conv, setConv] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return; }
+    const t0 = Date.now();
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
   const [props, setProps] = useState<Record<string, ProposalState>>({});
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, open]);
+  // U10 (6.14): smooth scrolling is motion too — the reduced-motion preference turns it off
+  useEffect(() => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    endRef.current?.scrollIntoView({ behavior: still ? "auto" : "smooth" });
+  }, [msgs, open]);
+  // U1 (6.11): while the staff member scrolls down a page the floating button shrinks toward the corner so it
+  // covers less of what lies under it; it comes back at once on scrolling up, or a moment after the scroll stops.
+  // Visual only: the button keeps its place, its size for the layout, and its full keyboard operability.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    if (open) { setCollapsed(false); return; }   // the open panel owns the corner; the toggle stays full size
+    let timer: number | undefined;
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY + 4 && y > 96) setCollapsed(true);
+      else if (y < lastY - 4) setCollapsed(false);
+      lastY = y;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setCollapsed(false), 700);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); window.clearTimeout(timer); };
+  }, [open]);
   useEffect(() => { setConv(null); setMsgs([]); setProps({}); }, [branchId]);   // branch change = new context (G24)
   const branchRef = useRef(branchId);
   branchRef.current = branchId;
@@ -35,8 +83,10 @@ export function OpsCopilot() {
     const sentFor = branchId;
     setMsgs((m) => [...m, { role: "staff", text }]); setInput(""); setBusy(true);
     try {
-      const r = await aiOpsChat(text, branchId, conv);
+      // U5: a clear upper bound — the employee is never left watching a spinner; a late reply is ignored
+      const r = await withTimeout<OpsReply | null>(aiOpsChat(text, branchId, conv), OPS_REPLY_TIMEOUT_MS, () => null);
       if (branchRef.current !== sentFor) return;   // the branch changed meanwhile: this answer belongs to the old context (G24)
+      if (r === null) { setMsgs((m) => [...m, { role: "assistant", text: OPS_TIMEOUT_TEXT }]); return; }
       setConv(r.conversation_id);
       setMsgs((m) => [...m, { role: "assistant", text: r.reply, mode: r.mode, proposals: r.proposals, aiStatus: r.ai_status }]);
       for (const p of r.proposals ?? []) setProps((s) => ({ ...s, [p.id]: { status: "proposed" } }));
@@ -55,16 +105,17 @@ export function OpsCopilot() {
   if (!branchId) return null;
   return (
     <>
-      <button onClick={() => setOpen((o) => !o)} className="fixed bottom-[72px] left-4 z-40 flex h-12 w-12 lg:bottom-4 items-center justify-center gap-2 rounded-full bg-ink-800 text-sm font-medium text-white shadow-lg hover:bg-ink-900 sm:w-auto sm:px-4" aria-label="مساعد العمليات" aria-expanded={open}>
-        {/* U1 note 03: an icon on a phone, so it covers less of the cards beneath it */}
-        <Bot className="h-5 w-5" /> <span className="hidden sm:inline">مساعد العمليات</span>
-      </button>
+      {dock && createPortal(<button onClick={() => setOpen((o) => !o)} data-testid="ops-copilot-fab" data-collapsed={collapsed || undefined} className={`flex h-11 w-11 lg:w-full origin-center items-center justify-center gap-2 rounded-xl bg-ink-800 text-sm font-medium text-white transition-transform duration-200 ease-out hover:bg-ink-900 motion-reduce:transition-none ${collapsed && !open ? "scale-[0.6]" : ""}`} aria-label="مساعد العمليات" aria-expanded={open}>
+        <Bot className="h-5 w-5" /> <span className="hidden lg:inline">مساعد العمليات</span>
+      </button>, dock)}
       {open && (
         <div role="dialog" aria-label="مساعد العمليات" className="fixed bottom-[136px] left-5 z-40 flex h-[min(640px,70vh)] lg:bottom-20 w-[min(420px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-ink-100 bg-ink-800 px-4 py-3 text-white">
             <div className="flex items-center gap-2"><Bot className="h-5 w-5" /><div className="leading-tight"><p className="text-sm font-semibold">مساعد العمليات</p><p className="text-[11px] text-ink-200">{branch?.name_ar}</p><p className="text-[11px] text-ink-200">يقرأ البيانات ويقترح؛ أنت من ينفذ</p></div></div>
             <button onClick={() => setOpen(false)} className="rounded-lg p-2.5 text-ink-200 hover:bg-white/10 hover:text-white" aria-label="إغلاق المساعد"><X className="h-4 w-4" /></button>
           </div>
+          {canFound && <div className="rfo-tabs" role="tablist" aria-label="أقسام المساعد"><button role="tab" className="rfo-tab" aria-selected={tab === "chat"} onClick={() => setTab("chat")}>محادثة</button><button role="tab" className="rfo-tab" aria-selected={tab === "founding"} onClick={() => setTab("founding")} data-testid="ops-tab-founding">تأسيس الفندق</button></div>}
+          {canFound && tab === "founding" ? <div className="flex-1 overflow-y-auto p-3 scrollbar-thin"><RoomAiFounding /></div> : <>
           <div className="flex-1 space-y-3 overflow-y-auto p-3 scrollbar-thin" role="log" aria-live="polite" aria-label="المحادثة">
             {msgs.length === 0 && (
               <div className="space-y-2">
@@ -95,13 +146,20 @@ export function OpsCopilot() {
                 </div>
               </div>
             ))}
-            {busy && <div className="flex justify-end"><div className="rounded-2xl bg-ink-50 px-3 py-2"><Spinner className="h-4 w-4" /></div></div>}
+            {busy && (
+              <div className="flex justify-end">
+                <div className="flex items-center gap-2 rounded-2xl bg-ink-50 px-3 py-2 text-xs text-ink-500" data-testid="ops-progress" role="status">
+                  <Spinner className="h-4 w-4" /> يعمل على سؤالك… <span className="tabular-nums" dir="ltr" data-testid="ops-elapsed">({elapsed} ث)</span>
+                </div>
+              </div>
+            )}
             <div ref={endRef} />
           </div>
           <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2 border-t border-ink-100 p-2">
             <input value={input} onChange={(e) => setInput(e.target.value)} className="input" aria-label="سؤالك أو طلبك" placeholder="اكتب سؤالك أو طلبك…" disabled={busy} />
             <button type="submit" disabled={busy || !input.trim()} className="btn-primary px-3" aria-label="إرسال"><Send className="h-4 w-4" /></button>
           </form>
+          </>}
         </div>
       )}
     </>

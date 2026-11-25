@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- The guest journey after the stay (migration 0070): W3 the check-out options and the extension (CX), W4 the
 -- departure and the deposit's return (DR), W5 the review (RW), W6 the alert rules (AR), and the journey's messages
@@ -30,10 +31,10 @@ begin
 exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
-create or replace function tj_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tj_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 -- today at a local hour of the branch
 create or replace function tj_at(p_branch uuid, p_hm text) returns timestamptz language sql security definer as $$
-  select (fn_branch_today(p_branch) + p_hm::time) at time zone (select timezone from branches where id = p_branch) $$;
+  select (t_today(p_branch) + p_hm::time) at time zone (select timezone from branches where id = p_branch) $$;
 create or replace function tj_tick(p_branch uuid, p_at timestamptz default now()) returns jsonb language sql security definer as $$ select fn_journey_tick(p_branch, true, p_at) $$;
 create or replace function tj_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function tj_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;
@@ -85,7 +86,7 @@ begin
   res := (r->>'id')::uuid;
   insert into ids values (p_key, res);
   if p_from < 0 then perform tj_shift(res, p_from); end if;
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (tj_fin(res)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'tj-rent-' || p_key));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tj_fin(res)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'tj-rent-' || p_key));
   if p_in then perform tj_check_in(res, tj_id(p_room)); end if;
   return res;
 end $$;
@@ -281,7 +282,7 @@ end $$;
 select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resA'), 'kind', 'receipt', 'amount_halalas', (tj_fin(tj_id('resA'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-night-a'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resA'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tj_fin(tj_id('resA'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-night-a'));
 exception when others then perform tj_record('CX05 the night is paid', false, sqlerrm);
 end $$;
 reset role;
@@ -409,7 +410,7 @@ end $$;
 select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resK'), 'kind', 'receipt', 'amount_halalas', (tj_fin(tj_id('resK'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-k'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resK'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tj_fin(tj_id('resK'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-k'));
 exception when others then perform tj_record('CX12 the two hours are paid', false, sqlerrm);
 end $$;
 reset role;
@@ -482,7 +483,7 @@ exception when others then perform tj_record('DR03 the reception confirms the ch
 end $$;
 do $$ declare r jsonb; m journey_messages%rowtype; e1 text; e2 text; begin
   -- a guest with a phone: resB (the hours were held; pay them, then leave)
-  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resB'), 'kind', 'receipt', 'amount_halalas', (tj_fin(tj_id('resB'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-b'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resB'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tj_fin(tj_id('resB'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-b'));
   perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resB'), 'kind', 'deposit', 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'tj-dep-b'));
   r := fn_staff_check_out(jsonb_build_object('reservation_id', tj_id('resB')));
   m := tj_msg(tj_id('resB'), 'checkout_confirmed');
@@ -795,7 +796,7 @@ end $$;
 select tj_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ begin
-  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resN'), 'kind', 'receipt', 'amount_halalas', (tj_fin(tj_id('resN'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-n'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', tj_id('resN'), 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tj_fin(tj_id('resN'))->>'balance_due')::bigint, 'method', 'cash', 'idempotency_key', 'tj-hours-n'));
 exception when others then perform tj_record('DR09 the two hours are paid', false, sqlerrm);
 end $$;
 reset role;

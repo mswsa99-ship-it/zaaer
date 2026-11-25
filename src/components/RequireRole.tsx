@@ -16,11 +16,12 @@ import { ROLE_LABELS } from "../lib/types";
 import { Card, LoadingScreen } from "./ui";
 
 export function RequireRole({ children }: { children?: ReactNode }) {
-  const { profile, loading, can, canFull } = useAuth();
+  const { profile, loading, can, canFull, permissions, identityError } = useAuth();
   const { pathname } = useLocation();
   const { branches, loading: branchLoading, error: branchError, reload } = useBranch();
 
   if (loading) return null;
+  if (identityError) return <GuardCard icon={<ShieldAlert className="h-6 w-6" />} title="تعذّر التحقق من صلاحيات الحساب" description="لم تُفتح الصفحة. أعد تسجيل الدخول للتحقق من صلاحياتك." />;
 
   if (!profile || !profile.is_active) {
     return (
@@ -29,7 +30,7 @@ export function RequireRole({ children }: { children?: ReactNode }) {
   }
 
   const page = pageFor(pathname);
-  if (!page || !pageAllowed(page, profile.role, { can, canFull })) {
+  if (!page || !pageAllowed(page, profile.role, { can, canFull, pageAccess: permissions.pageAccess })) {
     return (
       <GuardCard
         icon={<ShieldAlert className="h-6 w-6" />}

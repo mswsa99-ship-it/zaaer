@@ -1,8 +1,10 @@
 import { useEffect, type HTMLAttributes, type ReactNode } from "react";
+import { PRODUCT_NAME } from "../lib/designTokens";
+import { currentGuestScope } from "../lib/guestScope";
 import { cn } from "../lib/utils";
 import { useOrganizationName } from "../lib/organization";
 
-/** A white card; other attributes (data-testid, role…) reach the element. */
+/** A borderless surface card; other attributes (data-testid, role…) reach the element. */
 export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, "className" | "children">) {
   return <div className={cn("card p-5", className)} {...rest}>{children}</div>;
 }
@@ -12,7 +14,8 @@ export function SectionTitle({ title, subtitle, action, level = 1 }: { title: st
   const H = level === 1 ? "h1" : "h2";
   // A11Y-10 (SC 2.4.2): each page names the browser tab after its own title
   const org = useOrganizationName();
-  useEffect(() => { if (level === 1 && title) document.title = org ? `${title} — ${org}` : title; }, [level, title, org]);
+  // Plan 3.4: a staff tab carries the product name; a guest tab carries the hotel's name (guests see the hotel, not RoomAI)
+  useEffect(() => { if (level === 1 && title) { const suffix = currentGuestScope().guest ? org : PRODUCT_NAME; document.title = suffix ? `${title} — ${suffix}` : title; } }, [level, title, org]);
   return (
     // on a phone the action (branch picker, buttons) moves under the title instead of squeezing it into a narrow column
     <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
@@ -99,7 +102,7 @@ export function ErrorBanner({ message }: { message: string }) {
  */
 export function AmountBox({ label, value, tone = "text-ink-900", testId }: { label: string; value: ReactNode; tone?: string; testId?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-ink-100 bg-white px-3 py-2.5" data-testid={testId}>
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-white px-3 py-2.5" data-testid={testId}>
       <span className="text-[13px] font-medium leading-5 text-ink-500">{label}</span>
       <span className={`whitespace-nowrap text-lg font-bold leading-7 tabular-nums ${tone}`} dir="ltr">{value}</span>
     </div>

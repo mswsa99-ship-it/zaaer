@@ -1,58 +1,53 @@
-/**
- * The organisation's own name and logo (0055, SETUP-04): read from the server once per session — fn_public_organization,
- * open to the guest pages too — and never written in the code. The owner edits them in «المنشأة»; after a save every
- * screen updates at once. The last known name is kept in this browser so a reload shows it straight away.
- */
+/** Hotel identity is cached per address and guest/staff context, never across hotels. */
+import { useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { currentGuestScope, guestScopeKey } from "./guestScope";
 import { supabase } from "./supabase";
 
 export interface OrganizationInfo { name_ar: string; name_en: string | null; logo: string | null; license_number?: string | null }
-const STORE_KEY = "zaaer_org_name_v1";
-
-function readStored(): OrganizationInfo | null {
-  try { const raw = localStorage.getItem(STORE_KEY); if (!raw) return null; const v = JSON.parse(raw); return v && typeof v.name_ar === "string" ? { name_ar: v.name_ar, name_en: v.name_en ?? null, logo: null } : null; }
-  catch { return null; }
+interface Entry { value: OrganizationInfo | null; fresh: boolean; inflight: Promise<OrganizationInfo | null> | null }
+const entries = new Map<string, Entry>();
+const listeners = new Set<() => void>();
+function scopeKey(): string { return `${currentGuestScope().guest ? "guest" : "staff"}:${guestScopeKey()}`; }
+function storageKey(key: string): string { return "zaaer_org_name_v1:" + key; }
+function entry(key = scopeKey()): Entry {
+  let e = entries.get(key);
+  if (e) return e;
+  let value: OrganizationInfo | null = null;
+  try {
+    const raw = localStorage.getItem(storageKey(key));
+    const v = raw ? JSON.parse(raw) : null;
+    if (v && typeof v.name_ar === "string") value = { name_ar: v.name_ar, name_en: v.name_en ?? null, logo: null };
+  } catch { /* storage unavailable */ }
+  e = { value, fresh: false, inflight: null }; entries.set(key, e); return e;
 }
-function store(o: OrganizationInfo | null) {
-  try { if (o) localStorage.setItem(STORE_KEY, JSON.stringify({ name_ar: o.name_ar, name_en: o.name_en })); } catch { /* storage blocked */ }
-}
-
-let cached: OrganizationInfo | null = readStored();
-let fresh = false;
-let inflight: Promise<OrganizationInfo | null> | null = null;
-const listeners = new Set<(o: OrganizationInfo | null) => void>();
-
-/** The name already loaded (null until loadOrganization() has answered and nothing was kept from before). */
-export function organizationName(): string | null { return cached?.name_ar ?? null; }
-
-/** Loads the organisation once; a failure keeps what is known (the document then shows the branch only). */
+export function organizationName(): string | null { return entry().value?.name_ar ?? null; }
 export function loadOrganization(force = false): Promise<OrganizationInfo | null> {
-  if (fresh && !force) return Promise.resolve(cached);
-  inflight ??= Promise.resolve(supabase.rpc("fn_public_organization", {})).then(({ data, error }) => {
-    inflight = null;
-    if (error || !data) return cached;
-    cached = data as OrganizationInfo; fresh = true; store(cached);
-    for (const l of listeners) l(cached);
-    return cached;
-  }, () => { inflight = null; return cached; });
-  return inflight;
+  const key = scopeKey(), e = entry(key);
+  if (e.fresh && !force) return Promise.resolve(e.value);
+  e.inflight ??= Promise.resolve(supabase.rpc("fn_public_organization", {})).then(({ data, error }) => {
+    e.inflight = null;
+    if (error) return e.value;
+    e.value = data as OrganizationInfo | null; e.fresh = true;
+    try {
+      if (e.value) localStorage.setItem(storageKey(key), JSON.stringify({ name_ar: e.value.name_ar, name_en: e.value.name_en }));
+      else localStorage.removeItem(storageKey(key));
+    } catch { /* storage unavailable */ }
+    if (scopeKey() === key) for (const l of listeners) l();
+    return e.value;
+  }, () => { e.inflight = null; return e.value; });
+  return e.inflight;
 }
-
-/** After the owner saves «المنشأة»: every screen reads the new name and logo. */
-export function refreshOrganization(): Promise<OrganizationInfo | null> { fresh = false; return loadOrganization(true); }
-
-/** The organisation for a layout or a page; null while the first load is still on its way and nothing was kept. */
+export function refreshOrganization(): Promise<OrganizationInfo | null> { entry().fresh = false; return loadOrganization(true); }
 export function useOrganization(): OrganizationInfo | null {
-  const [org, setOrg] = useState<OrganizationInfo | null>(cached);
+  const { pathname } = useLocation();
+  const key = scopeKey();
+  const [state, setState] = useState(() => ({ key, value: entry(key).value }));
   useEffect(() => {
-    listeners.add(setOrg);
-    void loadOrganization();
-    return () => { listeners.delete(setOrg); };
-  }, []);
-  return org;
+    const update = () => { if (scopeKey() === key) setState({ key, value: entry(key).value }); };
+    listeners.add(update); update(); void loadOrganization(true);
+    return () => { listeners.delete(update); };
+  }, [pathname, key]);
+  return state.key === key ? state.value : entry(key).value;
 }
-
-/** The Arabic name to show, or an empty string while it loads (never a name written in the code). */
-export function useOrganizationName(): string {
-  return useOrganization()?.name_ar ?? "";
-}
+export function useOrganizationName(): string { return useOrganization()?.name_ar ?? ""; }

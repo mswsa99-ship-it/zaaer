@@ -931,9 +931,10 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
 
   it("SD03 the code comes after the arrival, once, for a unit with a key box — and is the guest's own on their page; a unit without a box takes its key at reception", async () => {
     const r = await book(K1, 0, 2); const token = await prepare(r.id, r.internal_ref);
-    const ev = (await rpc<any[]>("fn_evaluate_access", { p_reservation: r.id }))[0];
+    const ev = (await rpc<any>("fn_guest_session", { p_token: token })).access;
     expect(ev.allowed).toBe(false);
     expect(ev.reasons).toContain("يُسجَّل الوصول في الاستقبال ثم يُسلَّم الرمز");
+    expect(await fails(rpc("fn_evaluate_access", { p_reservation: r.id }))).toMatch(/permission denied/);   // 0078: internal only
     expect((await rpc<any>("fn_staff_deliver_access_code", { p_reservation: r.id, p_channel: "supervisor" })).reasons).toEqual(["لم يُسجَّل الوصول بعد"]);
     expect((await rpc<any>("fn_guest_access_code", { p_token: token })).allowed).toBe(false);
     expect((await rpc<any>("fn_guest_session", { p_token: token })).reservation).toMatchObject({ has_keybox: true, first_night_paid: false });
@@ -1869,7 +1870,7 @@ describe("G01/G02/G03/G19/G22 — guests, platforms and the website in the demo 
     const card = await rpc<any>("fn_public_branch", { p_branch: A });
     expect(typeof card.booking_platform_url === "string" || card.booking_platform_url === null).toBe(true);
     await login("reception@demo.sa");
-    expect(Array.isArray(await rpc<any>("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toBe(true);   // the staff still read it inside
+    expect(await fails(rpc("fn_get_public_availability", { p_branch: A, p_date: day(1) }))).toMatch(/permission denied/);   // 0078: nor the staff; the server's jobs only
   });
 });
 
@@ -2401,7 +2402,7 @@ describe("Permissions matrix in the demo (0043)", () => {
   let CATALOG: typeof import("../../src/lib/permissionCatalog");
   beforeAll(async () => { CATALOG = await import("../../src/lib/permissionCatalog"); });
 
-  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 64 rows (0063 added the closing's two, 0064 the expenses and ledger's three, 0065 the accounts' two, 0066 the bank's two), five columns, the owner's always allowed, nothing changed yet", async () => {
+  it("MX01 with no change every role can do exactly its approved cells (the owner every one), the conditioned cells are the limited ones, money is seen exactly as before; the owner reads the matrix: 65 rows (+ payment.settings 0137; 0063 added the closing's two, 0064 the expenses and ledger's three, 0065 the accounts' two, 0066 the bank's two), five columns, the owner's always allowed, nothing changed yet", async () => {
     const { PERMISSION_CATALOG } = CATALOG;
     for (const role of ROLES) {
       await login(EMAIL[role]); const m = await mine();
@@ -2416,7 +2417,7 @@ describe("Permissions matrix in the demo (0043)", () => {
     await login(EMAIL.owner);
     const mx = await rpc<any>("fn_permissions_matrix", {});
     expect(mx.roles).toEqual([...ROLES]); expect(mx.editable_roles).toEqual(["manager", "supervisor", "finance", "housekeeping"]);
-    expect(mx.rows).toHaveLength(64); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
+    expect(mx.rows).toHaveLength(66); expect(mx.changed).toBe(0); expect(mx.last_change).toBeNull();
     expect(mx.rows.every((r: any) => r.cells.owner.allowed === true && Object.keys(r.cells).length === 5)).toBe(true);
     const row = (code: string) => mx.rows.find((r: any) => r.code === code);
     expect(row("voucher.correct")).toMatchObject({ limit_note: "سنداته خلال 24 ساعة", full_roles: ["owner", "manager"], locked: false });

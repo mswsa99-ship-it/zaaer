@@ -17,6 +17,7 @@
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
 grant all on test_results to public;
+insert into auth.users(id,email,email_confirmed_at) values('a0000000-0000-0000-0000-0000000000c1','at-invite@test.local',now()) on conflict(id) do update set email=excluded.email,email_confirmed_at=excluded.email_confirmed_at;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
 create or replace function t_login(p_uid uuid, p_email text) returns void language plpgsql as $$
@@ -325,7 +326,7 @@ do $$ declare guest text[] := array['fn_guest_phone_verify(p_phone text, p_code 
                         'fn_guest_submit(p_token text, p_guest_id uuid, p_payload jsonb)', 'fn_guest_submit_checkin(p_token text)',
                         'fn_guest_access_code(p_token text)', 'fn_guest_stay_summary(p_token text)', 'fn_guest_acknowledge(p_token text, p_hash text)',
                         'fn_public_branch(p_branch uuid)', 'fn_branch_media(p_branch uuid, p_kind text)', 'fn_public_whatsapp(p_branch uuid)',
-                        'fn_public_organization()', 'fn_public_branch_guide(p_branch uuid)', 'fn_branch_photo(p_id uuid)',
+                        'fn_guest_branches()', 'fn_guest_org_id()', 'fn_guest_site(p_slug text)', 'fn_public_organization()', 'fn_public_branch_guide(p_branch uuid)', 'fn_branch_photo(p_id uuid)',
                         'fn_guest_children(p_token text)', 'fn_guest_set_children(p_token text, p_ages jsonb)',
                         -- 0070 (W3–W5): the check-out options, «غادرت وسلّمت المفتاح», the review's page
                         'fn_guest_checkout(p_token text)', 'fn_guest_checkout_choose(p_token text, p_choice text, p_hours integer, p_via text)',

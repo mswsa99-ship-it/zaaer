@@ -133,7 +133,7 @@ const missing = (layer, name, what) => {
   else missing("e2e", "e2e", "end-to-end tests");
 }
 // gates without individual tests (the build is evidence of compiling, not of behaviour)
-for (const g of gates.filter((x) => ["typecheck", "edge", "bridge", "build", "build:demo"].includes(x.name))) {
+for (const g of gates.filter((x) => ["typecheck", "edge", "lint", "raw-html", "bridge", "build", "build:demo"].includes(x.name))) {
   rows.push({ test_id: `GATE-${g.name}`, rule_ids: [], layer: "gate", file: g.name, title: `البوابة ${g.name}`, expected: "تنجح البوابة", actual: redact(`${g.status} ${g.seconds}`), status: /^PASS/.test(g.status) ? "passed" : /SKIPPED/.test(g.status) ? "not_run" : "failed", evidence: `gates/${g.name.replace(/:/g, "-")}.log` });
 }
 

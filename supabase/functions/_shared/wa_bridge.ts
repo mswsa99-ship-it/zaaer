@@ -9,7 +9,7 @@
  *   - the program says which number it is linked to (`linked`); a number other than the branch's is refused, so a
  *     personal phone linked by mistake never has its chats answered or copied into the inbox
  */
-import type { WaInbound } from "./whatsapp.ts";
+import { guestOptCommand, WA_OPT_CONFIRM, type WaInbound } from "./whatsapp.ts";
 import { dbPorts, findWaThread, type WaContact, type WaEnv } from "./wa_db.ts";
 import { runWaFlow } from "./wa_flow.ts";
 import { pickOption, renderPayloads, type WaMenu } from "./wa_text.ts";
@@ -170,6 +170,17 @@ async function bridgeMessage(db: Db, ch: BridgeChannel, body: Record<string, unk
   try {
     const collected: Array<Record<string, unknown>> = [];
     const ports = dbPorts(db, ch, contact, async (p) => { collected.push(p); return { ok: true }; }, env);
+    // 0083: «إيقاف»/«استئناف» acts on this branch's organization for the chat's number, even while auto-reply is
+    // off; a chat whose number WhatsApp hides (lid) cannot be matched to a phone and goes through the normal flow
+    const opt = msg.type === "text" ? guestOptCommand(msg.text) : null;
+    if (opt && contact.phone) {
+      await db.rpc(opt === "optout" ? "fn_guest_phone_optout" : "fn_guest_phone_optin",
+        opt === "optout" ? { p_org: ch.organization_id, p_phone: contact.phone, p_reason: "wa_bridge: إيقاف" } : { p_org: ch.organization_id, p_phone: contact.phone });
+      const t = (await findWaThread(db, ch.branch_id, contact.key)) ?? await ports.newThread();
+      await ports.save(t.id, "guest", gateInput(msg.text).redacted, { channel: "whatsapp", wa_type: msg.type });
+      await ports.save(t.id, "assistant", WA_OPT_CONFIRM[opt], { mode: "scripted", channel: "whatsapp", reason: "guest_phone_" + opt });
+      return ok({ ok: true, replies: [WA_OPT_CONFIRM[opt]] });
+    }
     const thread = await findWaThread(db, ch.branch_id, contact.key);
     const silent: SilentReason | null = body.answer === false ? "paused" : silentReason(ch, thread, msg.ts);
     if (silent) {

@@ -1,0 +1,54 @@
+sig	final_class	anon	authenticated	transitive_writes	dynamic_sql_in_closure	outbound_table_hits
+fn_alert_event_label(p_event text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_ar_hours(n integer)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_ar_nights(n integer)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_account_label(p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_accounting_label(p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_action_label(p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_entity_label(p_entity text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_removal_label(p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_audit_unit_label(p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_can(p_code text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_can_write(p_code text, p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_canonical_user_page(p_page text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_cap_full(p_code text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_capability_catalog()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_capability_removal_actions(p_code text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_check_payment_reference(p_method text, p_reference text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_check_version(p_current integer, p_expected integer)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_check_version_strict(p_current integer, p_expected integer)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_current_role()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_day_closing_state(p_status text, p_edit_until timestamp with time zone)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_dependency_total(d jsonb)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_guest_org_id()	READ: no write in closure (needs marker adapter)	True	True		False	
+fn_has_role(VARIADIC p_roles role_code[])	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_is_staff()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_mask_phone(p text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_name_closeness(p_name text, p_q text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_name_norm(s text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_normalize_ar(p text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_normalize_phone(p text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_page_read_gate(p_pages text[])	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_page_read_grant(p_pages text[])	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_page_write_gate(p_pages text[], p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_parse_halalas(p_value text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_payment_method_active(p_method text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_any_cap(p_codes text[])	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_branch(p_branch uuid)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_cap(p_code text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_cap_full(p_code text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_money()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_role(VARIADIC p_roles role_code[])	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_require_user_page(p_page text, p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_review_aspects()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_sees_money()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_staff_id()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_trigram_set(s text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_user_access_mode()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_user_branch_ids()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_user_org_id()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_user_page_can(p_page text, p_action text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_user_page_catalog()	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_valid_https_url(p text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_valid_map_url(p text)	READ: no write in closure (needs marker adapter)	False	True		False	
+fn_whatsapp_status(c branch_whatsapp_channels)	READ: no write in closure (needs marker adapter)	False	True		False	

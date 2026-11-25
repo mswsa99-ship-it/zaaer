@@ -15,6 +15,7 @@ import { fetchAllPages } from "../../lib/api";
 import { ScrollText, Search, AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import type { ExportScope, ExportStatement } from "../../lib/exports";
+import { DisabledReason } from "../../components/DisabledReason";
 
 /** Where an operation came from (0026), in the employee's words. */
 const SOURCE_AR: Record<string, string> = {
@@ -107,7 +108,7 @@ export default function AdminAuditLogs() {
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-500">{formatDateTime(l.created_at)}</td>
                   <td className="px-3 py-2 font-medium text-ink-700" data-testid="audit-action">{l.action_label}{l.category === "security" && <Badge className="mr-1 bg-warning-500/10 text-warning-700">أمني</Badge>}</td>
                   <td className="px-3 py-2 text-ink-600">{l.entity_label}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-ink-600">{l.entity_ref ?? "—"}{l.entity_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("entity_id", l.entity_id ?? undefined); }} title="كل أحداث هذا السجل">كل أحداثه</button>}</td>
+                  <td className={`px-3 py-2 text-xs text-ink-600 ${/[\u0600-\u06FF]/.test(l.entity_ref ?? "") ? "" : "font-mono"}`}>{l.entity_ref ?? "—"}{l.entity_id && <button type="button" className="mr-1 font-sans text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("entity_id", l.entity_id ?? undefined); }} title="كل أحداث هذا السجل">كل أحداثه</button>}</td>
                   <td className="px-3 py-2 text-ink-600">{l.actor_name ?? "—"}{l.actor_id && <button type="button" className="mr-1 text-[10px] text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); set("actor_id", l.actor_id ?? undefined); }} title="كل ما نفّذه">أحداثه فقط</button>}</td>
                   <td className="px-3 py-2 text-xs text-ink-500">{l.branch_name ?? "—"}</td>
                   <td className="max-w-[16rem] truncate px-3 py-2 text-xs text-ink-600" title={l.reason ?? ""}>{l.reason ?? "—"}</td>
@@ -120,7 +121,7 @@ export default function AdminAuditLogs() {
           </table>
           <div className="flex items-center justify-between border-t border-ink-50 px-3 py-2 text-xs text-ink-500">
             <span>صفحة {page + 1} من {pages} · {COUNT.event(data.total)}{loading && <Spinner className="mr-2 inline h-3 w-3" />}</span>
-            <div className="flex gap-2"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="btn-ghost px-2 py-1 text-xs">السابق</button><button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} className="btn-ghost px-2 py-1 text-xs">التالي</button></div>
+            <div className="flex flex-wrap items-center gap-2"><button disabled={page === 0} aria-describedby={page === 0 ? "dr-adminauditlogs-8" : undefined} title={page === 0 ? "أنت في الصفحة الأولى" : undefined} onClick={() => setPage(page - 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">السابق</button><DisabledReason id="dr-adminauditlogs-8" show={page === 0} text="أنت في الصفحة الأولى" /><button disabled={page + 1 >= pages} aria-describedby={page + 1 >= pages ? "dr-adminauditlogs-7" : undefined} title={page + 1 >= pages ? "هذه آخر صفحة" : undefined} onClick={() => setPage(page + 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">التالي</button><DisabledReason id="dr-adminauditlogs-7" show={page + 1 >= pages} text="هذه آخر صفحة" /></div>
           </div>
         </Card>
       </DataState>
@@ -172,7 +173,7 @@ function TraceSearch() {
           <span className="label">ابحث برمز التتبع</span>
           <input value={code} onChange={(e) => setCode(e.target.value)} className="input font-mono" dir="ltr" placeholder="K7Q2M9XA" aria-label="رمز التتبع" />
         </label>
-        <button type="submit" disabled={busy || !code.trim()} className="btn-primary text-sm">{busy ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} بحث</button>
+        <button type="submit" disabled={busy || !code.trim()} aria-describedby={!code.trim() ? "dr-adminauditlogs-6" : undefined} title={!code.trim() ? "اكتب الرمز للبحث" : undefined} className="btn-primary text-sm">{busy ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} بحث</button><DisabledReason id="dr-adminauditlogs-6" show={!code.trim()} text="اكتب الرمز للبحث" />
       </form>
       <p className="mt-1.5 text-[11px] text-ink-400">الرمز يظهر للموظف بجانب رسالة أي عملية تعذّر تنفيذها: «رمز التتبع: …». يبيّن هنا ما حدث دون أي بيانات شخصية.</p>
       {error && <div className="mt-3"><ErrorBanner message={error} /></div>}

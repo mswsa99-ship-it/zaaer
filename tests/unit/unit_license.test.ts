@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { normalizeUnitLicense } from "../../src/lib/validation";
-import { readsUnitLicense, UNIT_LICENSE_READERS } from "../../src/lib/unitLicenseRoles";
+import { readsUnitLicense, readsUnitLicenseFor, setsUnitLicenseOnCreate, UNIT_LICENSE_READERS } from "../../src/lib/unitLicenseRoles";
 
 const m75 = readFileSync(join(__dirname, "..", "..", "supabase/migrations/20261123110000_0075_unit_license.sql"), "utf8");
 const refused = (s: string) => { try { normalizeUnitLicense(s); return "accepted"; } catch (e) { return (e as Error).message; } };
@@ -115,5 +115,59 @@ describe("UL — the demo keeps the same rules", () => {
     expect(JSON.stringify(log)).not.toContain("NEW-77777");
     expect((await rpc<any[]>("fn_room_licenses", { p_branch: BRANCH_A })).data.some((l) => l.room_id === r101)).toBe(false);
     expect((await rpc<any[]>("fn_room_licenses", { p_branch: BRANCH_B })).data).toEqual([]);
+  });
+});
+
+describe("UL28 individual accounts: the licence is read and edited by whoever may EDIT the rooms page, whatever the role", () => {
+  const ind = (pages: Record<string, Record<string, boolean>>) => ({ mode: "individual" as const, revision: 1, pages, sensitive: [], homePage: null });
+  it("edit on /admin/rooms reads whatever the role; the three roles keep their read; a view-only or add-only non-listed role, or edit on other pages, does not; legacy and owner keep the roles", () => {
+    expect(readsUnitLicenseFor("housekeeping", ind({ "/admin/rooms": { view: true, edit: true } }))).toBe(true);
+    expect(readsUnitLicenseFor("supervisor", ind({ "/admin/rooms": { view: true } }))).toBe(true); // existing read preserved
+    expect(readsUnitLicenseFor("housekeeping", ind({ "/admin/rooms": { view: true } }))).toBe(false);
+    expect(readsUnitLicenseFor("housekeeping", ind({ "/admin/rooms": { view: true, add: true } }))).toBe(false);
+    expect(readsUnitLicenseFor("finance", ind({ "/admin/services": { view: true, edit: true } }))).toBe(false);
+    expect(readsUnitLicenseFor("owner", ind({}))).toBe(true);
+    expect(readsUnitLicenseFor("manager", { mode: "legacy", revision: 0, pages: {}, sensitive: [], homePage: null })).toBe(true);
+    expect(readsUnitLicenseFor("housekeeping", { mode: "legacy", revision: 0, pages: {}, sensitive: [], homePage: null })).toBe(false);
+    expect(readsUnitLicenseFor("manager", undefined)).toBe(true);
+  });
+});
+
+describe("UL29 item 6 (user 2026-11-25 06:19): the licence is saved together with the unit, in one call", () => {
+  async function cat(): Promise<string> { const c = await client.from("room_categories").select("id, branch_id"); return ((c.data as any[]) ?? []).find((x) => x.branch_id === BRANCH_A).id; }
+  const count = async (n: string) => (((await client.from("rooms").select("id, room_number")).data as any[]) ?? []).filter((x) => x.room_number === n).length;
+  it("UL29a a new unit with a licence saves both; the log has room.created and room.license_set", async () => {
+    const res = await rpc<any>("fn_admin_upsert_room", { p: { branch_id: BRANCH_A, category_id: await cat(), room_number: "901", license: " nl-٧٧ " } });
+    expect(res.error).toBeNull();
+    expect((await rpc<any[]>("fn_room_licenses", { p_branch: BRANCH_A })).data.find((l) => l.room_id === res.data.id)?.license_number).toBe("NL-77");
+    const log = await client.from("audit_events").select("action, entity_id");
+    const acts = ((log.data as any[]) ?? []).filter((e) => e.entity_id === res.data.id).map((e) => e.action).sort();
+    expect(acts).toEqual(["room.created", "room.license_set"]);
+  });
+  it("UL29b an invalid licence on a new unit refuses the whole save: no unit, no licence", async () => {
+    const before = (await rpc<any[]>("fn_room_licenses", { p_branch: BRANCH_A })).data.length;
+    const res = await rpc("fn_admin_upsert_room", { p: { branch_id: BRANCH_A, category_id: await cat(), room_number: "902", license: "A B" } });
+    expect(res.error?.message).toBe("VALIDATION: room_license");
+    expect(await count("902")).toBe(0);
+    expect((await rpc<any[]>("fn_room_licenses", { p_branch: BRANCH_A })).data.length).toBe(before);
+  });
+  it("UL29c a blank licence on create is not sent: unit saved, no licence row; an edit with an invalid licence changes nothing", async () => {
+    const c = await cat();
+    const made = await rpc<any>("fn_admin_upsert_room", { p: { branch_id: BRANCH_A, category_id: c, room_number: "903", license: "" } });
+    expect(made.error).toBeNull();
+    expect((await rpc<any[]>("fn_room_licenses", { p_branch: BRANCH_A })).data.some((l) => l.room_id === made.data.id)).toBe(false);
+    const bad = await rpc("fn_admin_upsert_room", { p: { id: made.data.id, category_id: c, notes: "لا يُحفظ", license: "A B", version: made.data.version } });
+    expect(bad.error?.message).toBe("VALIDATION: room_license");
+    const row = ((await client.from("rooms").select("id, notes, version")).data as any[]).find((x) => x.id === made.data.id);
+    expect(row.notes ?? null).toBeNull();
+    expect(row.version).toBe(made.data.version);
+  });
+  it("UL29d setsUnitLicenseOnCreate: Add alone is enough for an individual account; view-only is not; legacy and owner as before", () => {
+    const ind = (pages: Record<string, Record<string, boolean>>) => ({ mode: "individual" as const, revision: 1, pages, sensitive: [], homePage: null });
+    expect(setsUnitLicenseOnCreate("housekeeping", ind({ "/admin/rooms": { view: true, add: true } }))).toBe(true);
+    expect(setsUnitLicenseOnCreate("housekeeping", ind({ "/admin/rooms": { view: true } }))).toBe(false);
+    expect(readsUnitLicenseFor("housekeeping", ind({ "/admin/rooms": { view: true, add: true } }))).toBe(false); // Add alone never reads existing numbers
+    expect(setsUnitLicenseOnCreate("owner", undefined)).toBe(true);
+    expect(setsUnitLicenseOnCreate("finance", undefined)).toBe(false);
   });
 });

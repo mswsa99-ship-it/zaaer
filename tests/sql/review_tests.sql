@@ -20,6 +20,7 @@ create or replace function t_vouchers(p_res uuid, p_kind text) returns int langu
 create or replace function t_paid(p_res uuid) returns bigint language sql security definer as $$ select paid_halalas from reservations where id = p_res $$;
 create or replace function t_memberships(p_staff uuid) returns int language sql security definer as $$ select count(*)::int from branch_memberships where staff_id = p_staff $$;
 create or replace function t_charge(p_id uuid) returns reservation_charges language sql security definer as $$ select * from reservation_charges where id = p_id $$;
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated can no longer call fn_branch_today directly
 
 create temp table rf(k text primary key, v uuid);
 grant all on rf to public;
@@ -48,7 +49,7 @@ do $$ declare res uuid := (select v from rf where k='res'); a jsonb; b jsonb; be
     perform t_record('RF03 A03 same key with a different method → IDEMPOTENCY_CONFLICT', false, 'accepted');
   exception when others then perform t_record('RF03 A03 same key with a different method → IDEMPOTENCY_CONFLICT', sqlerrm like 'IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   begin
-    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'rf-key-1'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'rf-key-1'));
     perform t_record('RF04 A03 the voucher path cannot reuse a key taken by the payment path with other content', false, 'accepted');
   exception when others then perform t_record('RF04 A03 the voucher path cannot reuse a key taken by the payment path with other content', sqlerrm like 'IDEMPOTENCY_CONFLICT%', sqlerrm); end;
   perform t_record('RF04b A03 after all replays: exactly one receipt, paid = 100 SAR', t_vouchers(res, 'receipt') = 1 and t_paid(res) = 10000, 'paid=' || t_paid(res));
@@ -100,7 +101,7 @@ end $$;
 do $$ declare res uuid := (select v from rf where k='res'); rep jsonb; led jsonb; begin
   perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'deposit', 'amount_halalas', 30000, 'method', 'cash', 'idempotency_key', 'rf-dep'));
   perform fn_refund(jsonb_build_object('reservation_id', res, 'kind', 'refund', 'amount_halalas', 2500, 'method', 'cash', 'method_reason', 'النزيل طلب الرد نقدًا', 'reason', 'تعويض', 'idempotency_key', 'rf-ref'));
-  rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', fn_branch_today('00000000-0000-0000-0000-000000000010') - 1, fn_branch_today('00000000-0000-0000-0000-000000000010'), '{}'::jsonb);
+  rep := fn_reports_finance('00000000-0000-0000-0000-000000000010', t_today('00000000-0000-0000-0000-000000000010') - 1, t_today('00000000-0000-0000-0000-000000000010'), '{}'::jsonb);
   led := rep->'ledger';
   perform t_record('RF12 A05 report ledger reconciles: net = receipts − refunds + deposit_apply, read straight from vouchers',
     (led->>'net_collected')::bigint = (led->>'receipts')::bigint - (led->>'refunds')::bigint + (led->>'deposits_applied')::bigint

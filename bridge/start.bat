@@ -1,8 +1,8 @@
 @echo off
-rem Zaaer - branch WhatsApp on the reception computer. Keeps the program running; restarts it if it stops.
+rem RoomAI - branch WhatsApp on the reception computer. Keeps the program running; restarts it if it stops.
 setlocal
 chcp 65001 >nul
-title Zaaer - Branch WhatsApp
+title RoomAI - Branch WhatsApp
 cd /d "%~dp0"
 set "PUPPETEER_SKIP_DOWNLOAD=1"
 set "NODE=%~dp0node\node.exe"

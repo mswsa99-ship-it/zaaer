@@ -276,11 +276,14 @@ end $$;
 reset role;
 update keyboxes set code_status='needs_change' where room_id='00000000-0000-0000-0000-000000000100';
 set role authenticated; select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
--- T2/T3: availability shows exactly 1 studio before the arrival
+-- T2/T3: availability shows exactly 1 studio before the arrival (read as the server's own jobs read it: since 0078 no one
+-- signed in may call fn_get_public_availability)
+reset role;
 do $$ declare n int; begin
   select available_to_show into n from fn_get_public_availability('00000000-0000-0000-0000-000000000010', current_date) where category_id='00000000-0000-0000-0000-000000000030';
   perform t_record('T2/T3 only initial release (1) shown before the arrival', n = 1, 'shown=' || n);
 end $$;
+set role authenticated; select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
 do $$ declare r jsonb; begin
   r := fn_staff_check_in(jsonb_build_object('reservation_id', '00000000-0000-0000-0000-000000000201',
          'deposit', jsonb_build_object('amount_halalas', 5000, 'method', 'cash', 'idempotency_key', 'sec-dep-201')));
@@ -308,7 +311,8 @@ do $$ declare r jsonb; begin
   r := fn_staff_deliver_access_code('00000000-0000-0000-0000-000000000201','screen');
   perform t_record('T17 second delivery refused', (r->>'ok')::boolean = false, r::text);
 end $$;
--- T4: next room released after the arrival, occupied room not re-offered
+-- T4: next room released after the arrival, occupied room not re-offered (read as the server's jobs read it, 0078)
+reset role;
 do $$ declare n int; tot int; rel int; st text; begin
   select available_to_show, total_available into n, tot from fn_get_public_availability('00000000-0000-0000-0000-000000000010', current_date) where category_id='00000000-0000-0000-0000-000000000030';
   rel := t_released('00000000-0000-0000-0000-000000000030');

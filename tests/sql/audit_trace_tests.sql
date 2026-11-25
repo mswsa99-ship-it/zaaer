@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Traceable audit (decision 39, G22) and failure in the middle of an operation (X08).
 -- AT01–AT08: correlation, source, actor type, security category, owner-only security events,
@@ -21,7 +22,7 @@ create or replace function t_record(p_name text, p_ok boolean, p_detail text def
 $$;
 create or replace function t_id(p_k text) returns uuid language sql security definer as $$ select v from ids where k = p_k $$;
 create or replace function t_audit(p_entity uuid, p_action text) returns audit_events language sql security definer as $$
-  select * from audit_events where entity_id = p_entity and action = p_action order by created_at desc limit 1
+  select * from t_audit_all() where entity_id = p_entity and action = p_action order by created_at desc limit 1
 $$;
 create or replace function t_count(p_sql text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p_sql into n; return n; end $$;
 create or replace function t_ver(p_table text, p_id uuid) returns int language plpgsql security definer as $$ declare v int; begin execute format('select version from %I where id = $1', p_table) into v using p_id; return v; end $$;
@@ -43,7 +44,7 @@ insert into ids select 'tt', id from task_types where branch_id = '00000000-0000
 set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 do $$ declare v jsonb; a audit_events; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 1000, 'method','cash', 'idempotency_key','at-01'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 1000, 'method','cash', 'idempotency_key','at-01'));
   a := t_audit((v->>'voucher_id')::uuid, 'voucher.receipt_created');
   perform t_record('AT01 an audit row gets a transaction correlation, staff actor, screen source, success, business category',
     a.correlation_id like 'tx-%' and a.actor_type = 'staff' and a.actor_id is not null and a.source = 'screen' and a.result = 'success' and a.category = 'business',
@@ -52,7 +53,7 @@ exception when others then perform t_record('AT01 an audit row gets a transactio
 
 -- two operations in one transaction share one correlation (one call = one operation in the app)
 do $$ declare v1 jsonb; v2 jsonb; c1 text; c2 text; begin
-  v1 := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 500, 'method','cash', 'idempotency_key','at-02a'));
+  v1 := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 500, 'method','cash', 'idempotency_key','at-02a'));
   v2 := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit', 'amount_halalas', 500, 'method','cash', 'idempotency_key','at-02b'));
   c1 := (t_audit((v1->>'voucher_id')::uuid, 'voucher.receipt_created')).correlation_id;
   c2 := (t_audit((v2->>'voucher_id')::uuid, 'voucher.deposit_created')).correlation_id;
@@ -61,20 +62,20 @@ exception when others then perform t_record('AT02 the rows written by one transa
 
 select set_config('request.headers', '{"x-correlation-id":"AbC-12345678","x-client-source":"staff-app"}', false);
 do $$ declare v jsonb; a audit_events; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-03'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-03'));
   a := t_audit((v->>'voucher_id')::uuid, 'voucher.receipt_created');
-  perform t_record('AT03 the app''s correlation and source headers are used when well formed', a.correlation_id = 'AbC-12345678' and a.source = 'staff-app', row_to_json(a)::text);
+  perform t_record('AT03 the app''s correlation header is used when well formed; a client source header no longer writes the source (plan 5.3, 0082)', a.correlation_id = 'AbC-12345678' and a.source = 'screen', row_to_json(a)::text);
 exception when others then perform t_record('AT03 the app''s correlation and source headers are used when well formed', false, sqlerrm); end $$;
 select set_config('request.headers', '{"x-correlation-id":"bad id; select 1","x-client-source":"<script>"}', false);
 do $$ declare v jsonb; a audit_events; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-04'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-04'));
   a := t_audit((v->>'voucher_id')::uuid, 'voucher.receipt_created');
   perform t_record('AT04 malformed headers are ignored (transaction correlation, default source)', a.correlation_id like 'tx-%' and a.source = 'screen', row_to_json(a)::text);
 exception when others then perform t_record('AT04 malformed headers are ignored (transaction correlation, default source)', false, sqlerrm); end $$;
 select set_config('request.headers', '', false);
 select set_config('app.source', 'ops_assistant', false);
 do $$ declare v jsonb; a audit_events; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-05'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','at-05'));
   a := t_audit((v->>'voucher_id')::uuid, 'voucher.receipt_created');
   perform t_record('AT05 a trusted in-database source (the operations assistant) is recorded', a.source = 'ops_assistant', row_to_json(a)::text);
 exception when others then perform t_record('AT05 a trusted in-database source (the operations assistant) is recorded', false, sqlerrm); end $$;
@@ -86,13 +87,13 @@ select set_config('app.source', '', false);
 do $$ declare n int; r int; begin
   perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000006', false, 'اختبار التتبع');
   perform fn_admin_set_staff_active('10000000-0000-0000-0000-000000000006', true, 'اختبار التتبع');
-  select count(*), count(*) filter (where details->>'reason' = 'اختبار التتبع') into n, r from audit_events where entity_id = '10000000-0000-0000-0000-000000000006' and action in ('staff.deactivated','staff.activated') and category = 'security';
+  select count(*), count(*) filter (where details->>'reason' = 'اختبار التتبع') into n, r from t_audit_all() where entity_id = '10000000-0000-0000-0000-000000000006' and action in ('staff.deactivated','staff.activated') and category = 'security';
   perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', n = 2 and r = 2, n || ' / with reason ' || r);
 exception when others then perform t_record('AT06a deactivating and reactivating a staff member leaves two security events the owner can read', false, sqlerrm); end $$;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare n int; m int; begin
-  select count(*) into n from audit_events where entity_id = '10000000-0000-0000-0000-000000000006' and category = 'security';
-  select count(*) into m from audit_events where category = 'business';
+  n := (fn_audit_list('{"category":"security"}'::jsonb)->>'total')::int;  -- the manager's own view through the permitted RPC
+  m := (fn_audit_list('{"category":"business"}'::jsonb)->>'total')::int;
   perform t_record('AT06b a manager reads business events but no security event', n = 0 and m > 0, n || ' / ' || m);
 exception when others then perform t_record('AT06b a manager reads business events but no security event', false, sqlerrm); end $$;
 
@@ -117,7 +118,7 @@ exception when others then perform t_record('AT07b an invite records its branche
 do $$ declare n int; begin
   update audit_events set action = 'tampered' where organization_id = '00000000-0000-0000-0000-000000000001';
   get diagnostics n = row_count;
-  perform t_record('AT08 nobody can change an audit row through the API', n = 0 and t_count('select count(*) from audit_events where action = ''tampered''') = 0, n::text);
+  perform t_record('AT08 nobody can change an audit row through the API', n = 0 and t_count('select count(*) from t_audit_all() where action = ''tampered''') = 0, n::text);
 exception when others then perform t_record('AT08 nobody can change an audit row through the API', true, sqlerrm); end $$;
 reset role;
 
@@ -141,7 +142,7 @@ exception when others then perform t_record('CE02 a supervisor neither reads the
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 select set_config('request.headers', '{"x-correlation-id":"OKCODE2345"}', false);
 do $$ declare v jsonb; f jsonb; s jsonb; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','ce-03'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','ce-03'));
   f := fn_lookup_trace('K7Q2M9XA');
   s := fn_lookup_trace('OKCODE2345');
   perform t_record('CE03 the manager finds a failed code (its error) and a successful one (its audit rows)',
@@ -178,14 +179,14 @@ do $$ declare msg text := 'accepted'; before_paid bigint; after_paid bigint; v j
   select (fn_reservation_finance(t_id('res'))->>'received')::bigint into before_paid;
   perform set_config('test.fail_audit', 'on', true);
   begin
-    perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 2500, 'method','cash', 'idempotency_key','x08-a'));
+    perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 2500, 'method','cash', 'idempotency_key','x08-a'));
   exception when others then msg := sqlerrm; end;
   perform set_config('test.fail_audit', 'off', true);
   select (fn_reservation_finance(t_id('res'))->>'received')::bigint into after_paid;
   perform t_record('X08a a fault after the voucher row and before its audit row leaves no voucher and no change to what was received',
     msg like 'INJECTED_FAULT%' and t_count('select count(*) from financial_vouchers where idempotency_key = ''x08-a''') = 0 and after_paid = before_paid,
     msg || ' / ' || before_paid || ' / ' || after_paid);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 2500, 'method','cash', 'idempotency_key','x08-a'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 2500, 'method','cash', 'idempotency_key','x08-a'));
   perform t_record('X08a2 the retry with the same key then succeeds once',
     (v->>'ok')::boolean and not (v->>'duplicate')::boolean and t_count('select count(*) from financial_vouchers where idempotency_key = ''x08-a''') = 1, v::text);
 exception when others then perform t_record('X08a a fault after the voucher row and before its audit row leaves no voucher and no change to what was received', false, sqlerrm); end $$;

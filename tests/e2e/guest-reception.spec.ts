@@ -20,7 +20,7 @@ test.describe("guest reception", () => {
     await expect(page.getByText("+966500000001")).toBeVisible();
     await expect(page.getByTestId("wa-qr")).toHaveCount(0);
     await page.getByRole("link", { name: "بوابة الموظفين والإدارة" }).first().click();   // GUEST-22: the staff link is in the footer only
-    await expect(page.getByRole("heading", { name: /بوابة الموظفين/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "تسجيل الدخول", exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -100,6 +100,7 @@ test.describe("guest reception", () => {
     await page.getByPlaceholder("رقم الحجز").fill("bk-4471029");                 // a wrong number would say "لم نجد حجزًا"
     await page.getByRole("button", { name: "عرض حجوزاتي" }).click();
     await expect(page).toHaveURL(/\/booking\/status\//);                          // one booking on this phone: opened directly
+    await expect(page.getByTestId("guest-hero")).toBeVisible();                   // the status page has committed its DOM before going back
     await page.goBack();
     await expect(page.getByText("حجز واحد")).toBeVisible();                       // the verified list stays for this tab
     expect(errors).toEqual([]);

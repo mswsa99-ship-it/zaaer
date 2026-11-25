@@ -81,6 +81,9 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
   const sent = day.closing?.status === "submitted";
   const figures: ClosingFigures = sent && day.closing?.figures ? day.closing.figures : day.live;
   const editable = canEdit && (day.state === "none" || day.state === "draft" || (day.state === "open" && amending));
+  // M4 (plan 4.4): the blind count — before the closing is sent, the system's figures stay hidden so the counter
+  // writes what was actually counted; the figures appear in the review and after sending
+  const blind = !sent;
   const pending = day.requests.find((r) => r.status === "pending");
   const badge = STATE_BADGE[day.state];
 
@@ -124,9 +127,11 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
 
       <Card>
         <h2 className="mb-1 text-sm font-semibold text-ink-700">الصناديق</h2>
-        <p className="mb-3 text-xs text-ink-500">صافي اليوم في كل صندوق: المقبوض (إيجار وتأمين) ناقص المردود. أدخل ما عُددته فعلًا، واكتب سبب أي فرق.</p>
+        <p className="mb-3 text-xs text-ink-500">{blind
+          ? "عدّ ما في كل صندوق فعلًا وأدخله قبل رؤية رقم النظام؛ يظهر رقم النظام والفرق وسببه في المراجعة قبل الإرسال."
+          : "صافي اليوم في كل صندوق: المقبوض (إيجار وتأمين) ناقص المردود. أدخل ما عُددته فعلًا، واكتب سبب أي فرق."}</p>
         <div className="space-y-3" data-testid="closing-boxes">
-          {figures.boxes.map((b) => <BoxRow key={b.key} b={b} value={draft[b.key]} editable={editable} onChange={(v) => setDraft({ ...draft, [b.key]: v })} />)}
+          {figures.boxes.map((b) => <BoxRow key={b.key} b={b} value={draft[b.key]} editable={editable} blind={blind} onChange={(v) => setDraft({ ...draft, [b.key]: v })} />)}
         </div>
         <Field label="ملاحظة على اليوم" className="mt-3"><textarea className="input" rows={2} value={note} disabled={!(canEdit && (day.state === "none" || day.state === "draft"))} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة على اليوم" /></Field>
         {actionError && <div className="mt-3"><ErrorBanner message={actionError} /></div>}
@@ -145,7 +150,7 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
         {amending && <AmendForm busy={busy} onCancel={() => { setAmending(false); setDraft(draftOf(day)); }} onSave={saveAmend} />}
       </Card>
 
-      <Matrix figures={figures} />
+      {!blind && <Matrix figures={figures} />}
 
       {day.requests.length > 0 && (
         <Card>
@@ -172,24 +177,24 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
   );
 }
 
-function BoxRow({ b, value, editable, onChange }: { b: ClosingBox; value: { entered: number | null; reason: string } | undefined; editable: boolean; onChange: (v: { entered: number | null; reason: string }) => void }) {
+function BoxRow({ b, value, editable, blind, onChange }: { b: ClosingBox; value: { entered: number | null; reason: string } | undefined; editable: boolean; blind: boolean; onChange: (v: { entered: number | null; reason: string }) => void }) {
   const v = value ?? { entered: null, reason: "" };
   const diff = v.entered == null ? null : v.entered - b.system_halalas;
   return (
     <div className="rounded-xl border border-ink-100 p-3" data-testid={`closing-box-${b.box}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="font-semibold text-ink-800">{b.label}{b.required && <span className="mr-1 text-xs font-normal text-ink-400">(إلزامي)</span>}</span>
-        <span className="text-sm text-ink-500">سجّل النظام <span dir="ltr" className="font-semibold text-ink-800 tabular-nums">{sar(b.system_halalas)}</span></span>
+        {!blind && <span className="text-sm text-ink-500">سجّل النظام <span dir="ltr" className="font-semibold text-ink-800 tabular-nums">{sar(b.system_halalas)}</span></span>}
       </div>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <Field label={b.box === "pos" ? "إجمالي جهاز الشبكة" : b.box === "cash" ? "عدّ النقد" : "المؤكَّد"}>
           <MoneyInput valueHalalas={v.entered} onChange={(h) => onChange({ ...v, entered: h })} min={-100000000} disabled={!editable} label={`${b.label}: المُدخل`} />
         </Field>
-        <Field label={diff ? "سبب الفرق (إلزامي)" : "السبب"}>
+        <Field label={diff && !blind ? "سبب الفرق (إلزامي)" : "السبب"}>
           <input className="input" value={v.reason} disabled={!editable} onChange={(e) => onChange({ ...v, reason: e.target.value })} aria-label={`${b.label}: سبب الفرق`} />
         </Field>
       </div>
-      {diff != null && <p className={`mt-1 text-sm ${diff === 0 ? "text-success-600" : "text-danger-600"}`} data-testid={`closing-diff-${b.box}`}>{diff === 0 ? "مطابق." : <>الفرق <span dir="ltr">{sar(diff)}</span> {diff > 0 ? "(المعدود أكثر)" : "(المعدود أقل)"}</>}</p>}
+      {!blind && diff != null && <p className={`mt-1 text-sm ${diff === 0 ? "text-success-600" : "text-danger-600"}`} data-testid={`closing-diff-${b.box}`}>{diff === 0 ? "مطابق." : <>الفرق <span dir="ltr">{sar(diff)}</span> {diff > 0 ? "(المعدود أكثر)" : "(المعدود أقل)"}</>}</p>}
     </div>
   );
 }
@@ -276,12 +281,13 @@ function Archive({ branchId, tick, onPick, canApprove, onChanged }: { branchId: 
   const [error, setError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<{ id: string; approve: boolean; date: string } | null>(null);
   const [note, setNote] = useState("");
+  const [retryTick, setRetryTick] = useState(0);
   useEffect(() => {
     let alive = true; setError(null);
     closingApi.list(branchId, addDaysISO(todayISO(), -30), todayISO()).then((d) => { if (alive) setData(d); }, (e) => { if (alive) setError(toArabicError(e)); });
     return () => { alive = false; };
-  }, [branchId, tick]);
-  if (error) return <LoadErrorCard message={error} />;
+  }, [branchId, tick, retryTick]);
+  if (error) return <LoadErrorCard message={error} onRetry={() => setRetryTick((t) => t + 1)} />;
   if (!data) return <Card><Spinner /></Card>;
   return (
     <>

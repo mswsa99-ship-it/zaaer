@@ -1,0 +1,35 @@
+import {useState} from "react";
+import {Navigate,Link,useLocation} from "react-router-dom";
+import {useAuth} from "../../lib/auth";
+import {supabase} from "../../lib/supabase";
+import {roomaiAsset} from "../../lib/brand";
+import {homeFor} from "../../lib/nav";
+import {Card,ErrorBanner,LoadingScreen} from "../../components/ui";
+import {emptyOwnerDraft,ownerPasswordProblem,OWNER_DRAFT_KEY,type OwnerRegistrationDraft} from "../../lib/ownerRegistration";
+const readDraft=()=>{try{const d=JSON.parse(sessionStorage.getItem(OWNER_DRAFT_KEY)??"null");return d?.full_name?d as OwnerRegistrationDraft:emptyOwnerDraft();}catch{return emptyOwnerDraft();}};
+export default function OwnerRegister({ embedded = false, onLogin }: { embedded?: boolean; onLogin?: () => void } = {}){
+ const location=useLocation();
+ const {session,profile,isPlatformOperator,loading,refreshProfile,signOut}=useAuth();
+ const [draft,setDraft]=useState(readDraft);const [email,setEmail]=useState(()=>typeof location.state?.email==="string"?location.state.email:"");const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [code,setCode]=useState("");
+ const [step,setStep]=useState<"form"|"verify">("form");const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);const [notice,setNotice]=useState<string|null>(null);
+ if(loading)return <LoadingScreen/>;if(isPlatformOperator)return <Navigate to="/platform" replace/>;if(profile)return <Navigate to={homeFor(profile.role)} replace/>;
+ const update=(d:OwnerRegistrationDraft)=>{setDraft(d);try{sessionStorage.setItem(OWNER_DRAFT_KEY,JSON.stringify(d));}catch{/* optional nonsecret draft */}};
+ async function createHotel(){const r=await supabase.rpc("fn_owner_register_hotel",{p:draft});if(r.error)throw new Error(/EMAIL_NOT_CONFIRMED/.test(r.error.message)?"أكّد البريد أولًا. لم يُنشأ الفندق.":"لم يُنشأ الفندق. تحقق من البيانات ثم أعد المحاولة.");sessionStorage.removeItem(OWNER_DRAFT_KEY);await refreshProfile();}
+ async function submit(e:React.FormEvent){e.preventDefault();setError(null);setNotice(null);setBusy(true);try{
+  if(session){await createHotel();return;}
+  const problem=ownerPasswordProblem(password,confirm);if(problem)throw new Error(problem);
+  const r=await supabase.auth.signUp({email:email.trim().toLowerCase(),password});if(r.error)throw new Error("تعذّر بدء التسجيل. تحقق من البريد وكلمة المرور ثم أعد المحاولة.");
+  setPassword("");setConfirm("");setStep("verify");setNotice("أدخل رمز التأكيد الذي يصلك إلى بريدك. لن يُنشأ الفندق قبل تأكيد البريد.");
+ }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ async function verify(e:React.FormEvent){e.preventDefault();setBusy(true);setError(null);try{const r=await supabase.auth.verifyOtp({email:email.trim().toLowerCase(),token:code.trim(),type:"signup"});if(r.error)throw new Error("الرمز غير صحيح أو انتهت صلاحيته. اطلب رمزًا جديدًا وأعد المحاولة.");setCode("");setStep("form");setNotice("تم تأكيد بريدك. راجع بيانات الفندق واضغط إنشاء الفندق.");}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ async function resend(){setBusy(true);setError(null);try{const r=await supabase.auth.resend({type:"signup",email:email.trim().toLowerCase()});if(r.error)throw new Error("تعذّر إعادة الإرسال الآن. انتظر قليلًا ثم حاول.");setNotice("طُلب رمز جديد. تحقق من البريد والرسائل غير المرغوب فيها.");}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ const content = <>{error&&<ErrorBanner message={error}/ >}{notice&&<p role="status" className="my-3 text-sm text-rai-success">{notice}</p>}
+ {step==="verify"&&!session?<form onSubmit={verify} className="grid gap-4"><p dir="ltr">{email}</p><label className="grid gap-1">رمز تأكيد البريد<input className="input" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,8}" minLength={6} maxLength={8} value={code} onChange={e=>setCode(e.target.value)}/></label><button className="btn-primary" disabled={busy}>تأكيد البريد</button><button type="button" className="btn-outline" disabled={busy} onClick={()=>void resend()}>إرسال رمز جديد</button><button type="button" className="btn-ghost" disabled={busy} onClick={()=>{setStep("form");setCode("");}}>تعديل البيانات والبريد</button></form>:
+ <form onSubmit={submit} className="grid gap-4">
+ {!session&&<fieldset className="grid gap-4"><legend className="mb-3 font-semibold">الحساب</legend><label className="grid gap-1">البريد الإلكتروني<input className="input" type="email" autoComplete="email" dir="ltr" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label className="grid gap-1">كلمة المرور<input className="input" aria-label="كلمة المرور" type="password" autoComplete="new-password" dir="ltr" required minLength={12} value={password} onChange={e=>setPassword(e.target.value)}/><span className="text-xs text-rai-ink-muted">12 حرفًا على الأقل: كبير وصغير ورقم ورمز، دون مسافات.</span></label><label className="grid gap-1">تأكيد كلمة المرور<input className="input" type="password" autoComplete="new-password" dir="ltr" required minLength={12} value={confirm} onChange={e=>setConfirm(e.target.value)}/></label><p className="text-sm" aria-live="polite">قوة كلمة المرور: {!password?"لم تُدخل":ownerPasswordProblem(password,password)?"تحتاج تقوية":"قوية"}</p></fieldset>}
+ <fieldset className="grid gap-4"><legend className="mb-3 font-semibold">الفندق</legend>{([{key:"full_name",label:"اسم المالك الكامل",min:3},{key:"name_ar",label:"اسم الفندق",min:2}] as const).map(f=><label key={f.key} className="grid gap-1">{f.label}<input className="input" required minLength={f.min} maxLength={120} value={draft[f.key]} onChange={e=>update({...draft,[f.key]:e.target.value})}/></label>)}</fieldset>
+ <button className="btn-primary" disabled={busy}>{busy?"جارٍ التنفيذ…":session?"إنشاء الفندق":"إنشاء الحساب وإرسال رمز التأكيد"}</button></form>}
+ <div className="mt-4 flex gap-3">{session?<button className="btn-ghost" onClick={()=>void signOut()}>تسجيل الخروج</button>:(onLogin?<button type="button" className="btn-ghost" style={{color:"inherit"}} onClick={onLogin}>لدي حساب: دخول بالبريد وكلمة المرور</button>:<Link className="btn-ghost" style={{color:"var(--ink)"}} to="/login">لدي حساب: دخول بالبريد وكلمة المرور</Link>)}</div></>;
+ if(embedded)return <section data-testid="owner-registration-inline">{content}</section>;
+ return <main dir="rtl" className="owner-registration min-h-screen bg-rai-canvas px-4 py-8"><div className="mx-auto max-w-2xl"><img src={roomaiAsset("roomai-logo.svg")} alt="RoomAI" className="owner-logo-day mx-auto mb-6 h-12"/><img src={roomaiAsset("roomai-logo-reversed.svg")} alt="RoomAI" className="owner-logo-night mx-auto mb-6 h-12"/><Card>{content}</Card></div></main>;
+}

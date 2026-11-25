@@ -1,0 +1,3 @@
+# Admin follow-on3
+
+PG16.6 iso_credit1745 actualengine12ownerexactrowcontrols+12foreigndenials,0invalid. Functionsdaycloseminutes97,branchguidearrivalinstructions,archiveknowledge. 141adapterrows/91control-validlabels/201unadapted, notfullmatrixcoverage. BranchguideomittedbankfieldsarepreservedbybodybutUPDATEalsotouchesversion/time, exact2rows(branch+audit); noIBANbranchtested. Archiveonly, norestore/repeat/emptyreasonproof. HistoricalsameentityauditdecoygapremainsfalseREDpotential. Noexternalchanges.

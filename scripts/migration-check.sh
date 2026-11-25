@@ -26,7 +26,7 @@ REPORT="$OUTDIR/migration-report.txt"
 mkdir -p "$OUTDIR"
 source tests/sql/bootstrap.sh
 
-apply() { psql -d "$1" -v ON_ERROR_STOP=1 -q -f "$2" 2>&1 | grep -v NOTICE || true; }
+apply() { psql -d "$1" -v ON_ERROR_STOP=1 -q -f "$2" 2>&1 | awk '!/NOTICE/'; }
 
 bootstrap_db "$DB" >/dev/null
 pending=()
@@ -47,7 +47,7 @@ psql -d "$DB" -v ON_ERROR_STOP=1 -q -v phase=after -f scripts/migration-snapshot
 # restore drill: dump the migrated database and restore it elsewhere
 psql -q -c "drop database if exists $RESTORED;" -c "create database $RESTORED;" >/dev/null
 pg_dump -d "$DB" --no-owner --format=custom --file "$OUTDIR/migration-drill.dump"
-pg_restore -d "$RESTORED" --no-owner "$OUTDIR/migration-drill.dump" 2>&1 | grep -v "already exists" || true
+pg_restore -d "$RESTORED" --no-owner --exit-on-error "$OUTDIR/migration-drill.dump"
 rm -f "$OUTDIR/migration-drill.dump"   # synthetic data only, but a dump is never kept with the run's results
 psql -d "$RESTORED" -v ON_ERROR_STOP=1 -q -v phase=restored -f scripts/migration-snapshot.sql >/dev/null
 
@@ -65,7 +65,17 @@ changed=$(psql -d "$DB" -At -c "select b.k from _mig_snapshot b left join _mig_s
 unexplained=()
 while IFS= read -r k; do
   [[ -z "$k" ]] && continue
-  if [[ -f "$EXCEPTIONS" ]] && grep -q "^${k}:" "$EXCEPTIONS"; then echo "explained change: $k — $(grep "^${k}:" "$EXCEPTIONS" | head -1 | cut -d: -f2-)" >> "$REPORT"
+  line=""; [[ -f "$EXCEPTIONS" ]] && line=$(grep -m1 "^${k}:" "$EXCEPTIONS" || true)
+  if [[ -n "$line" ]]; then
+    # A line may pin the exact change: "<key>: expect=<before>-><after> | <reason>". Then only that exact transition is explained;
+    # any other before/after value of the same key still fails. A line without expect= explains any change of the key (older lines).
+    if [[ "$line" =~ \ expect=([^|]*)-\>([^|]*)\| ]]; then
+      want_b="${BASH_REMATCH[1]%% }"; want_a="${BASH_REMATCH[2]%% }"
+      got_b=$(psql -d "$DB" -At -c "select v from _mig_snapshot where phase='before' and k='${k//\'/}'")
+      got_a=$(psql -d "$DB" -At -c "select v from _mig_snapshot where phase='after' and k='${k//\'/}'")
+      if [[ "$got_b" == "$want_b" && "$got_a" == "$want_a" ]]; then echo "explained change (exact): $k — $line" >> "$REPORT"
+      else unexplained+=("$k (expected exactly '$want_b' -> '$want_a', got '$got_b' -> '$got_a')"); fi
+    else echo "explained change: $k — ${line#*:}" >> "$REPORT"; fi
   else unexplained+=("$k"); fi
 done <<< "$changed"
 

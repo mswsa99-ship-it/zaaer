@@ -1,6 +1,8 @@
+import { parseIndividualPermissions } from "./individualPermissions";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { readLoginIdentity, PROFILE_LOAD_ERROR } from "./loginIdentity";
 import { defaultPermissions, type Permissions } from "./permissionCatalog";
 export { defaultPermissions, type Permissions };
 
@@ -19,6 +21,8 @@ interface AuthContextValue {
   session: Session | null;
   profile: StaffProfile | null;
   loading: boolean;
+  isPlatformOperator: boolean;
+  identityError: string | null;
   /** the person's permissions (the owner: everything) */
   permissions: Permissions;
   /** may the person do this operation of the matrix? */
@@ -28,6 +32,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   /** needsConfirmation: the account exists but the email must be confirmed (link sent) before the first sign-in */
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation?: boolean }>;
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   /** 0074: e-mails a link to «تعيين كلمة المرور» (the forgotten password, a change of password, a colleague's reset) */
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
@@ -62,6 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPlatformOperator, setPlatformOperator] = useState(false);
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Permissions>(defaultPermissions(null));
   /** auth user id whose profile lookup has completed (found or not) — see onAuthStateChange. */
   const profileUserRef = useRef<string | null>(null);
@@ -89,6 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         profileReqRef.current++; // drop any in-flight lookup
         profileUserRef.current = null;
+        setIdentityError(null);
+        setPlatformOperator(false);
         setProfile(null);
         setPermissions(defaultPermissions(null));
         setLoading(false);
@@ -99,44 +108,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadProfile(authUserId: string) {
     const token = ++profileReqRef.current;
-    let { data } = await supabase
-      .from("staff_profiles")
-      .select("id, auth_user_id, organization_id, full_name, email, phone, role, is_active")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-    if (!data) {
-      // Link a pending invitation (by email) or, in demo mode with no staff yet, bootstrap the first owner.
-      // Everything is decided server-side (fn_claim_staff_profile); the browser cannot pick its own role.
-      await supabase.rpc("fn_claim_staff_profile", { p_full_name: null });
-      ({ data } = await supabase
-        .from("staff_profiles")
-        .select("id, auth_user_id, organization_id, full_name, email, phone, role, is_active")
-        .eq("auth_user_id", authUserId)
-        .maybeSingle());
+    setIdentityError(null);
+    try {
+      const identity = await readLoginIdentity(supabase, authUserId);
+      if (token !== profileReqRef.current) return;
+      profileUserRef.current = authUserId;
+      setPlatformOperator(identity.operator);
+      setProfile(identity.profile);
+      setPermissions(identity.permissions);
+    } catch {
+      if (token !== profileReqRef.current) return;
+      setPlatformOperator(false);
+      setProfile(null);
+      setPermissions(defaultPermissions(null));
+      setIdentityError(PROFILE_LOAD_ERROR);
+    } finally {
+      if (token === profileReqRef.current) setLoading(false);
     }
-    if (token !== profileReqRef.current) return; // a later sign-in/out superseded this lookup
-    const prof = data as StaffProfile | null;
-    const perms = prof ? await loadPermissions(prof.role) : defaultPermissions(null);
-    if (token !== profileReqRef.current) return;
-    profileUserRef.current = authUserId;
-    setPermissions(perms);
-    setProfile(prof);
-    setLoading(false);
   }
 
   /** the matrix as the server applies it to this person; the approved defaults if the server cannot say */
-  async function loadPermissions(role: string): Promise<Permissions> {
-    try {
-      const { data, error } = await supabase.rpc("fn_my_permissions", {});
-      const d = data as { allowed?: string[]; full?: string[]; sees_money?: boolean } | null;
-      if (error || !d || !Array.isArray(d.allowed)) return defaultPermissions(role);
-      return { allowed: new Set(d.allowed), full: new Set(d.full ?? []), seesMoney: !!d.sees_money };
-    } catch { return defaultPermissions(role); }
+  async function loadPermissions(): Promise<Permissions> {
+    const { data, error } = await supabase.rpc("fn_my_permissions", {});
+    const d = data as { allowed?: string[]; full?: string[]; sees_money?: boolean; page_access?: unknown } | null;
+    if (error || !d || !Array.isArray(d.allowed) || !Array.isArray(d.full)) throw new Error("Permission verification failed");
+    return { pageAccess: parseIndividualPermissions(d.page_access), allowed: new Set(d.allowed), full: new Set(d.full), seesMoney: !!d.sees_money };
   }
 
   // decision 34: a session the owner or a manager ended (or an account deactivated) is refused by the server on its next
@@ -161,10 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // the owner may have changed the matrix: the screens follow on the next check (the server already does)
           const role = profileRoleRef.current;
           if (role) {
-            const next = await loadPermissions(role);
+            const next = await loadPermissions();
             setPermissions((cur) => (samePermissions(cur, next) ? cur : next));
           }
         }
+      } catch {
+        setIdentityError("تعذّر التحقق من صلاحيات الحساب. أعد المحاولة.");
+        setPermissions(defaultPermissions(null));
       } finally { checking = false; }
     };
     const onVisible = () => { if (document.visibilityState === "visible") void recheck(); };
@@ -209,7 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.session) {
       const { data: claim } = await supabase.rpc("fn_claim_staff_profile", { p_full_name: fullName });
       const c = claim as { ok?: boolean; error?: string } | null;
-      if (!c?.ok) return { error: c?.error === "NO_INVITATION" ? "لا توجد دعوة لهذا البريد. اطلب من مالك المنشأة إضافتك من صفحة الموظفين." : "تعذّر ربط الحساب بملف موظف." };
+      if (!c?.ok && c?.error !== "NO_INVITATION") return { error: "تعذّر ربط الحساب بملف موظف." };
       return { error: null };
     }
     // email confirmation is on: no session until the link is opened; the invitation is linked at the first sign-in
@@ -224,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
+    <AuthContext.Provider value={{ session, profile, loading, isPlatformOperator, identityError, permissions, can: (c) => permissions.allowed.has(c), canFull: (c) => permissions.full.has(c), signIn, signUp, refreshProfile: async () => { if (session) { setLoading(true); await loadProfile(session.user.id); } }, signOut, requestPasswordReset, updatePassword, signOutEverywhere }}>
       {children}
     </AuthContext.Provider>
   );
@@ -247,7 +250,7 @@ export function authErrorAr(msg: string): string {
 }
 
 function samePermissions(a: Permissions, b: Permissions) {
-  return a.seesMoney === b.seesMoney && a.allowed.size === b.allowed.size && a.full.size === b.full.size
+  return JSON.stringify(a.pageAccess) === JSON.stringify(b.pageAccess) && a.seesMoney === b.seesMoney && a.allowed.size === b.allowed.size && a.full.size === b.full.size
     && [...a.allowed].every((c) => b.allowed.has(c)) && [...a.full].every((c) => b.full.has(c));
 }
 

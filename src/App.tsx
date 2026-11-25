@@ -1,11 +1,10 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { isDemo } from "./lib/supabase";
 import { LoadingScreen } from "./components/ui";
 import { useAuth } from "./lib/auth";
 import GuestLayout from "./layouts/GuestLayout";
 import StaffLayout from "./layouts/StaffLayout";
-import AdminLayout from "./layouts/AdminLayout";
 import { RequireRole } from "./components/RequireRole";
 
 import Landing from "./pages/guest/Landing";
@@ -19,6 +18,8 @@ import Kiosk from "./pages/guest/Kiosk";
 import Privacy from "./pages/guest/Privacy";
 import Terms from "./pages/guest/Terms";
 
+import OwnerRegister from "./pages/staff/OwnerRegister";
+import OwnerSetup from "./pages/staff/OwnerSetup";
 import StaffLogin from "./pages/staff/StaffLogin";
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import Arrivals from "./pages/staff/Arrivals";
@@ -36,10 +37,12 @@ import Codes from "./pages/staff/Codes";
 import Tickets from "./pages/staff/Tickets";
 import ResetPassword from "./pages/staff/ResetPassword";
 import Account from "./pages/staff/Account";
+import Shortcuts from "./pages/staff/Shortcuts";
 import Inbox from "./pages/staff/Inbox";
 import StaffJourney from "./pages/staff/StaffJourney";
 import GuestReview from "./pages/guest/GuestReview";
 
+const PlatformHotels = lazy(() => import("./pages/admin/PlatformHotels"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminBranches = lazy(() => import("./pages/admin/AdminBranches"));
 const AdminRoomCategories = lazy(() => import("./pages/admin/AdminRoomCategories"));
@@ -52,6 +55,7 @@ const AdminFinance = lazy(() => import("./pages/admin/AdminFinance"));
 const AdminStaff = lazy(() => import("./pages/admin/AdminStaff"));
 const AdminRoles = lazy(() => import("./pages/admin/AdminRoles"));
 const AdminBookingSources = lazy(() => import("./pages/admin/AdminBookingSources"));
+const AdminFinanceControls = lazy(() => import("./pages/admin/AdminFinanceControls"));
 const AdminAiSettings = lazy(() => import("./pages/admin/AdminAiSettings"));
 const AdminOrganization = lazy(() => import("./pages/admin/AdminOrganization"));
 const AdminWhatsapp = lazy(() => import("./pages/admin/AdminWhatsapp"));
@@ -69,6 +73,7 @@ const AdminTaskTypes = lazy(() => import("./pages/admin/AdminTaskTypes"));
 const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
 const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"));
 const AdminAssistant = lazy(() => import("./pages/admin/AdminAssistant"));
+const AdminBackup = lazy(() => import("./pages/admin/AdminBackup"));
 const AdminDataPurge = lazy(() => import("./pages/admin/AdminDataPurge"));
 import StaffReservationNew from "./pages/staff/StaffReservationNew";
 import PosSettlement from "./pages/staff/PosSettlement";
@@ -86,11 +91,19 @@ const AdminReview = lazy(() => import("./pages/admin/AdminReview"));
 /** IX-08: the owner's screens load on first use, so the staff and guest pages start faster on a weak network */
 /** demo only: the guest's WhatsApp as answered by the reception computer (runs the server's own code on demo data) */
 const WhatsAppDemo = isDemo ? lazy(() => import("./pages/guest/WhatsAppDemo")) : null;
+/** demo only (plan 3.3): the component gallery — every base component and its states on one page */
+const DesignGallery = isDemo ? lazy(() => import("./pages/DesignGallery")) : null;
 
-function ProtectedStaff({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+function LegacyLogin() {
+  const location = useLocation();
+  return <Navigate to={`/login${location.search}${location.hash}`} replace />;
+}
+
+function ProtectedStaff({ children, platform = false }: { children: React.ReactNode; platform?: boolean }) {
+  const { session, loading, identityError } = useAuth();
+  const location = useLocation();
   if (loading) return null;
-  if (!session) return <Navigate to="/staff/login" replace />;
+  if (!session || identityError) return <Navigate to={`${platform ? "/platform/login" : "/login"}?returnTo=${encodeURIComponent(location.pathname)}`} replace />;
   return <>{children}</>;
 }
 
@@ -98,6 +111,7 @@ export default function App() {
   return (
     <Suspense fallback={<LoadingScreen />}>
     <Routes>
+      <Route path="/platform" element={<ProtectedStaff platform><PlatformHotels /></ProtectedStaff>} />
       {/* Guest */}
       <Route element={<GuestLayout />}>
         <Route path="/" element={<Landing />} />
@@ -116,8 +130,14 @@ export default function App() {
         <Route path="/terms" element={<Terms />} />
       </Route>
 
+      {DesignGallery && <Route path="/design-gallery" element={<Suspense fallback={<LoadingScreen />}><DesignGallery /></Suspense>} />}
+
       {/* Staff login (public) */}
-      <Route path="/staff/login" element={<StaffLogin />} />
+      <Route path="/owner/register" element={<OwnerRegister />} />
+          <Route path="/owner/setup" element={<OwnerSetup />} />
+      <Route path="/login" element={<StaffLogin />} />
+      <Route path="/platform/login" element={<StaffLogin entry="platform" />} />
+      <Route path="/staff/login" element={<LegacyLogin />} />
       {/* 0074: every e-mailed link (forgotten password, change, invitation) opens here; public — the link brings the session */}
       <Route path="/staff/reset-password" element={<ResetPassword />} />
 
@@ -126,6 +146,7 @@ export default function App() {
         <Route element={<RequireRole />}>
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
           <Route path="/staff/account" element={<Account />} />
+          <Route path="/staff/shortcuts" element={<Shortcuts />} />
           <Route path="/staff/arrivals" element={<Arrivals />} />
           <Route path="/staff/reservations" element={<StaffReservations />} />
           <Route path="/staff/reservations/new" element={<StaffReservationNew />} />
@@ -153,7 +174,7 @@ export default function App() {
       </Route>
 
       {/* Admin */}
-      <Route element={<ProtectedStaff><AdminLayout /></ProtectedStaff>}>
+      <Route element={<ProtectedStaff><StaffLayout /></ProtectedStaff>}>
         <Route element={<RequireRole />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/organization" element={<AdminOrganization />} />
@@ -180,9 +201,11 @@ export default function App() {
           <Route path="/admin/staff" element={<AdminStaff />} />
           <Route path="/admin/roles" element={<AdminRoles />} />
           <Route path="/admin/booking-sources" element={<AdminBookingSources />} />
+          <Route path="/admin/finance-controls" element={<AdminFinanceControls />} />
           <Route path="/admin/ai-settings" element={<AdminAiSettings />} />
           <Route path="/admin/whatsapp" element={<AdminWhatsapp />} />
           <Route path="/admin/assistant" element={<AdminAssistant />} />
+          <Route path="/admin/backups" element={<AdminBackup />} />
           <Route path="/admin/data-purge" element={<AdminDataPurge />} />
           <Route path="/admin/payment-providers" element={<AdminPaymentProviders />} />
           <Route path="/admin/policies" element={<AdminPolicies />} />

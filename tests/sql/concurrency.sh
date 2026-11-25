@@ -171,7 +171,7 @@ in_house() {
   local res; res=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','room_id','$1','check_in','$TODAY','check_out','$D2','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق مقيم','source_id','$SRC')))->>'id';")
   qs "select t_race_ready('$res');" >/dev/null
   q "select fn_staff_check_in(jsonb_build_object('reservation_id','$res','deposit_reason','سباق',
-       'rent', jsonb_build_object('amount_halalas', (fn_reservation_finance('$res')->>'balance_due')::bigint, 'method','cash','idempotency_key','race-rent-$res')))->>'ok';" >/dev/null
+       'rent', jsonb_build_object('amount_halalas', (fn_reservation_finance('$res')->>'balance_due')::bigint, 'method','cash','received_confirmed',true,'idempotency_key','race-rent-$res')))->>'ok';" >/dev/null
   echo "$res"
 }
 
@@ -258,7 +258,7 @@ ST=$(qs "select count(*) from invoices where reservation_id = '$R7' and status =
 echo "IR01 A=$RA B=$RB invoices=$ST"
 [[ "$RA" == "R:true" && "$RB" == *"INVOICE_PERIOD_OVERLAP"* && "$ST" == "1" ]] && rc=0 || rc=1; check "IR01 two partial invoices for overlapping nights at once → one invoice; the other is refused with the overlap" $rc "A=$RA B=$RB $ST"
 # one voucher corrected twice at once (two keys): one replacement and one review item; the second finds it cancelled
-V8=$(q "select (fn_create_voucher(jsonb_build_object('reservation_id','$R7','kind','receipt','amount_halalas',10000,'method','cash','idempotency_key','race-v8')))->>'voucher_id';")
+V8=$(q "select (fn_create_voucher(jsonb_build_object('reservation_id','$R7','kind','receipt','received_confirmed',true,'amount_halalas',10000,'method','cash','idempotency_key','race-v8')))->>'voucher_id';")
 race "fn_staff_correct_voucher(jsonb_build_object('voucher_id','$V8','reason','سباق','amount_halalas',9000,'idempotency_key','race-c1'))->>'ok'" \
      "fn_staff_correct_voucher(jsonb_build_object('voucher_id','$V8','reason','سباق','amount_halalas',8000,'idempotency_key','race-c2'))->>'ok'"
 ST=$(qs "select count(*) filter (where status = 'approved') || ' ' || coalesce(sum(amount_halalas) filter (where status = 'approved'), 0) || ' '
@@ -296,7 +296,7 @@ R11=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR
 qs "select t_race_ready('$R11');" >/dev/null
 P11=$(qs "select guest_profile_id from reservation_guests where reservation_id = '$R11' and is_primary")
 race "fn_guest_ban(jsonb_build_object('profile_id','$P11','ban',true,'reason','سباق'))->>'ok'" \
-     "fn_staff_check_in(jsonb_build_object('reservation_id','$R11','deposit_reason','سباق','rent', jsonb_build_object('amount_halalas', (fn_reservation_finance('$R11')->>'balance_due')::bigint, 'method','cash','idempotency_key','race-rent-$R11')))->>'ok'"
+     "fn_staff_check_in(jsonb_build_object('reservation_id','$R11','deposit_reason','سباق','rent', jsonb_build_object('amount_halalas', (fn_reservation_finance('$R11')->>'balance_due')::bigint, 'method','cash','received_confirmed',true,'idempotency_key','race-rent-$R11')))->>'ok'"
 ST=$(qs "select r.status || ' ' || (select count(*) from guest_bans b where b.guest_profile_id = '$P11' and b.lifted_at is null) || ' ' || ('الضيف محظور من الإدارة' = any(fn_code_blockers(r.id))) from reservations r where r.id = '$R11'")
 echo "PX03 A=$RA B=$RB state=$ST"
 [[ "$RA" == "R:true" && ( ( "$RB" == "R:true" && "$ST" == "checked_in 1 true" ) || ( "$RB" == "R:false" && "$ST" == "confirmed 1 false" ) ) ]] && rc=0 || rc=1; check "PX03 a ban against the guest's arrival → one valid order: in and banned with the code held back, or banned and not in" $rc "A=$RA B=$RB $ST"
@@ -328,7 +328,7 @@ end $$;
 SQL
 BANK=$(qs "select id from cash_accounts where branch_id = '$BR' and kind = 'bank_account' and archived_at is null order by is_default desc limit 1")
 RM=$(q "select (fn_staff_create_reservation(jsonb_build_object('branch_id','$BR','category_id','$CAT','check_in','2031-03-01','check_out','2031-03-03','guest_phone','0552' || lpad((floor(random()*1000000))::int::text, 6, '0'),'guest_name','سباق مطابقة','source_id','$SRC'))->>'id');")
-tv() { q "select (fn_create_voucher(jsonb_build_object('reservation_id','$RM','kind','receipt','amount_halalas',$1,'method','bank_transfer','account_id','$BANK','reference','$2','idempotency_key','$2')))->>'voucher_id';"; }
+tv() { q "select (fn_create_voucher(jsonb_build_object('reservation_id','$RM','kind','receipt','received_confirmed',true,'amount_halalas',$1,'method','bank_transfer','account_id','$BANK','reference','$2','idempotency_key','$2')))->>'voucher_id';"; }
 mv() { qs "select t_race_movement('$BANK', $1, '$2')"; }
 one() { echo "jsonb_build_array(jsonb_build_object('type','voucher','id','$1'))"; }
 VA=$(tv 5100 race-mt-a); VB=$(tv 5100 race-mt-b); VC=$(tv 5200 race-mt-c); VD=$(tv 5300 race-mt-d); VE=$(tv 5400 race-mt-e)

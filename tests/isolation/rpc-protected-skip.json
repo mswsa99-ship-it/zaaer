@@ -1,0 +1,38 @@
+[
+ {
+  "signature": "fn_log_client_error(p_trace text, p_code text, p_context text)",
+  "reason": "may trigger outbound messages/queues; external-effect risk"
+ },
+ {
+  "signature": "fn_owner_register_hotel(p jsonb)",
+  "reason": "creates a new organization; not an existing-target operation"
+ },
+ {
+  "signature": "fn_platform_grant_support(p_operator uuid, p_reason text, p_hours integer)",
+  "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+ },
+ {
+  "signature": "fn_platform_payout_cancel(p_payout uuid, p_reason text)",
+  "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+ },
+ {
+  "signature": "fn_platform_payout_confirm(p jsonb)",
+  "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+ },
+ {
+  "signature": "fn_platform_revoke_support(p_grant uuid)",
+  "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+ },
+ {
+  "signature": "fn_platform_set_hotel_status(p_org uuid, p_status text, p_reason text)",
+  "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+ },
+ {
+  "signature": "fn_staff_deliver_access_code(p_reservation uuid, p_channel text)",
+  "reason": "may trigger outbound messages/queues; external-effect risk"
+ },
+ {
+  "signature": "fn_staff_journey_tick(p_branch uuid)",
+  "reason": "may trigger outbound messages/queues; external-effect risk"
+ }
+]

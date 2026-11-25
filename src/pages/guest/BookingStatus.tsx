@@ -84,14 +84,14 @@ export default function BookingStatus() {
       <div className="mx-auto max-w-md px-4 py-10" data-testid="booking-ended">
         <Card>
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-500/10 text-danger-600"><XCircle className="h-5 w-5" /></div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rai-danger-tint text-rai-danger"><XCircle className="h-5 w-5" /></div>
             <div className="min-w-0">
-              <h1 className="text-lg font-bold text-ink-800">{ENDED[r.status]}</h1>
-              <p className="mt-1 text-sm text-ink-600">{r.branch_name} · <span className="font-mono" dir="ltr">{r.internal_ref}</span> · {r.check_in} → {r.check_out}</p>
-              <p className="mt-2 text-sm text-ink-600">{t("لا يلزم أي إجراء منك على هذا الحجز، ولا يُسجَّل وصول عليه.", "Nothing is needed from you on this booking, and no check-in is made on it.")}</p>
+              <h1 className="text-lg font-bold text-rai-ink">{ENDED[r.status]}</h1>
+              <p className="mt-1 text-sm text-rai-ink-muted">{r.branch_name} · <span className="font-mono" dir="ltr">{r.internal_ref}</span> · {r.check_in} → {r.check_out}</p>
+              <p className="mt-2 text-sm text-rai-ink-muted">{t("لا يلزم أي إجراء منك على هذا الحجز، ولا يُسجَّل وصول عليه.", "Nothing is needed from you on this booking, and no check-in is made on it.")}</p>
             </div>
           </div>
-          {branch?.phone && <p className="mt-4 rounded-xl bg-ink-50 px-3 py-2 text-sm text-ink-700">{t("للاستفسار: اتصل بالاستقبال على", "Questions? Call the reception on")} <span className="font-mono font-semibold" dir="ltr">{branch.phone}</span></p>}
+          {branch?.phone && <p className="mt-4 rounded-xl bg-rai-canvas px-3 py-2 text-sm text-rai-ink">{t("للاستفسار: اتصل بالاستقبال على", "Questions? Call the reception on")} <span className="font-mono font-semibold" dir="ltr">{branch.phone}</span></p>}
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {branch?.booking_platform_url
               ? <a href={branch.booking_platform_url} target="_blank" rel="noopener noreferrer" className="btn-primary justify-center">{t("حجز جديد", "New booking")}</a>
@@ -114,41 +114,41 @@ export default function BookingStatus() {
 
   return (
     <div>
-      <header className="bg-brand-800 px-4 pb-10 pt-6 text-white" data-testid="guest-hero">
+      <header className="bg-rai-action px-4 pb-10 pt-6 text-rai-action-ink" data-testid="guest-hero">
         <div className="mx-auto max-w-lg">
-          <Link to="/" className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-brand-100 hover:text-white">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("الرئيسية", "Home")}</Link>
+          <Link to="/" className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-rai-action-ink hover:text-rai-action-ink">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("الرئيسية", "Home")}</Link>
           <p className="font-semibold" dir="auto">{r.branch_name}</p>
           <h1 className="mt-2 text-xl font-bold leading-8" data-testid="guest-greeting">{greeting}</h1>
-          <p className="mt-1 text-sm font-medium text-brand-100">{t("حالة الحجز", "Booking status")} · <span className="font-mono" dir="ltr">{r.internal_ref}</span>{checkInTime && !arrived ? t(` · الوصول من ${checkInTime}`, ` · check-in from ${checkInTime}`) : ""}</p>
+          <p className="mt-1 text-sm font-medium text-rai-action-ink">{t("حالة الحجز", "Booking status")} · <span className="font-mono" dir="ltr">{r.internal_ref}</span>{checkInTime && !arrived ? t(` · الوصول من ${checkInTime}`, ` · check-in from ${checkInTime}`) : ""}</p>
         </div>
       </header>
     <div className="mx-auto -mt-6 max-w-lg px-4 pb-10">
 
       <Card className="mb-6">
-        <h2 className="mb-3 text-base font-semibold text-ink-800">{t("حجزك", "Your booking")}</h2>
+        <h2 className="mb-3 text-base font-semibold text-rai-ink">{t("حجزك", "Your booking")}</h2>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><p className="text-xs text-ink-400">{t("الوحدة", "Unit")}</p><p className="font-medium text-ink-700">{r.room_number ?? t("غير مخصصة بعد", "Not assigned yet")} · {r.category_name}</p></div>
-          <div><p className="text-xs text-ink-400">{t("الحالة", "Status")}</p><p className="font-medium text-ink-700">{en ? STATUS_EN[r.status] ?? r.status : RESERVATION_STATUS_LABELS[r.status as ReservationStatus]}</p></div>
-          <div><p className="text-xs text-ink-400">{t("الوصول", "Arrival")}</p><p className="font-medium text-ink-700">{r.check_in}<span className="block text-[11px] text-ink-400">{hijri(r.check_in)}</span></p></div>
-          <div><p className="text-xs text-ink-400">{t("المغادرة", "Departure")}</p><p className="font-medium text-ink-700">{r.check_out}<span className="block text-[11px] text-ink-400">{hijri(r.check_out)}</span></p></div>
+          <div><p className="text-xs text-rai-ink-muted">{t("الوحدة", "Unit")}</p><p className="font-medium text-rai-ink">{r.room_number ?? t("غير مخصصة بعد", "Not assigned yet")} · {r.category_name}</p></div>
+          <div><p className="text-xs text-rai-ink-muted">{t("الحالة", "Status")}</p><p className="font-medium text-rai-ink">{en ? STATUS_EN[r.status] ?? r.status : RESERVATION_STATUS_LABELS[r.status as ReservationStatus]}</p></div>
+          <div><p className="text-xs text-rai-ink-muted">{t("الوصول", "Arrival")}</p><p className="font-medium text-rai-ink">{r.check_in}<span className="block text-[11px] text-rai-ink-muted">{hijri(r.check_in)}</span></p></div>
+          <div><p className="text-xs text-rai-ink-muted">{t("المغادرة", "Departure")}</p><p className="font-medium text-rai-ink">{r.check_out}<span className="block text-[11px] text-rai-ink-muted">{hijri(r.check_out)}</span></p></div>
         </div>
       </Card>
 
       {/* 0070 (W3, W4): the day of departure — the options, then the instructions and «غادرت وسلّمت المفتاح» */}
       {token && r.status === "checked_in" && <div className="-mt-2 mb-6"><GuestCheckoutPanel token={token} onChanged={load} /></div>}
 
-      <h2 className="mb-3 text-base font-semibold text-ink-800">{arrived ? t("إقامتك", "Your stay") : t("قبل وصولك", "Before you arrive")}</h2>
+      <h2 className="mb-3 text-base font-semibold text-rai-ink">{arrived ? t("إقامتك", "Your stay") : t("قبل وصولك", "Before you arrive")}</h2>
       <ol className="space-y-3" aria-label={t("خطوات الإقامة", "Stay steps")}>
         {steps.map((s, i) => (
-          <li key={i} className={`card flex items-center gap-3 p-4 ${s.done ? "border-success-500/30" : "border-warning-500/30"}`}>
-            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${s.done ? "bg-success-500/15 text-success-600" : "bg-warning-500/15 text-warning-700"}`}>
+          <li key={i} className={`card flex items-center gap-3 p-4 ${s.done ? "border-rai-line-strong" : "border-rai-line-strong"}`}>
+            <div className={`flex h-9 w-9 items-center justify-center rounded-full ${s.done ? "bg-rai-success-tint text-rai-success" : "bg-rai-warning-tint text-rai-warning"}`}>
               {s.done ? <CheckCircle2 className="h-5 w-5" /> : <s.icon className="h-5 w-5" />}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-ink-700">{s.label}</p>
-              <p className="text-xs text-ink-400">{s.statusText}</p>
+              <p className="text-sm font-medium text-rai-ink">{s.label}</p>
+              <p className="text-xs text-rai-ink-muted">{s.statusText}</p>
             </div>
-            {s.action ? <Link to={s.action.to} className="btn-primary text-xs">{s.action.label}</Link> : !s.done && <Clock className="h-4 w-4 text-ink-400" aria-hidden="true" />}
+            {s.action ? <Link to={s.action.to} className="btn-primary text-xs">{s.action.label}</Link> : !s.done && <Clock className="h-4 w-4 text-rai-ink-muted" aria-hidden="true" />}
           </li>
         ))}
       </ol>
@@ -158,8 +158,8 @@ export default function BookingStatus() {
         const mine = data.access.reasons.filter(guestCanAct);
         const desk = data.access.reasons.length - mine.length;
         return (
-          <div className="mt-4 rounded-xl bg-ink-50 p-4 text-xs text-ink-600" data-testid="guest-reasons">
-            {mine.length > 0 && <><p className="mb-1 font-medium text-ink-700">{arrived ? t("قبل تسليم الرمز:", "Before the code is released:") : t("مطلوب منك قبل الوصول:", "Needed from you before arrival:")}</p><ul className="list-disc space-y-0.5 ps-4">{mine.map((x, i) => <li key={i}>{en ? reasonEn(x) : x}</li>)}</ul></>}
+          <div className="mt-4 rounded-xl bg-rai-canvas p-4 text-xs text-rai-ink-muted" data-testid="guest-reasons">
+            {mine.length > 0 && <><p className="mb-1 font-medium text-rai-ink">{arrived ? t("قبل تسليم الرمز:", "Before the code is released:") : t("مطلوب منك قبل الوصول:", "Needed from you before arrival:")}</p><ul className="list-disc space-y-0.5 ps-4">{mine.map((x, i) => <li key={i}>{en ? reasonEn(x) : x}</li>)}</ul></>}
             {desk > 0 && <p className={mine.length ? "mt-2" : ""}>{t("بقية الخطوات يُنجزها الاستقبال عند وصولك.", "The other steps are done by the reception when you arrive.")}</p>}
           </div>
         );
@@ -174,7 +174,7 @@ export default function BookingStatus() {
           </button>
         )}
         {r.access_status === "eligibility_review" && !arrived && (
-          <div className="rounded-xl bg-brand-50 p-3 text-center text-sm text-brand-700">{t("أُبلغ الاستقبال بوصولك؛ يُسجَّل وصولك هناك.", "The reception knows you have arrived; check-in is done there.")}</div>
+          <div className="rounded-xl bg-rai-action p-3 text-center text-sm text-rai-action-ink">{t("أُبلغ الاستقبال بوصولك؛ يُسجَّل وصولك هناك.", "The reception knows you have arrived; check-in is done there.")}</div>
         )}
         <button onClick={() => navigate(`/reception?token=${token}`)} className="btn-outline"><MessageCircle className="h-4 w-4" /> {t("محادثة المساعد عن حجزك", "Chat with the assistant (verified)")}</button>
         <Link to={`/booking/summary/${token}`} className="btn-outline" data-testid="summary-link"><FileText className="h-4 w-4" /> {t("ملخص الإقامة", "Stay summary")}{r.summary_accepted ? t(" (مُقرّ)", " (accepted)") : ""}</Link>
@@ -189,17 +189,17 @@ export default function BookingStatus() {
 
       {rules && rules.length > 0 && (
         <Card className="mt-6" data-testid="guest-rules">
-          <h2 className="mb-2 text-base font-semibold text-ink-800">{t("قواعد الإقامة", "Stay rules")}</h2>
-          <ul className="space-y-2 text-sm text-ink-700">
-            {rules.map((p, i) => <li key={i} dir="auto"><p className="font-medium text-ink-800">{p.title}</p><p className="whitespace-pre-line text-ink-600">{p.content}</p></li>)}
+          <h2 className="mb-2 text-base font-semibold text-rai-ink">{t("قواعد الإقامة", "Stay rules")}</h2>
+          <ul className="space-y-2 text-sm text-rai-ink">
+            {rules.map((p, i) => <li key={i} dir="auto"><p className="font-medium text-rai-ink">{p.title}</p><p className="whitespace-pre-line text-rai-ink-muted">{p.content}</p></li>)}
           </ul>
         </Card>
       )}
 
       {delivered && (
-        <div className="mt-6 rounded-2xl bg-accent-500/10 p-5 text-center">
-          <KeyRound className="mx-auto mb-2 h-8 w-8 text-accent-700" />
-          <p className="text-sm font-medium text-accent-700">{t("رمز صندوق المفتاح جاهز", "Your key-box code is ready")}</p>
+        <div className="mt-6 rounded-2xl bg-rai-spark-tint p-5 text-center">
+          <KeyRound className="mx-auto mb-2 h-8 w-8 text-rai-spark-text" />
+          <p className="text-sm font-medium text-rai-spark-text">{t("رمز صندوق المفتاح جاهز", "Your key-box code is ready")}</p>
           <Link to={`/checkin/${token}`} className="btn-accent mt-3">{t("عرض رمز الصندوق", "Show the key-box code")}</Link>
         </div>
       )}

@@ -1,0 +1,47 @@
+# PROPOSAL ONLY (item 7.1). Not active: the .proposed suffix keeps GitHub from loading it.
+# To activate, rename to backup.yml after the owner approves the host/runner, retention numbers and secret injection.
+# Secrets are referenced by name only. A hosted runner has no persistent disk: BACKUP_DEST_DIR is runner temp, so the
+# Drive hook is the only durable copy and verify-remote.sh is mandatory before the run counts as success.
+name: backup
+on:
+  workflow_dispatch:
+  # schedule:            # disabled until activation is approved
+  #   - cron: '15 2 * * 0'   # weekly backup, Sunday 02:15 UTC
+  #   - cron: '15 3 1 * *'   # monthly restore drill, day 1 03:15 UTC
+permissions:
+  contents: read
+jobs:
+  backup:
+    if: vars.BACKUP_SCHEDULE == 'enabled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      BACKUP_REASON: scheduled
+      BACKUP_DEST_DIR: ${{ runner.temp }}/backups
+      BACKUP_PASSPHRASE_FILE: ${{ runner.temp }}/backup.pass
+      BACKUP_UPLOAD_HOOK: ${{ github.workspace }}/ops/backup-drive-hook.sh   # operator copy of drive-hook.example.sh
+      BACKUP_FETCH_HOOK: ${{ github.workspace }}/ops/backup-drive-hook.sh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned PostgreSQL client matching the server major version
+        # Fail-closed placeholder: activation must replace this with a pinned install, otherwise the job stops here.
+        run: echo "PG client version is not pinned yet; replace this step before activation" >&2; exit 1
+      - name: Write passphrase file (mode 600) from secret
+        run: |
+          set +x
+          [ -n "$P" ] || { echo "BACKUP_PASSPHRASE secret is empty" >&2; exit 1; }
+          umask 077
+          printf '%s' "$P" > "$BACKUP_PASSPHRASE_FILE"
+        env: { P: "${{ secrets.BACKUP_PASSPHRASE }}" }
+      - name: Backup
+        run: scripts/backup/backup.sh
+        env:
+          BACKUP_SOURCE_PGURI: ${{ secrets.PRODUCTION_DB_URI }}
+          BACKUP_STATE_PGURI: ${{ secrets.PRODUCTION_DB_URI }}
+      - name: Verify the uploaded copy by downloading it
+        run: scripts/backup/verify-remote.sh
+      - name: Retention (dry run only until deletion is approved)
+        run: scripts/backup/prune.sh   # dry run: lists, deletes nothing
+      - name: Remove the passphrase file and local archives
+        if: always()
+        run: rm -rf "$BACKUP_PASSPHRASE_FILE" "$BACKUP_DEST_DIR"

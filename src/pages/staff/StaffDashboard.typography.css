@@ -1,0 +1,76 @@
+/* Operations Center midpoint trial. No shared component or shell rules. */
+.ops-type-trial {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 23px;
+  font-variant-numeric: tabular-nums;
+}
+.ops-type-trial .text-sm { font-size: 14px; line-height: 22.2px; }
+.ops-type-trial .text-xs,
+.ops-type-trial .badge,
+.ops-type-trial .ops-stat-label {
+  font-size: 12.5px;
+  line-height: 18.6px;
+}
+.ops-type-trial .text-\[11px\],
+.ops-type-trial .ops-summary-label {
+  font-size: 12px;
+  line-height: 17.25px;
+}
+.ops-type-trial button,
+.ops-type-trial select,
+.ops-type-trial .input,
+.ops-type-trial .label,
+.ops-type-trial .btn,
+.ops-type-trial .btn-ghost,
+.ops-type-trial .btn-primary,
+.ops-type-trial .btn-outline,
+.ops-type-trial [data-testid="followups-banner"] > span:first-child {
+  font-size: 13.5px;
+  line-height: 20.2px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+/* A compact action/shift label started at 12px, not 14px. */
+.ops-type-trial .btn.text-xs,
+.ops-type-trial .btn-ghost.text-xs,
+.ops-type-trial .btn-primary.text-xs,
+.ops-type-trial .btn-outline.text-xs,
+.ops-type-trial [data-testid="shift-tiles"] > a > span:first-child {
+  font-size: 12.5px;
+  line-height: 18.6px;
+}
+.ops-type-trial h1,
+.ops-type-trial h2,
+.ops-type-trial h3,
+.ops-type-trial [data-testid="shift-rows"] > div:first-child {
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.ops-type-trial h1 { font-size: 22px; line-height: 30px; }
+.ops-type-trial .ops-briefing h2 { font-size: 18px; line-height: 27px; }
+/* This subsection started at 14/22.4, unlike the main 20/28 headings. */
+.ops-type-trial [data-testid="shift-rows"] > div:first-child { font-size: 17px; line-height: 25.2px; }
+.ops-type-trial .ops-briefing .text-\[11px\],
+.ops-type-trial [data-testid="shift-tiles"] .text-\[11px\] {
+  font-size: 11.5px;
+  line-height: 16.25px;
+}
+/* Keep existing KPI sizes and tabular numeral roles. */
+.ops-type-trial [dir="ltr"],
+.ops-type-trial .tabular-nums,
+.ops-type-trial .font-mono { font-variant-numeric: tabular-nums; }
+@media (max-width: 639px) {
+  /* Retain the one-page booking-code wrap fix from the larger trial. */
+  .ops-type-trial .ops-reservations .card > div:first-child > div:first-child {
+    flex-basis: 100%;
+  }
+  .ops-type-trial .ops-reservations .font-mono { white-space: nowrap; }
+  .ops-type-trial .ops-briefing .text-\[11px\],
+  .ops-type-trial [data-testid="shift-tiles"] .text-\[11px\] {
+    font-size: 12px;
+    line-height: 17.25px;
+  }
+}

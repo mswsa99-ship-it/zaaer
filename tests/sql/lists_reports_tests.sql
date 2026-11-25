@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Lists, calendar, log, exports, report filters, task times, staff editor, forced sign-out and capability usage
 -- (Phase 6, migrations 0040–0041): decisions 14, 28, 34, 35, 36, 43 (G25, X09), 55 (G26, D04).
@@ -105,7 +106,7 @@ create or replace function t_membership_rows(p_staff uuid, p_branch uuid) return
   select count(*), count(*) filter (where removed_at is not null) from branch_memberships where staff_id = p_staff and branch_id = p_branch;
 $$;
 create or replace function t_audit_last(p_action text, p_entity uuid) returns audit_events language sql security definer as $$
-  select * from audit_events where action = p_action and entity_id = p_entity order by created_at desc, id desc limit 1;
+  select * from t_audit_all() where action = p_action and entity_id = p_entity order by created_at desc, id desc limit 1;
 $$;
 -- an old audit row (the log's horizon for D04): the enrich trigger fills actor, source and category as it always does
 create or replace function t_audit_backdated(p_org uuid, p_branch uuid, p_action text, p_entity text, p_ago interval, p_details jsonb default '{"test": "backdated"}'::jsonb) returns void language plpgsql security definer as $$
@@ -309,7 +310,7 @@ select t_record('CL04 branch B''s supervisor is refused the calendar of branch 0
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 do $$ declare r jsonb; want uuid[]; got uuid[]; begin
   r := fn_audit_list('{}'::jsonb);
-  want := t_ids('select id from audit_events where organization_id = ''00000000-0000-0000-0000-000000000001''');
+  want := t_ids('select id from t_audit_all() where organization_id = ''00000000-0000-0000-0000-000000000001''');
   got := t_audit_ids('{}'::jsonb, 97);
   perform t_record('AL01 / X09c the owner''s unfiltered log: the total is the organisation''s whole log, the default page is 50, and the pages together are exactly the independent set',
     (r->>'total')::int = array_length(want, 1) and jsonb_array_length(r->'rows') = 50 and (r->>'limit')::int = 50 and want = got and array_length(got, 1) > 400,
@@ -321,7 +322,7 @@ do $$ declare r jsonb; begin
 exception when others then perform t_record('AL02 a page above 500 is capped, not refused; the total stays exact', false, sqlerrm); end $$;
 -- every filter against an independent query
 do $$ declare f record; want uuid[]; got uuid[]; n int := 0; bad text := ''; anchor audit_events; begin
-  select * into anchor from audit_events where organization_id = '00000000-0000-0000-0000-000000000001' and action = 'reservation.created' and branch_id = '00000000-0000-0000-0000-000000000010' order by created_at limit 1;
+  select * into anchor from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001' and action = 'reservation.created' and branch_id = '00000000-0000-0000-0000-000000000010' order by created_at limit 1;
   for f in select * from (values
     ('branch', jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010'), 'branch_id = ''00000000-0000-0000-0000-000000000010'''),
     ('action exact', '{"action":"reservation.created"}'::jsonb, 'action = ''reservation.created'''),
@@ -338,7 +339,7 @@ do $$ declare f record; want uuid[]; got uuid[]; n int := 0; bad text := ''; anc
     ('q by Arabic name', '{"q":"إنشاء حجز"}', 'action = ''reservation.created'''),
     ('q by entity id', jsonb_build_object('q', anchor.entity_id::text), format('entity_id = %L', anchor.entity_id))
   ) as t(name, filters, pred) loop
-    want := t_ids('select id from audit_events where organization_id = ''00000000-0000-0000-0000-000000000001'' and ' || f.pred);
+    want := t_ids('select id from t_audit_all() where organization_id = ''00000000-0000-0000-0000-000000000001'' and ' || f.pred);
     got := t_audit_ids(f.filters, 41);
     if want = got then n := n + 1; else bad := bad || f.name || ' (' || coalesce(array_length(want, 1), 0) || ' vs ' || coalesce(array_length(got, 1), 0) || ') '; end if;
   end loop;
@@ -359,7 +360,7 @@ exception when others then perform t_record('AL04 a row reads in Arabic: the act
 -- the manager: business rows of their branches only, details included; the supervisor: no details; housekeeping and finance: refused
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
 do $$ declare r jsonb; want uuid[]; got uuid[]; leak boolean; begin
-  want := t_ids('select id from audit_events where organization_id = ''00000000-0000-0000-0000-000000000001'' and category <> ''security'' and (branch_id is null or branch_id = ''00000000-0000-0000-0000-000000000010'')');
+  want := t_ids('select id from t_audit_all() where organization_id = ''00000000-0000-0000-0000-000000000001'' and category <> ''security'' and (branch_id is null or branch_id = ''00000000-0000-0000-0000-000000000010'')');
   got := t_audit_ids('{}'::jsonb, 150);
   r := fn_audit_list('{"category":"security"}'::jsonb);
   select bool_or(x->>'branch_id' = '00000000-0000-0000-0000-000000000012' or x->>'category' = 'security') into leak from jsonb_array_elements(fn_audit_list('{"limit":500}'::jsonb)->'rows') x;
@@ -634,7 +635,9 @@ select t_login_session('a0000000-0000-0000-0000-000000000002', 'sup@test.local',
 do $$ declare n int; no_id boolean; no_role boolean; total int; op text; again uuid; begin
   no_id := fn_staff_id() is null; no_role := fn_current_role() is null;
   select count(*) into n from reservations;
-  total := (fn_reservation_list('00000000-0000-0000-0000-000000000010', '{}'::jsonb, 1, 0)->>'total')::int;
+  -- The page guard now explicitly refuses revoked sessions, rather than
+  -- returning an empty page. No rows and no operation remain mandatory.
+  total := case when t_fails('select fn_reservation_list(''00000000-0000-0000-0000-000000000010'', ''{}''::jsonb, 1, 0)', 'FORBIDDEN%') = 'ok' then 0 else -1 end;
   op := t_fails(format('select fn_hk_create_task(%L::jsonb)', jsonb_build_object('room_id', '00000000-0000-0000-0000-000000000102', 'task_type_id', '00000000-0000-0000-0000-000000000420')), 'FORBIDDEN%');
   perform t_login_session('a0000000-0000-0000-0000-000000000002', 'sup@test.local', t_session_open('a0000000-0000-0000-0000-000000000002'));
   again := fn_staff_id();
@@ -686,8 +689,8 @@ select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 do $$ declare r jsonb; row jsonb; want bigint; last_want timestamptz; begin
   r := fn_reports_capability_usage('{"weeks": 4}'::jsonb);
   select x into row from jsonb_array_elements(r->'rows') x where x->>'code' = 'reservations.create';
-  want := t_count('select count(*) from audit_events where organization_id = ''00000000-0000-0000-0000-000000000001'' and action = ''reservation.created'' and result = ''success'' and created_at >= now() - interval ''4 weeks''');
-  select max(created_at) into last_want from audit_events where organization_id = '00000000-0000-0000-0000-000000000001' and action = 'reservation.created' and result = 'success';
+  want := t_count('select count(*) from t_audit_all() where organization_id = ''00000000-0000-0000-0000-000000000001'' and action = ''reservation.created'' and result = ''success'' and created_at >= now() - interval ''4 weeks''');
+  select max(created_at) into last_want from t_audit_all() where organization_id = '00000000-0000-0000-0000-000000000001' and action = 'reservation.created' and result = 'success';
   perform t_record('CU02 a capability used this window: «مستخدم», the window count and the last successful use equal the log, the users are people',
     row->>'status' = 'used' and (row->>'window_count')::int = want and want > 0 and (row->>'last_success_at')::timestamptz = last_want and (row->'by'->>'human')::int > 0
     and (row->>'core')::boolean = false and row->>'area' = 'الحجوزات', row::text);
@@ -732,9 +735,9 @@ select t_audit_backdated('00000000-0000-0000-0000-000000000002', null, 'data_pur
 select t_login('a0000000-0000-0000-0000-000000000005', 'owner2@test.local');
 set role authenticated;
 do $$ declare r jsonb; n_before bigint; n_after bigint; begin
-  n_before := t_count('select count(*) from audit_events');
+  n_before := t_count('select count(*) from t_audit_all()');
   r := fn_reports_capability_usage('{"weeks": 4}'::jsonb);
-  n_after := t_count('select count(*) from audit_events');
+  n_after := t_count('select count(*) from t_audit_all()');
   perform t_record('CU05 a purge of the log inside the window: the window is no longer covered, «غير مستخدم» disappears (undetermined instead), «استعمال القدرات» itself writes and removes nothing (decision 53), and the note says so',
     not (r->>'log_covers_window')::boolean and not exists (select 1 from jsonb_array_elements(r->'rows') x where x->>'status' = 'idle')
     and (select x->>'status' from jsonb_array_elements(r->'rows') x where x->>'code' = 'housekeeping.maintenance') = 'undetermined'

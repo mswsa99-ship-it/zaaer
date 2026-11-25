@@ -1,0 +1,4 @@
+sig	final_class	anon	authenticated	transitive_writes	dynamic_sql_in_closure	outbound_table_hits
+fn_expense_approve(p_id uuid)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,bank_match_items,bank_matches,bank_movements,document_sequences,expense_vouchers,gl_accounts,journal_entries,journal_lines,notifications,review_items	True	
+fn_pos_settle(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,pos_settlements,review_items	True	
+fn_rate_calendar_set(p jsonb)	A writer, no outbound table, no direct dynamic SQL: adapter candidate	False	True	audit_events,rate_calendar	True	

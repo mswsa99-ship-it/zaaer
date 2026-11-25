@@ -115,9 +115,14 @@ export function SubmitRow({ busy, label, onCancel, danger, cancelLabel = "إلغ
 export function ActionForm({ onSubmit, children, error }: { onSubmit: () => Promise<void>; children: ReactNode; error?: string | null }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 6.7 (U7): the lock is a ref, not only the busy state — two submits fired in the same tick (before the
+  // disabled state renders) must still run onSubmit once, or a non-idempotent form writes twice.
+  const inFlight = useRef(false);
   const submit = async (e: FormEvent) => {
-    e.preventDefault(); setBusy(true); setErr(null);
-    try { await onSubmit(); } catch (ex) { setErr(toArabicError(ex)); } finally { setBusy(false); }
+    e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setErr(null);
+    try { await onSubmit(); } catch (ex) { setErr(toArabicError(ex)); } finally { inFlight.current = false; setBusy(false); }
   };
   return (
     <form onSubmit={submit} noValidate>{/* SETUP-15: our Arabic messages, not the browser's English ones */}
@@ -132,6 +137,127 @@ export const useFormBusy = () => useContext(FormBusy);
 export function Submit({ label, onCancel, danger, cancelLabel }: { label: string; onCancel?: () => void; danger?: boolean; cancelLabel?: string }) {
   const busy = useFormBusy();
   return <SubmitRow busy={busy} label={label} onCancel={onCancel} danger={danger} cancelLabel={cancelLabel} />;
+}
+
+/**
+ * 6.5 (U4): a long modal form keeps what was typed across a reload. While a NEW record's form is open the
+ * draft is written to sessionStorage (debounced); the next time the form opens empty the stored draft is
+ * offered — restored only on the user's click, never applied silently. A successful save calls `clearSaved`.
+ * Editing an existing record is never persisted: the record itself is the source of truth.
+ */
+export function useFormDraft<T>({ storageKey, open, value, pristine, apply }: {
+  storageKey: string | null;   // null disables persistence (no branch yet, or editing an existing record)
+  open: boolean;               // the form is open
+  value: T;                    // the current draft
+  pristine: (v: T) => boolean; // true when nothing meaningful was typed
+  apply: (v: T) => void;       // put a restored draft into the form
+}): { saved: T | null; restoreSaved: () => void; clearSaved: () => void } {
+  const [saved, setSaved] = useState<T | null>(null);
+  const openedFor = useRef<string | null>(null);
+  // load the stored draft once per form opening
+  useEffect(() => {
+    if (!open || !storageKey) { if (!open) openedFor.current = null; return; }
+    if (openedFor.current === storageKey) return;
+    openedFor.current = storageKey;
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      const d = raw ? (JSON.parse(raw) as T) : null;
+      setSaved(d && !pristine(d) ? d : null);
+    } catch { setSaved(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, storageKey]);
+  // persist what is typed (debounced); a form emptied back to its start state removes its draft
+  useEffect(() => {
+    if (!open || !storageKey) return;
+    // Keep an offered draft intact until it is restored or the user starts a replacement.
+    if (saved && pristine(value)) return;
+    const t = window.setTimeout(() => {
+      try {
+        if (pristine(value)) sessionStorage.removeItem(storageKey);
+        else sessionStorage.setItem(storageKey, JSON.stringify(value));
+      } catch { /* storage off */ }
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, storageKey, value, saved]);
+  const restoreSaved = () => { if (saved) { apply(saved); setSaved(null); } };
+  const clearSaved = () => { try { if (storageKey) sessionStorage.removeItem(storageKey); } catch { /* storage off */ } setSaved(null); };
+  return { saved, restoreSaved, clearSaved };
+}
+
+/**
+ * 6.5 for EDITING an existing record. The record stays the source of truth: what is kept is only the edited form values
+ * (never fields listed in `omit`, e.g. a licence number), tied to the record's `version`. If the record changed since
+ * (its version moved), the stored edit is dropped and never offered, so it cannot overwrite newer data. Offered back on a
+ * click only; cleared on a successful save. sessionStorage, this tab, debounced like the new-record draft.
+ */
+export function useEditDraft<T extends object>({ storageKey, open, value, original, version, omit = [], apply }: {
+  storageKey: string | null;      // null disables persistence (no user, no record)
+  open: boolean;
+  value: T;                       // the form values now
+  original: T | null;             // the record as loaded (what "unchanged" means)
+  version: number | string | null | undefined;
+  omit?: string[];                // fields never written to storage
+  apply: (v: T) => void;
+}): { saved: Partial<T> | null; restoreSaved: () => void; clearSaved: () => void } {
+  const [saved, setSaved] = useState<Partial<T> | null>(null);
+  const openedFor = useRef<string | null>(null);
+  const strip = (v: T) => { const o = { ...(v as Record<string, unknown>) }; for (const k of omit) delete o[k]; return o; };
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  useEffect(() => {
+    if (!open || !storageKey || !original) { if (!open) openedFor.current = null; return; }
+    if (openedFor.current === storageKey) return;
+    openedFor.current = storageKey;
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      const env = raw ? (JSON.parse(raw) as { version?: unknown; value?: Partial<T> }) : null;
+      if (!env || !env.value || String(env.version) !== String(version)) { if (raw) sessionStorage.removeItem(storageKey); setSaved(null); return; }
+      setSaved(same({ ...strip(original), ...env.value }, strip(original)) ? null : env.value);
+    } catch { setSaved(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, storageKey, original]);
+  useEffect(() => {
+    if (!open || !storageKey || !original) return;
+    if (saved && same(strip(value), strip(original))) return;   // an offered edit stays until restored or replaced
+    const t = window.setTimeout(() => {
+      try {
+        if (same(strip(value), strip(original))) sessionStorage.removeItem(storageKey);
+        else sessionStorage.setItem(storageKey, JSON.stringify({ version, value: strip(value) }));
+      } catch { /* storage off */ }
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, storageKey, value, saved]);
+  const restoreSaved = () => { if (saved && original) { apply({ ...original, ...saved } as T); setSaved(null); } };
+  const clearSaved = () => { try { if (storageKey) sessionStorage.removeItem(storageKey); } catch { /* storage off */ } setSaved(null); };
+  return { saved, restoreSaved, clearSaved };
+}
+
+/**
+ * Sign-out: every unsaved draft of this tab is removed (new and edit drafts, and the expense and new-reservation forms'
+ * drafts, which keep the typed guest name/phone), so the next person in the tab is never offered them. This only removes
+ * data; it adds no retention.
+ */
+const DRAFT_KEY = /^zaaer:([a-z-]+-(draft|edit)|new-reservation):/;
+export function clearAllDrafts() {
+  try { for (const k of Object.keys(sessionStorage)) if (DRAFT_KEY.test(k)) sessionStorage.removeItem(k); } catch { /* storage off */ }
+}
+/**
+ * Drafts written before keys carried the user: `zaaer:{branch|room-category|service}-draft:{one id}`. They are discarded,
+ * never moved into a user's key (whose text it was is unknown).
+ */
+export function dropLegacyDrafts() {
+  try { for (const k of Object.keys(sessionStorage)) if (/^zaaer:(branch|room-category|service)-draft:[^:]+$/.test(k)) sessionStorage.removeItem(k); } catch { /* storage off */ }
+}
+
+/** The banner offering an unsaved draft back (6.5): what it is, and the restore action. */
+export function DraftRestoreBanner({ label, summary, onRestore }: { label: string; summary?: string | null; onRestore: () => void }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-700" data-testid="form-draft-restore">
+      {label}{summary ? `: ${summary}` : ""}.
+      <button type="button" className="btn-primary px-3 py-1 text-xs" onClick={onRestore}>استعادة المسودة</button>
+    </div>
+  );
 }
 
 export function ReasonInput({ value, onChange, label = "السبب (إلزامي)", placeholder }: { value: string; onChange: (v: string) => void; label?: string; placeholder?: string }) {

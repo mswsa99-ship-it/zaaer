@@ -16,16 +16,18 @@ import { projectKey } from "../_shared/keys.ts";
 import { gateInput, gateOutput, scriptedReply, isEnglishMessage, buildSystemPrompt, propertyFacts, isAllowedTool, validateToolArgs, matchKnowledge, type PropertyKnowledge, type Scope } from "../_shared/guardrails.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
 import { TOOL_DECLARATIONS, executeTool } from "../_shared/tools.ts";
+import { mayResumeConversation } from "../_shared/reception_scope.ts";
+import { budgetReadAvailable, sessionCountReadable } from "../_shared/budget_reads.ts";
+import { reserveApplies, mapReserveStatus, countedRequests } from "../_shared/guest_reserve.ts";
 import { localDay } from "../_shared/dates.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
 
-const DEFAULT_ORG = "00000000-0000-0000-0000-000000000001";
 const MAX_TOOL_ROUNDS = 3;
 const HISTORY_TURNS = 12;
 const MAX_OFFSCOPE_STRIKES = 3;
@@ -34,7 +36,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method" }, 405);
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
+  const url = Deno.env.get("SUPABASE_URL")!, secret = projectKey("secret");
+  const auth = req.headers.get("authorization") ?? "";
+  // constant-time comparison: the service key must not be guessable byte by byte through response timing
+  const sameSecret = (a: string, b: string) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
+  const trustedService = sameSecret(req.headers.get("apikey") ?? "", secret) || sameSecret(auth, `Bearer ${secret}`);
+  const scopeHeaders = { "x-hotel-slug": req.headers.get("x-hotel-slug") ?? "", "x-guest-token": req.headers.get("x-guest-token") ?? "" };
+  const db = createClient(url, secret, { global: { headers: scopeHeaders }, auth: { persistSession: false } });
+  const user = createClient(url, projectKey("publishable"), { global: { headers: { Authorization: auth, ...scopeHeaders } }, auth: { persistSession: false } });
   const appBaseUrl = (Deno.env.get("APP_BASE_URL") ?? "").replace(/\/$/, "");
 
   let body: Record<string, unknown>;
@@ -51,35 +60,59 @@ Deno.serve(async (req) => {
   const english = isEnglishMessage(message);
 
   // ---- organization / branch / settings -----------------------------------
-  const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", DEFAULT_ORG).maybeSingle();
-  if (!org) return json({ error: "org_not_found" }, 500);
   let branchId = typeof body.branch_id === "string" ? body.branch_id : null;
-  if (!branchId) {
-    const { data: b } = await db.from("branches").select("id").eq("organization_id", org.id).eq("is_active", true).order("created_at").limit(1).maybeSingle();
-    branchId = b?.id ?? null;
+  let organizationId: string | null = null;
+  const { data: staffId } = trustedService ? { data: null } : await user.rpc("fn_staff_id");
+  // page guard (0109/0110): a signed-in staff member talking to the reception assistant needs the assistant page.
+  // Guests (hotel-slug / guest-token path) and the trusted service are not staff and are unaffected.
+  if (staffId && !trustedService && !scopeHeaders["x-hotel-slug"]) {
+    const { data: pageOk, error: pageErr } = await user.rpc("fn_user_page_can", { p_page: "/admin/assistant", p_action: "view" });
+    if (pageErr || pageOk !== true) return json({ error: "forbidden" }, 403);
   }
-  const { data: branch } = await db.from("branches").select("id, name_ar, timezone").eq("id", branchId).eq("organization_id", org.id).maybeSingle();
+  if (trustedService) {
+    if (!branchId) return json({ error: "branch_required" }, 400);
+    const { data: b } = await db.from("branches").select("organization_id").eq("id", branchId).eq("is_active", true).is("archived_at", null).maybeSingle();
+    organizationId = b?.organization_id ?? null;
+  } else if (staffId && !scopeHeaders["x-hotel-slug"]) {
+    const { data: staff } = await user.from("staff_profiles").select("organization_id").eq("id", staffId).maybeSingle();
+    const { data: b } = await user.from("branches").select("id").eq("id", branchId).maybeSingle();
+    organizationId = b ? staff?.organization_id ?? null : null;
+  } else {
+    const { data } = await db.rpc("fn_guest_org_id"); organizationId = data;
+  }
+  if (!organizationId) return json({ error: "hotel_required" }, 400);
+  const { data: org } = await db.from("organizations").select("id, name_ar").eq("id", organizationId).eq("platform_status", "active").maybeSingle();
+  if (!org) return json({ error: "org_not_found" }, 400);
+  if (!branchId) {
+    const { data: list } = await db.from("branches").select("id").eq("organization_id", org.id).eq("is_active", true).is("archived_at", null).limit(2);
+    if (list?.length === 1) branchId = list[0].id;
+  }
+  const { data: branch } = await db.from("branches").select("id, name_ar, timezone").eq("id", branchId).eq("organization_id", org.id).eq("is_active", true).is("archived_at", null).maybeSingle();
   if (!branch) return json({ error: "branch_not_found" }, 400);
+  if (channel === "whatsapp" && !trustedService) return json({ error: "forbidden_channel" }, 403);
 
   const { data: settings } = await db.from("ai_settings").select("*").eq("organization_id", org.id).maybeSingle();
   const s = settings ?? { enabled: false, provider: "gemini", model: "gemini-3.8-flash", fallback_models: ["gemini-3.6-flash", "gemini-3.5-flash-lite"], temperature: 0.2, max_output_tokens: 400, timeout_ms: 12000, daily_request_limit: 2000, daily_token_budget: 500000, per_session_message_limit: 40, strict_scope: true, extra_instructions: null };
 
   // ---- conversation -------------------------------------------------------
-  if (conversationId) {
-    const { data: c } = await db.from("conversations").select("id, status, guest_token, branch_id").eq("id", conversationId).maybeSingle();
-    if (!c) conversationId = null;
-    else {
-      if (!guestToken && c.guest_token) guestToken = c.guest_token;
-      if (c.branch_id) branchId = c.branch_id;
-    }
-  }
-  // Validate the guest token server-side before trusting it
+  // A token supplied by the caller must name a current booking in this exact hotel and branch, or a live phone
+  // session (0083's «حجوزاتي» code) in this hotel — verified here, never a client-supplied boolean.
+  let verifiedGuest = false;
+  const phoneSessionLive = async (token: string) => {
+    const { data } = await db.from("guest_phone_sessions").select("token").eq("token", token).eq("organization_id", org.id).gt("expires_at", new Date().toISOString()).maybeSingle();
+    return !!data;
+  };
   if (guestToken) {
-    const { error } = await db.rpc("fn_guest_session", { p_token: guestToken });
-    if (error) guestToken = null;
+    const { data: link } = await db.from("registration_sessions").select("reservation_id, organization_id, branch_id").eq("token", guestToken).gt("expires_at", new Date().toISOString()).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
+    if (!link && !(await phoneSessionLive(guestToken))) return json({ error: "invalid_guest_scope" }, 403);
+    verifiedGuest = true;
+  }
+  if (conversationId) {
+    const { data: c } = await db.from("conversations").select("id, organization_id, status, guest_token, branch_id, client_fingerprint, channel").eq("id", conversationId).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
+    if (!c || !mayResumeConversation(c, { organizationId: org.id, branchId: branch.id, guestToken }, { trustedService, staff: !!staffId, fingerprint, channel })) return json({ error: "invalid_conversation_scope" }, 403);
   }
   if (!conversationId) {
-    const { data: c } = await db.from("conversations").insert({ channel, status: "active", branch_id: branchId, guest_token: guestToken, client_fingerprint: fingerprint }).select("id").single();
+    const { data: c } = await db.from("conversations").insert({ organization_id: org.id, channel, status: "active", branch_id: branch.id, guest_token: guestToken, client_fingerprint: fingerprint }).select("id").single();
     conversationId = c!.id;
   } else if (guestToken) {
     await db.from("conversations").update({ guest_token: guestToken, last_message_at: new Date().toISOString() }).eq("id", conversationId);
@@ -89,10 +122,43 @@ Deno.serve(async (req) => {
   let handedOff = conv?.status === "handed_off";
 
   // ---- per-session limit --------------------------------------------------
-  const { count: msgCount } = await db.from("conversation_messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversationId).eq("sender", "guest");
-  if ((msgCount ?? 0) >= s.per_session_message_limit) {
+  const sessionCount = await db.from("conversation_messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversationId).eq("sender", "guest");
+  if (!sessionCountReadable(sessionCount)) return json({ error: "budget_unavailable" }, 503);
+  if (sessionCount.count >= s.per_session_message_limit) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "session_message_limit" });
     return json({ conversation_id: conversationId, mode: "scripted", verified: !!guestToken, handed_off: handedOff, reply: english ? "This chat has reached its message limit. To continue, contact the reception or start a new chat." : "وصلت المحادثة إلى الحد الأقصى للرسائل. للمتابعة، تواصل مع الاستقبال أو ابدأ جلسة جديدة.", actions: [{ label: english ? "Start again" : "البدء من جديد", route: "/reception" }] });
+  }
+
+  // ---- guest quota reserve (0082) -------------------------------------------
+  // A screen guest's message is admitted atomically BEFORE it is written: fn_ai_guest_reserve moves the session,
+  // device, branch and hotel counters all-or-nothing, so a refused message consumes nothing and a flood of
+  // simultaneous messages never passes a cap. A booking link or a verified phone code (checked above and here,
+  // never a client boolean) skips the OTP gate but stays under the ordinary caps.
+  let reserveCounted = false;
+  if (reserveApplies({ channel, trustedService, staff: !!staffId })) {
+    if (!verifiedGuest) {
+      const headerToken = scopeHeaders["x-guest-token"];
+      if (headerToken && headerToken.length >= 8) {
+        const { data: link } = await db.from("registration_sessions").select("reservation_id").eq("token", headerToken).gt("expires_at", new Date().toISOString()).eq("organization_id", org.id).eq("branch_id", branch.id).maybeSingle();
+        verifiedGuest = !!link || (await phoneSessionLive(headerToken));
+      }
+    }
+    const { data: reserve, error: reserveError } = await db.rpc("fn_ai_guest_reserve", { p_branch: branch.id, p_conversation: conversationId, p_fingerprint: fingerprint, p_verified: verifiedGuest });
+    if (reserveError) {
+      // fail closed: a quota that cannot be checked is not spent, and the guest gets the busy reply, never a bypass
+      await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "guest_reserve_error", detail: String(reserveError.message ?? "").slice(0, 200) });
+      const busy = mapReserveStatus("branch_limit", english);
+      return json({ conversation_id: conversationId, mode: "scripted", verified: verifiedGuest, handed_off: handedOff, reply: busy.reply, actions: [] });
+    }
+    const reserveStatus = String((reserve as { status?: string } | null)?.status ?? "");
+    if (reserveStatus !== "ok") {
+      const d = mapReserveStatus(reserveStatus, english);
+      if (d.error) return json({ error: d.error }, d.errorStatus ?? 400);
+      // a refused message consumed nothing and is not written
+      await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: d.rule });
+      return json({ conversation_id: conversationId, mode: "scripted", verified: verifiedGuest, handed_off: handedOff, reply: d.reply, actions: d.actions ?? [], ...d.extra });
+    }
+    reserveCounted = true;   // the hotel's daily request was spent inside the reserve; the bump below adds tokens only
   }
 
   // ---- persist guest message (PII-redacted) --------------------------------
@@ -145,7 +211,7 @@ Deno.serve(async (req) => {
   const dayKey = new Date().toISOString().slice(0, 10);
   // atomic server-side increment (fn_ai_usage_bump, service role only): concurrent requests never overwrite counters
   const bump = async (patch: Record<string, number>) => {
-    const { data } = await db.rpc("fn_ai_usage_bump", { p_org: org.id, p_day: dayKey, p_requests: patch.requests ?? 0, p_tokens_in: patch.tokens_in ?? 0, p_tokens_out: patch.tokens_out ?? 0, p_fallbacks: patch.fallbacks ?? 0, p_blocks: patch.guardrail_blocks ?? 0 });
+    const { data } = await db.rpc("fn_ai_usage_bump", { p_org: org.id, p_day: dayKey, p_requests: countedRequests(patch.requests ?? 0, reserveCounted), p_tokens_in: patch.tokens_in ?? 0, p_tokens_out: patch.tokens_out ?? 0, p_fallbacks: patch.fallbacks ?? 0, p_blocks: patch.guardrail_blocks ?? 0 });
     return data;
   };
 
@@ -196,8 +262,8 @@ Deno.serve(async (req) => {
   if (!provider) return respondScripted("fallback", { ai_status: s.enabled ? "awaiting_credentials" : "disabled" });
 
   // ---- daily budgets ---------------------------------------------------------
-  const { data: usage } = await db.from("ai_usage_daily").select("*").eq("organization_id", org.id).eq("day", dayKey).maybeSingle();
-  if ((usage?.requests ?? 0) >= s.daily_request_limit || ((usage?.tokens_in ?? 0) + (usage?.tokens_out ?? 0)) >= s.daily_token_budget) {
+  const usageRead = await db.from("ai_usage_daily").select("*").eq("organization_id", org.id).eq("day", dayKey).maybeSingle();
+  if (!budgetReadAvailable(s, usageRead)) {
     await db.from("ai_guardrail_events").insert({ conversation_id: conversationId, stage: "budget", rule: "daily_budget_exhausted" });
     return respondScripted("fallback", { ai_status: "budget_exhausted" });
   }

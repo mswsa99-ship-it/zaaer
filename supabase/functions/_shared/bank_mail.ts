@@ -11,8 +11,8 @@ import { readMail } from "./mime.ts";
 type Db = { rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: any; error: { message: string } | null }> };
 export interface PollResult { configured: boolean; fetched: number; results: Array<{ uid: number; status: string; reason?: string }>; error?: string }
 
-export async function pollMailbox(db: Db, connect: (host: string, port: number) => Promise<Wire>, max = 25): Promise<PollResult> {
-  const cfg = await db.rpc("fn_bank_mail_poll_config");
+export async function pollMailbox(db: Db, connect: (host: string, port: number) => Promise<Wire>, max = 25, organizationId?: string): Promise<PollResult> {
+  const cfg = await db.rpc("fn_bank_mail_poll_config", organizationId ? { p_org: organizationId } : undefined);
   if (cfg.error) throw new Error("CONFIG: " + cfg.error.message);
   const c = cfg.data as { configured: boolean; host: string; port: number; user: string; password: string; last_uid: number; uid_validity: number | null };
   if (!c?.configured) return { configured: false, fetched: 0, results: [] };
@@ -29,10 +29,10 @@ export async function pollMailbox(db: Db, connect: (host: string, port: number) 
       const raw = await imap.fetch(uid);
       if (raw === null) { out.results.push({ uid, status: "empty" }); last = uid; continue; }
       let r: { data: { duplicate?: boolean; status?: string; reason?: string } | null; error: { message: string } | null };
-      try { r = await db.rpc("fn_bank_ingest", { p: readMail(raw) }); } catch (e) { r = { data: null, error: { message: String((e as Error)?.message ?? e) } }; }
+      try { r = await db.rpc("fn_bank_ingest", { ...(organizationId ? { p_org: organizationId } : {}), p: readMail(raw) }); } catch (e) { r = { data: null, error: { message: String((e as Error)?.message ?? e) } }; }
       if (r.error) {
         // one email that cannot be stored must not stop every later reading: a placeholder is kept and the reading moves on
-        const f = await db.rpc("fn_bank_ingest_failed", { p_uid: uid, p_error: r.error.message.slice(0, 150) });
+        const f = await db.rpc("fn_bank_ingest_failed", { ...(organizationId ? { p_org: organizationId } : {}), p_uid: uid, p_error: r.error.message.slice(0, 150) });
         if (f.error) throw new Error("INGEST: " + r.error.message);
         out.results.push({ uid, status: "failed", reason: r.error.message.slice(0, 150) }); last = uid; continue;
       }
@@ -48,6 +48,6 @@ export async function pollMailbox(db: Db, connect: (host: string, port: number) 
   } finally {
     if (imap) await imap.logout();
   }
-  await db.rpc("fn_bank_mail_poll_done", { p_last_uid: last, p_uid_validity: validity, p_error: err });
+  await db.rpc("fn_bank_mail_poll_done", { ...(organizationId ? { p_org: organizationId } : {}), p_last_uid: last, p_uid_validity: validity, p_error: err });
   return out;
 }

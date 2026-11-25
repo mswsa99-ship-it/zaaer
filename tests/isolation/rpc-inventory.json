@@ -1,0 +1,2919 @@
+{
+  "generated_from": "source1446+tranche3+rpc-fixtures",
+  "engine": "PGlite (Postgres WASM), not standalone PG16",
+  "total": 338,
+  "counts": {
+    "control-valid": 103,
+    "unexecuted-no-adapter": 189,
+    "control-valid-weak-oracle": 33,
+    "control-invalid-needs-fixture": 4,
+    "skipped-no-coverage-credit": 9
+  },
+  "signatures": [
+    {
+      "signature": "fn_account_ledger(p_account uuid, p_from date, p_to date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_account_statement(p_account uuid, p_from date, p_to date, p_branch uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_accounting_lock_month(p_month date, p_lock boolean, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_accounting_months()",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_admin_alert_rule_save(p_event text, p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_alert_rules()",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_approve_media_item(p_id uuid, p_approve boolean)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_archive_cash_account(p_id uuid, p_archive boolean, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_admin_archive_definition(p_entity text, p_id uuid, p_reason text, p_archive boolean)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_archive_knowledge(p_id uuid, p_reason text, p_archive boolean)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_archive_media_item(p_id uuid, p_reason text, p_archive boolean)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_bank_mail_get()",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_bank_mail_set(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_branch_media_info(p_branch uuid)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_delete_definition(p_entity text, p_id uuid)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_force_logout(p_staff uuid, p_reason text)",
+      "family": "permissions",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND: staff",
+        "hotel-b|branch-1:denied:NOT_FOUND: staff"
+      ]
+    },
+    {
+      "signature": "fn_admin_invite_staff(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_journey_settings(p_branch uuid)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_journey_settings_save(p_branch uuid, p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_media_items(p_branch uuid, p_archived boolean)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_payment_settings(p_branch uuid)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_products()",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_purge_execute(p_token text, p_phrase text)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_purge_history()",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_purge_preview(p_branch uuid, p_from date, p_to date, p_categories text[])",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_reset_permissions(p_reason text)",
+      "family": "permissions",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_admin_resolve_unanswered(p_id uuid, p_status text, p_note text)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_save_payment_settings(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_set_account_opening(p_account uuid, p_halalas bigint, p_on date, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND",
+        "hotel-b|branch-1:denied:NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_branch_guide(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_branch_media(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_day_close_minutes(p_branch uuid, p_minutes integer)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_guest_site(p_url text)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_set_inventory(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_permissions(p jsonb)",
+      "family": "permissions",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:VIOLATION",
+        "hotel-b|branch-1:VIOLATION"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_product_branch(p_product uuid, p_branch uuid, p_available boolean)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": []
+    },
+    {
+      "signature": "fn_admin_set_room_license(p_room uuid, p_number text)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_source_active(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_source_commission(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_set_staff_active(p_staff uuid, p_active boolean, p_reason text)",
+      "family": "permissions",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND: staff",
+        "hotel-b|branch-1:denied:NOT_FOUND: staff"
+      ]
+    },
+    {
+      "signature": "fn_admin_staff_auth_status()",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_admin_staff_invite_target(p_staff uuid)",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND",
+        "hotel-b|branch-1:denied:NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_admin_staff_list()",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_admin_trial_overview()",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_unit_guides(p_branch uuid)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_update_ai_settings(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_update_organization(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_update_staff(p jsonb)",
+      "family": "permissions",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND: staff",
+        "hotel-b|branch-1:denied:NOT_FOUND: staff"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_bank_rule(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_upsert_block(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_branch(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_upsert_cash_account(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_expense_category(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_upsert_facility(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_floor(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_knowledge(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_upsert_media_item(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_product(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:VALIDATION no-write (not an authorization denial)",
+        "hotel-b|branch-1:VALIDATION no-write (not an authorization denial)"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_product_category(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_upsert_release_rule(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_room(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_room_category(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_service(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_upsert_source(p jsonb)",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_upsert_task_type(p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_whatsapp_channels()",
+      "family": "admin",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_admin_whatsapp_save(p_branch uuid, p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_admin_whatsapp_security(p_branch uuid, p jsonb)",
+      "family": "admin",
+      "status": "control-valid",
+      "coverage": "adapter-written",
+      "mutates": true,
+      "control_error": null,
+      "attack_pgl": [
+        "hotel-a|branch-1:denied",
+        "hotel-b|branch-1:denied"
+      ]
+    },
+    {
+      "signature": "fn_ai_ops_allowed_actions()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_ai_ops_context(p_branch uuid, p_date date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_ai_ops_execute_proposal(p_id uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_ai_ops_find_reservation(p_branch uuid, p_query text)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_ai_ops_propose(p_conversation uuid, p_action text, p_args jsonb, p_summary text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_ai_ops_reject_proposal(p_id uuid, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_alert_event_label(p_event text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_approve_discount(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_ar_hours(n integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_ar_nights(n integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_account_label(p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_accounting_label(p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_action_label(p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_chain_verify()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_entity_label(p_entity text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_list(p jsonb)",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_audit_removal_label(p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_audit_unit_label(p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_auth_event(p_action text, p_target uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_authorize_export(p_page text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_available_rooms(p_branch uuid, p_from date, p_to date, p_category uuid, p_exclude_reservation uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_backup_status()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_balance_sheet(p_as_of date, p_branch uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_bank_assign_account(p_movement uuid, p_account uuid, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND",
+        "hotel-b|branch-1:denied:NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_bank_candidates(p_movement uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND",
+        "hotel-b|branch-1:denied:NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_bank_convert(p_movement uuid, p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_bank_match(p_movement uuid, p_targets jsonb, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_bank_messages(p_status text, p_limit integer)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_bank_movements(p_branch uuid, p_from date, p_to date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_bank_poll_allowed()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_bank_reparse(p_message uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_bank_unmatch(p_movement uuid, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_branch_media(p_branch uuid, p_kind text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_branch_photo(p_id uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_branch_staff(p_branch uuid)",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_can(p_code text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_can_write(p_code text, p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_cancel_invoice(p_invoice uuid, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_cancel_voucher(p_voucher uuid, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_canonical_user_page(p_page text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_cap_full(p_code text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_capability_catalog()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_capability_removal_actions(p_code text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_category_capacity_impact(p_category uuid, p_max_capacity integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_check_payment_reference(p_method text, p_reference text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_check_version(p_current integer, p_expected integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_check_version_strict(p_current integer, p_expected integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_claim_staff_profile(p_full_name text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_closing_box(p_method text)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_conversation_take(p_conversation uuid, p_take boolean)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_create_invoice(p_reservation uuid, p_from date, p_to date)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_create_voucher(p jsonb)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_current_role()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_amend(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_decide(p_request uuid, p_approve boolean, p_note text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_get(p_branch uuid, p_date date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_day_closing_list(p_branch uuid, p_from date, p_to date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_day_closing_request_edit(p_id uuid, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_review(p_id uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_save(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_state(p_status text, p_edit_until timestamp with time zone)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_day_closing_submit(p_id uuid, p_version integer, p_hash text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_definition_dependencies(p_entity text, p_id uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_dependency_total(d jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_discount_allowance(p_reservation uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_expense_approve(p_id uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_expense_attachment(p_id uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_expense_cancel(p_id uuid, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_expense_create(p jsonb)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_expense_list(p_branch uuid, p_from date, p_to date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_finance_approve_refund(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_finance_controls_get()",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_finance_controls_set(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_gl_chart(p_as_of date, p_branch uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_guest_access_code(p_token text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-invalid-needs-fixture",
+      "control_error": "hotel-a|branch-1: FORBIDDEN: branch not permitted",
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_acknowledge(p_token text, p_hash text)",
+      "family": "guest-capability",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_ban(p jsonb)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_branches()",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-unproven",
+        "hotel-a|branch-2:success-unproven",
+        "hotel-b|branch-1:success-unproven",
+        "hotel-b|branch-2:success-unproven"
+      ]
+    },
+    {
+      "signature": "fn_guest_checkout(p_token text)",
+      "family": "guest-capability",
+      "mutates": true,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_checkout_choose(p_token text, p_choice text, p_hours integer, p_via text)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_children(p_token text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_departure(p_token text, p_via text)",
+      "family": "guest-capability",
+      "mutates": true,
+      "status": "control-invalid-needs-fixture",
+      "control_error": "hotel-a|branch-1: VALIDATION: not_in_stay",
+      "coverage": "adapter-written",
+      "attack_pgl": []
+    },
+    {
+      "signature": "fn_guest_departure_instructions(p_token text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_lookup(p_external_ref text, p_phone_last4 text, p_source_id uuid, p_fingerprint text)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_org_id()",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_phone_open(p_token text, p_internal_ref text)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_phone_reservations(p_token text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_phone_verify(p_phone text, p_code text, p_fingerprint text)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_phone_verify_ref(p_phone text, p_ref text, p_fingerprint text)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_profile(p_id uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND",
+        "hotel-b|branch-1:denied:NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_guest_profiles(p jsonb)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_guest_rate(p jsonb)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_session(p_token text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_set_children(p_token text, p_ages jsonb)",
+      "family": "guest-capability",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_site(p_slug text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:VIOLATION",
+        "hotel-a|branch-2:VIOLATION",
+        "hotel-b|branch-1:VIOLATION",
+        "hotel-b|branch-2:VIOLATION"
+      ]
+    },
+    {
+      "signature": "fn_guest_stay_summary(p_token text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_submit(p_token text, p_guest_id uuid, p_payload jsonb)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_guest_submit_checkin(p_token text)",
+      "family": "guest-capability",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_guest_unit_guide(p_token text, p_purpose text)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:TOKEN_INVALID",
+        "hotel-a|branch-2:denied:TOKEN_INVALID",
+        "hotel-b|branch-1:denied:TOKEN_INVALID",
+        "hotel-b|branch-2:denied:TOKEN_INVALID"
+      ]
+    },
+    {
+      "signature": "fn_has_role(VARIADIC p_roles role_code[])",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hk_assign_task(p_task uuid, p_assignee uuid)",
+      "family": "hk",
+      "mutates": true,
+      "status": "control-invalid-needs-fixture",
+      "control_error": "hotel-a|branch-2: ASSIGNEE_NOT_IN_BRANCH",
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_hk_cancel_task(p_task uuid, p_reason text)",
+      "family": "hk",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_hk_complete_task(p_task uuid, p_note text, p_expected_version integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hk_create_task(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hk_set_cleanliness(p_room uuid, p_state text, p_reason text)",
+      "family": "hk",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_hk_start_task(p_task uuid)",
+      "family": "hk",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_hotel_exit_delete(p_org uuid, p_confirm_name text, p_confirm_id text)",
+      "family": "destructive",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hotel_exit_export(p_org uuid)",
+      "family": "destructive",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hotel_exit_restore(p_org uuid, p_archive uuid, p_confirm_id text)",
+      "family": "destructive",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hotel_exit_suspend(p_org uuid)",
+      "family": "destructive",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hotel_exit_tables()",
+      "family": "destructive",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_hotel_exit_verify(p_archive uuid)",
+      "family": "destructive",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_income_statement(p_from date, p_to date, p_branch uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_invoice_preview(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_is_staff()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_issue_credit_note(p_invoice uuid, p_reason text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-invalid-needs-fixture",
+      "control_error": "hotel-a|branch-1: NOT_E_INVOICED",
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:invalid-control",
+        "hotel-b|branch-1:invalid-control"
+      ]
+    },
+    {
+      "signature": "fn_keybox_alerts(p_branch uuid)",
+      "family": "keys",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_keybox_board(p_branch uuid)",
+      "family": "keys",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_keybox_reveal(p_room uuid)",
+      "family": "keys",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_log_client_error(p_trace text, p_code text, p_context text)",
+      "family": "other",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "may trigger outbound messages/queues; external-effect risk"
+    },
+    {
+      "signature": "fn_lookup_trace(p_trace text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_mask_phone(p text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_monitors_if_due(p_branch uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_my_page_access()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_my_permissions()",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_name_closeness(p_name text, p_q text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_name_norm(s text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_normalize_ar(p text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_normalize_phone(p text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_ops_daily_summary(p_branch uuid, p_date date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_ops_daily_summary_at(p_branch uuid, p_date date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_ops_units_board(p_branch uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_organization_info()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_owner_register_hotel(p jsonb)",
+      "family": "platform",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "creates a new organization; not an existing-target operation"
+    },
+    {
+      "signature": "fn_owner_save_permission_draft(p jsonb)",
+      "family": "platform",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_page_read_gate(p_pages text[])",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_page_read_grant(p_pages text[])",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_page_write_gate(p_pages text[], p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_parse_halalas(p_value text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_payment_method_active(p_method text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_permissions_matrix()",
+      "family": "permissions",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_platform_check_list(p_branch uuid, p_date date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_platform_grant_support(p_operator uuid, p_reason text, p_hours integer)",
+      "family": "platform",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+    },
+    {
+      "signature": "fn_platform_hotels()",
+      "family": "platform",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_platform_mark_checked(p jsonb)",
+      "family": "platform",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_platform_operator_id()",
+      "family": "platform",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_platform_payout_cancel(p_payout uuid, p_reason text)",
+      "family": "platform",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+    },
+    {
+      "signature": "fn_platform_payout_confirm(p jsonb)",
+      "family": "platform",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+    },
+    {
+      "signature": "fn_platform_revoke_support(p_grant uuid)",
+      "family": "platform",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+    },
+    {
+      "signature": "fn_platform_set_hotel_status(p_org uuid, p_status text, p_reason text)",
+      "family": "platform",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "platform-operator scope, not hotel-tenant; needs operator identity fixture"
+    },
+    {
+      "signature": "fn_platform_support_guests(p_grant uuid)",
+      "family": "platform",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_platform_unsettled(p_branch uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_pos_settle(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_pos_settlement_preview(p_branch uuid, p_account uuid, p_date date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_price_limits(p_category uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_public_branch(p_branch uuid)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-unproven",
+        "hotel-a|branch-2:success-unproven",
+        "hotel-b|branch-1:success-unproven",
+        "hotel-b|branch-2:success-unproven"
+      ]
+    },
+    {
+      "signature": "fn_public_branch_guide(p_branch uuid)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-unproven",
+        "hotel-a|branch-2:success-unproven",
+        "hotel-b|branch-1:success-unproven",
+        "hotel-b|branch-2:success-unproven"
+      ]
+    },
+    {
+      "signature": "fn_public_organization()",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-unproven",
+        "hotel-a|branch-2:success-unproven",
+        "hotel-b|branch-1:success-unproven",
+        "hotel-b|branch-2:success-unproven"
+      ]
+    },
+    {
+      "signature": "fn_public_review(p_token text)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_public_submit_review(p_token text, p jsonb)",
+      "family": "guest-capability",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_public_whatsapp(p_branch uuid)",
+      "family": "guest-capability",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-unproven",
+        "hotel-a|branch-2:success-unproven",
+        "hotel-b|branch-1:success-unproven",
+        "hotel-b|branch-2:success-unproven"
+      ]
+    },
+    {
+      "signature": "fn_purge_categories()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_quote_stay(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_rate_calendar(p_branch uuid, p_from date, p_to date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_rate_calendar_set(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_refund(p jsonb)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_report_filter_options(p_branch uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_reports_capability_usage(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_reports_discounts(p_branch uuid, p_from date, p_to date, p_filters jsonb)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_reports_finance(p_branch uuid, p_from date, p_to date, p_filters jsonb)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_reports_identities(p_branch uuid, p_from date, p_to date, p_path text, p_filters jsonb)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_reports_late_entries(p_branch uuid, p_from date, p_to date, p_min_days integer, p_filters jsonb)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_reports_platforms(p_branch uuid, p_from date, p_to date)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_require_any_cap(p_codes text[])",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_require_branch(p_branch uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_require_cap(p_code text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_require_cap_full(p_code text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_require_money()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_require_role(VARIADIC p_roles role_code[])",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_require_user_page(p_page text, p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_reservation_calendar(p_branch uuid, p_from date, p_to date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_reservation_detail(p_reservation uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_reservation_finance(p_reservation uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_reservation_flags(p_branch uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_reservation_group(p_reservation uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_reservation_group_summary(p_reservation uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:RESERVATION_NOT_FOUND",
+        "hotel-b|branch-1:denied:RESERVATION_NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_reservation_list(p_branch uuid, p_filters jsonb, p_limit integer, p_offset integer)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_reservation_nights(p_reservation uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_review_aspects()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_review_list(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_review_mark(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_review_summary()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_review_undo(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_room_available(p_room uuid, p_from date, p_to date, p_exclude_reservation uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_room_licenses(p_branch uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_saved_view_remove(p_id uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_saved_view_save(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_saved_views_list(p_screen text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_sees_money()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_add_damage(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_add_service(p_reservation uuid, p_service uuid, p_quantity numeric, p_note text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_adjust_price(p_reservation uuid, p_kind text, p_amount_halalas bigint, p_description text, p_reason text, p_expected_version integer)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_alert_resolve(p_alert uuid, p_note text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_amend_stay(p_reservation uuid, p_new_check_out date, p_pricing_mode text, p_reason text, p_expected_version integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_approve_checkin(p_reservation uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_approve_identity(p_guest_id uuid, p_approve boolean, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_assign_room(p_reservation uuid, p_room uuid)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_cancel(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_cancel_product_order(p_order uuid, p_reason text)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:NOT_FOUND",
+        "hotel-b|branch-1:denied:NOT_FOUND"
+      ]
+    },
+    {
+      "signature": "fn_staff_cancel_reservation(p_reservation uuid, p_reason text, p_source text, p_external_event_id text)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_check_in(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_check_out(p jsonb)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_checkout(p_reservation uuid, p_override_reason text)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_complete_cleaning(p_task uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_confirm_gov_registration(p_reservation uuid, p_reference text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_confirm_payment(p_reservation uuid, p_method payment_method, p_amount_halalas bigint, p_reference text, p_idempotency_key text, p_provider text)",
+      "family": "financial",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_correct_voucher(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_create_free_stay(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_create_maintenance(p_room uuid, p_title text, p_description text)",
+      "family": "hk",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_create_product_order(p_reservation uuid, p_items jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_create_reservation(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_day_summary(p_branch uuid, p_date date)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_deliver_access_code(p_reservation uuid, p_channel text)",
+      "family": "other",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "may trigger outbound messages/queues; external-effect risk"
+    },
+    {
+      "signature": "fn_staff_edit_invoice(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_enter_guest(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_extension_decide(p_request uuid, p_action text, p_reason text, p_expected_version integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_id()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_invite(p_email text, p_full_name text, p_role role_code, p_branch_ids uuid[])",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_issue_invoice(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_journey(p_branch uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_journey_tick(p_branch uuid)",
+      "family": "other",
+      "status": "skipped-no-coverage-credit",
+      "coverage": "unexecuted",
+      "reason": "may trigger outbound messages/queues; external-effect risk"
+    },
+    {
+      "signature": "fn_staff_knowledge(p_branch uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_mark_delivery_failed(p_reservation uuid, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_mark_keybox_tested(p_room uuid)",
+      "family": "keys",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_no_show(p_reservation uuid, p_reason text)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_pay_product_order(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_payment_exception(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_product_menu(p_branch uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_product_orders(p_branch uuid, p_status text, p_days integer)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_quote(p_branch uuid, p_category uuid, p_check_in date, p_check_out date, p_nightly_override bigint, p_discount_halalas bigint)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_record_inspection(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_record_paper_ack(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_release_next_slot(p_branch uuid, p_category uuid, p_date date, p_reason text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_reopen_stay(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_resolve_maintenance(p_ticket uuid)",
+      "family": "hk",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_resolve_ticket(p_ticket uuid)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_review_reply(p_review uuid, p_reply text, p_expected_version integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_reviews(p_branch uuid, p_days integer)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_rotate_keybox_code(p_room uuid, p_new_code text, p_field_tested boolean)",
+      "family": "keys",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_set_children(p_reservation uuid, p_ages jsonb, p_reason text)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_set_hold(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_shomoos(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_switch_room(p_reservation uuid, p_room uuid, p_effective date, p_reason text, p_expected_version integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_undo_cancel(p jsonb)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_undo_check_in(p jsonb)",
+      "family": "reservation",
+      "mutates": true,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_staff_update_platform(p_reservation uuid, p jsonb, p_reason text, p_expected_version integer)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_stay_followups(p_branch uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_stay_status(p_reservation uuid)",
+      "family": "reservation",
+      "mutates": false,
+      "status": "control-valid-weak-oracle",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)",
+        "hotel-a|branch-1:success-no-target-effect(unproven)",
+        "hotel-b|branch-1:success-no-target-effect(unproven)"
+      ]
+    },
+    {
+      "signature": "fn_stay_summary(p_reservation uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_trial_balance(p_from date, p_to date, p_branch uuid)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_trigram_set(s text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_user_access_mode()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_user_branch_ids()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_user_org_id()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_user_page_can(p_page text, p_action text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_user_page_catalog()",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_valid_https_url(p text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_valid_map_url(p text)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_voucher_list(p jsonb)",
+      "family": "financial",
+      "mutates": false,
+      "status": "control-valid",
+      "control_error": null,
+      "coverage": "adapter-written",
+      "attack_pgl": [
+        "hotel-a|branch-1:denied:FORBIDDEN: branch not permitted",
+        "hotel-b|branch-1:denied:FORBIDDEN: branch not permitted"
+      ]
+    },
+    {
+      "signature": "fn_whatsapp_status(c branch_whatsapp_channels)",
+      "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    }
+  ]
+}

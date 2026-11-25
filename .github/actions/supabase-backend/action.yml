@@ -56,6 +56,9 @@ runs:
         supabase link --project-ref "$PROJECT_REF"
         supabase migration list
         # --include-all: a migration older than the newest applied one (e.g. 0015 after 0016) is applied too, once
+        if find supabase/migrations -name "*_0073_purge_trial.sql" | grep -q .; then
+          echo "::error::Legacy unscoped purge migration must never enter automatic deployment"; exit 1
+        fi
         supabase db push --include-all
 
     - name: Edge functions — deploy

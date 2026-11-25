@@ -11,7 +11,7 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { projectKey } from "../_shared/keys.ts";
-import { parseInbound, usable, verifySignature, waSend, type WaChannel, type WaInbound } from "../_shared/whatsapp.ts";
+import { parseInbound, usable, verifySignature, waSend, guestOptCommand, textPayload, WA_OPT_CONFIRM, type WaChannel, type WaInbound } from "../_shared/whatsapp.ts";
 import { runWaFlow } from "../_shared/wa_flow.ts";
 import { dbPorts } from "../_shared/wa_db.ts";
 
@@ -29,7 +29,10 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "POST") return new Response("method", { status: 405 });
 
+  // size cap before reading: Meta's payloads are a few KB; refuse anything large without parsing it
+  if (Number(req.headers.get("content-length") ?? "0") > 262144) return new Response("too large", { status: 413 });
   const raw = await req.text();
+  if (raw.length > 262144) return new Response("too large", { status: 413 });
   let body: unknown;
   try { body = JSON.parse(raw); } catch { return new Response("bad json", { status: 400 }); }
   const phoneNumberId = String((body as any)?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id ?? ""); // deno-lint-ignore no-explicit-any
@@ -67,6 +70,14 @@ async function handle(db: Db, ch: WaChannel, m: WaInbound) {
     }
     return r;
   };
+  // 0083: «إيقاف»/stop and «استئناف»/start act on this channel's organization for the sender's verified number
+  const opt = m.type === "text" ? guestOptCommand(m.text) : null;
+  if (opt && m.from) {
+    await db.rpc(opt === "optout" ? "fn_guest_phone_optout" : "fn_guest_phone_optin",
+      opt === "optout" ? { p_org: ch.organization_id, p_phone: m.from, p_reason: "whatsapp: إيقاف" } : { p_org: ch.organization_id, p_phone: m.from });
+    await send(textPayload(m.from, WA_OPT_CONFIRM[opt]));
+    return;
+  }
   const ports = dbPorts(db, ch, { key: m.from, phone: m.from }, send, {
     appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "", supabaseUrl: Deno.env.get("SUPABASE_URL")!, serviceKey: projectKey("secret"),
   });

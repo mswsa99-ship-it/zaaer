@@ -96,7 +96,7 @@ export function StayProgress({ r, canMoney, onJump }: { r: StayProgressInput; ca
 
 function Amount({ label, v, warn, testId }: { label: string; v: number; warn?: boolean; testId?: string }) {
   return (
-    <div className="rounded-xl border border-ink-100 bg-white px-3 py-2.5" data-testid={testId}>
+    <div className="rounded-xl bg-white px-3 py-2.5" data-testid={testId}>
       <p className="text-xs font-medium text-ink-500">{label}</p>
       <p className={cn("text-lg font-bold tabular-nums", warn ? "text-warning-700" : "text-ink-800")}>{formatCurrency(v / 100)}</p>
     </div>

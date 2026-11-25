@@ -67,14 +67,14 @@ do $$ declare r jsonb; b uuid; cat uuid; res uuid; v jsonb; begin
          'check_out', (t_today(b) + 22)::text, 'guest_phone', '0551000095', 'guest_name', 'نزيل المطابقة', 'source_id', '00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   insert into ids values ('b', b), ('res', res);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 50000, 'method','bank_transfer', 'reference','MT-TR-1', 'idempotency_key','mt-1'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 50000, 'method','bank_transfer', 'reference','MT-TR-1', 'idempotency_key','mt-1'));
   insert into ids values ('v1', (v->>'voucher_id')::uuid);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 10000, 'method','bank_transfer', 'reference','MT-TR-2', 'idempotency_key','mt-2'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method','bank_transfer', 'reference','MT-TR-2', 'idempotency_key','mt-2'));
   insert into ids values ('v2', (v->>'voucher_id')::uuid);
   -- the day's terminal: two card payments and a card refund
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 20000, 'method','pos', 'reference','MT-POS-1', 'idempotency_key','mt-p1'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 20000, 'method','pos', 'reference','MT-POS-1', 'idempotency_key','mt-p1', 'advance_ok', true, 'reason', 'دفعة مقدمة لاختبار المطابقة'));
   insert into ids values ('p1', (v->>'voucher_id')::uuid);
-  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'amount_halalas', 10000, 'method','pos', 'reference','MT-POS-2', 'idempotency_key','mt-p2'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method','pos', 'reference','MT-POS-2', 'idempotency_key','mt-p2', 'advance_ok', true, 'reason', 'دفعة مقدمة لاختبار المطابقة'));
   insert into ids values ('p2', (v->>'voucher_id')::uuid);
   v := fn_refund(jsonb_build_object('reservation_id', res, 'kind','refund', 'amount_halalas', 3000, 'method','pos', 'reference','MT-POS-R', 'reason','رد جزء من بطاقة', 'idempotency_key','mt-pr'));
   insert into ids values ('pr', (v->>'voucher_id')::uuid);
@@ -279,7 +279,7 @@ select t_record('MT10 the matching''s log lines read in Arabic', fn_audit_action
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare v jsonb; mc uuid; m jsonb; c jsonb; rv uuid; begin
-  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 15000, 'method','pos', 'reference','MT-POS-C', 'idempotency_key','mt-pc'));
+  v := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 15000, 'method','pos', 'reference','MT-POS-C', 'idempotency_key','mt-pc'));
   insert into ids values ('pc', (v->>'voucher_id')::uuid);
   m := fn_bank_match(t_id('mc'), t_tg('voucher', t_id('pc')::text), null);
   -- the day's terminal is settled, so the correction keeps the original and adds its reversal (no cancellation)

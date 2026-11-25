@@ -4,7 +4,8 @@
  * POST { phone, client_fingerprint? } → { status: "sent" | "channel_unavailable" | "throttled" | "invalid" | "send_failed" }
  *
  * The code is created in the database (fn_guest_phone_start, service role only) and goes straight to WhatsApp; it is
- * never returned to the browser. It is sent from the WhatsApp number of the branch of the guest's latest booking
+ * never returned to the browser. The challenge is marked sent only after the channel actually took it
+ * (fn_guest_phone_mark_sent); a failed or impossible send frees the pending quota it tentatively held (0083). It is sent from the WhatsApp number of the branch of the guest's latest booking
  * (branch_whatsapp_channels, set up by the owner on /admin/whatsapp), with that branch's approved Authentication
  * template. "sent" is also the answer for a phone with no bookings (nothing is sent then), so this endpoint does not
  * reveal who has a booking. A branch without a usable channel answers "channel_unavailable" and the page asks for a
@@ -14,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { projectKey } from "../_shared/keys.ts";
 import { otpTemplatePayload, usable, waSend, type WaChannel } from "../_shared/whatsapp.ts";
 
-const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "content-type": "application/json" } });
 
 Deno.serve(async (req) => {
@@ -23,9 +24,11 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ status: "invalid" }, 400); }
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { auth: { persistSession: false } });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, projectKey("secret"), { global: { headers: { "x-hotel-slug": req.headers.get("x-hotel-slug") ?? "" } }, auth: { persistSession: false } });
+  const { data: hotel } = await db.rpc("fn_guest_org_id");
+  if (!hotel) return json({ status: "invalid" }, 400);
   // no branch has a usable number with a code template → the page goes straight to the booking-number path
-  const { count } = await db.from("branch_whatsapp_channels").select("branch_id", { count: "exact", head: true }).eq("enabled", true).not("otp_template", "is", null);
+  const { count } = await db.from("branch_whatsapp_channels").select("branch_id", { count: "exact", head: true }).eq("organization_id", hotel).eq("enabled", true).not("otp_template", "is", null);
   if (!count) return json({ status: "channel_unavailable" });
 
   const fingerprint = String(body.client_fingerprint ?? req.headers.get("x-forwarded-for") ?? "").slice(0, 120) || null;
@@ -36,9 +39,15 @@ Deno.serve(async (req) => {
 
   const { data: ch } = await db.rpc("fn_whatsapp_channel", { p_branch: data.branch_id });
   const channel = ch as WaChannel | null;
-  if (!usable(channel) || !channel.otp_template) return json({ status: "channel_unavailable" });
+  if (!usable(channel) || !channel.otp_template) {
+    // no send happened: the pending challenge frees its slot again (0083)
+    await db.rpc("fn_guest_phone_mark_sent", { p_challenge: data.challenge_id, p_sent: false });
+    return json({ status: "channel_unavailable" });
+  }
 
   const r = await waSend(channel, otpTemplatePayload(data.phone, data.code, channel.otp_template, channel.template_lang || "ar"));
+  // 0083: only a message the channel actually took spends the phone's allowance; a failed send frees its slot
+  await db.rpc("fn_guest_phone_mark_sent", { p_challenge: data.challenge_id, p_sent: r.ok });
   // the outcome is kept for the owner (no code, no full phone)
   await db.from("integration_events").insert({
     organization_id: channel.organization_id, source: "whatsapp", external_event_id: String(data.challenge_id), kind: "guest.otp",

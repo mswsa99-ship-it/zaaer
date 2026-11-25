@@ -136,11 +136,12 @@ select ul_login('a0000000-0000-0000-0000-000000000001');
 set role authenticated;
 do $$ declare e text; begin
   begin perform 1 from room_licenses limit 1; e := 'accepted'; exception when others then e := sqlerrm; end;
-  perform ul_record('UL11 even the owner cannot select the table directly; only fn_room_licenses and fn_admin_set_room_license mention it',
+  perform ul_record('UL11 even the owner cannot select the table directly; only fn_room_licenses and the internal writer fn_room_license_apply (0135, not executable by clients; fn_admin_set_room_license now delegates to it) and the hotel-exit catalogue fn_hotel_exit_tables (2.12, it names every tenancy table but reads them only through the owner-run export) mention it',
     e like '%permission denied%'
     and not has_table_privilege('authenticated', 'public.room_licenses', 'select') and not has_table_privilege('anon', 'public.room_licenses', 'select')
-    and (select string_agg(p.proname, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosrc like '%room_licenses%' and p.proname !~ '^ul_')
-        = 'fn_admin_set_room_license,fn_room_licenses',
+    and (select string_agg(p.proname, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosrc like '%room_licenses%' and p.proname !~ '^ul_' and p.proname !~ '__impl$')
+        = 'fn_hotel_exit_tables,fn_room_license_apply,fn_room_licenses'
+    and not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('fn_room_licenses__impl','fn_hotel_exit_tables__impl','fn_room_license_apply') and (has_function_privilege('authenticated',p.oid,'EXECUTE') or has_function_privilege('anon',p.oid,'EXECUTE'))),
     e);
 end $$;
 reset role;

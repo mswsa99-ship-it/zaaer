@@ -33,7 +33,7 @@ const IN_HOUSE = "966501110001";   // the seed's guest in room 101 (checked in, 
 
 /** a guest token of the in-house stay of room 101, as the WhatsApp flow gets it (the phone session, then the booking) */
 async function guestToken(): Promise<{ token: string; reservation: string; branch: string }> {
-  const ps = await service<string>("fn_whatsapp_phone_session", { p_phone: IN_HOUSE });
+  const ps = await service<string>("fn_whatsapp_phone_session", { p_phone: IN_HOUSE,p_branch: "00000000-0000-0000-0000-000000000010" });
   const list = await service<{ reservations: Array<{ internal_ref: string; status: string }> }>("fn_guest_phone_reservations", { p_token: ps });
   const b = list.reservations.find((r) => r.status === "checked_in")!;
   const { token } = await service<{ token: string }>("fn_guest_phone_open", { p_token: ps, p_internal_ref: b.internal_ref });

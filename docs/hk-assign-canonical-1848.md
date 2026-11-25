@@ -1,0 +1,5 @@
+# HK assign exact adapter
+
+RPC35net adapter update,0040source role/branch/memberchecked, no notificationproducer. CanonicalPG16fourownercontrols exact2rows(task+details-qualifiedaudit), prior sameentityauditdecoys untouched. Actual{s:housekeeping}resolverused. Foreignhotelassignee4attempts ASSIGNEE_NOT_IN_BRANCH+wholepublicno-write;NULLassignee4allowedcalls version2 andNULLchecked thenrolledback (not exactrowcontractforNULL). Allouterrollback. InitialDBloadONCONFLICTDONOTHINGkeptoldcall-onlyadapter, detectedunassertedFAIL and explicitlyreplacedreviewedrowbeforegreen. SourcefreshDBloadusesupdatedrow.
+
+Effectversion2 assumes baselinefixtureversion1, not universalassignmentstateoracle. No crossbranchstaffassigneebranchnegative orrepeatsemanticclaim; no genericmatrixcredit.126adapters338/protected9unchanged. Checkoutcandidate separateunintegrated.

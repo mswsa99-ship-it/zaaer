@@ -4,7 +4,7 @@
  * check-out inspection, «مغلق», and the corrections within their windows. It reads fn_stay_status only, and every
  * action is a server function: the server decides, this screen shows why.
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, AlertTriangle, BadgeCheck, CheckCircle2, ClipboardCheck, FileCheck, KeyRound, LogIn, LogOut, Moon, RotateCcw, ShieldAlert, Undo2, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -59,7 +59,7 @@ export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { 
       {notice && <div className="rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" role="status" data-testid="stay-notice">{notice}</div>}
       {reasons && <Reasons title="تعذّر تنفيذ الإجراء للأسباب التالية:" items={reasons} />}
       {(["pending_verification", "confirmed", "checked_in"].includes(s.status) || s.shomoos.registered) && <ShomoosCard {...common} canAct={canShomoos} money={money} />}
-      {before && s.checkin && <ArrivalCard {...common} branchId={branchId} canAct={canArrive} money={money} />}
+      {before && s.checkin && <ArrivalCard {...common} branchId={branchId} canAct={canArrive} canDeliver={can("code.deliver")} money={money} onReveal={setRevealed} />}
       {s.status === "checked_in" && <InHouseCard {...common} canAct={canAct} canInspect={canInspect} money={money} isMgr={can("checkin.undo")} onReveal={setRevealed} />}
       {departed && <DepartedCard {...common} canInspect={canInspect} money={money} isMgr={can("stay.reopen")} />}
       {s.status === "cancelled" && can("res.undo_cancel") && s.corrections.undo_cancel_until && <UndoCancel {...common} until={s.corrections.undo_cancel_until} />}
@@ -122,23 +122,48 @@ function ShomoosCard({ s, id, done, fail, canAct, money }: Common & { canAct: bo
 }
 
 // ---------------------------------------------------------------- the arrival (decisions 1, 2, 3)
-function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common & { branchId: string; canAct: boolean; money: boolean }) {
+function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money, onReveal }: Common & { branchId: string; canAct: boolean; canDeliver: boolean; money: boolean; onReveal: (code: string) => void }) {
   const c = s.checkin!;
   const core = c.blockers;
   const accounts = useCashAccounts(money ? branchId : null);
-  const [rent, setRent] = useState<number | null>(c.first_night_short ?? 0);
+  // M1 (plan 4.1): no prefilled amount — the clerk types what was actually received, at most the shortage
+  const [rent, setRent] = useState<number | null>(null);
   const [rentMethod, setRentMethod] = useState<PaymentMethod>("cash"); const [rentAccount, setRentAccount] = useState(""); const [rentRef, setRentRef] = useState("");
-  const [deposit, setDeposit] = useState<number | null>(c.deposit_short ?? 0);
+  const [deposit, setDeposit] = useState<number | null>(null);
   const [depMethod, setDepMethod] = useState<PaymentMethod>("cash"); const [depAccount, setDepAccount] = useState(""); const [depRef, setDepRef] = useState("");
+  // M1 (plan 4.1): no voucher at the arrival without an explicit «استلمت» confirmation
+  const [rentReceived, setRentReceived] = useState(false);
+  const [depReceived, setDepReceived] = useState(false);
   const [reason, setReason] = useState("");
   // one arrival, one pair of entries: a resend after a refusal recorded nothing, so the keys stay the same
   const [keys] = useState(() => ({ rent: newIdempotencyKey(), deposit: newIdempotencyKey() }));
-  useEffect(() => { setRent(c.first_night_short ?? 0); }, [c.first_night_short]);
-  useEffect(() => { setDeposit(c.deposit_short ?? 0); }, [c.deposit_short]);
+  const rentShort = Math.max(c.first_night_short ?? 0, 0);
+  // plan 6.3 (U12): with no financial shortfall the arrival and the code are one click. With a shortfall the form below
+  // stays as it is (4.1: the typed amount, «استلمت», the cap, the reason): nothing here records a voucher.
+  const oneStep = canDeliver && s.has_keybox && rentShort === 0 && (c.deposit_short ?? 0) === 0;
+  const [channel, setChannel] = useState<"screen" | "supervisor">("screen");
+  const inFlight = useRef(false);
+  const [oneBusy, setOneBusy] = useState(false);
+  const [oneError, setOneError] = useState<string | null>(null);
+  const arriveAndDeliver = async () => {
+    if (inFlight.current) return;          // a double click is one request, not two
+    inFlight.current = true; setOneBusy(true); setOneError(null);
+    try {
+      const r: CheckInResult = await stayApi.checkIn({ reservation_id: id, expected_version: s.version });
+      if (!r.ok) { refused(r.reasons ?? []); return; }
+      // the server decides the code too (its own blockers, role and branch); the arrival above is already recorded
+      const d = await staffApi.deliverAccessCode(id, channel);
+      if (!d.ok) { await done("سُجِّل الوصول، ولم يُسلَّم الرمز بعد."); refused(d.reasons ?? []); return; }
+      if (channel === "supervisor" && d.code) onReveal(d.code);
+      await done(channel === "supervisor" ? "سُجِّل الوصول وسُلِّم رمز الصندوق شفهيًا." : "سُجِّل الوصول وسُلِّم رمز الصندوق؛ يظهر للنزيل في صفحته.");
+    } catch (e) { setOneError(toArabicError(e)); } finally { inFlight.current = false; setOneBusy(false); }
+  };
   const depositShort = Math.max((c.deposit_short ?? 0) - (deposit ?? 0), 0);
   const entry = (amount: number | null, method: PaymentMethod, account: string, ref: string, key: string): PaymentEntry | undefined =>
     amount && amount > 0 ? { amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? account || undefined : undefined, reference: ref.trim() || undefined, idempotency_key: key } : undefined;
   const submit = async () => {
+    if ((rent ?? 0) > rentShort || (deposit ?? 0) > (c.deposit_short ?? 0)) throw new Error("VALIDATION: amount_exceeds_short");
+    if (((rent ?? 0) > 0 && !rentReceived) || ((deposit ?? 0) > 0 && !depReceived)) throw new Error("VALIDATION: received_confirm");
     if ((rent ?? 0) > 0 && METHOD_NEEDS_REFERENCE.includes(rentMethod) && !rentRef.trim()) throw new Error("VALIDATION: reference_required");
     if ((deposit ?? 0) > 0 && METHOD_NEEDS_REFERENCE.includes(depMethod) && !depRef.trim()) throw new Error("VALIDATION: reference_required");
     const r: CheckInResult = await stayApi.checkIn({ reservation_id: id, expected_version: s.version, rent: entry(rent, rentMethod, rentAccount, rentRef, keys.rent), deposit: entry(deposit, depMethod, depAccount, depRef, keys.deposit), deposit_reason: depositShort > 0 && reason.trim() ? reason.trim() : undefined });
@@ -149,7 +174,7 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
   return (
     <Card data-testid="arrival">
       <Head icon={LogIn} title="تسجيل الوصول" />
-      <p className="mb-3 text-xs text-ink-500">شروط الوصول واحدة في كل الفروع ولا تجاوز لها. رمز الصندوق يُسلَّم بعد تسجيل الوصول، كخطوة مستقلة.</p>
+      <p className="mb-3 text-xs text-ink-500">شروط الوصول واحدة في كل الفروع ولا تجاوز لها. {oneStep ? "حين لا نقص مالي يُسلَّم الرمز مع الوصول في نقرة واحدة." : "رمز الصندوق يُسلَّم بعد تسجيل الوصول، كخطوة مستقلة."}</p>
       {core.length > 0 ? <Reasons title="شروط لم تكتمل بعد:" items={core} /> : <Ok>الشروط الثابتة مكتملة: الحجز مؤكد، والنزلاء مسجلون ومطابقون، وشموس مقبول، والوحدة نظيفة ومتاحة.</Ok>}
       {money && (
         <AmountGrid className="mt-3">
@@ -159,24 +184,55 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, money }: Common &
           <AmountBox label="التأمين المستلم" value={sar(c.deposit_balance)} tone={(c.deposit_short ?? 0) > 0 ? "text-warning-700" : "text-success-600"} />
         </AmountGrid>
       )}
-      {canAct && core.length === 0 && (
+      {canAct && core.length === 0 && oneStep && (
+        <div className="mt-4 space-y-3" data-testid="one-step">
+          {oneError && <ErrorBanner message={oneError} />}
+          <p className="text-xs text-ink-500">لا نقص مالي على هذا الحجز: خطوة واحدة تسجّل الوصول ثم تسلّم رمز الصندوق، والخادم يتحقق من كل شرط في الخطوتين.</p>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" onKeyDown={radioGroupKeys} aria-label="قناة تسليم الرمز">
+            {(["screen", "supervisor"] as const).map((ch) => (
+              <button key={ch} type="button" role="radio" aria-checked={channel === ch} tabIndex={channel === ch ? 0 : -1} onClick={() => setChannel(ch)}
+                className={`rounded-xl border px-3 py-2 text-sm ${channel === ch ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100 text-ink-600"}`}>{ch === "screen" ? "صفحة النزيل" : "شفهيًا عبر المشرف"}</button>
+            ))}
+          </div>
+          <button type="button" disabled={oneBusy} onClick={arriveAndDeliver} className="btn-primary w-full" data-testid="arrive-and-deliver">
+            {oneBusy ? <Spinner className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />} تسجيل الوصول وتسليم الرمز
+          </button>
+        </div>
+      )}
+      {canAct && core.length === 0 && !oneStep && (
         <ActionForm onSubmit={submit}>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {rentShort > 0 && (
             <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">
               <legend className="px-1 text-xs font-semibold text-ink-600">سند قبض الإيجار</legend>
-              <Field label="المبلغ" hint={(c.first_night_short ?? 0) > 0 ? `المطلوب قبل الوصول: ${sar(c.first_night_short)} — الليلة الأولى كاملة، والدفعة الجزئية لا تكفي.` : "الليلة الأولى مدفوعة؛ يمكن قبض المزيد الآن أو تركه صفرًا."}>
+              <Field label="المبلغ" hint={`المطلوب قبل الوصول: ${sar(rentShort)} — الليلة الأولى كاملة، والدفعة الجزئية لا تكفي، ولا يقبل السند أكثر من المطلوب.`}>
                 <MoneyInput valueHalalas={rent} onChange={setRent} />
               </Field>
               {(rent ?? 0) > 0 && <PaymentFields method={rentMethod} setMethod={setRentMethod} accountId={rentAccount} setAccountId={setRentAccount} reference={rentRef} setReference={setRentRef} accounts={accounts.active} verb="receive" />}
+              {(rent ?? 0) > 0 && (
+                <label className="flex items-start gap-2 text-sm text-ink-700">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={rentReceived} onChange={(e) => setRentReceived(e.target.checked)} />
+                  أؤكد أنني استلمت المبلغ فعلًا
+                </label>
+              )}
             </fieldset>
+            )}
+            {(c.deposit_short ?? 0) > 0 && (
             <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">
               <legend className="px-1 text-xs font-semibold text-ink-600">سند قبض التأمين</legend>
-              <Field label="المبلغ" hint={(c.deposit_short ?? 0) > 0 ? `تأمين الفرع ${sar(c.deposit_required)}؛ يُحتجز منفصلًا ويُرد بعد المغادرة وفحصها.` : "التأمين مستلم كاملًا."}>
+              <Field label="المبلغ" hint={`تأمين الفرع ${sar(c.deposit_required)}؛ يُحتجز منفصلًا ويُرد بعد المغادرة وفحصها، ولا يقبل السند أكثر من النقص.`}>
                 <MoneyInput valueHalalas={deposit} onChange={setDeposit} />
               </Field>
               {(deposit ?? 0) > 0 && <PaymentFields method={depMethod} setMethod={setDepMethod} accountId={depAccount} setAccountId={setDepAccount} reference={depRef} setReference={setDepRef} accounts={accounts.active} verb="receive" deposit />}
+              {(deposit ?? 0) > 0 && (
+                <label className="flex items-start gap-2 text-sm text-ink-700">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={depReceived} onChange={(e) => setDepReceived(e.target.checked)} />
+                  أؤكد أنني استلمت المبلغ فعلًا
+                </label>
+              )}
               {depositShort > 0 && <ReasonInput value={reason} onChange={setReason} label="سبب عدم استلام التأمين كاملًا (إلزامي)" placeholder="مثال: نزيل شركة بعقد سارٍ" />}
             </fieldset>
+            )}
           </div>
           <Submit label="تسجيل الوصول" />
         </ActionForm>

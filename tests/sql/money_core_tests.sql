@@ -9,6 +9,7 @@
 -- =====================================================================
 \set ON_ERROR_STOP off
 create temp table test_results(name text, ok boolean, detail text);
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 grant all on test_results to public;
 create temp table ids(k text primary key, v uuid);
 grant all on ids to public;
@@ -72,18 +73,18 @@ do $$ begin
     t_id('cash10')::text || ' / ' || t_id('bank10')::text || ' / ' || coalesce(t_id('bank12')::text, 'none'));
 end $$;
 do $$ declare a jsonb; b jsonb; c jsonb; begin
-  a := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 10000, 'method','cash', 'idempotency_key','mc-02a'));
-  b := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 5000, 'method','pos', 'reference','TRX-5501', 'idempotency_key','mc-02b'));
-  c := fn_create_voucher(jsonb_build_object('reservation_id', t_id('resOTA1'), 'kind','receipt', 'amount_halalas', 40000, 'method','ota_deferred', 'idempotency_key','mc-02c'));
+  a := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 10000, 'method','cash', 'idempotency_key','mc-02a'));
+  b := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 5000, 'method','pos', 'reference','TRX-5501', 'idempotency_key','mc-02b'));
+  c := fn_create_voucher(jsonb_build_object('reservation_id', t_id('resOTA1'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 40000, 'method','ota_deferred', 'idempotency_key','mc-02c'));
   insert into ids values ('vPos1', (b->>'voucher_id')::uuid), ('vOta1', (c->>'voucher_id')::uuid);
   perform t_record('MC02 cash goes to the default cash box, the terminal to the default bank account, the platform to none',
     (t_voucher((a->>'voucher_id')::uuid)).account_id = t_id('cash10') and (t_voucher((b->>'voucher_id')::uuid)).account_id = t_id('bank10')
     and (t_voucher((c->>'voucher_id')::uuid)).account_id is null and (t_voucher((b->>'voucher_id')::uuid)).reference = 'TRX-5501', a::text);
 exception when others then perform t_record('MC02 cash goes to the default cash box, the terminal to the default bank account, the platform to none', false, sqlerrm); end $$;
 do $$ declare r1 text; r2 text; r3 text; r4 text; legacy bigint; begin
-  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','mada', 'reference','X-1', 'idempotency_key','mc-03a')), 'VALIDATION: method_retired%');
+  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','mada', 'reference','X-1', 'idempotency_key','mc-03a')), 'VALIDATION: method_retired%');
   r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','deposit', 'amount_halalas', 100, 'method','card', 'reference','X-2', 'idempotency_key','mc-03b')), 'VALIDATION: method_retired%');
-  r3 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','booking_platform', 'idempotency_key','mc-03c')), 'VALIDATION: method_retired%');
+  r3 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','booking_platform', 'idempotency_key','mc-03c')), 'VALIDATION: method_retired%');
   r4 := t_fails(format('select fn_refund(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','refund', 'amount_halalas', 100, 'method','payment_link', 'reference','X-4', 'reason','x', 'idempotency_key','mc-03d')), 'VALIDATION: method_retired%');
   -- an old voucher keeps its method and still counts
   legacy := t_count('select count(*) from financial_vouchers where method in (''mada'', ''card'', ''booking_platform'') and status = ''approved''');
@@ -91,18 +92,18 @@ do $$ declare r1 text; r2 text; r3 text; r4 text; legacy bigint; begin
     r1 = 'ok' and r2 = 'ok' and r3 = 'ok' and r4 = 'ok' and legacy >= 0, r1 || ' / ' || r2 || ' / ' || r3 || ' / ' || r4);
 end $$;
 do $$ declare r1 text; r2 text; r3 text; ok jsonb; begin
-  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','pos', 'idempotency_key','mc-04a')), 'VALIDATION: reference_required%');
-  r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','bank_transfer', 'reference','  ', 'idempotency_key','mc-04b')), 'VALIDATION: reference_required%');
-  r3 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','bank_transfer', 'reference','X', 'idempotency_key','mc-04c')), 'VALIDATION: reference%');
-  ok := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 2500, 'method','bank_transfer', 'reference','TR-778899', 'idempotency_key','mc-04d'));
+  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','pos', 'idempotency_key','mc-04a')), 'VALIDATION: reference_required%');
+  r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','bank_transfer', 'reference','  ', 'idempotency_key','mc-04b')), 'VALIDATION: reference_required%');
+  r3 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','bank_transfer', 'reference','X', 'idempotency_key','mc-04c')), 'VALIDATION: reference%');
+  ok := fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 2500, 'method','bank_transfer', 'reference','TR-778899', 'idempotency_key','mc-04d'));
   perform t_record('MC04 the terminal and the transfer need their transaction number; a transfer counts at once with it',
     r1 = 'ok' and r2 = 'ok' and r3 = 'ok' and (ok->>'ok')::boolean and (t_voucher((ok->>'voucher_id')::uuid)).status = 'approved'
     and (t_voucher((ok->>'voucher_id')::uuid)).account_id = t_id('bank10'), r1 || ' / ' || r2 || ' / ' || r3);
 exception when others then perform t_record('MC04 the terminal and the transfer need their transaction number; a transfer counts at once with it', false, sqlerrm); end $$;
 do $$ declare r1 text; r2 text; r3 text; begin
-  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'account_id', t_id('bank10'), 'idempotency_key','mc-05a')), 'VALIDATION: account_kind%');
-  r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','pos', 'reference','T-555', 'account_id', t_id('bank12'), 'idempotency_key','mc-05b')), 'BRANCH_MISMATCH%');
-  r3 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('resOTA1'), 'kind','receipt', 'amount_halalas', 100, 'method','ota_deferred', 'account_id', t_id('bank10'), 'idempotency_key','mc-05c')), 'VALIDATION: account_not_allowed%');
+  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'account_id', t_id('bank10'), 'idempotency_key','mc-05a')), 'VALIDATION: account_kind%');
+  r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','pos', 'reference','T-555', 'account_id', t_id('bank12'), 'idempotency_key','mc-05b')), 'BRANCH_MISMATCH%');
+  r3 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('resOTA1'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','ota_deferred', 'account_id', t_id('bank10'), 'idempotency_key','mc-05c')), 'VALIDATION: account_not_allowed%');
   perform t_record('MC05 cash never lands in a bank account, an account of another branch is refused, the platform takes no account',
     r1 = 'ok' and r2 = 'ok' and r3 = 'ok', r1 || ' / ' || r2 || ' / ' || r3);
 end $$;
@@ -113,8 +114,8 @@ do $$ declare r1 text; r2 text; begin
 end $$;
 do $$ declare r1 text; res jsonb; r2 text; begin
   perform fn_admin_archive_cash_account(t_id('cash10'), true, 'اختبار: بلا صندوق افتراضي');
-  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'idempotency_key','mc-06a')), 'VALIDATION: account_required%');
-  r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','cash', 'account_id', t_id('cash10'), 'idempotency_key','mc-06b')), 'VALIDATION: account_archived%');
+  r1 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'idempotency_key','mc-06a')), 'VALIDATION: account_required%');
+  r2 := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','cash', 'account_id', t_id('cash10'), 'idempotency_key','mc-06b')), 'VALIDATION: account_archived%');
   res := fn_admin_archive_cash_account(t_id('cash10'), false, 'إعادة');
   perform fn_admin_upsert_cash_account(jsonb_build_object('id', t_id('cash10'), 'name', 'الصندوق الرئيسي', 'is_default', true, 'version', t_ver('cash_accounts', t_id('cash10'))));
   perform t_record('MC06 with no default and no account a cash receipt is refused with a clear reason; an archived box is refused; restoring brings it back',
@@ -149,7 +150,7 @@ do $$ declare r jsonb; used bigint; refused text; back text; begin
   back := t_fails(format('select fn_admin_archive_cash_account(%L, false, %L)', t_id('bank10'), 'إعادة'), 'ACCOUNT_EXISTS%');
   r := fn_admin_archive_cash_account(t_id('bank10b'), true, 'أُغلق الحساب');
   used := t_count(format('select count(*) from financial_vouchers where account_id = %L', t_id('bank10b')));
-  refused := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 100, 'method','pos', 'reference','TRX-7002', 'account_id', t_id('bank10b'), 'idempotency_key','mc-08a')), 'VALIDATION: account_archived%');
+  refused := t_fails(format('select fn_create_voucher(%L::jsonb)', jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 100, 'method','pos', 'reference','TRX-7002', 'account_id', t_id('bank10b'), 'idempotency_key','mc-08a')), 'VALIDATION: account_archived%');
   perform t_record('MC08 a used account is archived with its reason, keeps its vouchers, is no longer offered, and the change is audited; an archived one returns only when none is in use',
     (r->>'used_by_vouchers')::int >= 1 and used >= 1 and refused = 'ok' and back = 'ok' and (r->>'default_missing')::boolean
     and (select archived_at is not null from cash_accounts where id = t_id('bank10b'))
@@ -191,12 +192,12 @@ set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare p jsonb; begin
   -- what other suites already put on this account today is the baseline; this suite adds to it
-  p := fn_pos_settlement_preview('00000000-0000-0000-0000-000000000010', t_id('bank10'), fn_branch_today('00000000-0000-0000-0000-000000000010'));
+  p := fn_pos_settlement_preview('00000000-0000-0000-0000-000000000010', t_id('bank10'), t_today('00000000-0000-0000-0000-000000000010'));
   insert into nums values ('pos_total0', (p->>'system_total_halalas')::bigint), ('pos_count0', (p->>'voucher_count')::bigint);
 end $$;
-do $$ declare p jsonb; s jsonb; s2 jsonb; nonote text; d date := fn_branch_today('00000000-0000-0000-0000-000000000010'); refund_id uuid; begin
+do $$ declare p jsonb; s jsonb; s2 jsonb; nonote text; d date := t_today('00000000-0000-0000-0000-000000000010'); refund_id uuid; begin
   -- today on the default bank account: 50.00 (MC02) + 25.00 + a refund of 10.00 by terminal
-  perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'amount_halalas', 2500, 'method','pos', 'reference','TRX-9001', 'idempotency_key','mc-10a'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', t_id('res'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 2500, 'method','pos', 'reference','TRX-9001', 'idempotency_key','mc-10a'));
   reset role;
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000001', false);
   perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000001', 'email', 'owner@test.local')::text, false);
@@ -228,7 +229,7 @@ do $$ declare r1 text; r2 text; begin
   perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000001', 'email', 'owner@test.local')::text, false);
   set role authenticated;
   r2 := t_fails(format('select fn_pos_settle(%L::jsonb)', jsonb_build_object('branch_id','00000000-0000-0000-0000-000000000010', 'account_id', t_id('bank10'),
-                  'business_date', fn_branch_today('00000000-0000-0000-0000-000000000010') + 1, 'terminal_total_halalas', 0)), 'VALIDATION: business_date%');
+                  'business_date', t_today('00000000-0000-0000-0000-000000000010') + 1, 'terminal_total_halalas', 0)), 'VALIDATION: business_date%');
   perform t_record('MC11b housekeeping cannot see the settlement; a day that has not come yet cannot be settled', r1 = 'ok' and r2 = 'ok', r1 || ' / ' || r2);
 end $$;
 reset role;
@@ -242,7 +243,7 @@ do $$ declare u jsonb; c jsonb; nonote text; mixed text; after jsonb; v2 jsonb; 
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000001', false);
   perform set_config('request.jwt.claims', json_build_object('sub', 'a0000000-0000-0000-0000-000000000001', 'email', 'owner@test.local')::text, false);
   set role authenticated;
-  v2 := fn_create_voucher(jsonb_build_object('reservation_id', t_id('resOTA2'), 'kind','receipt', 'amount_halalas', 30000, 'method','ota_deferred', 'idempotency_key','mc-12a'));
+  v2 := fn_create_voucher(jsonb_build_object('reservation_id', t_id('resOTA2'), 'kind','receipt', 'received_confirmed', true, 'amount_halalas', 30000, 'method','ota_deferred', 'idempotency_key','mc-12a'));
   insert into ids values ('vOta2', (v2->>'voucher_id')::uuid);
   reset role;
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000004', false);

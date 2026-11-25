@@ -1,0 +1,7 @@
+# Guest checkout response identity
+
+RPC36standalonereviewed0070fn_guest_checkout->fn_checkout_offer(fn_token_reservation). CanonicalPG16iso_credit1745,52assertions0fail,2hotels own+decoysyntheticrows; matching/noheaderbearer exactroom/balance/deposit/status/date/open/instructions, decoyidentity, invalid/expired/suspended/foreignheadernegatives, allpublictablecontenthashno-write. Directsyntheticfinancefieldsnotreceipt/ledgerfixture. Latehours/extension/nextarrivalfields unasserted. Wrongfixedtargetresponsemutantfails22/52, functionrestoredbyrollback. Bothwholeproofsrollbackfixtures.
+
+Correctedgenericadapterincorrectmutates=true/update tofalse/read, preservingweak genericstatus rather than launderingstandaloneproofintoengineacceptance. Sharedboundedfreshchecker now includesstandalonereadproof, syntax/staticinventorypass. No broaderguestexceptions/P0PASS.
+
+Freshdependencyproof1857: NEWiso_candidate_guest1857withallmigrationsincl0115/0116; sharedboundedcheckerpassesbranch79,guestmutator116,newguestcheckout52,engineprovenance/publicoracle,44units/staticinventory. Sourcee773be5cleanatstart, noallfamilyfixturepreload. Evidence/tmp/roomai-guest-fresh1857, retainedlocalDB. Notfullreleaseverification.

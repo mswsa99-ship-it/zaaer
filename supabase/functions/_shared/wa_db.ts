@@ -61,7 +61,7 @@ export function dbPorts(db: Db, ch: WaBranch, c: WaContact, send: (payload: Reco
 
     async bookings() {
       if (!c.phone) return { token: "", list: [] };                 // a hidden number: nothing is looked up
-      const { data: token } = await db.rpc("fn_whatsapp_phone_session", { p_phone: c.phone });
+      const { data: token } = await db.rpc("fn_whatsapp_phone_session", { p_phone: c.phone, p_branch: ch.branch_id });
       if (!token) return { token: "", list: [] };
       const { data } = await db.rpc("fn_guest_phone_reservations", { p_token: token });
       return { token: String(token), list: ((data?.reservations ?? []) as WaBooking[]) };

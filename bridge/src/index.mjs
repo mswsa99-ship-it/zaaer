@@ -1,5 +1,5 @@
 /**
- * زائر — ربط واتساب الفرع بكمبيوتر الاستقبال (WhatsApp Web)
+ * RoomAI | ربط واتساب الفرع بكمبيوتر الاستقبال (WhatsApp Web)
  *
  * Opens WhatsApp Web in the computer's own Chrome/Edge (a visible window: scan the QR once from the branch phone,
  * then it stays linked), reads every new guest message, and types the system's answer like an employee would.

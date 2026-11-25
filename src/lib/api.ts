@@ -154,6 +154,9 @@ export const VALIDATION_AR: Record<string, string> = {
   shomoos_guest_count: "تغيّر عدد النزلاء بعد تسجيل شموس؛ حدِّث التسجيل أولًا.",
   first_night_unpaid: "الليلة الأولى غير مدفوعة كاملة.",
   deposit_reason: "التأمين لم يُستلم كاملًا: اكتب سبب ذلك.",
+  // M1 (plan 4.1): the arrival's vouchers — an explicit «استلمت», and never more than the shortage
+  received_confirm: "أكّد «استلمت المبلغ فعلًا» قبل تسجيل السند.",
+  amount_exceeds_short: "المبلغ أكبر من المطلوب قبل الوصول؛ لا يقبل سند الوصول أكثر من قيمة النقص.",
   deposit_refund_before_checkout: "يُرد تأمين الإقامة بعد تسجيل المغادرة وفحصها.",
   inspection_result: "اختر نتيجة الفحص: سليمة أو بملاحظات.",
   inspection_notes: "اكتب ملاحظات الفحص.",
@@ -224,7 +227,7 @@ export const VALIDATION_AR: Record<string, string> = {
   enabled: "قيمة التشغيل غير صحيحة.",
   attachments_count: "خمسة مرفقات على الأكثر للسند.",
   attachment: "تعذّرت قراءة المرفق؛ اختره من جديد.",
-  attachment_too_large: "حجم المرفق أكبر من 2 ميجابايت.",
+  attachment_too_large: "حجم المرفق أكبر من 10 ميجابايت.",
   attachment_type: "المرفق صورة (PNG أو JPEG أو WebP) أو ملف PDF فقط.",
   category: "اختر تصنيف المصروف.",
   description: "اكتب وصف المصروف (500 حرف على الأكثر).",
@@ -335,7 +338,7 @@ export const VALIDATION_AR: Record<string, string> = {
   instructions_first: "اقرأ تعليمات المغادرة أولًا، ثم اختر «غادرت وسلّمت المفتاح».",
   free_hour_over: "انتهى وقت الخروج المجاني: كل ساعة تبدأ بعده خروج متأخر. اختر الساعات، أو غادر وأبلغنا فتُحسب الساعات التي بدأت.",
   not_departure_day: "إبلاغ المغادرة يُتاح يوم المغادرة. إن كنت ستغادر قبل موعدك فتواصل مع الاستقبال.",
-  import_unmarked: "لم يُحذف شيء: لم يُعثر على نزلاء معلَّمين بأنهم مستوردون من زائر رغم وجود ملفات من أيام الاستيراد. تواصل مع الدعم الفني قبل المسح.",
+  import_unmarked: "لم يُحذف شيء: لم يُعثر على نزلاء معلَّمين بأنهم من النزلاء المستوردين المحميين رغم وجود ملفات من أيام الاستيراد. تواصل مع الدعم الفني قبل المسح.",
   extension_status: "تغيّرت حالة الطلب (دُفع أو أُلغي)؛ حدّث القائمة.",
   via: "مصدر الطلب غير صحيح.",
   review_marks: "قيّم الدرجة العامة وكل جانب من الجوانب الستة من 1 إلى 10.",
@@ -877,7 +880,7 @@ export interface ProductMenu { categories: MenuCategory[]; stays: Array<{ id: st
 export const productsApi = {
   admin: () => rpc<ProductsAdmin>("fn_admin_products", {}),
   upsertCategory: (p: { id?: string; name: string; sort_order?: number; is_active?: boolean; version?: number }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_product_category", { p }),
-  upsertProduct: (p: { id?: string; category_id: string; name: string; description?: string | null; price_halalas: number; taxable?: boolean; is_active?: boolean; sort_order?: number; version?: number }) =>
+  upsertProduct: (p: { id?: string; category_id: string; name: string; description?: string | null; price_halalas: number; taxable?: boolean; is_active?: boolean; sort_order?: number; version?: number; branches?: string[] }) =>
     rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_product", { p }),
   setBranch: (productId: string, branchId: string, available: boolean) => rpc<{ ok: boolean }>("fn_admin_set_product_branch", { p_product: productId, p_branch: branchId, p_available: available }),
   orders: (branchId: string, status: ProductOrderStatus | null, days: number) => rpc<ProductOrder[]>("fn_staff_product_orders", { p_branch: branchId, p_status: status, p_days: days }),

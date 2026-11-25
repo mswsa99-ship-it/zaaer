@@ -58,40 +58,40 @@ export default function CheckIn() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-8 lg:py-12">
-      <Link to={`/booking/status/${token}`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("حالة الحجز", "Booking status")}</Link>
+      <Link to={`/booking/status/${token}`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-rai-ink-muted hover:text-rai-ink-muted">{en ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />} {t("حالة الحجز", "Booking status")}</Link>
 
       <div className="mb-6 text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-500/10 text-accent-700"><KeyRound className="h-7 w-7" /></div>
-        <h1 className="text-2xl font-bold text-ink-800">{t("رمز صندوق المفتاح", "Key-box code")}</h1>
-        <p className="mt-2 text-sm text-ink-500">{t("يُعرض الرمز فقط بعد استيفاء جميع شروط تسليم الرمز واعتماد المشرف، ويختفي تلقائيًا بعد دقيقة.", "The code shows only when every entry condition is met and the reception has approved it. It hides itself after one minute.")}</p>
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-rai-spark-tint text-rai-spark-text"><KeyRound className="h-7 w-7" /></div>
+        <h1 className="text-2xl font-bold text-rai-ink">{t("رمز صندوق المفتاح", "Key-box code")}</h1>
+        <p className="mt-2 text-sm text-rai-ink-muted">{t("يُعرض الرمز فقط بعد استيفاء جميع شروط تسليم الرمز واعتماد المشرف، ويختفي تلقائيًا بعد دقيقة.", "The code shows only when every entry condition is met and the reception has approved it. It hides itself after one minute.")}</p>
       </div>
 
       {eligible ? (
         <Card className="text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-success-600" />
+          <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-rai-success" />
           {code ? (
             <div className="my-6">
-              <p className="text-xs text-ink-400">{t(`وحدة ${code.room} — رمز الصندوق`, `Unit ${code.room} — key-box code`)}</p>
-              <p className="mt-2 select-all text-4xl font-bold tracking-[0.5em] text-brand-700" dir="ltr">{code.code}</p>
-              <p className="mt-3 text-xs text-warning-700">{t("الرمز خاص بك؛ يُرجى عدم مشاركته. سيُغيَّر بعد مغادرتك.", "Do not share the code. It is changed after you leave.")}</p>
+              <p className="text-xs text-rai-ink-muted">{t(`وحدة ${code.room} — رمز الصندوق`, `Unit ${code.room} — key-box code`)}</p>
+              <p className="mt-2 select-all text-4xl font-bold tracking-[0.5em] text-rai-action-ink" dir="ltr">{code.code}</p>
+              <p className="mt-3 text-xs text-rai-warning">{t("الرمز خاص بك؛ يُرجى عدم مشاركته. سيُغيَّر بعد مغادرتك.", "Do not share the code. It is changed after you leave.")}</p>
               <button onClick={() => setCode(null)} className="btn-outline mt-4 text-xs"><EyeOff className="h-3.5 w-3.5" /> {t("إخفاء", "Hide")}</button>
             </div>
           ) : (
             <>
-              <p className="text-sm text-ink-600">{t("جميع شروط تسليم الرمز مستوفاة. عرض رمز الصندوق:", "All entry conditions are met. Tap to show the key-box code.")}</p>
+              <p className="text-sm text-rai-ink-muted">{t("جميع شروط تسليم الرمز مستوفاة. عرض رمز الصندوق:", "All entry conditions are met. Tap to show the key-box code.")}</p>
               <button onClick={reveal} disabled={revealing} className="btn-accent mt-5">{revealing ? <Spinner /> : <><KeyRound className="h-4 w-4" /> {t("عرض الرمز", "Show the code")}</>}</button>
             </>
           )}
         </Card>
       ) : (
-        <Card className="border-danger-500/30">
+        <Card className="border-rai-line-strong">
           <div className="flex items-start gap-3">
-            <Lock className="mt-0.5 h-6 w-6 shrink-0 text-danger-500" />
+            <Lock className="mt-0.5 h-6 w-6 shrink-0 text-rai-danger" />
             <div>
-              <p className="text-sm font-semibold text-ink-800">{t("لا يمكن عرض الرمز حاليًا", "The code cannot be shown yet")}</p>
-              <p className="mt-1 text-xs text-ink-500">{t("يجب استيفاء الشروط التالية واعتماد المشرف:", "Still needed, then approval by the reception:")}</p>
+              <p className="text-sm font-semibold text-rai-ink">{t("لا يمكن عرض الرمز حاليًا", "The code cannot be shown yet")}</p>
+              <p className="mt-1 text-xs text-rai-ink-muted">{t("يجب استيفاء الشروط التالية واعتماد المشرف:", "Still needed, then approval by the reception:")}</p>
               <ul className="mt-3 space-y-1.5">
-                {reasons.map((r, i) => <li key={i} className="flex items-start gap-2 text-xs text-danger-600"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {en ? reasonEn(r) : r}</li>)}
+                {reasons.map((r, i) => <li key={i} className="flex items-start gap-2 text-xs text-rai-danger"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {en ? reasonEn(r) : r}</li>)}
               </ul>
             </div>
           </div>

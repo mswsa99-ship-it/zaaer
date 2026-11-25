@@ -1,0 +1,168 @@
+
+ RUN  v2.1.9 /tmp/roomai-h-wt
+
+ ❯ tests/unit/contract.test.ts (12 tests | 1 failed) 46ms
+   × UI ↔ SQL ↔ demo contract > every RPC the UI calls is emulated by the demo backend 6ms
+     → RPCs called from src/ but missing in src/demo/client.ts rpcs map: fn_backup_status: expected [ 'fn_backup_status' ] to deeply equal []
+ ❯ tests/unit/tenancy.test.ts (6 tests | 1 failed) 220ms
+   × TN — every table belongs to the platform, a hotel or a branch > TN01 every table a migration creates (and none drops) is classified once, and nothing else is 7ms
+     → expected [ 'access_delivery_events', …(109) ] to deeply equal [ 'access_delivery_events', …(110) ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/contract.test.ts > UI ↔ SQL ↔ demo contract > every RPC the UI calls is emulated by the demo backend
+AssertionError: RPCs called from src/ but missing in src/demo/client.ts rpcs map: fn_backup_status: expected [ 'fn_backup_status' ] to deeply equal []
+
+- Expected
++ Received
+
+- Array []
++ Array [
++   "fn_backup_status",
++ ]
+
+ ❯ tests/unit/contract.test.ts:44:112
+     42|   it("every RPC the UI calls is emulated by the demo backend", () => {
+     43|     const missing = rpcCallsInUi.filter((f) => !rpcDefinedInDemo.has(f…
+     44|     expect(missing, `RPCs called from src/ but missing in src/demo/cli…
+       |                                                                                                                ^
+     45|   });
+     46|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/unit/tenancy.test.ts > TN — every table belongs to the platform, a hotel or a branch > TN01 every table a migration creates (and none drops) is classified once, and nothing else is
+AssertionError: expected [ 'access_delivery_events', …(109) ] to deeply equal [ 'access_delivery_events', …(110) ]
+
+- Expected
++ Received
+
+  Array [
+    "access_delivery_events",
+    "access_release_requests",
+    "accounting_periods",
+    "ai_action_proposals",
+    "ai_branch_usage_daily",
+    "ai_guardrail_events",
+    "ai_guest_session_usage",
+    "ai_guest_usage_daily",
+    "ai_ops_conversations",
+    "ai_ops_messages",
+    "ai_settings",
+    "ai_tool_executions",
+    "ai_usage_daily",
+    "alert_events",
+    "alert_rules",
+    "audit_events",
+-   "backup_runs",
+    "bank_mail_settings",
+    "bank_match_items",
+    "bank_matches",
+    "bank_messages",
+    "bank_movements",
+    "bank_parse_rules",
+    "blocks",
+    "booking_sources",
+    "branch_journey_settings",
+    "branch_media",
+    "branch_media_items",
+    "branch_memberships",
+    "branch_payment_settings",
+    "branch_whatsapp_channels",
+    "branches",
+    "cash_accounts",
+    "checkout_inspections",
+    "client_errors",
+    "code_rotation_events",
+    "conversation_messages",
+    "conversations",
+    "data_purge_requests",
+    "day_closing_lines",
+    "day_closing_requests",
+    "day_closings",
+    "discount_approvals",
+    "document_sequences",
+    "expense_attachments",
+    "expense_categories",
+    "expense_vouchers",
+    "facilities",
+    "finance_control_settings",
+    "financial_vouchers",
+    "floors",
+    "gl_accounts",
+    "guest_bans",
+    "guest_lookup_attempts",
+    "guest_phone_challenges",
+    "guest_phone_optouts",
+    "guest_phone_sessions",
+    "guest_profiles",
+    "guest_reviews",
+    "housekeeping_tasks",
+    "human_handoff_tickets",
+    "integration_events",
+    "inventory_periods",
+    "invoices",
+    "journal_entries",
+    "journal_lines",
+    "journey_messages",
+    "journey_ticks",
+    "keyboxes",
+    "knowledge_entries",
+    "maintenance_tickets",
+    "monitor_runs",
+    "notifications",
+    "organizations",
+    "payment_transactions",
+    "platform_events",
+    "platform_operators",
+    "platform_payouts",
+    "platform_support_grants",
+    "pos_settlements",
+    "product_branches",
+    "product_categories",
+    "product_order_lines",
+    "product_orders",
+    "products",
+    "property_policies",
+    "rate_calendar",
+    "registration_sessions",
+    "release_rules",
+    "released_slots",
+    "reservation_allocations",
+    "reservation_charges",
+    "reservation_guests",
+    "reservation_nights",
+    "reservations",
+    "review_items",
+    "role_permissions",
+    "room_categories",
+    "room_licenses",
+    "rooms",
+    "service_definitions",
+    "staff_profiles",
+    "staff_saved_views",
+    "stay_acknowledgements",
+    "stay_extension_requests",
+    "stay_payment_exceptions",
+    "system_settings",
+    "task_types",
+    "unanswered_questions",
+    "whatsapp_inbound_messages",
+    "whatsapp_outbox",
+  ]
+
+ ❯ tests/unit/tenancy.test.ts:41:35
+     39| describe("TN — every table belongs to the platform, a hotel or a branc…
+     40|   it("TN01 every table a migration creates (and none drops) is classif…
+     41|     expect(Object.keys(T).sort()).toEqual(tables);
+       |                                   ^
+     42|   });
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 16 passed (18)
+   Start at  09:09:37
+   Duration  716ms (transform 58ms, setup 0ms, collect 110ms, tests 265ms, environment 0ms, prepare 133ms)
+

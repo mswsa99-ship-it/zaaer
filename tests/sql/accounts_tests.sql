@@ -1,3 +1,4 @@
+\i tests/sql/audit_oracle.sql
 -- =====================================================================
 -- Accounts (AC*; migration 0074): the security events a signed-in staff member records — own sign-in, sign-out and
 -- password change; a reset link or an invitation for a colleague only within what the caller may manage — filed
@@ -47,7 +48,7 @@ do $$ declare r jsonb; e audit_events%rowtype; begin
   exception when others then perform ac_record('AU02 only the listed security events can be recorded', sqlerrm = 'VALIDATION: action', sqlerrm);
   end;
   r := fn_auth_event('security.signed_in', null);
-  select * into e from audit_events where action = 'security.signed_in' and actor_id = '10000000-0000-0000-0000-000000000001' order by created_at desc limit 1;
+  select * into e from t_audit_all() where action = 'security.signed_in' and actor_id = '10000000-0000-0000-0000-000000000001' order by created_at desc limit 1;
   perform ac_record('AU03 the owner''s sign-in is filed under «security» on their own profile, with the first forwarded IP and the browser',
     (r->>'ok')::boolean and e.category = 'security' and e.entity_type = 'staff_profile' and e.entity_id = '10000000-0000-0000-0000-000000000001'
     and e.details->>'ip' = '203.0.113.7' and e.details->>'user_agent' = 'AC-test-browser' and e.actor_type = 'staff', r::text);
@@ -80,7 +81,7 @@ do $$ declare ok1 boolean; e1 text; e2 text; e3 text; begin
 end $$;
 reset role;
 select ac_record('AU05b the link is recorded on the colleague''s profile with their name',
-  exists (select 1 from audit_events where action = 'security.password_link_sent' and entity_id = '10000000-0000-0000-0000-000000000002'
+  exists (select 1 from t_audit_all() where action = 'security.password_link_sent' and entity_id = '10000000-0000-0000-0000-000000000002'
             and actor_id = '10000000-0000-0000-0000-0000000074a6' and details->>'target_name' = 'مشرف'));
 
 -- ---------------------------------------------------------------- AU06 at most 60 security events an hour
@@ -95,7 +96,7 @@ do $$ declare r jsonb; begin
 exception when others then perform ac_record('AU06a the 61st security event within an hour is skipped', false, sqlerrm);
 end $$;
 reset role;
-select ac_record('AU06b and is not stored', (select count(*) from audit_events where actor_id = '10000000-0000-0000-0000-000000000004' and action = 'security.signed_in') = 60);
+select ac_record('AU06b and is not stored', (select count(*) from t_audit_all() where actor_id = '10000000-0000-0000-0000-000000000004' and action = 'security.signed_in') = 60);
 
 -- ---------------------------------------------------------------- AU07 who has an account, and the last sign-in
 select ac_login('a0000000-0000-0000-0000-000000000001');
@@ -147,7 +148,8 @@ select ac_login('a0000000-0000-0000-0000-0000000074a6');
 set role authenticated;
 do $$ begin
   perform ac_record('AU11 the security events are not visible to a manager (category «security» is the owner''s)',
-    not exists (select 1 from audit_events where action like 'security.%'), null);
+    coalesce((fn_audit_list('{"category":"security"}'::jsonb)->>'total')::int, -1) = 0
+    and coalesce((fn_audit_list('{}'::jsonb)->>'total')::int, 0) > 0, null);  -- the manager's own view through the permitted RPC
 end $$;
 reset role;
 

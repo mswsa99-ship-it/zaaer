@@ -1,3 +1,5 @@
+import { financeControlRpcs } from "./financeControls";
+import type { FinanceControls } from "../lib/financeControls";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * In-browser demo backend. Implements the slice of the Supabase client the UI uses
@@ -6,6 +8,10 @@
  * roles, ledger-derived money, allocation overlap, idempotency) so the walkthrough behaves
  * like the real system. Nothing here talks to a server.
  */
+import { platformRpcs, DEMO_OPERATOR } from "./platform";
+import { mayResumeConversation } from "../../supabase/functions/_shared/reception_scope";
+import { hashToken } from "./journey";
+import { currentGuestScope } from "../lib/guestScope";
 import { seed, uid, todayISO, addDays, nowISO, ORG, STAFF, type Row, type Store } from "./data";
 import { scriptedReply, normalizeArabic } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
@@ -25,7 +31,7 @@ import { makePermissions, permissionRpcs } from "./permissions";
 
 const KEY = "zaaer_demo_store_v9";
 /** seed() + the modules that add their own tables (keeps data.ts free of import cycles) */
-function fullSeed(): Store { const s = seed(); s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); seedJourney((t) => (s[t] ??= [])); return s; }
+function fullSeed(): Store { const s = seed(); s.platform_operators=[{auth_user_id:DEMO_OPERATOR.auth,full_name:"مشغّل تجريبي",is_active:true}]; s.knowledge_entries ??= []; s.unanswered_questions ??= []; seedKnowledge((t) => (s[t] ??= []), STAFF.supervisor.id); seedBank((t) => (s[t] ??= [])); seedProducts((t) => (s[t] ??= []), (s.branches ?? []).map((b: Row) => b.id)); seedJourney((t) => (s[t] ??= [])); return s; }
 const SESSION_KEY = "zaaer_demo_session";
 
 // ---------------------------------------------------------------------------
@@ -71,7 +77,7 @@ type Session = { user: { id: string; email: string }; access_token: string; sign
 let session: Session = (() => { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null"); } catch { return null; } })();
 const authListeners = new Set<(e: string, s: Session) => void>();
 function setSession(s: Session) { session = s; try { if (s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } for (const l of authListeners) l(s ? "SIGNED_IN" : "SIGNED_OUT", s); }
-const DEMO_ACCOUNTS = Object.values(STAFF);
+const DEMO_ACCOUNTS = [...Object.values(STAFF),DEMO_OPERATOR];
 /** when a new session of this account opens: now, and strictly after any end the owner set on the person's sessions (fn_end_sessions) */
 function newSessionAt(authUserId: string): string { const sp = T("staff_profiles").find((s) => s.auth_user_id === authUserId); const ended = sp?.sessions_ended_at ? Date.parse(sp.sessions_ended_at) + 1 : 0; return new Date(Math.max(Date.now(), ended)).toISOString(); }
 
@@ -83,7 +89,7 @@ function me(): Row | null {
   const s = T("staff_profiles").find((x) => x.auth_user_id === session!.user.id && x.is_active);
   // fn_session_ok (0040, decision 34): a session ended by a forced sign-out or a deactivation is refused on its next
   // request, whatever token it still holds; a session without the mark (signed in before the rule) has nothing to check
-  if (!s || (s.sessions_ended_at && session.signed_in_at && Date.parse(s.sessions_ended_at) >= Date.parse(session.signed_in_at))) return null;
+  if (!s || byId("organizations",s.organization_id)?.platform_status === "suspended" || (s.sessions_ended_at && session.signed_in_at && Date.parse(s.sessions_ended_at) >= Date.parse(session.signed_in_at))) return null;
   return s;
 }
 /** fn_user_branch_ids: the owner is on every branch; the others on their live memberships (a retired one, removed_at set, no longer counts) */
@@ -133,7 +139,8 @@ let requestHeaders: Record<string, string> | null = null;
 /**
  * Test hook (end-to-end tests only): `window.__demoLatency(target, detail)` returns a delay in ms for a read
  * (target = table name, detail = its filters such as "branch_id=…") or an RPC (target = "rpc:<name>", detail = its
- * arguments as JSON), so a test can replay a slow or out-of-order answer. Unset → no delay.
+ * arguments as JSON) or an Edge Function call (target = "fn:<name>", detail = its body as JSON), so a test can
+ * replay a slow or out-of-order answer. Unset → no delay.
  */
 function demoLatency(target: string, detail: string[]): number {
   const f = (globalThis as { __demoLatency?: (t: string, d: string[]) => unknown }).__demoLatency;
@@ -141,8 +148,8 @@ function demoLatency(target: string, detail: string[]): number {
   try { const n = Number(f(target, detail)); return Number.isFinite(n) && n > 0 ? Math.min(n, 10_000) : 0; } catch { return 0; }
 }
 /** Test hook (end-to-end tests only): `window.__demoFail(target, detail)` returns an error message to make that read
- *  (target = table) or RPC (target = "rpc:<name>") fail, so a test can show a failed load next to an empty one (U04)
- *  or a failed save (U01). Unset → nothing fails. */
+ *  (target = table) or RPC (target = "rpc:<name>") or Edge Function call (target = "fn:<name>") fail, so a test can
+ *  show a failed load next to an empty one (U04) or a failed save (U01). Unset → nothing fails. */
 function demoFailure(target: string, detail: string[]): string | null {
   const f = (globalThis as { __demoFail?: (t: string, d: string[]) => unknown }).__demoFail;
   if (typeof f !== "function") return null;
@@ -266,6 +273,7 @@ type Filter = (r: Row) => boolean;
  *  0043: the matrix's rows decide the rest — «السياسات» (property_policies), «تولّي محادثة واتساب» (a staff reply and taking
  *  a conversation); role_permissions is written only through fn_admin_set_permissions / fn_admin_reset_permissions. */
 const WRITE_RULES: Record<string, () => boolean> = {
+  platform_operators:()=>false, platform_events:()=>false, platform_support_grants:()=>false,
   booking_sources: () => false, staff_profiles: () => false, inventory_periods: () => false, release_rules: () => false, branch_media_items: () => false, branch_payment_settings: () => false,   // 0055: through fn_admin_set_inventory / fn_admin_upsert_release_rule
   branch_memberships: () => false, staff_saved_views: () => false, role_permissions: () => false,
   room_licenses: () => false,   // 0075: written only through fn_admin_set_room_license
@@ -275,12 +283,24 @@ const WRITE_RULES: Record<string, () => boolean> = {
   property_policies: () => can("policies"), conversations: () => can("conversation.take"), conversation_messages: () => can("conversation.take"),
 };
 const BRANCH_TABLES = new Set(["rooms", "reservations", "housekeeping_tasks", "facilities", "blocks", "floors", "task_types", "service_definitions", "room_categories", "maintenance_tickets", "property_policies", "inventory_periods", "release_rules", "released_slots", "keyboxes", "financial_vouchers", "reservation_charges", "invoices", "reservation_allocations", "human_handoff_tickets", "notifications"]);
+/** Same public address selector as SQL. A missing/unknown address never chooses among several hotels. */
+function guestOrg(): string | null {
+ const scope=currentGuestScope();
+ if(scope.slug) return T("organizations").find(o=>o.platform_status!=="suspended" && (o.guest_slug ?? o.id)===scope.slug)?.id ?? null;
+ if(scope.token) { const x=T("registration_sessions").find(s=>s.token===scope.token && Date.parse(s.expires_at)>Date.now()); const id=byId("reservations",x?.reservation_id)?.organization_id ?? T("guest_reviews").find(g=>g.token_hash===hashToken(scope.token!))?.organization_id ?? null;return byId("organizations",id)?.platform_status==="suspended"?null:id; }
+ const live=T("organizations").filter(o=>o.platform_status!=="suspended" && T("branches").some(b=>b.organization_id===o.id && b.is_active && !b.archived_at));
+ return live.length===1 ? live[0].id : null;
+}
 /** Mirrors the row-level security of the real schema closely enough for the walkthrough. */
 function visible(table: string, r: Row): boolean {
   const m = me(); const branches = myBranches();
-  if (table === "branches") return !m || branches.includes(r.id);
-  if (table === "property_policies" && !m) return !!r.is_public;
-  if (table === "booking_sources" || table === "organizations" || table === "system_settings") return true;
+  if (["platform_operators","platform_events","platform_support_grants"].includes(table)) return false;
+  if (m && r.organization_id && r.organization_id!==m.organization_id) return false;
+  if (table === "branches") return m ? branches.includes(r.id) : r.organization_id===guestOrg() && !!r.is_active && !r.archived_at;
+  if (table === "property_policies" && !m) return !!r.is_public && r.organization_id===guestOrg();
+  if(table === "booking_sources" && !m) return r.organization_id===guestOrg() && !!r.is_active;
+  if (table === "organizations") return m ? r.id===m.organization_id : r.id===guestOrg();
+  if (table === "booking_sources" || table === "system_settings") return !!m && r.organization_id===m.organization_id;
   if (!m) return false;
   if (table === "staff_saved_views") return r.staff_id === m.id;   // own rows only (0040)
   // 0043: the money tables follow fn_sees_money (any money cell of the matrix); the guests of a stay keep their fixed roles
@@ -544,14 +564,24 @@ const guestCtx = {
   atomically: <V,>(fn: () => V): V => atomically(fn),
 };
 const rpcs: Record<string, (a: any) => any> = {
+  fn_authorize_export: () => undefined,
+  fn_owner_save_permission_draft: () => { throw new Error("Draft-only preview: no server persistence in demo"); },
+  // 7.1: no synthetic success dates. Demo mirrors owner-only empty recorded state.
+  fn_backup_status: () => { requireRole("owner"); return { last_success: null, last_run: null, last_restore_drill: null, failures_since_last_success: 0 }; },
   fn_staff_id: () => staffId(),
   fn_user_branch_ids: () => myBranches(),
-  fn_claim_staff_profile: () => ({ ok: true, claimed: true }),
+  fn_claim_staff_profile: () => {
+    if(T("platform_operators").some(o=>o.auth_user_id===session?.user.id))return{ok:false,error:"PLATFORM_ACCOUNT"};
+    const pending=T("staff_profiles").find(s=>!s.auth_user_id&&s.is_active&&s.role!=="owner"&&String(s.email).toLowerCase()===session?.user.email.toLowerCase()&&byId("organizations",s.organization_id)?.platform_status!=="suspended");
+    if(pending){pending.auth_user_id=session!.user.id;emit("staff_profiles");return{ok:true,claimed:true,role:pending.role};}
+    return me()?{ok:true,claimed:false}:{ok:false,error:"NO_INVITATION"};
+  },
   // 0040: a guest is no staff role; the invite re-opens a retired membership instead of a duplicate, and is logged
   fn_staff_invite: ({ p_email, p_full_name, p_role, p_branch_ids }) => rpcs.fn_admin_invite_staff({ p: { email: p_email, full_name: p_full_name, role: p_role, branch_ids: p_branch_ids ?? [] } }),
   // 0055 (SETUP-08): the email checked, a branch for every role but the owner, the phone checked and kept normalised
   fn_admin_invite_staff: ({ p }) => { requireCap("staff.manage"); const q: Row = p ?? {}; const role = String(q.role ?? ""); if (role === "guest" || !["owner", "manager", "supervisor", "finance", "housekeeping"].includes(role)) throw new Error("INVALID_ROLE");
     if (role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
+    if (role === "owner") throw new Error("OWNER_SELF_SIGNUP_REQUIRED");
     if (!perm.roleWithinMine(role)) throw new Error("FORBIDDEN: a role beyond your own");                       // 0046
     const email = String(q.email ?? "").trim().toLowerCase(), name = String(q.full_name ?? "").trim(); if (!email || !name) throw new Error("VALIDATION: email_and_name");
     if (!validEmail(email)) throw new Error("VALIDATION: email"); if (name.length > 120) throw new Error("VALIDATION: full_name");
@@ -562,11 +592,12 @@ const rpcs: Record<string, (a: any) => any> = {
     const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone, role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
     for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
     emit("staff_profiles"); emit("branch_memberships"); audit(null, "staff_invited", "staff_profile", id, { role, branch_ids: branches, phone: !!phone }); return { ok: true, staff_id: id }; },
-  fn_admin_update_ai_settings: ({ p }) => { requireCap("security");
+  fn_admin_update_ai_settings: ({ p }) => { requireRole("owner"); requireCap("security");
     // 0052 (SEC-02): the guard's four numbers keep their ranges
-    const rng: Record<string, [number, number]> = { guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
+    const rng: Record<string, [number, number]> = { guest_otp_after_messages: [1, 100], guest_device_daily_message_limit: [1, 1000], guest_branch_daily_message_limit: [1, 100000], guest_otp_device_hourly_limit: [1, 100], guest_otp_phone_hourly_limit: [1, 200], guest_otp_cooldown_seconds: [10, 3600], guard_repeat_limit: [2, 20], guard_burst_messages: [3, 200], guard_burst_minutes: [1, 120], guard_conversation_tokens: [1000, 1000000] };
     for (const [k, [lo, hi]] of Object.entries(rng)) if (p?.[k] != null && !(Number.isInteger(Number(p[k])) && Number(p[k]) >= lo && Number(p[k]) <= hi)) throw new Error("VALIDATION: ai_guard");
-    Object.assign(T("ai_settings")[0], p, { updated_at: nowISO() }); emit("ai_settings"); return { ok: true }; },
+    const currentOrg=me()?.organization_id; const setting = T("ai_settings").find((x) => x.organization_id === currentOrg);
+    const before = { ...setting }; Object.assign(setting!, p, { updated_at: nowISO() }); emit("ai_settings"); audit(null, "ai_settings_updated", "ai_settings", currentOrg, { before, after: p }); return { ok: true }; },
   fn_definition_dependencies: ({ p_entity, p_id }) => { requireCap("definitions"); return deps(p_entity, p_id); },
 
   // ---- definitions ----
@@ -630,19 +661,19 @@ const rpcs: Record<string, (a: any) => any> = {
     const row = byId("room_categories", res.id)!; row.price_mode ??= "unified"; for (const k of ["weekly_price_halalas", "monthly_price_halalas", "min_nightly_halalas"]) row[k] ??= null;
     return { ...res, stays_over_capacity: cur && oldMax != null && row.max_capacity < oldMax ? capacityImpact(row.id, row.max_capacity).length : 0 };
   },
-  fn_admin_upsert_room: ({ p }) => { requireCap("definitions"); const rows = T("rooms"); let r = p.id ? byId("rooms", p.id) : null; if (p.id && !r) throw new Error("NOT_FOUND");
+  fn_admin_upsert_room: ({ p }) => { requireCap("definitions"); const wantsLicense = "license" in p && !(!p.id && !String(p.license ?? "").trim()); if (wantsLicense) { if (!hasRole("owner", "manager", "supervisor")) throw new Error("FORBIDDEN: licence"); normalizeUnitLicense(p.license); } const rows = T("rooms"); let r = p.id ? byId("rooms", p.id) : null; if (p.id && !r) throw new Error("NOT_FOUND");
     // 0055 (SETUP-06): a unit number is kept with Latin digits — «١٠١» is «101»
     if (p.room_number != null) { p = { ...p, room_number: latinDigits(String(p.room_number)).trim() }; if (p.room_number.length > 20) throw new Error("VALIDATION: room_number"); }
     const branch = r ? r.branch_id : p.branch_id; requireBranch(branch); const cat = p.category_id ?? r?.category_id; const blk = p.block_id === undefined ? r?.block_id ?? null : p.block_id; const flr = p.floor_id === undefined ? r?.floor_id ?? null : p.floor_id;
     if (!cat || byId("room_categories", cat)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: category"); if (blk && byId("blocks", blk)?.branch_id !== branch) throw new Error("BRANCH_MISMATCH: block"); if (flr && (byId("floors", flr)?.branch_id !== branch || (blk && byId("floors", flr)?.block_id !== blk))) throw new Error("BRANCH_MISMATCH: floor");
-    if (!r) { nonEmpty(p.room_number, "room_number"); if (rows.some((x) => x.branch_id === branch && latinDigits(String(x.room_number)) === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER"); r = { id: uid(), branch_id: branch, organization_id: ORG, category_id: cat, block_id: blk, floor_id: flr, room_number: p.room_number.trim(), floor: 1, status: "available", cleanliness: "clean", is_active: p.is_active ?? true, notes: p.notes ?? null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: nowISO(), updated_at: nowISO() }; rows.push(r); emit("rooms"); audit(branch, "room.created", "room", r.id, { after: r }); return { ok: true, id: r.id, version: 1 }; }
+    if (!r) { nonEmpty(p.room_number, "room_number"); if (rows.some((x) => x.branch_id === branch && latinDigits(String(x.room_number)) === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER"); r = { id: uid(), branch_id: branch, organization_id: ORG, category_id: cat, block_id: blk, floor_id: flr, room_number: p.room_number.trim(), floor: 1, status: "available", cleanliness: "clean", is_active: p.is_active ?? true, notes: p.notes ?? null, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: nowISO(), updated_at: nowISO() }; rows.push(r); emit("rooms"); audit(branch, "room.created", "room", r.id, { after: r }); if (wantsLicense) applyRoomLicense(r.id, p.license); return { ok: true, id: r.id, version: 1 }; }
     checkVersion(r.version, p.version); const before = { ...r };
     if (p.is_active === false && r.is_active && guestInHouse(r.id)) throw new Error("ROOM_HAS_GUEST: a guest is in house");
     if (p.is_active === false && r.is_active && T("reservation_allocations").some((a) => a.room_id === r!.id && a.status === "active" && a.to_date > branchToday() && ["confirmed", "checked_in", "pending_verification"].includes(byId("reservations", a.reservation_id)?.status))) throw new Error("HAS_FUTURE_COMMITMENTS");
     if (p.room_number && p.room_number.trim() !== r.room_number && rows.some((x) => x.id !== r!.id && x.branch_id === branch && latinDigits(String(x.room_number)) === p.room_number.trim())) throw new Error("DUPLICATE_ROOM_NUMBER");
     Object.assign(r, { room_number: p.room_number?.trim() || r.room_number, category_id: cat, block_id: blk, floor_id: flr, notes: p.notes ?? r.notes, is_active: p.is_active ?? r.is_active, version: r.version + 1, updated_at: nowISO() });
     if (!r.is_active) r.status = "out_of_service"; else if (r.status === "out_of_service") r.status = "available";
-    emit("rooms"); audit(branch, "room.updated", "room", r.id, { before, after: r }); return { ok: true, id: r.id, version: r.version }; },
+    emit("rooms"); audit(branch, "room.updated", "room", r.id, { before, after: r }); if (wantsLicense) applyRoomLicense(r.id, p.license); return { ok: true, id: r.id, version: r.version }; },
   fn_admin_upsert_facility: ({ p }) => upsertDef("facilities", "facility", p, ["name", "description", "block_id", "floor_id", "images", "is_active"], (x) => nonEmpty(x.name, "name"), ["name"]),
   fn_admin_upsert_task_type: ({ p }) => upsertDef("task_types", "task_type", p, ["name", "description", "is_active"], (x) => nonEmpty(x.name, "name"), ["name"]),
   // a late check-out service moves the departure to its hour: after the branch's check-out time, billed once (0033)
@@ -1169,11 +1200,13 @@ const rpcsMore: Record<string, (a: any) => any> = {
   },
   fn_staff_create_maintenance: ({ p_room, p_title, p_description }) => { requireCap("maintenance.create"); nonEmpty(p_title, "title"); const rm = byId("rooms", p_room); if (!rm) throw new Error("ROOM_NOT_FOUND"); const id = uid(); T("maintenance_tickets").unshift({ id, room_id: p_room, branch_id: rm.branch_id, title: p_title, description: p_description ?? null, status: "open", created_by: staffId(), created_at: nowISO() }); if (!["occupied"].includes(rm.status)) rm.status = "maintenance"; emit("maintenance_tickets"); emit("rooms"); return { ok: true, ticket_id: id }; },
   fn_staff_resolve_maintenance: ({ p_ticket }) => { requireCap("maintenance.resolve"); const t = byId("maintenance_tickets", p_ticket); if (!t) throw new Error("TICKET_NOT_FOUND"); t.status = "resolved"; emit("maintenance_tickets"); const rm = byId("rooms", t.room_id)!; if (rm.status === "maintenance") rm.status = "available"; return { ok: true, room_status: recomputeRoomReady(t.room_id) }; },
-  fn_staff_resolve_ticket: ({ p_ticket }) => { requireCap("maintenance.resolve"); const t = byId("human_handoff_tickets", p_ticket); if (!t) throw new Error("TICKET_NOT_FOUND"); Object.assign(t, { status: "resolved", resolved_by: staffId(), resolved_at: nowISO() }); emit("human_handoff_tickets"); return { ok: true }; },
+  // 0078: the caller's hotel, then the caller's branches or no branch (as the server: another's ticket is not found, ok false)
+  fn_staff_resolve_ticket: ({ p_ticket }) => { requireCap("maintenance.resolve"); const t = byId("human_handoff_tickets", p_ticket); if (!t || t.organization_id !== me()?.organization_id || (t.branch_id && !myBranches().includes(t.branch_id))) return { ok: false }; Object.assign(t, { status: "resolved", resolved_by: staffId(), resolved_at: nowISO() }); emit("human_handoff_tickets"); return { ok: true }; },
   fn_staff_release_next_slot: ({ p_category }) => { requireRole("owner", "manager"); const slot = T("released_slots").find((x) => x.category_id === p_category && x.date === todayISO()); if (slot) slot.released_count++; else T("released_slots").push({ id: uid(), branch_id: byId("room_categories", p_category)?.branch_id, category_id: p_category, date: todayISO(), released_count: 1, updated_at: nowISO() }); emit("released_slots"); return (slot?.released_count ?? 1); },
 
   // ---- gate flow ----
-  fn_evaluate_access: ({ p_reservation }) => [evaluate(p_reservation)],
+  // 0078: an internal helper the app never calls; only the server's own functions use it
+  fn_evaluate_access: () => { throw new Error("permission denied for function fn_evaluate_access"); },
   // the former one-step confirmation: Shomoos now needs its explicit «every guest is registered» (fn_staff_shomoos)
   fn_staff_confirm_gov_registration: ({ p_reservation, p_reference }) => rpcs.fn_staff_shomoos({ p: { reservation_id: p_reservation, action: "register", reference: p_reference, all_guests: false } }),
   fn_staff_assign_room: ({ p_reservation, p_room }) => { requireCap("room.assign"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); if (!["confirmed", "pending_verification"].includes(r.status)) throw new Error("RESERVATION_STATUS_INVALID"); if (T("reservation_allocations").some((a) => a.reservation_id === r.id && a.status === "active")) throw new Error("ALREADY_ALLOCATED"); if (!roomAvailable(p_room, r.check_in, r.check_out)) throw new Error("ROOM_NOT_AVAILABLE"); allocate(r.id, p_room, r.check_in, r.check_out, "assign"); r.version++; audit(r.branch_id, "assign_room", "reservation", r.id, { room_id: p_room }); return { ok: true }; },
@@ -1291,13 +1324,14 @@ const rpcsMore: Record<string, (a: any) => any> = {
 
   // ---- guest ----
   // decision 23: staff only (visitors see no availability)
-  fn_get_public_availability: ({ p_branch, p_date }) => { if (!myBranches().includes(p_branch)) throw new Error("permission denied for function fn_get_public_availability"); return T("room_categories").filter((c) => c.branch_id === p_branch && c.is_public && c.is_active && !c.archived_at).map((c) => { const rooms = T("rooms").filter((r) => r.category_id === c.id && r.is_active && !r.archived_at); const free = rooms.filter((r) => roomAvailablePublic(r.id, p_date, addDays(p_date, 1))).length; return { category_id: c.id, category_name: c.name_ar, base_price_halalas: c.base_price_halalas, base_capacity: c.base_capacity, max_capacity: c.max_capacity, available_to_show: Math.min(free, 2), total_available: free }; }); },
+  // 0078: no one in the app reads it any more (decision 23 for visitors; 2.4 for staff): only the server's own jobs
+  fn_get_public_availability: () => { throw new Error("permission denied for function fn_get_public_availability"); },
   fn_guest_lookup: ({ p_external_ref, p_phone_last4 }) => { const r = T("reservations").find((x) => (x.external_ref ?? "").toLowerCase() === String(p_external_ref).toLowerCase() || x.internal_ref.toLowerCase() === String(p_external_ref).toLowerCase()); if (!r) { T("human_handoff_tickets").unshift({ id: uid(), organization_id: ORG, branch_id: null, conversation_id: null, reservation_id: null, kind: "unmatched_reservation", external_ref: p_external_ref, source_name: null, details: "رقم حجز غير مطابق", status: "open", resolved_by: null, resolved_at: null, created_at: nowISO() }); emit("human_handoff_tickets"); return { status: "unmatched" }; } const g = T("reservation_guests").find((x) => x.reservation_id === r.id && x.is_primary); if (!g?.phone || !g.phone.endsWith(p_phone_last4)) return { status: "mismatch" }; const token = "DEMO" + Math.random().toString(16).slice(2, 14).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: r.id, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return { status: "ok", token }; },
   // phone-first lookup (0020). The demo has no WhatsApp: guest-otp answers channel_unavailable, so the page asks for a booking number
   fn_guest_phone_verify: () => ({ status: "expired" }),
-  fn_guest_phone_verify_ref: ({ p_phone, p_ref }) => { const ph = normPhone(p_phone); if (!ph) return { status: "invalid" }; const ids = phoneReservationIds(ph); const ok = T("reservations").some((r) => ids.includes(r.id) && [r.external_ref, r.internal_ref].some((x) => String(x ?? "").toUpperCase() === String(p_ref ?? "").trim().toUpperCase())); if (!ok) return { status: "mismatch" }; const token = "PH" + Math.random().toString(16).slice(2, 14).toUpperCase(); phoneSessions.set(token, ph); return { status: "ok", token }; },
-  fn_guest_phone_reservations: ({ p_token }) => { const ph = phoneSessions.get(p_token); if (!ph) throw new Error("TOKEN_INVALID"); const ids = phoneReservationIds(ph); return { phone_last4: ph.slice(-4), reservations: T("reservations").filter((r) => ids.includes(r.id)).sort((a, b) => (a.check_in < b.check_in ? -1 : 1)).map((r) => ({ ref: r.external_ref ?? r.internal_ref, internal_ref: r.internal_ref, status: r.status, check_in: r.check_in, check_out: r.check_out, nights: Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000), branch_name: byId("branches", r.branch_id)?.name_ar ?? null, category_name: byId("room_categories", r.room_category_id)?.name_ar ?? null, payment_status: r.payment_status, access_status: r.access_status, identity_status: r.identity_status })) }; },
-  fn_guest_phone_open: ({ p_token, p_internal_ref }) => { const ph = phoneSessions.get(p_token); if (!ph) throw new Error("TOKEN_INVALID"); const r = T("reservations").find((x) => x.internal_ref === p_internal_ref && phoneReservationIds(ph).includes(x.id)); if (!r) throw new Error("NOT_FOUND"); const token = "DEMO" + Math.random().toString(16).slice(2, 14).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: r.id, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return { status: "ok", token }; },
+  fn_guest_phone_verify_ref: ({ p_phone, p_ref }) => { const ph = normPhone(p_phone); if (!ph) return { status: "invalid" }; const ids = phoneReservationIds(ph); const ok = T("reservations").some((r) => ids.includes(r.id) && [r.external_ref, r.internal_ref].some((x) => String(x ?? "").toUpperCase() === String(p_ref ?? "").trim().toUpperCase())); if (!ok) return { status: "mismatch" }; const token = "PH" + Math.random().toString(16).slice(2, 14).toUpperCase(); if(!guestOrg()) return {status:"invalid"}; phoneSessions.set(token, {phone:ph,org:guestOrg()!}); return { status: "ok", token }; },
+  fn_guest_phone_reservations: ({ p_token }) => { const ps = phoneSessions.get(p_token); if (!ps || (!ps.service && ps.org!==guestOrg()) || (currentGuestScope().slug && ps.org!==guestOrg())) throw new Error("TOKEN_INVALID"); const ph=ps.phone; const ids = phoneReservationIds(ph,ps.org,ps.branch); return { phone_last4: ph.slice(-4), reservations: T("reservations").filter((r) => ids.includes(r.id)).sort((a, b) => (a.check_in < b.check_in ? -1 : 1)).map((r) => ({ ref: r.external_ref ?? r.internal_ref, internal_ref: r.internal_ref, status: r.status, check_in: r.check_in, check_out: r.check_out, nights: Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 86400000), branch_name: byId("branches", r.branch_id)?.name_ar ?? null, category_name: byId("room_categories", r.room_category_id)?.name_ar ?? null, payment_status: r.payment_status, access_status: r.access_status, identity_status: r.identity_status })) }; },
+  fn_guest_phone_open: ({ p_token, p_internal_ref }) => { const ps = phoneSessions.get(p_token); if (!ps || (!ps.service && ps.org!==guestOrg()) || (currentGuestScope().slug && ps.org!==guestOrg())) throw new Error("TOKEN_INVALID"); const r = T("reservations").find((x) => x.internal_ref === p_internal_ref && phoneReservationIds(ps.phone,ps.org,ps.branch).includes(x.id)); if (!r) throw new Error("NOT_FOUND"); const token = "DEMO" + Math.random().toString(16).slice(2, 14).toUpperCase(); T("registration_sessions").push({ id: uid(), reservation_id: r.id, token, expires_at: new Date(Date.now() + 86400000).toISOString(), used_at: null, created_at: nowISO() }); return { status: "ok", token }; },
   // 0058 (GUEST-07): children under 15 by age — counted on the booking, out of the registration target
   fn_guest_children: ({ p_token }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!; return { children_ages: r.children_ages ?? [], target: registrationTarget(r) }; },
   fn_guest_set_children: ({ p_token, p_ages }) => { const s = T("registration_sessions").find((x) => x.token === p_token); if (!s) throw new Error("TOKEN_INVALID"); const r = byId("reservations", s.reservation_id)!;
@@ -2094,6 +2128,20 @@ const phase6Ctx = {
 Object.assign(rpcs, phase6Rpcs(phase6Ctx));
 // 0074 — accounts: the person's security events (owner's «security» log), who has an account (owner, manager), the invitation's target (owner)
 const AUTH_ACTIONS = ["security.signed_in", "security.signed_out", "security.signed_out_everywhere", "security.password_changed", "security.password_link_sent", "security.invite_sent"];
+// the licence writer shared by fn_admin_set_room_license and fn_admin_upsert_room (item 6: unit and licence in one call; the gate is the caller's)
+function applyRoomLicense(p_room: string, p_number: string | null) {
+  const r = byId("rooms", p_room); if (!r) throw new Error("NOT_FOUND");
+  requireBranch(r.branch_id);
+  const v = normalizeUnitLicense(p_number);
+  const rows = T("room_licenses"); const cur = rows.find((l) => l.room_id === r.id); const old = cur?.license_number ?? null;
+  if (old === v) return { ok: true, unchanged: true, license_number: v };
+  if (cur) Object.assign(cur, { license_number: v, updated_by: staffId(), updated_at: nowISO() });
+  else rows.push({ room_id: r.id, organization_id: r.organization_id, branch_id: r.branch_id, license_number: v, updated_by: staffId(), updated_at: nowISO() });
+  const tail = (x: string | null) => (x == null ? undefined : "…" + x.slice(-4));
+  audit(r.branch_id, "room.license_set", "room", r.id, { before: { license_number: tail(old) }, after: { license_number: tail(v) } });
+  emit("room_licenses");
+  return { ok: true, license_number: v };
+}
 Object.assign(rpcs, {
   fn_auth_event: ({ p_action, p_target }: { p_action: string; p_target?: string | null }) => {
     if (!session) throw new Error("FORBIDDEN: not signed in");
@@ -2117,7 +2165,7 @@ Object.assign(rpcs, {
   },
   fn_admin_staff_invite_target: ({ p_staff }: { p_staff: string }) => {
     requireRole("owner");
-    const x = byId("staff_profiles", p_staff); if (!x) throw new Error("NOT_FOUND");
+    const x = byId("staff_profiles", p_staff); if (!x || x.role === "owner" || x.organization_id!==me()?.organization_id) throw new Error("NOT_FOUND");
     return { staff_id: x.id, email: x.email, full_name: x.full_name, is_active: x.is_active !== false, linked: !!x.auth_user_id };
   },
   // 0075 (plan item 1.8): the unit's licence number — the owner, the manager and the supervisor read it; with
@@ -2133,17 +2181,7 @@ Object.assign(rpcs, {
   fn_admin_set_room_license: ({ p_room, p_number }: { p_room: string; p_number: string | null }) => {
     if (!hasRole("owner", "manager", "supervisor")) throw new Error("FORBIDDEN: licence");
     requireCap("definitions");
-    const r = byId("rooms", p_room); if (!r) throw new Error("NOT_FOUND");
-    requireBranch(r.branch_id);
-    const v = normalizeUnitLicense(p_number);
-    const rows = T("room_licenses"); const cur = rows.find((l) => l.room_id === r.id); const old = cur?.license_number ?? null;
-    if (old === v) return { ok: true, unchanged: true, license_number: v };
-    if (cur) Object.assign(cur, { license_number: v, updated_by: staffId(), updated_at: nowISO() });
-    else rows.push({ room_id: r.id, organization_id: r.organization_id, branch_id: r.branch_id, license_number: v, updated_by: staffId(), updated_at: nowISO() });
-    const tail = (x: string | null) => (x == null ? undefined : "…" + x.slice(-4));
-    audit(r.branch_id, "room.license_set", "room", r.id, { before: { license_number: tail(old) }, after: { license_number: tail(v) } });
-    emit("room_licenses");
-    return { ok: true, license_number: v };
+    return applyRoomLicense(p_room, p_number);
   },
 });
 // review Phase 2b (0056): the branch guide, gallery and videos, booking sources, payment provider settings
@@ -2477,7 +2515,6 @@ function capacityImpact(categoryId: string, maxCapacity: number) {
 function quote(branch: string, category: string, ci: string, co: string, override: number | null, discount: number) {
   return quoteStay({ branch_id: branch, category_id: category, check_in: ci, check_out: co, nightly_rate_halalas: override, discount_halalas: discount ?? 0 });
 }
-function roomAvailablePublic(roomId: string, from: string, to: string) { const rm = byId("rooms", roomId)!; if (["blocked", "out_of_service", "maintenance"].includes(rm.status)) return false; return !T("reservation_allocations").some((a) => a.room_id === roomId && a.status === "active" && overlaps(a.from_date, a.to_date, from, to)); }
 /** What still stands before the code (fn_evaluate_access of 0033): before the arrival, the arrival's own conditions; after it, the code's. */
 function evaluate(resId: string, _skipSupervisor = false) {
   const r = byId("reservations", resId); if (!r) return { allowed: false, reasons: ["الحجز غير موجود"] };
@@ -2535,7 +2572,7 @@ function opsChat(body: any) {
 }
 
 // ---- phone-first lookup helpers (mirror fn_normalize_phone / fn_phone_reservation_ids) ----
-const phoneSessions = new Map<string, string>();
+const phoneSessions = new Map<string, {phone:string;org:string;branch?:string;service?:boolean}>();
 function normPhone(p: unknown): string | null {
   let d = String(p ?? "").replace(/[٠-٩]/g, (x) => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/\D/g, "");
   if (d.startsWith("00")) d = d.slice(2);
@@ -2545,8 +2582,8 @@ function normPhone(p: unknown): string | null {
   if (d.startsWith("966")) return null;
   return d.length >= 8 && d.length <= 15 ? d : null;
 }
-function phoneReservationIds(ph: string): string[] {
-  return T("reservations").filter((r) => r.status !== "rejected" && T("reservation_guests").some((g) => g.reservation_id === r.id && g.is_primary && normPhone(g.phone) === ph)).map((r) => r.id);
+function phoneReservationIds(ph: string,org: string|null=guestOrg(),branch?:string): string[] {
+  return T("reservations").filter((r) => r.organization_id===org && (!branch || r.branch_id===branch) && r.status !== "rejected" && T("reservation_guests").some((g) => g.reservation_id === r.id && g.is_primary && normPhone(g.phone) === ph)).map((r) => r.id);
 }
 // ---- WhatsApp on the reception computer (0023) ----
 function waStatus(c: Row): string {
@@ -2564,8 +2601,8 @@ const bridgeOnline = (c: Row | undefined) => !!c?.bridge_last_seen && Date.now()
 let journeyTick: (branch: string) => unknown = () => undefined;
 /** server-only functions (service role in the real system): only the service client below reaches them */
 const serviceRpcs: Record<string, (a: any) => any> = {
-  fn_whatsapp_phone_session: ({ p_phone }) => { const ph = normPhone(p_phone); if (!ph) throw new Error("VALIDATION: phone"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, ph); return token; },
-  fn_wa_bridge_auth: ({ p_key }) => { if (!/^zb_[0-9a-f]{64}$/.test(String(p_key ?? ""))) return null; const c = T("branch_whatsapp_channels").find((x) => x.mode === "web_bridge" && !!x.bridge_key && x.bridge_key === p_key); if (!c) return null; return { branch_id: c.branch_id, organization_id: c.organization_id, enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, status: c.status, display_phone: c.display_phone, human_pause_minutes: c.human_pause_minutes ?? 60, branch_name: byId("branches", c.branch_id)?.name_ar ?? null }; },
+  fn_whatsapp_phone_session: ({ p_phone,p_branch }) => { const ph = normPhone(p_phone); const b=byId("branches",p_branch); if (!ph || !b) throw new Error("VALIDATION: phone_or_branch"); const token = "PH" + randomHex(8).toUpperCase(); phoneSessions.set(token, {phone:ph,org:b.organization_id,branch:b.id,service:true}); return token; },
+  fn_wa_bridge_auth: ({ p_key }) => { if (!/^zb_[0-9a-f]{64}$/.test(String(p_key ?? ""))) return null; const c = T("branch_whatsapp_channels").find((x) => x.mode === "web_bridge" && !!x.bridge_key && x.bridge_key === p_key); if (!c || byId("organizations",c.organization_id)?.platform_status==="suspended") return null; return { branch_id: c.branch_id, organization_id: c.organization_id, enabled: !!c.enabled, auto_reply: c.auto_reply ?? true, status: c.status, display_phone: c.display_phone, human_pause_minutes: c.human_pause_minutes ?? 60, branch_name: byId("branches", c.branch_id)?.name_ar ?? null }; },
   fn_wa_bridge_beat: ({ p_branch, p_status, p_phone, p_name, p_version, p_detail }) => { if (!["starting", "qr", "connected", "disconnected", "stopped"].includes(p_status)) throw new Error("VALIDATION: status"); const c = T("branch_whatsapp_channels").find((x) => x.branch_id === p_branch && x.mode === "web_bridge"); if (!c) return null; const ph = String(p_phone ?? "").replace(/\D/g, ""); const complete = waStatus(c) !== "not_configured";
     Object.assign(c, { bridge_status: p_status, bridge_last_seen: nowISO(), bridge_phone: /^\d{8,15}$/.test(ph) ? ph : c.bridge_phone ?? null, bridge_name: p_name || c.bridge_name || null, bridge_version: p_version || c.bridge_version || null });
     if (complete && p_status === "connected") Object.assign(c, { status: "active", last_error: null, last_checked_at: nowISO() });
@@ -2607,6 +2644,9 @@ const products = productRpcs({ T, byId, can, requireCap, requireBranch, myBranch
   productTax: (resId, amount, taxable) => chargeTax(resId, "products", amount, taxable), recompute, createVoucher: (p) => rpcs.fn_create_voucher({ p }), cancelVoucher: (id, reason) => rpcs.fn_cancel_voucher({ p_voucher: id, p_reason: reason }) });
 Object.assign(rpcs, products.staff);
 Object.assign(serviceRpcs, products.service);
+// 0078: the guest assistant reads a branch's public answers with the server's key; the app may not call it
+serviceRpcs.fn_public_knowledge = rpcs.fn_public_knowledge;
+rpcs.fn_public_knowledge = () => { throw new Error("permission denied for function fn_public_knowledge"); };
 // the guest journey after the stay (0070–0072, W3–W7): the check-out options, the departure, the deposit's countdown,
 // the review, the alert rules, the unit's photos, the trial data's overview
 const journey = journeyRpcs({ T, byId, requireCap, requireBranch, hasRole: (...r) => hasRole(...r), staffId, audit: (b, a, e, id, d) => audit(b, a, e, id, d), emit,
@@ -2628,7 +2668,29 @@ Object.assign(rpcs, journey.rpcs);
 journeyTick = (branch) => journey.tick(branch, false);
 afterRpc = () => { bankSync({}); products.sync(); journey.sync(); };
 
-function invoke(name: string, opts: any) {
+for(const name of ["fn_public_branch","fn_public_whatsapp","fn_public_branch_guide","fn_branch_media"]) {
+ const original=rpcs[name]; if(!original) continue;
+ rpcs[name]=(a:any)=>{ const b=byId("branches",a.p_branch); if(!b || (me() ? !myBranches().includes(b.id) : b.organization_id!==guestOrg())) return null; return original(a); };
+}
+rpcs.fn_public_organization=()=>{ const id=currentGuestScope().guest ? guestOrg() : me()?.organization_id; const o=byId("organizations",id); return o ? {name_ar:o.name_ar,name_en:o.name_en ?? null,logo:o.logo ?? null} : null; };
+Object.assign(rpcs,{
+  fn_guest_branches: ()=>T("branches").filter(b=>b.organization_id===guestOrg() && b.is_active && !b.archived_at),
+});
+rpcs.fn_guest_site=({p_slug})=>{const o=T("organizations").find(x=>x.platform_status!=="suspended" && (x.guest_slug ?? x.id)===p_slug);return o ? {id:o.id,slug:o.guest_slug ?? o.id,name_ar:o.name_ar,name_en:o.name_en ?? null}:null;};
+for(const name of ["fn_public_review","fn_public_submit_review"]) {const f=rpcs[name];if(!f)continue;rpcs[name]=(a:any)=>{const review=T("guest_reviews").find(g=>g.token_hash===hashToken(a.p_token));if(currentGuestScope().slug && review?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return f(a);};}
+const originalSession=rpcs.fn_guest_session;
+rpcs.fn_guest_session=(a:any)=>{const x=T("registration_sessions").find(s=>s.token===a.p_token);const res=byId("reservations",x?.reservation_id);if(currentGuestScope().slug && res?.organization_id!==guestOrg())throw new Error("TOKEN_INVALID");return originalSession(a);};
+
+Object.assign(rpcs,platformRpcs({T,uid,user:()=>session?.user.id??null,owner:me,emit,atomic:atomically}));
+
+
+Object.assign(rpcs,financeControlRpcs({org:()=>me()?.organization_id,role:()=>me()?.role,
+ read:(org)=>T("finance_control_settings").find(x=>x.organization_id===org) as unknown as FinanceControls | undefined,
+ write:(d)=>{const rows=T("finance_control_settings");const at=rows.findIndex(x=>x.organization_id===d.organization_id);if(at<0)rows.push(d);else rows[at]=d;emit("finance_control_settings");},
+ audit:(before,after)=>audit(null,"security.finance_execution_thresholds_updated","finance_control_settings",after.organization_id,{before,after})}));
+
+function invoke(name: string, opts: any, trustedService = false) {
+  if(name === "platform-invite")return{data:{ok:false,error:"owner_self_signup_required"},error:{message:"owner_self_signup_required"}};
   const body = opts?.body ?? {};
   if (name === "guest-otp") return { data: { status: "channel_unavailable" }, error: null };
   // WhatsApp (demo): the connection test answers from the demo row; a supervisor's reply is stored but nothing is sent
@@ -2654,16 +2716,27 @@ function invoke(name: string, opts: any) {
   if (name === "bank-mail") { if (!can("bank.manage")) return { data: null, error: { message: "forbidden" } }; return { data: { configured: false, fetched: 0, results: [], demo: true }, error: null }; }
   if (name === "ai-health") return { data: { configured: false, ok: false, model: null, error: "وضع العرض التجريبي — لا مزود متصل" }, error: null };
   if (name === "ai-ops") { if (body.mode === "briefing") { const ctx = rpcs.fn_ai_ops_context({ p_branch: body.branch_id, p_date: body.date ?? null }); if (!ctx) return { data: null, error: { message: "forbidden" } }; const b = buildBriefing(ctx); return { data: { ...b, insights: null, mode: "deterministic", ai_status: "demo", generated_at: ctx.generated_at, date: ctx.summary?.date }, error: null }; } const r = opsChat(body); return r.error ? { data: null, error: r.error } : { data: r.data, error: null }; }
-  if (name === "ai-reception") { const branch = body.branch_id ?? T("branches")[0]?.id; let conv = body.conversation_id ? byId("conversations", body.conversation_id) : null; if (!conv) { conv = { id: uid(), reservation_id: null, channel: "screen", status: "active", branch_id: branch, guest_token: body.guest_token ?? null, client_fingerprint: body.client_fingerprint ?? null, created_at: nowISO(), last_message_at: nowISO(), handed_off_at: null, handoff_reason: null }; T("conversations").unshift(conv); } const msg = String(body.message ?? ""); T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "guest", content: msg, meta: { mode: "scripted" }, created_at: nowISO() }); const bb = byId("branches", branch); const knowledge = { branchName: bb?.name_ar, checkInTime: bb?.check_in_time, checkOutTime: bb?.check_out_time, address: bb?.address, phone: bb?.phone, mapUrl: bb?.map_url ?? null, bookingUrl: bb?.booking_platform_url ?? null, policies: T("property_policies").filter((x) => x.branch_id === branch && x.is_public).map((x) => ({ topic: x.topic, title: x.title, content: x.content_ar })), entries: rpcs.fn_public_knowledge({ p_branch: branch }) };
+  if (name === "ai-reception") {
+    const branch=body.branch_id; const bbScope=byId("branches",branch);
+    const organizationId=trustedService ? bbScope?.organization_id : me()?.organization_id ?? guestOrg();
+    if(byId("organizations",organizationId)?.platform_status==="suspended")return {data:null,error:{message:"hotel_unavailable"}};
+    if(!branch || !bbScope || bbScope.organization_id!==organizationId || (!trustedService && me() && !myBranches().includes(branch)))return {data:null,error:{message:"invalid_branch_scope"}};
+    const token=body.guest_token ?? null;
+    if(token){const link=T("registration_sessions").find(s=>s.token===token && Date.parse(s.expires_at)>Date.now());const res=byId("reservations",link?.reservation_id);if(res?.organization_id!==organizationId || res?.branch_id!==branch)return{data:null,error:{message:"invalid_guest_scope"}};}
+    let conv = body.conversation_id ? byId("conversations", body.conversation_id) : null;
+    if(body.conversation_id && (!conv || !mayResumeConversation({...conv,organization_id:byId("branches",conv.branch_id)?.organization_id} as any,{organizationId,branchId:branch,guestToken:token},{trustedService,staff:!!me(),fingerprint:body.client_fingerprint??"",channel:trustedService ? body.channel ?? "screen" : "screen"})))return{data:null,error:{message:"invalid_conversation_scope"}};
+    if (!conv) { conv = { id: uid(), organization_id:organizationId, reservation_id: null, channel: "screen", status: "active", branch_id: branch, guest_token: body.guest_token ?? null, client_fingerprint: body.client_fingerprint ?? null, created_at: nowISO(), last_message_at: nowISO(), handed_off_at: null, handoff_reason: null }; T("conversations").unshift(conv); } const msg = String(body.message ?? ""); T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "guest", content: msg, meta: { mode: "scripted" }, created_at: nowISO() }); const bb = byId("branches", branch); const knowledge = { branchName: bb?.name_ar, checkInTime: bb?.check_in_time, checkOutTime: bb?.check_out_time, address: bb?.address, phone: bb?.phone, mapUrl: bb?.map_url ?? null, bookingUrl: bb?.booking_platform_url ?? null, policies: T("property_policies").filter((x) => x.branch_id === branch && x.is_public).map((x) => ({ topic: x.topic, title: x.title, content: x.content_ar })), entries: serviceRpcs.fn_public_knowledge({ p_branch: branch }) };
     const note = (r: { intent: string; knowledgeId?: string }) => { if (r.knowledgeId) rpcs.fn_knowledge_usage_bump({ p_entry: r.knowledgeId }); if (r.intent === "unknown") rpcs.fn_record_unanswered({ p_branch: branch, p_question: msg, p_conversation: conv!.id }); };
-    if (conv.status === "handed_off") { const r0 = scriptedReply(msg, "فايف اورز", undefined, knowledge); note(r0); const informative = ["policy", "knowledge", "existing_booking", "new_booking", "access_code"].includes(r0.intent); const reply = informative ? r0.text + "\n\nمحادثتك ما زالت محوّلة إلى مشرف الاستقبال وسيرد عليك هنا عند توفره." : "تم تحويل محادثتك إلى مشرف الاستقبال وسيرد عليك هنا قريبًا. أثناء الانتظار يمكنك سؤالي عن مواعيد الوصول والمغادرة أو الإنترنت أو المواقف أو الموقع، أو بدء محادثة جديدة."; T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "assistant", content: reply, meta: { mode: "scripted", reason: "handed_off" }, created_at: nowISO() }); emit("conversation_messages"); return { data: { conversation_id: conv.id, reply, intent: r0.intent, actions: [...(informative ? r0.actions.filter((a) => !a.value) : []), { label: "محادثة جديدة", route: "/reception?new=1" }], mode: "scripted", verified: !!body.guest_token, handed_off: true }, error: null }; }
-    const r = scriptedReply(msg, "فايف اورز", undefined, knowledge); note(r); const handoffWhy = /(موظف|مشرف|بشري|human|staff)/.test(msg) ? "طلب صريح من النزيل" : r.handoff ?? null; if (handoffWhy) { Object.assign(conv, { status: "handed_off", handed_off_at: nowISO(), handoff_reason: handoffWhy }); T("human_handoff_tickets").unshift({ id: uid(), organization_id: ORG, branch_id: branch, conversation_id: conv.id, reservation_id: null, kind: "guest_request", external_ref: null, source_name: null, details: handoffWhy, status: "open", resolved_by: null, resolved_at: null, created_at: nowISO() }); emit("human_handoff_tickets"); } T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "assistant", content: r.text, meta: { mode: "scripted" }, created_at: nowISO() }); conv.last_message_at = nowISO(); emit("conversations"); emit("conversation_messages"); return { data: { conversation_id: conv.id, reply: r.text, actions: r.actions, intent: r.intent, mode: "scripted", verified: !!body.guest_token, handed_off: conv.status === "handed_off", ai_status: "demo" }, error: null }; }
+    if (conv.status === "handed_off") { const r0 = scriptedReply(msg, byId("organizations",organizationId)?.name_ar ?? "", undefined, knowledge); note(r0); const informative = ["policy", "knowledge", "existing_booking", "new_booking", "access_code"].includes(r0.intent); const reply = informative ? r0.text + "\n\nمحادثتك ما زالت محوّلة إلى مشرف الاستقبال وسيرد عليك هنا عند توفره." : "تم تحويل محادثتك إلى مشرف الاستقبال وسيرد عليك هنا قريبًا. أثناء الانتظار يمكنك سؤالي عن مواعيد الوصول والمغادرة أو الإنترنت أو المواقف أو الموقع، أو بدء محادثة جديدة."; T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "assistant", content: reply, meta: { mode: "scripted", reason: "handed_off" }, created_at: nowISO() }); emit("conversation_messages"); return { data: { conversation_id: conv.id, reply, intent: r0.intent, actions: [...(informative ? r0.actions.filter((a) => !a.value) : []), { label: "محادثة جديدة", route: "/reception?new=1" }], mode: "scripted", verified: !!body.guest_token, handed_off: true }, error: null }; }
+    const r = scriptedReply(msg, byId("organizations",organizationId)?.name_ar ?? "", undefined, knowledge); note(r); const handoffWhy = /(موظف|مشرف|بشري|human|staff)/.test(msg) ? "طلب صريح من النزيل" : r.handoff ?? null; if (handoffWhy) { Object.assign(conv, { status: "handed_off", handed_off_at: nowISO(), handoff_reason: handoffWhy }); T("human_handoff_tickets").unshift({ id: uid(), organization_id: organizationId, branch_id: branch, conversation_id: conv.id, reservation_id: null, kind: "guest_request", external_ref: null, source_name: null, details: handoffWhy, status: "open", resolved_by: null, resolved_at: null, created_at: nowISO() }); emit("human_handoff_tickets"); } T("conversation_messages").push({ id: uid(), conversation_id: conv.id, sender: "assistant", content: r.text, meta: { mode: "scripted" }, created_at: nowISO() }); conv.last_message_at = nowISO(); emit("conversations"); emit("conversation_messages"); return { data: { conversation_id: conv.id, reply: r.text, actions: r.actions, intent: r.intent, mode: "scripted", verified: !!body.guest_token, handed_off: conv.status === "handed_off", ai_status: "demo" }, error: null }; }
   return { data: null, error: { message: "unknown function" } };
 }
 
 // ---------------------------------------------------------------------------
 // client
 // ---------------------------------------------------------------------------
+const demoPasswordHash=async(password:string)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(password)))).map(x=>x.toString(16).padStart(2,"0")).join("");
+function demoSignupCode(account:Row){account.code=String(crypto.getRandomValues(new Uint32Array(1))[0]%100000000).padStart(8,"0");account.expires=Date.now()+10*60*1000;account.sent_at=Date.now();account.attempts=0;sessionStorage.setItem("roomai.demo.mail-capture",JSON.stringify({email:account.email,code:account.code}));emit("demo_auth_users");}
 export function createDemoClient() {
   return {
     from: (table: string) => new QB(table),
@@ -2672,8 +2745,10 @@ export function createDemoClient() {
       getSession: async () => ({ data: { session }, error: null }),
       onAuthStateChange: (cb: (e: string, s: Session) => void) => { authListeners.add(cb); return { data: { subscription: { unsubscribe: () => authListeners.delete(cb) } } }; },
       // a fresh sign-in is a new session (0040): it opens after any forced end of the person's sessions, so it is not refused by it
-      signInWithPassword: async ({ email }: { email: string; password: string }) => { lastSignInAt = Date.now(); const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
-      signUp: async ({ email }: { email: string; password: string }) => { const acc = DEMO_ACCOUNTS[0]; setSession({ user: { id: acc.auth, email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      signInWithPassword: async ({ email,password }: { email: string; password: string }) => { lastSignInAt = Date.now(); const pending = T("staff_profiles").find(s=>String(s.email).toLowerCase()===String(email).trim().toLowerCase()); const registered=T("demo_auth_users").find(a=>a.email===String(email).trim().toLowerCase()); if(registered&&(!registered.confirmed||registered.password_hash!==await demoPasswordHash(password)))return{data:{session:null},error:{message:"Invalid credentials or email not confirmed"}}; const acc = DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === String(email).trim().toLowerCase()) ?? (registered ? {auth:registered.id,email:registered.email} : null) ?? (pending ? {auth:pending.auth_user_id??("demo-invited-"+pending.id),email:pending.email} : DEMO_ACCOUNTS[0]); setSession({ user: { id: acc.auth, email: acc.email }, access_token: "demo", signed_in_at: newSessionAt(acc.auth) }); return { data: { session }, error: null }; },
+      signUp: async ({ email,password }: { email: string; password: string }) => { const em=email.trim().toLowerCase();if(T("demo_auth_users").some(a=>a.email===em))return{data:{session:null},error:{message:"already registered"}};const account={id:uid(),email:em,confirmed:false,password_hash:await demoPasswordHash(password)};T("demo_auth_users").push(account);demoSignupCode(account);return{data:{session:null},error:null}; },
+      verifyOtp:async({email,token}:{email:string;token:string;type:string})=>{const a=T("demo_auth_users").find(a=>a.email===email);if(!a||a.confirmed||a.attempts>=5||Date.now()>a.expires||(++a.attempts&&a.code!==token))return{data:{session:null},error:{message:"OTP invalid or expired"}};a.confirmed=true;delete a.code;sessionStorage.removeItem("roomai.demo.mail-capture");setSession({user:{id:a.id,email:a.email},access_token:"demo",signed_in_at:nowISO()});emit("demo_auth_users");return{data:{session},error:null};},
+      resend:async({email}:{email:string;type:string})=>{const a=T("demo_auth_users").find(a=>a.email===email);if(!a||a.confirmed||Date.now()-a.sent_at<60000)return{data:null,error:{message:"try again later"}};demoSignupCode(a);return{data:{},error:null};},
       /** a token put back in hand (supabase.auth.setSession): the same session as before, refused if it was ended since */
       setSession: async (s: Session) => { if (!s?.user?.id) return { data: { session: null }, error: { message: "invalid session" } }; setSession({ user: { id: s.user.id, email: s.user.email }, access_token: s.access_token ?? "demo", signed_in_at: s.signed_in_at }); return { data: { session }, error: null }; },
       signOut: async (opts?: { scope?: "global" | "local" | "others" }) => { if (opts?.scope !== "others") setSession(null); return { error: null }; },
@@ -2688,7 +2763,15 @@ export function createDemoClient() {
     },
     channel: (_name: string) => { const mine: Listener[] = []; const ch = { on: (_e: string, f: { table: string }, cb: () => void) => { const l = { table: f.table, cb }; mine.push(l); listeners.add(l); return ch; }, subscribe: () => ch, unsubscribe: () => { for (const l of mine) listeners.delete(l); }, _mine: mine }; return ch; },
     removeChannel: async (ch: { _mine?: Listener[] }) => { for (const l of ch?._mine ?? []) listeners.delete(l); return "ok"; },
-    functions: { invoke: async (name: string, opts?: any) => invoke(name, opts) },
+    // the test hooks __demoLatency / __demoFail apply to a function call as "fn:<name>" (detail = its body as JSON),
+    // exactly as they do to an RPC ("rpc:<name>") or a table read — so a test can replay a slow or failed function
+    functions: { invoke: async (name: string, opts?: any) => {
+      const detail = [JSON.stringify(opts?.body ?? {})];
+      await later(demoLatency("fn:" + name, detail), null);
+      const fail = demoFailure("fn:" + name, detail);
+      if (fail) return { data: null, error: { message: fail } };
+      return invoke(name, opts);
+    } },
   };
 }
 export const DEMO_LOGINS = DEMO_ACCOUNTS.map((a) => ({ email: a.email, name: a.name, role: a.role }));
@@ -2705,7 +2788,7 @@ export function createDemoServiceClient() {
 export const demoFunctionsFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const name = String(input).split("/functions/v1/")[1]?.split("?")[0] ?? "";
   let body: unknown = {}; try { body = JSON.parse(String(init?.body ?? "{}")); } catch { /* empty */ }
-  const r = invoke(name, { body }) as { data: unknown; error: { message: string } | null };
+  const r = invoke(name, { body }, true) as { data: unknown; error: { message: string } | null };
   return new Response(JSON.stringify(r.error ? { error: r.error.message } : r.data), { status: r.error ? 400 : 200, headers: { "content-type": "application/json" } });
 }) as typeof fetch;
 /** the key of a branch linked to the reception computer — the simulator plays that program */

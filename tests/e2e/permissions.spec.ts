@@ -18,7 +18,7 @@ async function save(page: Page, reason: string) {
 /** the demo keeps one session per browser: sign out, then in as another role (same tab) */
 async function signInAs(page: Page, button: string) {
   const out = page.locator('[title="تسجيل الخروج"]:visible, [aria-label="تسجيل الخروج"]:visible').first();
-  if (await out.isVisible().catch(() => false)) { await out.click(); await page.waitForURL(/#\/staff\/login/, { timeout: 15_000 }); }
+  if (await out.isVisible().catch(() => false)) { await out.click(); await page.waitForURL(/#\/login(?:\?|$)/, { timeout: 15_000 }); }
   await page.goto("/#/staff/login", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: button }).click();
   await page.waitForURL(/#\/(staff|admin)\//, { timeout: 15_000 });
@@ -29,9 +29,26 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
   test("PE01 the owner opens the matrix: every operation, the owner's column fixed, the matrix row locked, the approved state said, an export", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/admin/dashboard");
-    await page.getByRole("link", { name: "مصفوفة الصلاحيات" }).first().click();
+    const more = page.getByTestId("bottom-tabs-more");
+    if (await more.isVisible().catch(() => false)) {
+      // phone: the sections live in the «المزيد» drawer, behind the admin menu toggle
+      await more.click();
+      const drawer = page.getByTestId("staff-menu-drawer");
+      const toggle = drawer.getByTestId("admin-menu-toggle");
+      if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      const groups = drawer.locator("#drawer-admin").getByRole("button");
+      const target = drawer.getByRole("link", { name: "مصفوفة الصلاحيات" });
+      for (let i = 0, n = await groups.count(); i < n && !(await target.isVisible()); i++) await groups.nth(i).click();
+      await target.click();
+    } else {
+      // desktop: the sidebar sections are an accordion, open «الإدارة» before the link is reachable
+      const link = page.getByRole("link", { name: "مصفوفة الصلاحيات" }).first();
+      if (!(await link.isVisible().catch(() => false))) await page.getByRole("button", { name: "الإدارة", exact: true }).last().click();
+      await link.click();
+    }
     await expect(page.getByTestId("perm-matrix")).toBeVisible();
-    await expect(page.locator("[data-testid=perm-row]")).toHaveCount(64);
+    await expect(page.locator("[data-testid=perm-row]")).toHaveCount(65);
     await expect(page.getByTestId("perm-changed-count")).toHaveText("مطابقة للمصفوفة المعتمدة");
     await expect(cell(page, "res.create", "owner")).toBeChecked();
     await expect(cell(page, "res.create", "owner")).toBeDisabled();
@@ -39,11 +56,12 @@ test.describe("«مصفوفة الصلاحيات» — the owner edits the appro
     await expect(cell(page, "res.create", "supervisor")).toBeChecked();
     await expect(cell(page, "res.create", "finance")).not.toBeChecked();
     await expect(page.locator("[data-testid=perm-row][data-code='voucher.correct']")).toContainText("سنداته خلال 24 ساعة");
+    await page.getByTestId("export-trigger").first().click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-xlsx").first().click()]);
     const rows = firstSheetRows(new Uint8Array(readFileSync((await download.path())!)));
     expect(rows[0][0]).toBe("مصفوفة الصلاحيات");
     const blank = rows.findIndex((r) => r.length === 0 || r.every((c) => c === ""));
-    expect(rows.slice(blank + 2).filter((r) => r.some((c) => c !== "")).length).toBe(64);
+    expect(rows.slice(blank + 2).filter((r) => r.some((c) => c !== "")).length).toBe(65);
   });
 
   test("PE02 unticking «إنشاء حجز» for the supervisor takes effect at their next operation; «استعادة المصفوفة المعتمدة» gives it back", async ({ page, loginAs, go }) => {

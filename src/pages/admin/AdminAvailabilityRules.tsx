@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { inventoryApi, staffApi, toArabicError } from "../../lib/api";
 import { Modal, NumberInput } from "../../components/forms";
@@ -40,11 +40,14 @@ export default function AdminAvailabilityRules() {
   const withoutRule = categories.filter((c) => !rules.some((r) => r.category_id === c.id)); const branchId = q.branchId; const load = q.reload;
 
   // 0055 (SETUP-01): through fn_admin_upsert_release_rule — initial ≥ 0 and ≤ the type's units, increment ≥ 1, a known trigger
+  const saveLock = useRef(false);
   async function saveRule(key: string, p: Parameters<typeof inventoryApi.upsertRule>[0]) {
+    if (saveLock.current) return;
+    saveLock.current = true;
     setActing(key); setError(null);
     try { await inventoryApi.upsertRule(p); } catch (e) { setError(toArabicError(e)); }
     load();
-    setActing(null);
+    saveLock.current = false; setActing(null);
   }
   const toggle = (r: RuleRow) => saveRule(r.id, { id: r.id, enabled: !r.enabled });
   const updateField = (r: RuleRow, field: "initial_public_release" | "release_increment", value: number | null) => {
@@ -84,19 +87,19 @@ export default function AdminAvailabilityRules() {
               <div className="flex flex-wrap items-center gap-4">
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">العدد الابتدائي</label>
-                  <NumberInput value={r.initial_public_release} onCommit={(v) => updateField(r, "initial_public_release", v)} className="w-20 text-center" label="الإتاحة الأولية" disabled={acting === r.id + "initial_public_release"} />
+                  <NumberInput value={r.initial_public_release} onCommit={(v) => updateField(r, "initial_public_release", v)} className="w-20 text-center" label="الإتاحة الأولية" disabled={acting !== null} />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">الزيادة</label>
-                  <NumberInput value={r.release_increment} onCommit={(v) => updateField(r, "release_increment", v)} className="w-20 text-center" label="زيادة الإتاحة" disabled={acting === r.id + "release_increment"} />
+                  <NumberInput value={r.release_increment} onCommit={(v) => updateField(r, "release_increment", v)} className="w-20 text-center" label="زيادة الإتاحة" disabled={acting !== null} />
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-ink-400">الشرط</label>
-                  <select className="input w-auto text-xs" value={r.release_trigger} aria-label="شرط الكشف" disabled={acting === r.id} onChange={(e) => saveRule(r.id, { id: r.id, release_trigger: e.target.value })}>
+                  <select className="input w-auto text-xs" value={r.release_trigger} aria-label="شرط الكشف" disabled={acting !== null} onChange={(e) => saveRule(r.id, { id: r.id, release_trigger: e.target.value })}>
                     {TRIGGERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-                <button onClick={() => toggle(r)} disabled={acting === r.id} className="btn-outline text-sm">
+                <button onClick={() => toggle(r)} disabled={acting !== null} className="btn-outline text-sm">
                   {acting === r.id ? <Spinner /> : r.enabled ? "إيقاف" : "تفعيل"}
                 </button>
                 <button onClick={() => setReleaseFor(r)} className="btn-accent text-sm"><Unlock className="h-4 w-4" /> إفراج يدوي عن وحدة إضافية</button>
@@ -122,7 +125,7 @@ export default function AdminAvailabilityRules() {
         </div>
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-ink-700">الوحدات المُفرج عنها — 14 يومًا القادمة</h3>
-          {slots.length === 0 ? <p className="text-xs text-ink-400">لا توجد إفراجات مسجّلة.</p> : (
+          {slots.length === 0 ? (q.error ? null : <p className="text-xs text-ink-400">لا توجد إفراجات مسجّلة.</p>) : (
             <table className="w-full text-xs">
               <thead><tr className="border-b border-ink-100 text-ink-400"><th className="py-1.5 text-right font-medium">التاريخ</th><th className="py-1.5 text-right font-medium">التصنيف</th><th className="py-1.5 text-center font-medium">مُفرج</th></tr></thead>
               <tbody>{slots.map((s, i) => (
@@ -144,16 +147,18 @@ function ReleaseModal({ rule, branchId, onClose, onDone }: { rule: RuleRow; bran
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<number | null>(null);
 
+  const releaseLock = useRef(false);
   async function submit() {
+    if (releaseLock.current) return;
     setError(null);
     if (!reason.trim()) { setError("يجب كتابة سبب."); return; }
-    setBusy(true);
+    releaseLock.current = true; setBusy(true);
     try {
       const n = await staffApi.releaseNextSlot(branchId, rule.category_id, date, reason.trim());
       setResult(Number(n));
       onDone();
     } catch (e) { setError(toArabicError(e)); }
-    setBusy(false);
+    releaseLock.current = false; setBusy(false);
   }
 
   return (

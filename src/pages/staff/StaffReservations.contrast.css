@@ -1,0 +1,142 @@
+/* Reservations only. Text colors follow the surface they actually sit on. */
+.reservations-contrast {
+  --res-ink: #10262d;
+  --res-muted: #354d55;
+  --res-link: #095865;
+  --res-warning: #624000;
+  --res-danger: #92190f;
+  --res-success: #155b30;
+  --res-accent: #3e4678;
+  color: var(--res-ink);
+}
+.reservations-contrast [class*="text-ink-"] { color: var(--res-ink); }
+.reservations-contrast .text-ink-400,
+.reservations-contrast .text-ink-500,
+.reservations-contrast .text-ink-600 { color: var(--res-muted); }
+.reservations-contrast [class*="text-brand-"],
+.reservations-contrast .btn-ghost { color: var(--res-link); }
+.reservations-contrast [class*="text-warning-"],
+.reservations-contrast [data-testid="followups-banner"] { color: var(--res-warning); }
+.reservations-contrast [class*="text-danger-"] { color: var(--res-danger); }
+.reservations-contrast [class*="text-success-"] { color: var(--res-success); }
+.reservations-contrast [class*="text-accent-"] { color: var(--res-accent); }
+.reservations-contrast .badge { color: #243c45; background-color: #e5edf0; }
+.reservations-contrast .badge[class*="text-success-"] { color: #15502c; background-color: #dcefe2; }
+.reservations-contrast .badge[class*="text-warning-"] { color: #624000; background-color: #f7ead2; }
+.reservations-contrast .badge[class*="text-danger-"] { color: #851c17; background-color: #f8e2df; }
+.reservations-contrast .badge[class*="text-accent-"] { color: #383d70; background-color: #e8e8f5; }
+.reservations-contrast .badge[class*="text-brand-"] { color: #124c59; background-color: #dfeef2; }
+/* Links remain identifiable without relying on their hue. */
+.reservations-contrast .ops-briefing a,
+.reservations-contrast a.text-brand-600 { text-decoration: underline; text-underline-offset: 3px; }
+[data-theme="dark"] .reservations-contrast .card {
+  /* 85% surface opacity only: keep text and controls fully opaque. */
+  background-color: rgb(17 40 48 / 85%);
+  --res-ink: #f1f7f7;
+  --res-muted: #d5e3e6;
+  --res-link: #b4f1f6;
+  --res-warning: #ffd58c;
+  --res-danger: #ffb9af;
+  --res-success: #a3e8b7;
+  --res-accent: #d2ceff;
+  color: var(--res-ink);
+}
+[data-theme="dark"] .reservations-contrast select,
+[data-theme="dark"] .reservations-contrast .input {
+  background-color: #244a54;
+  color: #f4fafa;
+}
+[data-theme="dark"] .reservations-contrast .input::placeholder { color: #e0eeee; opacity: 1; }
+[data-theme="dark"] .reservations-contrast .card .btn-ghost:hover { background-color: #244a54; }
+/* Explicit status pairs retain contrast in night mode. */
+[data-theme="dark"] .reservations-contrast .badge { color: #e2eef0; background-color: #29434d; }
+[data-theme="dark"] .reservations-contrast .badge[class*="text-success-"] { color: #b6f1c7; background-color: #193f2a; }
+[data-theme="dark"] .reservations-contrast .badge[class*="text-warning-"] { color: #ffe1a6; background-color: #49350e; }
+[data-theme="dark"] .reservations-contrast .badge[class*="text-danger-"] { color: #ffc4bb; background-color: #4b201b; }
+[data-theme="dark"] .reservations-contrast .badge[class*="text-accent-"] { color: #dfdcff; background-color: #33304e; }
+[data-theme="dark"] .reservations-contrast .badge[class*="text-brand-"] { color: #b4edf5; background-color: #173f49; }
+/* Route-scoped shell: never changes a different staff/admin/guest page. */
+.reservations-shell [data-testid="keybox-alert"],
+.reservations-shell .bg-danger-500 { background-color: #8c211b; color: #ffffff; }
+.reservations-shell [data-testid="keybox-alert"] .bg-danger-600 { background-color: #691711; }
+[data-theme="dark"] .reservations-shell {
+  background-color: #091c24;
+  color: #f1f7f7;
+}
+[data-theme="dark"] .reservations-shell aside,
+[data-theme="dark"] .reservations-shell header,
+[data-theme="dark"] .reservations-shell [data-testid="bottom-tabs"] {
+  background-color: #112b35;
+  color: #f1f7f7;
+  border-color: #37525c;
+}
+[data-theme="dark"] .reservations-shell [class*="text-ink-"] { color: #d5e3e6; }
+[data-theme="dark"] .reservations-shell [class*="text-brand-"] { color: #b4f1f6; }
+[data-theme="dark"] .reservations-shell .bg-ink-50,
+[data-theme="dark"] .reservations-shell .bg-brand-50,
+[data-theme="dark"] .reservations-shell [class*="bg-white"] { background-color: #183b47; }
+[data-theme="dark"] .reservations-shell [class*="text-warning-"] { color: #ffe1a6; }
+[data-theme="dark"] .reservations-shell > .flex > .relative.text-warning-700,
+[data-theme="dark"] .reservations-shell [data-testid="review-banner"],
+[data-theme="dark"] .reservations-shell [data-testid="followups-banner"] { background-color: #3a2c13; }
+[data-theme="dark"] .reservations-shell .reservations-contrast {
+  --res-ink: #f1f7f7;
+  --res-muted: #d5e3e6;
+  --res-link: #b4f1f6;
+  --res-warning: #ffe1a6;
+  --res-danger: #ffb9af;
+  --res-success: #a3e8b7;
+  --res-accent: #d2ceff;
+}
+[data-theme="dark"] .reservations-shell .reservations-contrast [class*="text-ink-"] { color: var(--res-ink); }
+[data-theme="dark"] .reservations-shell .reservations-contrast .text-ink-400,
+[data-theme="dark"] .reservations-shell .reservations-contrast .text-ink-500,
+[data-theme="dark"] .reservations-shell .reservations-contrast .text-ink-600 { color: var(--res-muted); }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge { color: #e2eef0; background-color: #29434d; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-success-"] { color: #b6f1c7; background-color: #193f2a; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-warning-"] { color: #ffe1a6; background-color: #49350e; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-danger-"] { color: #ffc4bb; background-color: #4b201b; }
+.reservations-shell aside .text-ink-400,
+.reservations-shell [data-testid="bottom-tabs"],
+.reservations-shell [data-testid="bottom-tabs"] [class*="text-ink-"] { color: #354d55; }
+.reservations-shell > .flex > .relative.text-warning-700 { color: #624000; }
+.reservations-shell .reservations-contrast .card { background-color: rgb(255 255 255 / 85%); }
+[data-theme="dark"] .reservations-shell aside .text-ink-400,
+[data-theme="dark"] .reservations-shell [data-testid="bottom-tabs"],
+[data-theme="dark"] .reservations-shell [data-testid="bottom-tabs"] [class*="text-ink-"] { color: #d5e3e6; }
+[data-theme="dark"] .reservations-shell > .flex > .relative.text-warning-700 { color: #ffe1a6; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .card { background-color: rgb(17 40 48 / 85%); }
+
+[data-theme="dark"] .reservations-shell [data-testid="keybox-alert"] .bg-white { background-color: #ffffff; }
+[data-theme="dark"] .reservations-shell aside img,
+[data-theme="dark"] .reservations-shell header img { background-color: #e7f1f2; border-radius: 8px; padding: 3px; }
+
+.reservations-contrast .btn-primary { color: #ffffff; background-color: #174f60; }
+.reservations-contrast .input { color: #10262d; background-color: #ffffff; }
+.reservations-contrast .input::placeholder { color: #354d55; opacity: 1; }
+[data-theme="dark"] .reservations-contrast .input { color: #f4fafa; background-color: #244a54; }
+[data-theme="dark"] .reservations-contrast .input::placeholder { color: #e0eeee; }
+[data-theme="dark"] .reservations-shell .reservations-contrast  .bg-ink-50,
+[data-theme="dark"] .reservations-shell .reservations-contrast [class*="hover:bg-ink-50"]:hover { background-color: #183b47; }
+
+[data-theme="dark"] .reservations-shell .reservations-contrast tr { border-color: #37525c; }
+
+/* Night text midpoint: each current foreground halfway to white in sRGB. */
+[data-theme="dark"] .reservations-shell { color: #f8fbfb; }
+[data-theme="dark"] .reservations-shell [class*="text-ink-"] { color: #eaf1f2; }
+[data-theme="dark"] .reservations-shell [class*="text-brand-"] { color: #daf8fb; }
+[data-theme="dark"] .reservations-shell .reservations-contrast,
+[data-theme="dark"] .reservations-shell .reservations-contrast .card {
+ --res-ink: #f8fbfb; --res-muted: #eaf1f2; --res-link: #daf8fb;
+ --res-warning: #fff0d3; --res-danger: #ffddd7; --res-success: #d1f4db; --res-accent: #e9e7ff;
+}
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge { color: #f1f7f8; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-success-"] { color: #dbf8e3; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-warning-"] { color: #fff0d3; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-danger-"] { color: #ffe2dd; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-brand-"] { color: #daf6fa; }
+[data-theme="dark"] .reservations-shell .reservations-contrast .badge[class*="text-accent-"] { color: #efeeff; }
+[data-theme="dark"] .reservations-shell aside .text-ink-400,
+[data-theme="dark"] .reservations-shell [data-testid="bottom-tabs"],
+[data-theme="dark"] .reservations-shell [data-testid="bottom-tabs"] [class*="text-ink-"] { color: #eaf1f2; }
+[data-theme="dark"] .reservations-shell > .flex > .relative.text-warning-700 { color: #fff0d3; }

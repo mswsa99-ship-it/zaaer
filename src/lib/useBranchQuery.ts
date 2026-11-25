@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type DependencyList } from "r
 import { useBranch } from "./branch";
 import { toArabicError } from "./api";
 
+export const ROOM_AI_CHANGED = "roomai:changed";
+
 export interface BranchQuery<T> {
   /** The result for the ACTIVE branch only — never a previous branch's data. */
   data: T;
@@ -53,6 +55,12 @@ export function useBranchQuery<T>(load: (branchId: string) => Promise<T>, deps: 
   }, [branchId, branchLoading, tick, ...deps]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  // Room AI confirmed a write for this branch: the open page reloads its list (no other behaviour change)
+  useEffect(() => {
+    const onChanged = () => setTick((t) => t + 1);
+    window.addEventListener(ROOM_AI_CHANGED, onChanged);
+    return () => window.removeEventListener(ROOM_AI_CHANGED, onChanged);
+  }, []);
   const current = state.key === branchId && branchId !== null;
   return {
     data: current ? state.data : emptyRef.current,

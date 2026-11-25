@@ -1,3 +1,4 @@
+create or replace function t_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;  -- 0127: authenticated cannot call fn_branch_today directly
 -- =====================================================================
 -- Guest journey, task W2 (VT*; migration 0069): the tax switches. The value-added tax is off by default; each of
 -- rent, services and products has its own switch and its own rate in the branch's settings, the owner's alone;
@@ -29,7 +30,7 @@ begin
 exception when others then
   return case when sqlerrm like p_like then 'ok' else sqlerrm end;
 end $$;
-create or replace function tv_today(p uuid) returns date language sql security definer as $$ select fn_branch_today(p) $$;
+create or replace function tv_today(p uuid) returns date language sql security definer as $$ select t_today(p) $$;
 create or replace function tv_fin(p uuid) returns jsonb language sql security definer as $$ select fn_reservation_finance_internal(p) $$;
 create or replace function tv_res(p uuid) returns reservations language sql security definer as $$ select * from reservations where id = p $$;
 create or replace function tv_branch(p uuid) returns branches language sql security definer as $$ select * from branches where id = p $$;
@@ -69,7 +70,7 @@ begin
          'guest_phone', p_phone, 'guest_name', 'نزيل الضريبة', 'source_id', '00000000-0000-0000-0000-000000000021'));
   res := (r->>'id')::uuid;
   insert into ids values (p_key, res);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'amount_halalas', (tv_fin(res)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'vt-rent-' || p_key));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', res, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tv_fin(res)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'vt-rent-' || p_key));
   if p_room is not null then perform tv_check_in(res, tv_id(p_room)); end if;
   return res;
 end $$;
@@ -336,7 +337,7 @@ do $$ declare r jsonb; o jsonb; bi uuid; cat uuid; room uuid; resE uuid; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', bi, 'category_id', cat, 'check_in', tv_today(bi)::text, 'check_out', (tv_today(bi) + 2)::text,
          'guest_phone', '0552000006', 'guest_name', 'نزيل الشاملة', 'source_id', '00000000-0000-0000-0000-000000000021'));
   resE := (r->>'id')::uuid; insert into ids values ('resE', resE);
-  perform fn_create_voucher(jsonb_build_object('reservation_id', resE, 'kind', 'receipt', 'amount_halalas', (tv_fin(resE)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'vt-rent-e'));
+  perform fn_create_voucher(jsonb_build_object('reservation_id', resE, 'kind', 'receipt', 'received_confirmed', true, 'amount_halalas', (tv_fin(resE)->>'total')::bigint, 'method', 'cash', 'idempotency_key', 'vt-rent-e'));
   perform tv_check_in(resE, room);
   perform fn_staff_add_service(resE, tv_id('svci'), 1, null);
   o := tv_order_paid(resE, tv_items(tv_id('water')::text, '2'), 'vt-pay-e');
