@@ -80,3 +80,17 @@ test("AB-K1 all-branches keybox alert covers every branch and names each room's 
   await picker(page).selectOption({ label: "جميع الفروع" });
   await expect.poll(async () => (await banner.innerText()).replace(/\s+/g, " "), { timeout: 8000 }).toMatch(/\(فرع/);
 });
+
+test("AB-S1 accounts: the visible scope always matches the effective one (picker «جميع الفروع» hides the redundant checkbox; ticking «كل فروعي» says so)", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/accounts", { waitUntil: "networkidle" });
+  const box = page.getByRole("checkbox", { name: /كل فروعي/ });
+  await expect(box).toBeVisible();
+  await expect(page.getByTestId("acc-scope")).toHaveCount(0);
+  await box.check();
+  await expect(page.getByTestId("acc-scope")).toContainText("كل فروعك");
+  await box.uncheck();
+  await picker(page).selectOption({ label: "جميع الفروع" });
+  await expect(page.getByRole("checkbox", { name: /كل فروعي/ })).toHaveCount(0);
+  await expect(page.getByTestId("acc-scope")).toHaveText("النطاق: جميع الفروع");
+});

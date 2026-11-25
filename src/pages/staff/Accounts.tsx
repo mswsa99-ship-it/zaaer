@@ -51,7 +51,9 @@ export default function Accounts() {
             {current === "balance" || current === "chart"
               ? <Field label="حتى تاريخ"><DateRangePicker single label="حتى تاريخ" from={to} to={to} max={todayISO()} onChange={(a) => setTo(a)} /></Field>
               : <Field label="اليوم أو الفترة" className="sm:col-span-2"><DateRangePicker label="اليوم أو الفترة" from={from} to={to} max={todayISO()} onChange={(a, b) => { setFrom(a); setTo(b); }} /></Field>}
-            <label className="flex min-h-[44px] items-center gap-2 self-end text-sm text-ink-700"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> كل فروعي</label>
+            {allBranches
+              ? <p className="self-end pb-3 text-sm font-medium" data-testid="acc-scope">النطاق: جميع الفروع</p>
+              : <label className="flex min-h-[44px] items-center gap-2 self-end text-sm text-ink-700"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> كل فروعي{all && <span className="text-xs font-semibold" data-testid="acc-scope">، النطاق الآن: كل فروعك وليس الفرع المختار</span>}</label>}
           </div>
         </Card>
       )}
@@ -101,16 +103,16 @@ function Trial({ from, to, branch }: { from: string; to: string; branch: string 
         {d.rows.length === 0 ? <EmptyState icon={<Scale className="h-10 w-10" />} title="لا قيود في هذه الفترة" /> : (
           <Card>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-sm" data-testid="trial-rows">
+              <table className="res-table w-full min-w-[40rem] text-sm" data-testid="trial-rows">
                 <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">الحساب</th><th className="py-2 text-left font-medium">أول الفترة</th><th className="py-2 text-left font-medium">مدين</th><th className="py-2 text-left font-medium">دائن</th><th className="py-2 text-left font-medium">آخر الفترة</th></tr></thead>
                 <tbody>
                   {d.rows.map((x) => (
                     <tr key={x.account_id} className="border-b border-ink-50" data-testid="trial-row">
-                      <td className="py-2"><span className="font-mono text-xs text-ink-400" dir="ltr">{x.code}</span> {x.name}</td>
-                      <td className="py-2 text-left"><Num v={x.opening_halalas} /></td>
-                      <td className="py-2 text-left"><Num v={x.debit_halalas} /></td>
-                      <td className="py-2 text-left"><Num v={x.credit_halalas} /></td>
-                      <td className="py-2 text-left font-semibold"><Num v={x.closing_halalas} /></td>
+                      <td data-label="الحساب" className="py-2"><span className="font-mono text-xs text-ink-400" dir="ltr">{x.code}</span> {x.name}</td>
+                      <td data-label="أول الفترة" className="py-2 text-left"><Num v={x.opening_halalas} /></td>
+                      <td data-label="مدين" className="py-2 text-left"><Num v={x.debit_halalas} /></td>
+                      <td data-label="دائن" className="py-2 text-left"><Num v={x.credit_halalas} /></td>
+                      <td data-label="آخر الفترة" className="py-2 text-left font-semibold"><Num v={x.closing_halalas} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -197,15 +199,15 @@ function Statement({ account, asOf, branch }: { account: string; asOf: string; b
         <p className="mb-2 text-xs text-ink-500">من <span dir="ltr">{d.from}</span> إلى <span dir="ltr">{d.to}</span> — الرصيد أول الفترة <Num v={d.opening_halalas} /></p>
         {d.lines.length === 0 ? <EmptyState icon={<BookOpen className="h-8 w-8" />} title="لا حركة في هذا الشهر" /> : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[32rem] text-sm" data-testid="statement-lines">
+            <table className="res-table w-full min-w-[32rem] text-sm" data-testid="statement-lines">
               <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">القيد</th><th className="py-2 text-right font-medium">البيان</th><th className="py-2 text-left font-medium">مدين</th><th className="py-2 text-left font-medium">دائن</th><th className="py-2 text-left font-medium">الرصيد</th></tr></thead>
               <tbody>{d.lines.map((l, i) => (
                 <tr key={l.entry_id + i} className="border-b border-ink-50">
-                  <td className="py-2 text-xs"><span className="font-mono" dir="ltr">{l.number}</span><span className="block text-ink-400" dir="ltr">{l.entry_date}</span></td>
-                  <td className="py-2 text-ink-600">{l.description}</td>
-                  <td className="py-2 text-left"><Num v={l.debit_halalas} /></td>
-                  <td className="py-2 text-left"><Num v={l.credit_halalas} /></td>
-                  <td className="py-2 text-left font-semibold"><Num v={l.balance_halalas} /></td>
+                  <td data-label="القيد" className="py-2 text-xs"><span className="font-mono" dir="ltr">{l.number}</span><span className="block text-ink-400" dir="ltr">{l.entry_date}</span></td>
+                  <td data-label="البيان" className="py-2 text-ink-600">{l.description}</td>
+                  <td data-label="مدين" className="py-2 text-left"><Num v={l.debit_halalas} /></td>
+                  <td data-label="دائن" className="py-2 text-left"><Num v={l.credit_halalas} /></td>
+                  <td data-label="الرصيد" className="py-2 text-left font-semibold"><Num v={l.balance_halalas} /></td>
                 </tr>))}</tbody>
             </table>
           </div>
