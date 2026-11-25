@@ -252,8 +252,8 @@ test.describe("floating assistant on a phone and motion/contrast (plan 6.11 and 
     merge(await walk());   // both bubbles and the mode note
     await dialog.getByPlaceholder("اكتب سؤالك أو طلبك…").fill("أنشئ مهمة تنظيف للوحدة 102");
     await dialog.getByPlaceholder("اكتب سؤالك أو طلبك…").press("Enter");
-    await expect(dialog.getByRole("button", { name: "تأكيد وتنفيذ" })).toBeVisible({ timeout: 15_000 });
-    merge(await walk());   // the proposal card and its action buttons
+    await expect(dialog.getByText("للقراءة والاطلاع فقط").first()).toBeVisible({ timeout: 15_000 });   // read-only guidance replaces the old proposal card
+    merge(await walk());   // the read-only guidance bubble
     const pairs = [...merged.values()].sort((a, b) => a.ratio - b.ratio);
     const lines = pairs.map((v) => `${v.ratio.toFixed(2)}:1 (needs ${v.need}:1) ${v.fg} on ${v.bg} — «${v.sample}»`);
     const failures = pairs.filter((v) => v.ratio < v.need).map((v) => `${v.ratio.toFixed(2)}:1 < ${v.need}:1 — ${v.fg} on ${v.bg} — «${v.sample}»`);

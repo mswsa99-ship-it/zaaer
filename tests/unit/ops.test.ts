@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { validateOpsArgs, gateOpsOutput, buildBriefing, fallbackOpsReply, isOpsTool, OPS_ACTIONS, executeOpsTool, localDay, redactArgs } from "../../supabase/functions/_shared/ops";
+import { readFileSync } from "node:fs";
+import { validateOpsArgs, gateOpsOutput, buildBriefing, fallbackOpsReply, isOpsTool, OPS_ACTIONS, OPS_READ_ONLY, OPS_TOOL_DECLARATIONS, executeOpsTool, localDay, redactArgs } from "../../supabase/functions/_shared/ops";
 
 const ctx = {
   summary: { date: "2026-10-22", units: { active: 10, occupied: 6, reserved: 1, ready: 2, dirty: 3, maintenance: 1, out_of_service: 0 }, occupancy_pct: 60,
@@ -26,15 +27,24 @@ describe("ops tool argument validation", () => {
     expect(() => validateOpsArgs("list_available_rooms", { from: "tomorrow", to: "2026-10-30" })).toThrow(/INVALID_ARG/);
     expect(validateOpsArgs("list_available_rooms", { from: "2026-10-22", to: "2026-10-24" })).toEqual({ from: "2026-10-22", to: "2026-10-24", category_id: undefined, exclude_reservation_id: undefined });
   });
-  it("propose_action: only whitelisted actions, positive amounts, PII-redacted summary, primitives only", () => {
-    expect(() => validateOpsArgs("propose_action", { action: "delete_branch", args: {}, summary: "حذف الفرع" })).toThrow(/action/);
-    expect(() => validateOpsArgs("propose_action", { action: "create_receipt", args: { amount_halalas: -5 }, summary: "قبض سالب" })).toThrow(/amount/);
-    const v = validateOpsArgs("propose_action", { action: "create_task", args: { room_id: "x", nested: { a: 1 }, priority: "high", n: 3.7 }, summary: "مهمة للضيف 1012345678 جوال 0501234567" });
-    expect(v.action).toBe("create_task");
-    expect((v.args as Record<string, unknown>).nested).toBeUndefined();
-    expect((v.args as Record<string, unknown>).n).toBe(4);
-    expect(String(v.summary)).not.toMatch(/1012345678|0501234567/);
-    for (const a of OPS_ACTIONS) expect(() => validateOpsArgs("propose_action", { action: a, args: {}, summary: "وصف كافٍ" })).not.toThrow();
+  it("READ-ONLY: propose_action is not offered to the model and is refused by the validator and the executor", async () => {
+    expect(OPS_READ_ONLY).toBe(true);
+    expect(OPS_TOOL_DECLARATIONS.map((t) => t.name)).not.toContain("propose_action");
+    expect(isOpsTool("propose_action")).toBe(false);
+    for (const a of OPS_ACTIONS) expect(() => validateOpsArgs("propose_action", { action: a, args: {}, summary: "وصف كافٍ" })).toThrow(/READ_ONLY/);
+    const calls: string[] = [];
+    const db = { rpc: async (fn: string) => { calls.push(fn); return { data: [], error: null }; } };
+    await expect(executeOpsTool("propose_action", { action: "no_show", args: { reservation_id: "r" }, summary: "s" }, { db, branchId: "b", conversationId: "c", today: "2026-10-22" })).rejects.toThrow(/READ_ONLY/);
+    expect(calls).toEqual([]);   // no write RPC was even attempted
+  });
+  it("READ-ONLY: every tool the model can call reads only (a fixed allowlist of read RPCs), none mutates", () => {
+    expect(OPS_TOOL_DECLARATIONS.map((t) => t.name).sort()).toEqual(["find_reservation", "get_operations_context", "get_reservation_finance", "list_available_rooms", "list_units_board"]);
+    const src = readFileSync("supabase/functions/_shared/ops.ts", "utf8");
+    const exec = src.slice(src.indexOf("export async function executeOpsTool"), src.indexOf("Branch-local calendar day"));
+    const rpcs = [...exec.matchAll(/call\("(\w+)"/g)].map((m) => m[1]).sort();
+    expect(rpcs).toEqual(["fn_ai_ops_context", "fn_ai_ops_find_reservation", "fn_available_rooms", "fn_ai_ops_propose", "fn_ops_units_board", "fn_reservation_finance"].sort());
+    const reachable = exec.replace(/case "propose_action":[^\n]*\n/, "");
+    expect(reachable).not.toMatch(/fn_ai_ops_propose|fn_ai_ops_execute/);
   });
 });
 
@@ -93,10 +103,8 @@ describe("tool executor scoping", () => {
     await executeOpsTool("get_operations_context", { date: undefined }, c);
     await executeOpsTool("find_reservation", { query: "R-1" }, c);
     await executeOpsTool("list_units_board", {}, c);
-    await executeOpsTool("propose_action", { action: "no_show", args: { reservation_id: "r" }, summary: "s" }, c);
-    expect(calls.map((x) => x.fn)).toEqual(["fn_ai_ops_context", "fn_ai_ops_find_reservation", "fn_ops_units_board", "fn_ai_ops_propose"]);
+    expect(calls.map((x) => x.fn)).toEqual(["fn_ai_ops_context", "fn_ai_ops_find_reservation", "fn_ops_units_board"]);
     for (const x of calls.slice(0, 3)) expect(x.args.p_branch).toBe("branch-A");
-    expect(calls[3].args.p_conversation).toBe("conv-1");
     expect(calls[0].args.p_date).toBe("2026-10-22");
   });
 });

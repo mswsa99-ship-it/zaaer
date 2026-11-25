@@ -39,7 +39,13 @@ const OPS_ACTION_ARG_PROPERTIES: Record<string, unknown> = {
   quantity: { type: "integer", description: "الكمية" },
 };
 
-export const OPS_TOOL_DECLARATIONS: ToolDeclaration[] = [
+/**
+ * READ-ONLY (the owner, 25 Nov 2026 14:15: the AI knows all the routes and files, "لا ينفذ ولكن مطلع"). The staff assistant
+ * has NO write path: propose_action is dormant source, not offered to the model, refused by the validator and the executor.
+ * Restoring it is a code change plus review, never a setting.
+ */
+export const OPS_READ_ONLY = true as const;
+const ALL_OPS_TOOL_DECLARATIONS_DORMANT: ToolDeclaration[] = [
   { name: "get_operations_context", description: "الصورة التشغيلية الكاملة لليوم: ملخص الوحدات والإشغال، الوصول والمغادرة، المتأخرون، الأرصدة، التأمينات، الوحدات التي تحتاج انتباهًا، المهام المفتوحة، الموظفون. استخدمها أولًا لأي سؤال تشغيلي.",
     parameters: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD (افتراضي: اليوم)" } } } },
   { name: "find_reservation", description: "البحث عن حجز برقمه الداخلي أو الخارجي أو اسم الضيف أو رقم الوحدة. يعيد الحالة والتواريخ والأرصدة ومعرّف الحجز.",
@@ -53,6 +59,8 @@ export const OPS_TOOL_DECLARATIONS: ToolDeclaration[] = [
   { name: "propose_action", description: "يقترح إجراءً تشغيليًا يتطلب تأكيد الموظف قبل التنفيذ. لا ينفذ شيئًا بنفسه. الإجراءات: create_task{room_id|facility_id,task_type_id,priority,assignee_id,description}, complete_task{task_id,note}, assign_task{task_id,assignee_id}, set_cleanliness{room_id,state:clean|dirty,reason}, amend_stay{reservation_id,new_check_out,pricing_mode:keep_rate|reprice,reason}, switch_room{reservation_id,room_id,effective,reason}, cancel_reservation{reservation_id,reason}, no_show{reservation_id,reason}, create_receipt{reservation_id,amount_halalas,method:cash|pos|bank_transfer|ota_deferred,reference}, create_deposit{reservation_id,amount_halalas,method:cash|pos|bank_transfer,reference} (رقم العملية إلزامي للشبكة والتحويل؛ يُقيَّد السند في الصندوق أو الحساب الافتراضي للفرع), add_service{reservation_id,service_id,quantity}, create_invoice{reservation_id}.",
     parameters: { type: "object", properties: { action: { type: "string", enum: [...OPS_ACTIONS] }, args: { type: "object", description: "وسائط الإجراء؛ اكتب منها ما يخص الإجراء المختار فقط", properties: OPS_ACTION_ARG_PROPERTIES }, summary: { type: "string", description: "وصف عربي قصير لما سيحدث وأثره" } }, required: ["action", "args", "summary"] } },
 ];
+
+export const OPS_TOOL_DECLARATIONS: ToolDeclaration[] = ALL_OPS_TOOL_DECLARATIONS_DORMANT.filter((t) => !(OPS_READ_ONLY && t.name === "propose_action"));
 
 export function isOpsTool(name: string): boolean { return OPS_TOOL_DECLARATIONS.some((t) => t.name === name); }
 
@@ -96,6 +104,7 @@ export function validateOpsArgs(name: string, args: Record<string, unknown>): Re
     case "list_available_rooms": return { from: str("from", DATE_RE), to: str("to", DATE_RE), category_id: str("category_id", UUID_RE), exclude_reservation_id: str("exclude_reservation_id", UUID_RE) };
     case "list_units_board": return {};
     case "propose_action": {
+      if (OPS_READ_ONLY) throw new Error("READ_ONLY: the operations assistant cannot propose or execute actions");
       const action = str("action");
       if (!action || !(OPS_ACTIONS as readonly string[]).includes(action)) throw new Error("INVALID_ARG: action");
       const summary = str("summary"); if (!summary || summary.length < 5) throw new Error("INVALID_ARG: summary");
@@ -122,7 +131,7 @@ export async function executeOpsTool(name: string, args: Record<string, unknown>
     case "get_reservation_finance": return await call("fn_reservation_finance", { p_reservation: args.reservation_id });
     case "list_available_rooms": return await call("fn_available_rooms", { p_branch: ctx.branchId, p_from: args.from, p_to: args.to, p_category: args.category_id ?? null, p_exclude_reservation: args.exclude_reservation_id ?? null });
     case "list_units_board": return await call("fn_ops_units_board", { p_branch: ctx.branchId });
-    case "propose_action": return await call("fn_ai_ops_propose", { p_conversation: ctx.conversationId, p_action: args.action, p_args: args.args, p_summary: args.summary });
+    case "propose_action": if (OPS_READ_ONLY) throw new Error("READ_ONLY: the operations assistant cannot propose or execute actions"); return await call("fn_ai_ops_propose", { p_conversation: ctx.conversationId, p_action: args.action, p_args: args.args, p_summary: args.summary });
     default: throw new Error("UNKNOWN_TOOL");
   }
 }
@@ -168,7 +177,7 @@ export function buildOpsSystemPrompt(o: { propertyName: string; branchName: stri
     "مهمتك: مساعدة فريق التشغيل على فهم حالة اليوم واتخاذ القرار بسرعة: الوصول والمغادرة، الوحدات والنظافة والجاهزية، المهام، الأرصدة والتأمينات، التمديد والتبديل والإلغاء.",
     "قواعد غير قابلة للتجاوز:",
     "1) لا تختلق أي رقم أو حالة. كل حقيقة تأتي من أداة. إن لم تجد البيانات قل ذلك.",
-    "2) لا تنفذ أي تغيير بنفسك. أي إجراء تشغيلي يتم عبر propose_action ثم يؤكده الموظف من الواجهة. اشرح أثر الإجراء قبل اقتراحه (مثال: التمديد يغير المغادرة والسعر؛ الإلغاء لا يسترد المال تلقائيًا؛ إتمام التنظيف لا يحرر وحدة مؤجرة).",
+    "2) أنت للقراءة والاطلاع فقط: لا تنفذ ولا تقترح تنفيذ أي إجراء، ولا يوجد لديك أي أداة كتابة. إن طلب الموظف تغييرًا فاشرح له أين يجريه بنفسه في التطبيق وما أثره (مثال: التمديد يغير المغادرة والسعر؛ الإلغاء لا يسترد المال تلقائيًا؛ إتمام التنظيف لا يحرر وحدة مؤجرة).",
     "3) لا تطلب ولا تذكر رموز الدخول أو أرقام الوثائق أو أرقام الجوال الكاملة أو أي سر.",
     "4) المال بالريال في النص (الهلالة ÷ 100). فرّق دائمًا بين المتبقي على الإقامة ورصيد التأمين.",
     "5) الحالات: النشاط والنظافة والإشغال وجاهزية الدخول مستقلة؛ «نظيفة» لا تعني «خالية» ولا «جاهزة للدخول».",

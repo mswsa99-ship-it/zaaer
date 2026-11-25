@@ -39,22 +39,18 @@ test.describe("ops copilot", () => {
     await expect(reply).not.toBeEmpty();
   });
 
-  test("OC02 a write is a proposal first; confirming executes it through the real RPC and it shows up in housekeeping", async ({ page, loginAs }) => {
+  test("OC02 the assistant is read-only: a write request gets guidance, no confirm button, and nothing is created", async ({ page, loginAs }) => {
     await loginAs("owner");
-    await openCopilot(page);
-    await send(page, "أنشئ مهمة تنظيف للوحدة 102");
-    const confirm = page.getByRole("button", { name: "تأكيد وتنفيذ" }).first();
-    await expect(confirm).toBeVisible();
-    // nothing happened yet: the task does not exist before confirmation
     await page.goto("/#/staff/housekeeping", { waitUntil: "networkidle" });
-    const before = await page.getByText("وحدة 102").count();
+    const before = await page.locator("main").getByText("وحدة 102").count();
     await page.goto("/#/staff/dashboard", { waitUntil: "networkidle" });
     await openCopilot(page);
     await send(page, "أنشئ مهمة تنظيف للوحدة 102");
-    await page.getByRole("button", { name: "تأكيد وتنفيذ" }).first().click();
-    await expect(page.getByText("نُفذ وسُجل").first()).toBeVisible();
+    await expect(page.getByText("للقراءة والاطلاع فقط").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "تأكيد وتنفيذ" })).toHaveCount(0);
+    await page.keyboard.press("Escape");                              // the chat bubble itself mentions the room: close it before counting the page
     await page.goto("/#/staff/housekeeping", { waitUntil: "networkidle" });
-    expect(await page.getByText("وحدة 102").count()).toBeGreaterThan(before);
+    expect(await page.locator("main").getByText("وحدة 102").count()).toBe(before);
   });
 
   test("OC03 housekeeping cannot get balances from the copilot", async ({ page, loginAs }) => {
