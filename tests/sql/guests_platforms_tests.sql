@@ -262,7 +262,7 @@ end $$;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 do $$ declare res uuid; res2 uuid; m1 jsonb; m2 jsonb; begin
   -- a new profile on the same phone still matches (by phone); a companion carrying the banned document matches (by document)
-  res := t_gstay(t_id('g7'), t_today() + 70, t_today() + 71, 'عمر القحطاني ن', '0553330003', '{"new_profile": true}');
+  res := t_gstay(t_id('g7'), t_today() + 70, t_today() + 71, 'عمر القحطاني نون', '0553330003', '{"new_profile": true}');
   res2 := t_gstay(t_id('g8'), t_today() + 72, t_today() + 73, 'زائر آخر تماما', '0554440004', '{"companions": 1}');
   perform t_doc(res2, null, 'عمر ناصر القحطاني', '1056789014');
   m1 := fn_reservation_detail(res)->'bans'; m2 := fn_reservation_detail(res2)->'bans';

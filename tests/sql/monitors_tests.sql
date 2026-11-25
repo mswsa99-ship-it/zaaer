@@ -86,9 +86,9 @@ do $$ declare r jsonb; d0 date := t_today() + 120; begin
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_number', 'MN-1')); insert into ids values ('m1', (r->>'id')::uuid);
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_number', 'MN-2')); insert into ids values ('m2', (r->>'id')::uuid);
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_number', 'MN-3')); insert into ids values ('m3', (r->>'id')::uuid);
-  insert into ids values ('a', t_stay(t_id('m1'), d0, d0 + 2, 'ضيف المراقبة أ'));
-  insert into ids values ('b', t_stay(t_id('m2'), d0, d0 + 2, 'ضيف المراقبة ب'));
-  insert into ids values ('c', t_stay(t_id('m3'), d0, d0 + 2, 'ضيف المراقبة ج'));
+  insert into ids values ('a', t_stay(t_id('m1'), d0, d0 + 2, 'ضيف المراقبة ألف'));
+  insert into ids values ('b', t_stay(t_id('m2'), d0, d0 + 2, 'ضيف المراقبة باء'));
+  insert into ids values ('c', t_stay(t_id('m3'), d0, d0 + 2, 'ضيف المراقبة جيم'));
 end $$;
 
 do $$ declare r jsonb; n0 bigint; begin

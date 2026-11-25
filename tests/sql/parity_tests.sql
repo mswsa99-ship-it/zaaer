@@ -55,7 +55,7 @@ do $$ declare r jsonb; rid uuid; begin
     t_companions(rid) = 1 and exists (select 1 from reservations where id = rid and companions = 1)
     and exists (select 1 from reservation_guests where reservation_id = rid and not is_primary and relationship = 'ابن' and verification_status = 'not_started' and not data_submitted), r::text);
   begin
-    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-10","check_out":"2031-05-11","guest_phone":"0551000023","guest_name":"فوق السعة","source_id":"00000000-0000-0000-0000-000000000021","adults":2,"companions_details":[{"full_name":"مرافق أ"},{"full_name":"مرافق ب"},{"full_name":"مرافق ج"},{"full_name":"مرافق د"},{"full_name":"مرافق هـ"},{"full_name":"مرافق و"},{"full_name":"مرافق ز"}]}'::jsonb);
+    perform fn_staff_create_reservation('{"branch_id":"00000000-0000-0000-0000-000000000010","category_id":"00000000-0000-0000-0000-000000000030","check_in":"2031-05-10","check_out":"2031-05-11","guest_phone":"0551000023","guest_name":"فوق السعة","source_id":"00000000-0000-0000-0000-000000000021","adults":2,"companions_details":[{"full_name":"مرافق ألف"},{"full_name":"مرافق باء"},{"full_name":"مرافق جيم"},{"full_name":"مرافق دال"},{"full_name":"مرافق هاء"},{"full_name":"مرافق واو"},{"full_name":"مرافق زاي"}]}'::jsonb);
     perform t_record('P03b capacity is checked against adults + companion rows', false);
   exception when others then
     perform t_record('P03b capacity is checked against adults + companion rows', sqlerrm like 'CAPACITY_EXCEEDED%', sqlerrm);

@@ -140,7 +140,8 @@ do $$ declare unreadable text; begin
     and a.attname not in ('addons_halalas', 'balance_due_halalas', 'deposit_balance_halalas', 'discount_halalas', 'nightly_rate_halalas',
                           'paid_halalas', 'price_basis', 'prices_include_tax', 'refunded_halalas', 'rent_amount_halalas', 'tax_rate_bp',
                           'tax_services_rate_bp', 'tax_products_rate_bp',   -- 0069: the tax policy of the stay, with tax_rate_bp
-                          'taxes_halalas', 'total_halalas');
+                          'taxes_halalas', 'total_halalas',
+                          'company_vat_number', 'company_address');   -- 0142: the company tax identity is read only through the role-masked fn_reservation_detail (0143), never through the table
   perform t_record('RF15c gate: every non-money reservations column is readable by staff (0011, 0033, 0035)', unreadable is null, unreadable);
   select string_agg(a.attname, ', ' order by a.attname) into unreadable
   from pg_attribute a

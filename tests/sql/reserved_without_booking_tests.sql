@@ -100,14 +100,14 @@ do $$ declare r jsonb; v uuid; begin
   if v is null then r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_number', 'RW-4')); v := (r->>'id')::uuid; end if;
   insert into ids values ('off', v);
   -- RW-1: a real booking covering today through the product's own functions (the flag is set legitimately)
-  insert into ids values ('stay', t_stay(t_id('ok'), t_today(), t_today() + 2, 'ضيف المراقبة أ'));
+  insert into ids values ('stay', t_stay(t_id('ok'), t_today(), t_today() + 2, 'ضيف المراقبة ألف'));
 end $$;
 
 do $$ declare r jsonb; ri review_items; begin
   -- the state the plan names: RW-2 flagged «محجوزة» with no allocation at all; RW-3's booking cancelled while the
   -- flag was left behind (what any writer that forgets the release leaves); RW-4 the same but out of service
   perform t_set_reserved(t_id('bare'));
-  insert into ids values ('stay3', t_stay(t_id('stale'), t_today(), t_today() + 2, 'ضيف المراقبة ب'));
+  insert into ids values ('stay3', t_stay(t_id('stale'), t_today(), t_today() + 2, 'ضيف المراقبة باء'));
   perform t_drift_cancel(t_id('stay3'));
   perform t_set_off_reserved(t_id('off'));
   perform t_run();
