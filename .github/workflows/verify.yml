@@ -17,7 +17,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04, which Playwright 1.56 cannot install on
-    timeout-minutes: 30
+    timeout-minutes: 60   # the full suite grew past 30 minutes on 2 runners (the base run took 21.5; the 2026-11-25 candidate run was cut at 30 with no failure reported)
     services:
       postgres:
         image: postgres:16
