@@ -814,6 +814,20 @@ function createReservationUnit(p: any, groupRef: string | null) { requireCap("re
     audit(p.branch_id, "reservation.created", "reservation", id, { after: { internal_ref: ref, check_in: p.check_in, check_out: p.check_out, quote: q, arrival_time: arrival, departure_time: departure, companions: comp, group_ref: groupRef, guest_profile_id: gp.id, platform_booked_on: bookedOn, platform_collects: collects, platform_voucher: vch?.number ?? null } }); emit("reservation_guests");
     return { ok: true, id, internal_ref: ref, quote: q, group_ref: groupRef, guest_profile_id: gp.id, platform_voucher: vch?.number ?? null }; }
 const rpcsMore: Record<string, (a: any) => any> = {
+  // 0145: role-aware read sources (mirror the SQL: own branches, page rules of the table, money masked by role)
+  fn_reservation_cards: ({ p_branch, p_status, p_today_only }) => {
+    if (!myBranches().includes(p_branch)) return [];
+    return T("reservations").filter((r) => r.branch_id === p_branch && (!p_status || p_status.length === 0 || p_status.includes(r.status)) && (!p_today_only || r.check_in === branchToday(p_branch)))
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+      .map((r) => { const src = byId("booking_sources", r.source_id); const rm = byId("rooms", r.room_id); const cat = byId("room_categories", r.room_category_id); const br = byId("branches", r.branch_id);
+        return { id: r.id, internal_ref: r.internal_ref, external_ref: r.external_ref ?? null, status: r.status, check_in: r.check_in, check_out: r.check_out, adults: r.adults, companions: r.companions,
+          payment_status: seesMoney() ? r.payment_status : null, identity_status: r.identity_status, government_registration: !!r.government_registration, shomoos_accepted_at: r.shomoos_accepted_at ?? null,
+          access_status: r.access_status, keybox_delivered: !!r.keybox_delivered, actual_check_in: r.actual_check_in ?? null, updated_at: r.updated_at ?? null,
+          source: src ? { name: src.name } : null, room: rm ? { room_number: rm.room_number } : null, room_category: cat ? { name_ar: cat.name_ar } : null, branch: { name_ar: br?.name_ar } }; });
+  },
+  fn_branch_iban: ({ p_branch }) => (hasRole("owner", "manager") && myBranches().includes(p_branch) ? (byId("branches", p_branch)?.bank_iban ?? null) : null),
+  fn_my_profile: () => { const m = me(); return m ? { id: m.id, auth_user_id: m.auth_user_id, organization_id: m.organization_id, full_name: m.full_name, email: m.email, phone: m.phone ?? null, role: m.role, is_active: m.is_active } : null; },
+  fn_staff_directory: () => { const m = me(); if (!m) return []; return T("staff_profiles").filter((x) => x.organization_id === m.organization_id && x.is_active).map((x) => ({ id: x.id, full_name: x.full_name, role: x.role })).sort((a, b) => String(a.full_name).localeCompare(String(b.full_name))); },
   // 0142: company VAT number and national address (mirrors the SQL: role, branch, strict version, formats)
   fn_staff_set_company_tax: ({ p_reservation, p_vat, p_address, p_expected_version }) => atomically(() => { requireCap("voucher.correct"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
     if (p_expected_version == null) throw new Error("VERSION_REQUIRED: expected version must be supplied"); checkVersion(r.version, p_expected_version);

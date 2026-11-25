@@ -6,11 +6,11 @@ import { defaultPermissions, type Permissions } from "./permissionCatalog";
 export const PROFILE_LOAD_ERROR = "تعذّر التحقق من صلاحيات الحساب. أعد المحاولة، ولم يتم فتح أي صفحة.";
 
 /** Missing is a successful empty lookup, never a transport/permission error. */
-export async function readLoginIdentity(client: SupabaseClient, uid: string): Promise<{ operator: boolean; profile: StaffProfile | null; permissions: Permissions }> {
+export async function readLoginIdentity(client: SupabaseClient, _uid: string): Promise<{ operator: boolean; profile: StaffProfile | null; permissions: Permissions }> {
   const operator = await client.rpc("fn_platform_operator_id");
   if (operator.error) throw new Error(PROFILE_LOAD_ERROR);
   if (operator.data) return { operator: true, profile: null, permissions: defaultPermissions(null) };
-  const lookup = () => client.from("staff_profiles").select("id, auth_user_id, organization_id, full_name, email, phone, role, is_active").eq("auth_user_id", uid).maybeSingle();
+  const lookup = () => client.rpc("fn_my_profile");
   let result = await lookup();
   if (result.error) throw new Error(PROFILE_LOAD_ERROR);
   if (!result.data) {

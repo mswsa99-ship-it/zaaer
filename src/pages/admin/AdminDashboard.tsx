@@ -45,7 +45,7 @@ async function loadStats(branchId: string): Promise<Stats> {
   const hourAgo = new Date(Date.now() - 3600_000).toISOString();
   const [rooms, reservations, handoffs, unmatched, failures, summary, finance] = await Promise.all([
     supabase.from("rooms").select("id", { count: "exact", head: true }).eq("branch_id", branchId).is("archived_at", null),
-    supabase.from("reservations").select("id, status, check_in, payment_status").eq("branch_id", branchId),
+    supabase.rpc("fn_reservation_cards", { p_branch: branchId, p_status: null, p_today_only: false }),
     supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").eq("branch_id", branchId),
     supabase.from("human_handoff_tickets").select("id", { count: "exact", head: true }).eq("status", "open").eq("kind", "unmatched_reservation").eq("branch_id", branchId),
     supabase.from("access_delivery_events").select("id, reservation_id").eq("acknowledged", false).lt("created_at", hourAgo),

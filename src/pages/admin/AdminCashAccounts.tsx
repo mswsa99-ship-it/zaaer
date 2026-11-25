@@ -41,7 +41,7 @@ export default function AdminCashAccounts() {
   useEffect(() => {
     if (!branchId) { setIban(null); return; }
     let alive = true;
-    supabase.from("branches").select("bank_iban").eq("id", branchId).maybeSingle().then(({ data }) => { if (alive) setIban((data as { bank_iban: string | null } | null)?.bank_iban ?? null); });
+    supabase.rpc("fn_branch_iban", { p_branch: branchId }).then(({ data }) => { if (alive) setIban((data as string | null) ?? null); });
     return () => { alive = false; };
   }, [branchId, q.data]);
 

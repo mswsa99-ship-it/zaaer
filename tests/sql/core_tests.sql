@@ -793,6 +793,31 @@ end $$;
 
 reset role;
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),110) as detail from test_results order by ok, name;
+-- 0145: role-aware sources (additive; the direct reads are closed later by 0146)
+reset role;
+do $$ begin update branches set bank_iban = 'SA0380000000608010167519', bank_name = 'T', bank_beneficiary = 'T' where id = '00000000-0000-0000-0000-000000000010'; end $$;
+set role authenticated;
+select t_login('a0000000-0000-0000-0000-000000000002','sup@test.local');
+do $$ declare c jsonb; m jsonb; begin
+  c := fn_reservation_cards('00000000-0000-0000-0000-000000000010');
+  perform t_record('RS11 0145: a money role gets reservation cards with payment_status', jsonb_array_length(c) > 0 and (c->0) ? 'payment_status' and (c->0->>'payment_status') is not null, left(c::text, 120));
+  perform t_record('RS12 0145: the cards carry no money or personal columns', not (c::text ~ '(total_halalas|paid_halalas|phone|birth_date|identity_number|gov_registration_ref)'));
+  m := fn_my_profile();
+  perform t_record('RS13 0145: own profile is returned whole', m->>'email' = 'sup@test.local');
+  perform t_record('RS14 0145: the directory holds id, name and role only', not (fn_staff_directory()::text ~ '(email|phone)') and jsonb_array_length(fn_staff_directory()) > 0);
+  perform t_record('RS15 0145: another branch gives no cards', fn_reservation_cards('00000000-0000-0000-0000-000000000099') = '[]'::jsonb);
+end $$;
+select t_login('a0000000-0000-0000-0000-000000000003','hk@test.local');
+do $$ declare c jsonb; begin
+  c := fn_reservation_cards('00000000-0000-0000-0000-000000000010');
+  perform t_record('RS16 0145: a role that does not see money never gets payment_status', not exists (select 1 from jsonb_array_elements(c) e where e->>'payment_status' is not null), left(c::text, 120));
+  perform t_record('RS17 0145: housekeeping gets no IBAN', fn_branch_iban('00000000-0000-0000-0000-000000000010') is null);
+end $$;
+select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
+do $$ begin perform t_record('RS18 0145: the owner reads the branch IBAN through the function', fn_branch_iban('00000000-0000-0000-0000-000000000010') = 'SA0380000000608010167519'); end $$;
+reset role;
+update branches set bank_iban = null, bank_name = null, bank_beneficiary = null where id = '00000000-0000-0000-0000-000000000010';
+
 select count(*) filter (where ok) as passed, count(*) filter (where ok is not true) as failed from test_results;
 \set ON_ERROR_STOP on
 do $$ begin

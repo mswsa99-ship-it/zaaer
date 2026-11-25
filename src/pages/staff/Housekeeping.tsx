@@ -45,7 +45,7 @@ export default function Housekeeping() {
       supabase.from("rooms").select("id, room_number, status, cleanliness").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("room_number"),
       supabase.from("facilities").select("id, name").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("task_types").select("id, name, code").eq("branch_id", branchId).eq("is_active", true).is("archived_at", null).order("name"),
-      supabase.from("staff_profiles").select("id, full_name, role").eq("is_active", true),
+      supabase.rpc("fn_staff_directory"),
       supabase.from("checkout_inspections").select("reservation_id, result").eq("branch_id", branchId).eq("status", "active"),
     ]);
     return {

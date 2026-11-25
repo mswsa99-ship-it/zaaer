@@ -1,7 +1,6 @@
 import { useEffect, useId } from "react";
 import { supabase } from "./supabase";
 import { useBranchQuery, must } from "./useBranchQuery";
-import { todayISO } from "./utils";
 import { useAuth } from "./auth";
 
 export interface ReservationCard {
@@ -32,17 +31,6 @@ export interface ReservationCard {
 
 const NO_CARDS: ReservationCard[] = [];
 
-// Operational columns only: money (total/paid/rent) is never read from the table — use fn_reservation_list /
-// fn_reservation_finance, which the server gates by role (GAP05).
-const SELECT = `
-  id, internal_ref, external_ref, status, check_in, check_out, adults, companions,
-  payment_status, identity_status, government_registration, shomoos_accepted_at, access_status, keybox_delivered,
-  actual_check_in, updated_at,
-  source:booking_sources(name),
-  room:rooms(room_number),
-  room_category:room_categories(name_ar),
-  branch:branches(name_ar)
-`;
 
 /**
  * Reservation cards of the ACTIVE branch (from BranchProvider), on the shared branch loader (decision 40, G24):
@@ -57,10 +45,9 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
   const money = useAuth().permissions.seesMoney;
 
   const q = useBranchQuery<ReservationCard[]>(async (branchId) => {
-    let qq = supabase.from("reservations").select(SELECT).eq("branch_id", branchId);
-    if (statusKey) qq = qq.in("status", statusKey.split(","));
-    if (todayOnly) qq = qq.eq("check_in", todayISO());
-    const list = must(await qq.order("created_at", { ascending: false })) as unknown as ReservationCard[];
+    const { data: cards, error: cardsErr } = await supabase.rpc("fn_reservation_cards", { p_branch: branchId, p_status: statusKey ? statusKey.split(",") : null, p_today_only: todayOnly });
+    if (cardsErr) throw cardsErr;
+    const list = (cards ?? []) as unknown as ReservationCard[];
     if (list.length === 0) return list;
     // Primary guests are loaded separately (reservation_guests is role-gated on the server: a role that may not
     // read them simply gets no rows, and the card shows "—").
