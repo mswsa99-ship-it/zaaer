@@ -1,3 +1,5 @@
+import { TimeInput } from "../../components/TimeInput";
+import { NationalityField } from "../../components/NationalityField";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarPlus, Calculator, Plus, X, Users, Search, ShieldBan, UserCheck } from "lucide-react";
@@ -7,12 +9,14 @@ import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi, guestProfileApi, toArabicError, type Quote, type PriceRun, type GuestProfileRow } from "../../lib/api";
 import { Stars } from "../../components/Guests";
 import { Card, SectionTitle, ErrorBanner, Spinner, LoadErrorCard } from "../../components/ui";
-import { Field, MoneyInput, Toggle , NumberInput} from "../../components/forms";
+import { Field, MoneyInput, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO } from "../../lib/utils";
 import { checkPersonName, checkPhone, fieldError } from "../../lib/validation";
 import { VALIDATION_AR } from "../../lib/api";
 import { CLEANLINESS_LABELS } from "../../lib/types";
+import { DateRangePicker } from "../../components/DateRangePicker";
+const MAX_NIGHTS = 30;
 
 interface Cat { id: string; name_ar: string; base_capacity: number; max_capacity: number; base_price_halalas: number }
 interface Src { id: string; name: string; kind: string; external_reference_required: boolean }
@@ -87,6 +91,7 @@ export default function StaffReservationNew() {
   const [lateReason, setLateReason] = useState("");
   const pastStay = f.check_out <= todayISO();
   const canLate = ["owner", "manager", "supervisor"].includes(profile?.role ?? "");
+  const setNights = (n: number) => setF((x) => ({ ...x, check_out: addDays(x.check_in, Math.max(1, Math.min(MAX_NIGHTS, n))) }));
   const nights = useMemo(() => Math.max(0, Math.round((new Date(f.check_out).getTime() - new Date(f.check_in).getTime()) / 86400000)), [f.check_in, f.check_out]);
   const source = sources.find((s) => s.id === f.source_id);
   const cat = cats.find((c) => c.id === f.category_id);
@@ -148,6 +153,22 @@ export default function StaffReservationNew() {
     : null;
   const step1Ok = nights > 0 && !!f.category_id && (!pastStay || (canLate && !!lateReason.trim()));
   const step2Ok = !!f.guest_name.trim() && guestDataOk && capacityOk;
+  // «التالي» with a problem: say what and where, mark the field and move to it (never just stop)
+  const [tried, setTried] = useState(false);
+  const showMissing = () => {
+    setTried(true);
+    window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>('[data-wizard-step] [aria-invalid="true"]');
+      if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus({ preventScroll: true }); }
+    }, 50);
+  };
+  useEffect(() => { setTried(false); }, [step]);
+  const nameShown = nameErr ?? (tried && !f.guest_name.trim() ? "اكتب اسم النزيل." : null);
+  const phoneShown = phoneErr ?? (tried && !guest && !f.guest_phone.trim() ? "الجوال مطلوب." : null);
+  const maxCap = cat?.max_capacity ?? 1;
+  useEffect(() => { // a smaller unit type brings the counts down to what it can hold
+    setF((x) => { const a = Math.min(Math.max(x.adults, 1), maxCap); const c = Math.min(x.companions, Math.max(0, maxCap - a)); return a === x.adults && c === x.companions ? x : { ...x, adults: a, companions: c }; });
+  }, [maxCap]);
   return (
     <div>
       <button onClick={() => navigate("/staff/reservations")} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-600"><ArrowLeft className="h-4 w-4" /> الحجوزات</button>
@@ -167,17 +188,23 @@ export default function StaffReservationNew() {
         ))}
       </ol>
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-4 lg:grid-cols-3">
-        <div className={step === 3 ? "space-y-4 lg:col-span-2" : "space-y-4 lg:col-span-3"}>
+        <div data-wizard-step className={step === 3 ? "space-y-4 lg:col-span-2" : "space-y-4 lg:col-span-3"}>
           <div hidden={step !== 1} data-testid="step-1"><Card>
             <h2 className="mb-3 font-semibold text-ink-800">المدة والوحدة</h2>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="الوصول"><input type="date" className="input" dir="ltr" value={f.check_in} onChange={(e) => setF({ ...f, check_in: e.target.value, check_out: f.check_out <= e.target.value ? addDays(e.target.value, 1) : f.check_out })} /></Field>
-              <Field label="المغادرة"><input type="date" className="input" dir="ltr" min={addDays(f.check_in, 1)} value={f.check_out} onChange={(e) => setF({ ...f, check_out: e.target.value })} /></Field>
-              <Field label="الليالي"><input className="input bg-ink-50" dir="ltr" readOnly value={nights} /></Field>
-              <Field label="وقت الوصول المتوقع" hint="فارغ = موعد الفرع"><input type="time" className="input" dir="ltr" value={times.arrival} onChange={(e) => setTimes({ ...times, arrival: e.target.value })} /></Field>
-              <Field label="وقت المغادرة المتوقع" hint="فارغ = موعد الفرع"><input type="time" className="input" dir="ltr" value={times.departure} onChange={(e) => setTimes({ ...times, departure: e.target.value })} /></Field>
+              <Field label="الوصول"><DateRangePicker single label="الوصول" from={f.check_in} to={f.check_in} onChange={(a) => setF({ ...f, check_in: a, check_out: f.check_out <= a ? addDays(a, 1) : f.check_out > addDays(a, MAX_NIGHTS) ? addDays(a, MAX_NIGHTS) : f.check_out })} /></Field>
+              <Field label="المغادرة"><DateRangePicker single label="المغادرة" from={f.check_out} to={f.check_out} min={addDays(f.check_in, 1)} max={addDays(f.check_in, MAX_NIGHTS)} onChange={(a) => setF({ ...f, check_out: a })} /></Field>
+              <Field label="الليالي">
+                <div className="flex items-center justify-center gap-2" role="group" aria-label="عدد الليالي" data-testid="nights-stepper">
+                  <button type="button" className="btn-outline min-h-[44px] min-w-[44px] px-0 text-xl" aria-label="ليلة أقل" disabled={nights <= 1} onClick={() => setNights(Math.min(MAX_NIGHTS, nights - 1))}>−</button>
+                  <output className="min-w-[3rem] text-center text-lg font-semibold tabular-nums" dir="ltr" aria-live="polite" data-testid="nights-value">{nights}</output>
+                  <button type="button" className="btn-outline min-h-[44px] min-w-[44px] px-0 text-xl" aria-label="ليلة أكثر" disabled={nights >= MAX_NIGHTS} onClick={() => setNights(Math.max(1, nights + 1))}>+</button>
+                </div>
+              </Field>
+              <Field label="وقت الوصول المتوقع" hint="فارغ = موعد الفرع"><TimeInput clearable label="وقت الوصول المتوقع" value={times.arrival} onChange={(v) => setTimes({ ...times, arrival: v })} /></Field>
+              <Field label="وقت المغادرة المتوقع" hint="فارغ = موعد الفرع"><TimeInput clearable label="وقت المغادرة المتوقع" value={times.departure} onChange={(v) => setTimes({ ...times, departure: v })} /></Field>
               <div />
-              <Field label="نوع الوحدة" className="sm:col-span-2"><select className="input" value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value, room_id: "" })}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name_ar} — {formatCurrency(c.base_price_halalas / 100)} / ليلة — حتى {c.max_capacity} أشخاص</option>)}</select></Field>
+              <Field label="نوع الوحدة" className="sm:col-span-2"><select className="input" aria-invalid={(tried && !f.category_id) || undefined} value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value, room_id: "" })}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name_ar} — {formatCurrency(c.base_price_halalas / 100)} / ليلة — حتى {c.max_capacity} أشخاص</option>)}</select></Field>
               <Field label="الوحدة (اختياري الآن)" hint={rooms.length === 0 && nights > 0 ? "لا توجد وحدة متاحة لكامل الفترة من هذا النوع" : undefined}>
                 <select className="input" value={f.room_id} onChange={(e) => setF({ ...f, room_id: e.target.value })}>
                   <option value="">تخصيص لاحقًا</option>
@@ -197,8 +224,8 @@ export default function StaffReservationNew() {
             {extraUnits.map((u, i) => (
               <div key={i} className="mt-3 grid items-end gap-3 rounded-xl border border-ink-100 p-3 sm:grid-cols-[1fr_6rem_6rem_auto]">
                 <Field label={`الوحدة ${i + 2} — النوع`}><select className="input" value={u.category_id} onChange={(e) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, category_id: e.target.value } : x)))}>{cats.map((c) => <option key={c.id} value={c.id}>{c.name_ar} — حتى {c.max_capacity}</option>)}</select></Field>
-                <Field label="بالغون"><NumberInput value={u.adults} onChange={(v) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, adults: (v ?? 0) } : x)))} /></Field>
-                <Field label="مرافقون"><NumberInput value={u.companions} onChange={(v) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, companions: (v ?? 0) } : x)))} /></Field>
+                <Field label="بالغون"><CountSelect label="بالغون" min={1} max={cats.find((c) => c.id === u.category_id)?.max_capacity ?? 1} value={u.adults} onChange={(n) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, adults: n, companions: Math.min(x.companions, Math.max(0, (cats.find((c) => c.id === u.category_id)?.max_capacity ?? 1) - n)) } : x)))} /></Field>
+                <Field label="مرافقون"><CountSelect label="مرافقون" min={0} max={Math.max(0, (cats.find((c) => c.id === u.category_id)?.max_capacity ?? 1) - u.adults)} value={u.companions} onChange={(n) => setExtraUnits(extraUnits.map((x, j) => (j === i ? { ...x, companions: n } : x)))} /></Field>
                 <button type="button" onClick={() => setExtraUnits(extraUnits.filter((_, j) => j !== i))} className="btn-ghost mb-0.5 p-2 text-ink-400" aria-label="إزالة الوحدة"><X className="h-4 w-4" /></button>
               </div>
             ))}
@@ -229,12 +256,12 @@ export default function StaffReservationNew() {
               )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="الاسم (مطلوب)" error={nameErr}><input className="input" value={f.guest_name} aria-invalid={!!nameErr} onChange={(e) => setF({ ...f, guest_name: e.target.value })} /></Field>
-              <Field label={guest ? "الجوال" : "الجوال (مطلوب)"} error={phoneErr} hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف النزيل بالجوال نفسه ما لم تُعلّم «نزيل جديد»"}><input className="input" dir="ltr" inputMode="tel" autoComplete="tel" value={f.guest_phone} aria-invalid={!!phoneErr} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
-              <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} /></Field>
+              <Field label="الاسم (مطلوب)" error={nameShown}><input className="input" value={f.guest_name} aria-invalid={!!nameShown} onChange={(e) => setF({ ...f, guest_name: e.target.value })} /></Field>
+              <Field label={guest ? "الجوال" : "الجوال (مطلوب)"} error={phoneShown} hint={guest ? "يبقى جوال الملف المختار إن تُرك فارغًا" : "يُعاد استخدام ملف النزيل بالجوال نفسه ما لم تُعلّم «نزيل جديد»"}><input className="input" dir="ltr" inputMode="tel" autoComplete="tel" value={f.guest_phone} aria-invalid={!!phoneShown} onChange={(e) => setF({ ...f, guest_phone: e.target.value })} placeholder="05xxxxxxxx" /></Field>
+              <Field label="الجنسية"><NationalityField value={f.nationality} onChange={(v) => setF({ ...f, nationality: v })} /></Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="بالغون"><NumberInput value={f.adults} onChange={(v) => setF({ ...f, adults: (v ?? 0) })} /></Field>
-                <Field label="مرافقون"><NumberInput value={f.companions} onChange={(v) => setF({ ...f, companions: (v ?? 0) })} /></Field>
+                <Field label="بالغون"><CountSelect label="بالغون" min={1} max={maxCap} value={f.adults} invalid={!capacityOk} onChange={(n) => setF({ ...f, adults: n, companions: Math.min(f.companions, Math.max(0, maxCap - n)) })} /></Field>
+                <Field label="مرافقون"><CountSelect label="مرافقون" min={0} max={Math.max(0, maxCap - f.adults)} value={f.companions} onChange={(n) => setF({ ...f, companions: n })} /></Field>
               </div>
               {!capacityOk && <p className="text-xs text-danger-600 sm:col-span-2">عدد النزلاء يتجاوز سعة نوع الوحدة.</p>}
               <div className="space-y-2 sm:col-span-2">
@@ -270,7 +297,7 @@ export default function StaffReservationNew() {
               <Field label="ملاحظات" className="sm:col-span-2"><textarea className="input" rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
             </div>
           </Card></div>
-          <WizardNav step={step} setStep={setStep} canNext={step === 1 ? step1Ok : step === 2 ? step2Ok : false} reason={step === 1 && !step1Ok ? "حدّد مدة صحيحة ونوع الوحدة، وسبب الإدخال المتأخر إن لزم." : step === 2 && !step2Ok ? blockReason : null} />
+          <WizardNav step={step} setStep={setStep} canNext={step === 1 ? step1Ok : step === 2 ? step2Ok : false} onBlocked={showMissing} reason={step === 1 && !step1Ok ? "حدّد مدة صحيحة ونوع الوحدة، وسبب الإدخال المتأخر إن لزم." : step === 2 && !step2Ok ? blockReason : null} />
         </div>
         <div className="space-y-4" hidden={step !== 3}>
           <Card>
@@ -306,12 +333,21 @@ export default function StaffReservationNew() {
     </div>
   );
 }
+/** A bounded count as a drop-down: only values the unit can hold are offered (owner request, 25 Nov), never an arbitrary number. */
+function CountSelect({ value, min, max, onChange, label, invalid, id }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string; invalid?: boolean; id?: string }) {
+  const top = Math.max(min, max);
+  return (
+    <select id={id} className="input" aria-label={label} aria-invalid={invalid || undefined} value={Math.min(Math.max(value, min), top)} onChange={(e) => onChange(Number(e.target.value))}>
+      {Array.from({ length: top - min + 1 }, (_, i) => min + i).map((n) => <option key={n} value={n}>{n}</option>)}
+    </select>
+  );
+}
 const STEPS = ["المدة والوحدة", "النزيل", "المصدر والسعر"];
-function WizardNav({ step, setStep, canNext, reason }: { step: 1 | 2 | 3; setStep: (n: 1 | 2 | 3) => void; canNext: boolean; reason: string | null }) {
+function WizardNav({ step, setStep, canNext, reason, onBlocked }: { step: 1 | 2 | 3; setStep: (n: 1 | 2 | 3) => void; canNext: boolean; reason: string | null; onBlocked: () => void }) {
   return (
     <div><div className="flex justify-between gap-2" data-testid="wizard-nav">
       {step > 1 ? <button type="button" className="btn-ghost" onClick={() => setStep((step - 1) as 1 | 2)}>السابق</button> : <span />}
-      {step < 3 && <button type="button" className="btn-primary" disabled={!canNext} aria-describedby={reason ? "wizard-step-block-reason" : undefined} onClick={() => setStep((step + 1) as 2 | 3)}>التالي</button>}
+      {step < 3 && <button type="button" className="btn-primary" data-blocked={!canNext || undefined} aria-describedby={reason ? "wizard-step-block-reason" : undefined} onClick={() => (canNext ? setStep((step + 1) as 2 | 3) : onBlocked())}>التالي</button>}
     </div>{reason && <p id="wizard-step-block-reason" data-testid="wizard-step-block-reason" role="status" className="mt-2 text-xs text-ink-600">{reason}</p>}</div>
   );
 }

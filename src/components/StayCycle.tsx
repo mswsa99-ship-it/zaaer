@@ -135,6 +135,9 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money
   const [rentReceived, setRentReceived] = useState(false);
   const [depReceived, setDepReceived] = useState(false);
   const [reason, setReason] = useState("");
+  // user rule 25 Nov 12:46: a deposit below the branch deposit asks «هل لديك تفويض من المدير؟». Yes: the written authorisation
+  // is required and saved as the voucher note. No: the lower amount is refused. Above the shortage: refused at once.
+  const [authorised, setAuthorised] = useState<boolean | null>(null);
   // one arrival, one pair of entries: a resend after a refusal recorded nothing, so the keys stay the same
   const [keys] = useState(() => ({ rent: newIdempotencyKey(), deposit: newIdempotencyKey() }));
   const rentShort = Math.max(c.first_night_short ?? 0, 0);
@@ -162,11 +165,14 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money
   const entry = (amount: number | null, method: PaymentMethod, account: string, ref: string, key: string): PaymentEntry | undefined =>
     amount && amount > 0 ? { amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? account || undefined : undefined, reference: ref.trim() || undefined, idempotency_key: key } : undefined;
   const submit = async () => {
-    if ((rent ?? 0) > rentShort || (deposit ?? 0) > (c.deposit_short ?? 0)) throw new Error("VALIDATION: amount_exceeds_short");
+    if ((rent ?? 0) > rentShort) throw new Error("VALIDATION: amount_exceeds_short");
+    if ((deposit ?? 0) > (c.deposit_short ?? 0)) throw new Error("VALIDATION: deposit_exceeds_short");
+    if (depositShort > 0 && authorised !== true) throw new Error("VALIDATION: deposit_no_authorization");
+    if (depositShort > 0 && !reason.trim()) throw new Error("VALIDATION: deposit_auth_details");
     if (((rent ?? 0) > 0 && !rentReceived) || ((deposit ?? 0) > 0 && !depReceived)) throw new Error("VALIDATION: received_confirm");
     if ((rent ?? 0) > 0 && METHOD_NEEDS_REFERENCE.includes(rentMethod) && !rentRef.trim()) throw new Error("VALIDATION: reference_required");
     if ((deposit ?? 0) > 0 && METHOD_NEEDS_REFERENCE.includes(depMethod) && !depRef.trim()) throw new Error("VALIDATION: reference_required");
-    const r: CheckInResult = await stayApi.checkIn({ reservation_id: id, expected_version: s.version, rent: entry(rent, rentMethod, rentAccount, rentRef, keys.rent), deposit: entry(deposit, depMethod, depAccount, depRef, keys.deposit), deposit_reason: depositShort > 0 && reason.trim() ? reason.trim() : undefined });
+    const r: CheckInResult = await stayApi.checkIn({ reservation_id: id, expected_version: s.version, rent: entry(rent, rentMethod, rentAccount, rentRef, keys.rent), deposit: entry(deposit, depMethod, depAccount, depRef, keys.deposit), deposit_reason: depositShort > 0 && authorised === true && reason.trim() ? `تفويض من المدير: ${reason.trim()}` : undefined });
     if (!r.ok) { refused(r.reasons ?? []); return; }
     const vouchers = [r.rent_voucher ? `سند الإيجار ${r.rent_voucher}` : null, r.deposit_voucher ? `سند التأمين ${r.deposit_voucher}` : null].filter(Boolean).join(" · ");
     await done(`سُجِّل الوصول.${vouchers ? ` ${vouchers}.` : ""} ${r.has_keybox ? "سلّم رمز الصندوق من «رمز صندوق المفتاح» أدناه." : "الوحدة بلا صندوق مفتاح: سلّم مفتاحها للنزيل."}`);
@@ -221,8 +227,9 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money
             <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">
               <legend className="px-1 text-xs font-semibold text-ink-600">سند قبض التأمين</legend>
               <Field label="المبلغ" hint={`تأمين الفرع ${sar(c.deposit_required)}؛ يُحتجز منفصلًا ويُرد بعد المغادرة وفحصها، ولا يقبل السند أكثر من النقص.`}>
-                <MoneyInput valueHalalas={deposit} onChange={setDeposit} />
+                <MoneyInput valueHalalas={deposit} onChange={(v) => { setDeposit(v); setAuthorised(null); }} />
               </Field>
+              {(deposit ?? 0) > (c.deposit_short ?? 0) && <p role="alert" className="text-xs text-rai-danger" data-testid="deposit-over">المبلغ أكبر من نقص التأمين ({sar(c.deposit_short)})؛ لا يقبل السند أكثر منه.</p>}
               {(deposit ?? 0) > 0 && <PaymentFields method={depMethod} setMethod={setDepMethod} accountId={depAccount} setAccountId={setDepAccount} reference={depRef} setReference={setDepRef} accounts={accounts.active} verb="receive" deposit />}
               {(deposit ?? 0) > 0 && (
                 <label className="flex items-start gap-2 text-sm text-ink-700">
@@ -230,7 +237,20 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money
                   أؤكد أنني استلمت المبلغ فعلًا
                 </label>
               )}
-              {depositShort > 0 && <ReasonInput value={reason} onChange={setReason} label="سبب عدم استلام التأمين كاملًا (إلزامي)" placeholder="مثال: نزيل شركة بعقد سارٍ" />}
+              {depositShort > 0 && (deposit ?? 0) <= (c.deposit_short ?? 0) && (
+                <div className="space-y-2 rounded-xl border border-rai-line-strong p-3" data-testid="deposit-auth">
+                  <p className="text-sm font-semibold text-rai-ink">التأمين أقل من تأمين الفرع ({sar(c.deposit_required)}). هل لديك تفويض من المدير؟</p>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="تفويض المدير">
+                    {([true, false] as const).map((v) => (
+                      <button key={String(v)} type="button" role="radio" aria-checked={authorised === v} onClick={() => setAuthorised(v)}
+                        className={`rounded-xl border px-3 py-2 text-sm ${authorised === v ? "border-rai-line-strong bg-rai-spark-tint text-rai-spark-text" : "border-rai-line text-rai-ink"}`}>{v ? "نعم" : "لا"}</button>
+                    ))}
+                  </div>
+                  {authorised === false && <p role="alert" className="text-xs text-rai-danger" data-testid="deposit-no-auth">لا يُقبل تأمين أقل من تأمين الفرع دون تفويض من المدير. اطلب من العميل تكملة المبلغ أو احصل على التفويض.</p>}
+                  {authorised === true && <ReasonInput value={reason} onChange={setReason} label="تفاصيل التفويض (إلزامي): اسم المدير وسبب التخفيض" placeholder="مثال: وافق المدير فلان على تأمين 20 ر.س لنزيل شركة بعقد سارٍ" />}
+                  {authorised === true && <p className="text-xs text-rai-ink-muted">تُحفظ هذه الملاحظة على سند التأمين مع تسجيلها في سجل العمليات. تسجيلها إقرار منك ولا يثبت موافقة المدير.</p>}
+                </div>
+              )}
             </fieldset>
             )}
           </div>

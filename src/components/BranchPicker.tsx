@@ -2,13 +2,16 @@ import { useBranch, NO_BRANCH_MESSAGE } from "../lib/branch";
 import { useAuth } from "../lib/auth";
 import { Building2, AlertTriangle } from "lucide-react";
 
+export const ALL = "__all__";
+
 /**
  * Branch scope selector shared by operational and admin screens. The selection lives in BranchProvider, so changing
  * it here refreshes every branch-scoped list/request/form on the open page (U02/G24). A signed-in user with no
  * authorised branch sees the fail-closed message instead of a picker (GAP02).
  */
-export function BranchPicker({ className }: { className?: string }) {
-  const { branchId, branches, setBranchId, loading } = useBranch();
+export function BranchPicker({ className, allowAll = false }: { className?: string; allowAll?: boolean }) {
+  const { branchId, branches, setBranchId, loading, canAll, allBranches, setAllBranches } = useBranch();
+  const withAll = allowAll && canAll;
   const { session } = useAuth();
   if (loading) return null;
   if (branches.length === 0) {
@@ -19,8 +22,9 @@ export function BranchPicker({ className }: { className?: string }) {
   return (
     <label className={"inline-flex items-center gap-2 text-sm " + (className ?? "")}>
       <Building2 className="h-4 w-4 text-ink-400" />
-      <select value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} className="input w-auto max-w-full py-2.5" aria-label="الفرع النشط">
+      <select value={withAll && allBranches ? ALL : branchId ?? ""} onChange={(e) => (e.target.value === ALL ? setAllBranches(true) : setBranchId(e.target.value))} className="input w-auto max-w-full py-2.5" aria-label="الفرع النشط">
         {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
+        {withAll && <option value={ALL}>جميع الفروع</option>}
       </select>
     </label>
   );

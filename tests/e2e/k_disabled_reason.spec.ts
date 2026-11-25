@@ -8,7 +8,7 @@ test.describe("disabled buttons say why (6.8)", () => {
     await bookingNext(page); // unit/date step to guest step
     const create = page.getByTestId("create-reservation");
     const next = page.getByRole("button", { name: "التالي" });
-    await expect(next).toBeDisabled();
+    await expect(next).toHaveAttribute("data-blocked", "true");
     await expect(page.getByTestId("wizard-step-block-reason")).toBeVisible();
     await expect(page.getByTestId("wizard-step-block-reason")).toContainText("اكتب اسم النزيل");
     await expect(next).toHaveAttribute("aria-describedby", "wizard-step-block-reason");
@@ -20,13 +20,10 @@ test.describe("disabled buttons say why (6.8)", () => {
     await expect(create).toBeEnabled();
     await expect(page.getByTestId("create-block-reason")).toHaveCount(0);
     await page.getByRole("button", { name: "السابق" }).click();
-    // capacity: far more adults than any unit holds
-    await page.locator("div:has(> label:has-text('بالغون')) input").first().fill("40");
-    await expect(next).toBeDisabled();
-    await expect(page.getByTestId("wizard-step-block-reason")).toBeVisible();
-    await expect(page.getByTestId("wizard-step-block-reason")).toContainText("سعة نوع الوحدة");
-    if (process.env.K_SHOTS) await page.screenshot({ path: "/tmp/k-disabled-reason.png" });
-    await page.locator("div:has(> label:has-text('بالغون')) input").first().fill("1");
+    // capacity: the counts are drop-downs bounded by the unit type, so no arbitrary number can be entered
+    const adults = page.getByLabel("بالغون").first();
+    const top = Math.max(...(await adults.locator("option").evaluateAll((os) => os.map((o) => Number((o as HTMLOptionElement).value)))));
+    expect(top).toBeLessThan(40);
     await expect(next).toBeEnabled();
   });
 });

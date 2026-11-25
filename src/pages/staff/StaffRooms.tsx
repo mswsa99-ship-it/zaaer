@@ -11,6 +11,7 @@ import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../
 import { latinDigits } from "../../lib/validation";
 import { useReservations } from "../../lib/hooks";
 import { useUnitLicenses } from "../../lib/unitLicense";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 const unitKey = (s: string) => latinDigits(s).toLowerCase().replace(/[\s\-_]/g, "");
 
@@ -207,7 +208,7 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
     <div data-testid="reservation-calendar">
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <button type="button" className="btn-ghost px-2 py-1" onClick={() => setFrom(addDaysISO(from, -span))} aria-label="الفترة السابقة"><ChevronRight className="h-4 w-4" /></button>
-        <label className="flex items-center gap-1.5 text-xs text-ink-600">من <input type="date" className="input w-auto py-1 text-xs" dir="ltr" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} aria-label="بداية التقويم" /></label>
+        <span className="flex items-center gap-1.5 text-xs text-ink-600">من <DateRangePicker single className="w-44" label="بداية التقويم" from={from} to={from} onChange={(a) => setFrom(a)} /></span>
         <span className="text-xs text-ink-500" dir="ltr">→ {to}</span>
         <button type="button" className="btn-ghost px-2 py-1" onClick={() => setFrom(addDaysISO(from, span))} aria-label="الفترة التالية"><ChevronLeft className="h-4 w-4" /></button>
         <button type="button" className="btn-ghost py-1 text-xs" onClick={() => setFrom(addDaysISO(todayISO(), -2))}>اليوم</button>

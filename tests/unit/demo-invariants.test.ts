@@ -1594,7 +1594,7 @@ describe("G01/G02/G03/G19/G22 — guests, platforms and the website in the demo 
     await rpc("fn_staff_approve_identity", { p_guest_id: pg.id, p_approve: true });
     g = await get("reservation_guests", pg.id); expect(g.verification_status).toBe("verified"); expect(g.verified_by).toBeTruthy();
     // another booking with another phone and the same document: its own profile, flagged as a duplicate, never merged
-    const r2 = await book(20, 22, { guest_phone: "0509999999", guest_name: "سعد م العتيبي" }); const [pg2] = await guestsOf(r2.id);
+    const r2 = await book(20, 22, { guest_phone: "0509999999", guest_name: "سعد مي العتيبي" }); const [pg2] = await guestsOf(r2.id);
     await rpc("fn_staff_enter_guest", { p: doc(r2.id, { guest_id: pg2.id }) });
     const g2 = await get("reservation_guests", pg2.id);
     expect(g2.guest_profile_id).not.toBe(g.guest_profile_id);
@@ -1933,7 +1933,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
   });
 
   it("DS02 sort: arrival ascending, departure, creation, number, and the default (arrival descending then creation descending); branch B's booking is the owner's to see and not the supervisor's; the row carries every column the column picker offers", async () => {
-    const inB = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: B, category_id: CAT_B, source_id: RECEPTION, check_in: day(40), check_out: day(42), guest_name: "ضيف الفرع ب", guest_phone: "0500009901", adults: 1, companions: 0 } });
+    const inB = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: B, category_id: CAT_B, source_id: RECEPTION, check_in: day(40), check_out: day(42), guest_name: "ضيف الفرع باء", guest_phone: "0500009901", adults: 1, companions: 0 } });
     const list = (sort?: string) => rpc<any>("fn_reservation_list", { p_branch: A, p_filters: sort ? { sort } : {}, p_limit: 1000, p_offset: 0 }).then((r) => r.rows as any[]);
     const nonDecreasing = (xs: string[]) => xs.every((x, i) => i === 0 || xs[i - 1] <= x);
     expect(nonDecreasing((await list("check_in_asc")).map((r) => r.check_in))).toBe(true);
@@ -2044,7 +2044,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
   it("DS06 the log: the owner reads the whole log with the security rows, the manager and the supervisor never a security row even when asked, the supervisor only their branches and the branch-less rows and no details; every filter equals an independent filter, read in pages; the rows read in Arabic with the booking's number, the person's name and the branch; housekeeping and finance are refused", async () => {
     // a security row (branch-less), a business row of branch B, and a branch-less business row
     await rpc("fn_admin_force_logout", { p_staff: FIN, p_reason: "جهاز مفقود" });
-    const inB = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: B, category_id: CAT_B, source_id: RECEPTION, check_in: day(40), check_out: day(42), guest_name: "ضيف الفرع ب", guest_phone: "0500009901", adults: 1, companions: 0 } });
+    const inB = await rpc<any>("fn_staff_create_reservation", { p: { branch_id: B, category_id: CAT_B, source_id: RECEPTION, check_in: day(40), check_out: day(42), guest_name: "ضيف الفرع باء", guest_phone: "0500009901", adults: 1, companions: 0 } });
     await rpc("fn_admin_set_source_active", { p: { id: "00000000-0000-0000-0000-000000000529", is_active: true, reason: "تجربة" } });
     const events = await all("audit_events"); const { auditActionLabel } = await import("../../src/lib/auditLabels");
     const seeded = events.find((e) => e.action === "reservation.created" && e.actor_id === SUP)!; const seededRes = await get("reservations", seeded.entity_id);

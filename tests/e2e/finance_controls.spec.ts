@@ -35,7 +35,7 @@ test.describe("phase 4 money controls", () => {
     // over the shortage (the branch's 50) is refused, and nothing is recorded
     await deposit.locator("input[data-money]").fill("5000");
     await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
-    await expect(arrival).toContainText("أكبر من المطلوب قبل الوصول");
+    await expect(arrival).toContainText("المبلغ أكبر من نقص التأمين");
     await expect(page.getByTestId("stay-notice")).toHaveCount(0);
     // without the explicit «استلمت» confirmation no voucher is written
     await deposit.locator("input[data-money]").fill("50");

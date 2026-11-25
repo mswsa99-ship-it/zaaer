@@ -38,6 +38,11 @@ interface BranchContextValue {
   branchId: string | null;
   branch: BranchLite | null;
   setBranchId: (id: string) => void;
+  /** Owner only (and only with two or more branches): the «جميع الفروع» choice is available. */
+  canAll: boolean;
+  /** «جميع الفروع» is selected. Only screens that opt in (BranchPicker allowAll + a merging query) read every branch; any other screen keeps using `branchId`, the last single branch. */
+  allBranches: boolean;
+  setAllBranches: (on: boolean) => void;
   /** Re-run the authorised-branch query (e.g. after the manager fixed the memberships). */
   reload: () => void;
 }
@@ -52,6 +57,15 @@ const storageKey = (scope: string) => `zaaer.branch.${scope}`;
 function readStored(scope: string | null): string | null {
   if (!scope) return null;
   try { return (scope.startsWith("guest:") ? sessionStorage : localStorage).getItem(storageKey(scope)); } catch { return null; }
+}
+const allKey = (scope: string) => `zaaer.branch.all.${scope}`;
+function readAll(scope: string | null): boolean {
+  if (!scope || scope.startsWith("guest:")) return false;
+  try { return localStorage.getItem(allKey(scope)) === "1"; } catch { return false; }
+}
+function writeAll(scope: string | null, on: boolean) {
+  if (!scope || scope.startsWith("guest:")) return;
+  try { localStorage.setItem(allKey(scope), on ? "1" : "0"); } catch { /* ignore */ }
 }
 function writeStored(scope: string | null, id: string) {
   if (!scope) return;
@@ -90,7 +104,7 @@ async function loadStaffBranches(): Promise<Loaded> {
 // ---------------------------------------------------------------------------
 export function BranchProvider({ children }: { children: ReactNode }) {
   useLocation(); // Re-evaluate guest/staff scope on an in-app route change.
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, profile } = useAuth();
   const userId = currentGuestScope().guest ? null : session?.user?.id ?? null;
   // Persistence scope: the signed-in user (1:1 with the staff profile) or the shared guest scope.
   const scope = authLoading ? null : userId ?? "guest:" + guestScopeKey();
@@ -121,14 +135,28 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     return branches.find((b) => b.id === chosen) ?? branches.find((b) => b.id === DEFAULT_BRANCH) ?? branches[0];
   }, [branches, chosen]);
 
+  const [allOn, setAllOn] = useState<{ scope: string | null; on: boolean }>({ scope: null, on: false });
+  const storedAll = useMemo(() => readAll(scope), [scope]);
+  const allSelected = allOn.scope === scope ? allOn.on : storedAll;
+  // Owner-only: other roles (and guests) never get the choice, whatever is stored.
+  const canAll = !!userId && profile?.role === "owner" && branches.length > 1;
+  const allBranches = canAll && allSelected;
+  const setAllBranches = useCallback((on: boolean) => {
+    if (!scope) return;
+    setAllOn({ scope, on });
+    writeAll(scope, on);
+  }, [scope]);
+
   const setBranchId = useCallback((id: string) => {
     if (!scope) return;
     setOverride({ scope, id });
     writeStored(scope, id);
+    setAllOn({ scope, on: false });
+    writeAll(scope, false);
   }, [scope]);
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
-  const value = useMemo<BranchContextValue>(() => ({ branches, loading, error, branchId: branch?.id ?? null, branch, setBranchId, reload }), [branches, loading, error, branch, setBranchId, reload]);
+  const value = useMemo<BranchContextValue>(() => ({ branches, loading, error, branchId: branch?.id ?? null, branch, setBranchId, canAll, allBranches, setAllBranches, reload }), [branches, loading, error, branch, setBranchId, canAll, allBranches, setAllBranches, reload]);
   return createElement(BranchContext.Provider, { value }, children);
 }
 

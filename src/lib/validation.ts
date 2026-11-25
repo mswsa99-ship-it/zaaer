@@ -15,11 +15,20 @@ export function latinDigits(s: string): string {
 const NAME_ALLOWED = /^[A-Za-zÀ-ÖØ-öø-ɏء-غـ-ْٰ-ۓ '’.-]+$/;
 const NAME_LETTER = /[A-Za-zÀ-ÖØ-öø-ɏء-غف-يٱ-ۓ]/g;
 
-/** A person's name: letters (Arabic or Latin), spaces, hyphen, apostrophe, dot; at least two letters. Empty is left to «required». */
+/**
+ * A person's name: letters (Arabic or Latin), spaces, hyphen, apostrophe, dot. User rule 25 Nov 13:17: every part (word) has
+ * at least two letters («طه» is fine, «ا» alone is not) and a part made of one repeated letter («اااا», «xx») is refused.
+ * The number of parts (word count) is a separate rule (checkNameParts) and is unchanged. Empty is left to «required».
+ */
 export function checkPersonName(name: string | null | undefined): void {
   const s = (name ?? "").trim();
   if (!s) return;
-  if (!NAME_ALLOWED.test(s) || (s.match(NAME_LETTER) ?? []).length < 2) throw new Error("VALIDATION: name_letters_only");
+  if (!NAME_ALLOWED.test(s)) throw new Error("VALIDATION: name_letters_only");
+  for (const part of s.split(/\s+/)) {
+    const letters = part.match(NAME_LETTER) ?? [];
+    if (letters.length < 2) throw new Error("VALIDATION: name_letters_only");
+    if (new Set(letters.map((c) => c.toLowerCase())).size === 1) throw new Error("VALIDATION: name_letters_only");
+  }
 }
 
 /**

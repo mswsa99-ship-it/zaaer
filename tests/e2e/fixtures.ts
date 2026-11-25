@@ -151,3 +151,20 @@ export async function checkOut(page: Page, scope = page.getByTestId("in-house"))
     await expect(dlg).toBeHidden();
   }
 }
+
+/** The day / period picker: opens the control named `label`, walks to the month of `from`, taps the days, confirms (one day = that day only). */
+export async function pickRange(page: Page, label: string, from: string, to: string = from) {
+  await page.getByRole("button", { name: label, exact: true }).first().click();
+  const dlg = page.getByRole("dialog", { name: label });
+  const tap = async (day: string) => {
+    for (let i = 0; i < 400; i++) {
+      if (await dlg.locator(`[data-day="${day}"]`).count()) break;
+      const shown = (await dlg.locator("[data-day]").first().getAttribute("data-day"))!;
+      await dlg.getByRole("button", { name: day < shown ? "الشهر السابق" : "الشهر التالي" }).click();
+    }
+    await dlg.locator(`[data-day="${day}"]`).click();
+  };
+  await tap(from);
+  if (to !== from) await tap(to);
+  await dlg.getByRole("button", { name: "موافق" }).click();
+}

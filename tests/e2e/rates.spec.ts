@@ -112,8 +112,8 @@ test.describe("rates (phase 2)", () => {
     await loginAs("owner");
     await startBooking(page, /استوديو مريح/, plus(t, 100), plus(t, 102), "ثلاثة نزلاء");
     await page.getByRole("button", { name: "السابق" }).click();   // the guests are on step 2
-    await page.locator("div:has(> label:has-text('بالغون')) input").first().fill("2");
-    await page.locator("div:has(> label:has-text('مرافقون')) input").first().fill("1");
+    await page.getByLabel("بالغون").first().selectOption("2");
+    await page.getByLabel("مرافقون").first().selectOption("1");
     await bookingNext(page);
     await page.getByRole("button", { name: "إنشاء الحجز" }).click();
     await page.waitForURL(/#\/staff\/reservations\/[0-9a-f-]+/, { timeout: 15_000 });

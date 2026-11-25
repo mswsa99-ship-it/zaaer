@@ -20,6 +20,7 @@ import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, ErrorBanner } from "
 import { Field, Modal, MoneyInput, Toggle, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { DisabledReason } from "../../components/DisabledReason";
+import { TimeInput } from "../../components/TimeInput";
 
 const RECIPIENT_AR: Record<AlertRecipient, string> = { responsible: "مسؤول الفرع", fallback: "البديل (الإدارة)", owner: "المالك", manager: "المدير", supervisor: "المشرفون" };
 const CHANNEL_AR: Record<AlertChannel, string> = { app: "داخل النظام", whatsapp: "واتساب", both: "النظام وواتساب" };
@@ -89,8 +90,8 @@ export default function AdminJourney() {
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-ink-800"><Route className="h-4 w-4 text-brand-600" /> يوم المغادرة والمغادرة والتقييم</h2>
         <div className="mb-3"><Toggle checked={form.journey_enabled} onChange={(v) => set("journey_enabled", v)} label="إرسال رسائل الرحلة للنزلاء على واتساب الفرع" /></div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="وقت رسالة صباح المغادرة" hint="يصل النزيلَ المغادرَ اليوم خياراته"><input type="time" className="input" value={form.checkout_message_time} onChange={(e) => set("checkout_message_time", e.target.value)} data-testid="journey-message-time" /></Field>
-          <Field label="الخروج بلا رسوم حتى" hint="من موعد الخروج المعتمد حتى هذه الساعة"><input type="time" className="input" value={form.free_checkout_until} onChange={(e) => set("free_checkout_until", e.target.value)} /></Field>
+          <Field label="وقت رسالة صباح المغادرة" hint="يصل النزيلَ المغادرَ اليوم خياراته"><TimeInput label="وقت رسالة صباح المغادرة" value={form.checkout_message_time} onChange={(v) => set("checkout_message_time", v)} /></Field>
+          <Field label="الخروج بلا رسوم حتى" hint="من موعد الخروج المعتمد حتى هذه الساعة"><TimeInput label="الخروج بلا رسوم حتى" value={form.free_checkout_until} onChange={(v) => set("free_checkout_until", v)} /></Field>
           <Field label="سعر الساعة بعدها" hint="جزء الساعة ساعة، بلا حد أعلى إلا الضيف التالي"><MoneyInput valueHalalas={form.late_hour_price_halalas} onChange={(h) => set("late_hour_price_halalas", h ?? 0)} label="سعر الساعة" /></Field>
           <Field label="وقت التنظيف قبل الضيف التالي (دقيقة)"><input type="number" min={0} max={240} className="input" value={form.cleaning_buffer_minutes} onChange={(e) => set("cleaning_buffer_minutes", Number(e.target.value))} /></Field>
           <Field label="مهلة الدفع لحجز التمديد (دقيقة)" hint="بعدها يُلغى الطلب غير المدفوع"><input type="number" min={5} max={240} className="input" value={form.hold_minutes} onChange={(e) => set("hold_minutes", Number(e.target.value))} /></Field>

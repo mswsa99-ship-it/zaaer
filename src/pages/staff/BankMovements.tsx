@@ -19,6 +19,7 @@ import { useAuth } from "../../lib/auth";
 import { SectionTitle, Card, Spinner, LoadErrorCard, EmptyState, Badge, AmountBox, AmountGrid } from "../../components/ui";
 import { Field, Modal, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
+import { DateRangePicker } from "../../components/DateRangePicker";
 import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
 import { KIND_AR } from "../admin/AdminBankMail";
 
@@ -31,7 +32,7 @@ const MSG_STATUS: Record<BankMessage["status"], [string, string]> = {
 type View = "branch" | "unassigned" | "messages";
 
 export default function BankMovements() {
-  const { branchId } = useBranch();
+  const { branchId, allBranches } = useBranch();
   const { can } = useAuth();
   const owner = can("bank.manage");
   const [view, setView] = useState<View>("branch");
@@ -41,7 +42,7 @@ export default function BankMovements() {
 
   return (
     <div>
-      <SectionTitle title="الحركات البنكية" subtitle="ما قالته رسائل البنك: كل داخل وخارج من حساب الفرع" action={<BranchPicker />} />
+      <SectionTitle title="الحركات البنكية" subtitle="ما قالته رسائل البنك: كل داخل وخارج من حساب الفرع" action={<BranchPicker allowAll />} />
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-ink-50 p-1" role="tablist" aria-label="عرض الحركات">
         {views.map(([v, label]) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
@@ -51,19 +52,18 @@ export default function BankMovements() {
       {view !== "messages" && (
         <Card className="mb-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="من"><input type="date" className="input" dir="ltr" max={to} value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} aria-label="من" /></Field>
-            <Field label="إلى"><input type="date" className="input" dir="ltr" min={from} max={todayISO()} value={to} onChange={(e) => e.target.value && setTo(e.target.value)} aria-label="إلى" /></Field>
+            <Field label="اليوم أو الفترة" className="sm:col-span-2"><DateRangePicker label="اليوم أو الفترة" from={from} to={to} max={todayISO()} onChange={(a, b) => { setFrom(a); setTo(b); }} /></Field>
           </div>
         </Card>
       )}
-      {view === "branch" && branchId && <Movements branch={branchId} from={from} to={to} />}
+      {view === "branch" && (allBranches ? <Movements branch={null} assignedOnly from={from} to={to} /> : branchId && <Movements branch={branchId} from={from} to={to} />)}
       {view === "unassigned" && <Movements branch={null} from={from} to={to} unassignedOnly />}
       {view === "messages" && <Messages />}
     </div>
   );
 }
 
-function Movements({ branch, from, to, unassignedOnly }: { branch: string | null; from: string; to: string; unassignedOnly?: boolean }) {
+function Movements({ branch, from, to, unassignedOnly, assignedOnly }: { branch: string | null; from: string; to: string; unassignedOnly?: boolean; /** «جميع الفروع»: every branch's movements, the unassigned ones left to their own tab */ assignedOnly?: boolean }) {
   const [rows, setRows] = useState<BankMovement[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -75,9 +75,9 @@ function Movements({ branch, from, to, unassignedOnly }: { branch: string | null
   const done = () => { setAct(null); setTick((t) => t + 1); };
   useEffect(() => {
     let alive = true; setRows(null); setError(null);
-    bankApi.movements(branch, from, to).then((d) => { if (alive) setRows(unassignedOnly ? d.filter((x) => !x.branch_id) : d); }, (e) => { if (alive) setError(toArabicError(e)); });
+    bankApi.movements(branch, from, to).then((d) => { if (alive) setRows(unassignedOnly ? d.filter((x) => !x.branch_id) : assignedOnly ? d.filter((x) => !!x.branch_id) : d); }, (e) => { if (alive) setError(toArabicError(e)); });
     return () => { alive = false; };
-  }, [branch, from, to, unassignedOnly, tick]);
+  }, [branch, from, to, unassignedOnly, assignedOnly, tick]);
   if (error) return <LoadErrorCard message={error} onRetry={() => setTick((t) => t + 1)} />;
   if (!rows) return <div className="py-10 text-center"><Spinner /></div>;
   const waiting = rows.filter((r) => r.status === "pending").length;

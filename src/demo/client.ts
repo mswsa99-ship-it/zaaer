@@ -814,6 +814,12 @@ function createReservationUnit(p: any, groupRef: string | null) { requireCap("re
     audit(p.branch_id, "reservation.created", "reservation", id, { after: { internal_ref: ref, check_in: p.check_in, check_out: p.check_out, quote: q, arrival_time: arrival, departure_time: departure, companions: comp, group_ref: groupRef, guest_profile_id: gp.id, platform_booked_on: bookedOn, platform_collects: collects, platform_voucher: vch?.number ?? null } }); emit("reservation_guests");
     return { ok: true, id, internal_ref: ref, quote: q, group_ref: groupRef, guest_profile_id: gp.id, platform_voucher: vch?.number ?? null }; }
 const rpcsMore: Record<string, (a: any) => any> = {
+  // 0142: company VAT number and national address (mirrors the SQL: role, branch, strict version, formats)
+  fn_staff_set_company_tax: ({ p_reservation, p_vat, p_address, p_expected_version }) => atomically(() => { requireCap("voucher.correct"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id);
+    if (p_expected_version == null) throw new Error("VERSION_REQUIRED: expected version must be supplied"); checkVersion(r.version, p_expected_version);
+    if (p_vat != null && !/^3[0-9]{13}3$/.test(String(p_vat))) throw new Error("VALIDATION: vat_number");
+    if (p_address != null && !(p_address.street && p_address.city && p_address.district && /^[0-9]{4}$/.test(p_address.building_number ?? "") && /^[0-9]{5}$/.test(p_address.postal_code ?? ""))) throw new Error("VALIDATION: company_address");
+    r.company_vat_number = p_vat ?? null; r.company_address = p_address ?? null; r.version++; r.updated_at = nowISO(); emit("reservations"); audit(r.branch_id, "reservation.company_tax_set", "reservation", r.id, { after: { company_vat_number: r.company_vat_number } }); return { ok: true }; }),
   fn_staff_amend_stay: ({ p_reservation, p_new_check_out, p_pricing_mode, p_reason, p_expected_version }) => { requireCap("stay.extend"); nonEmpty(p_reason, "reason"); if (!["keep_rate", "reprice"].includes(p_pricing_mode)) throw new Error("VALIDATION: pricing_mode"); const r = byId("reservations", p_reservation); if (!r) throw new Error("RESERVATION_NOT_FOUND"); requireBranch(r.branch_id); checkVersion(r.version, p_expected_version);
     return amendStayInternal(r, p_new_check_out, p_pricing_mode, p_reason, true); },
   // B4 (0048): the platform's fields corrected before arrival and before «طابقتُ مع المنصة»; the group's units change together

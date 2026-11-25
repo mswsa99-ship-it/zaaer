@@ -5,30 +5,45 @@ import { opsApi, toArabicError, type PlatformCheckRow } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
 import { SectionTitle, Card, EmptyState, Badge, ErrorBanner, Spinner, LoadingScreen, LoadErrorCard } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
+import { DateRangePicker } from "../../components/DateRangePicker";
+import { eachDay } from "../../lib/dateRange";
 import { RESERVATION_STATUS_LABELS, type ReservationStatus } from "../../lib/types";
-import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../../lib/utils";
 
 /**
  * The platforms' daily list (decision 4): every platform booking arriving today or tomorrow, to be matched against the
  * platform's own extranet (the number, the dates, who collects). «طابقتُ» keeps who and when; a group's units share the mark.
  */
 export default function PlatformCheck() {
-  const { branchId } = useBranch();
-  const [date, setDate] = useState(todayISO());
+  const { branchId, branches, allBranches } = useBranch();
+  const [range, setRange] = useState(() => ({ from: todayISO(), to: addDaysISO(todayISO(), 1) }))  /* the page's old default: today and tomorrow */;
   const [rows, setRows] = useState<PlatformCheckRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(async () => {
     if (!branchId) return;
-    try { const r = await opsApi.platformCheckList(branchId, date); setRows(r.rows); setError(null); } catch (e) { setError(toArabicError(e)); setRows([]); }
-  }, [branchId, date]);
+    try {
+      // one day = that day only; two days = every day of the period, both included (no day cap: a long period is read in small batches). «جميع الفروع»: every branch, rows merged once by reservation.
+      const ids = allBranches ? branches.map((b) => b.id) : [branchId];
+      const days = eachDay(range.from, range.to, 3660);
+      // the server answers one day per call: read in batches so a long period is complete, never cut at an arbitrary number of days
+      const jobsList: Array<[string, string]> = ids.flatMap((id) => days.map((d) => [id, d] as [string, string]));
+      const results: Array<Array<PlatformCheckRow & { _branch: string }>> = [];
+      for (let i = 0; i < jobsList.length; i += 12) {
+        results.push(...await Promise.all(jobsList.slice(i, i + 12).map(([id, d]) => opsApi.platformCheckList(id, d).then((r) => r.rows.map((x) => ({ ...x, _branch: id }))))));
+      }
+      const seen = new Map<string, PlatformCheckRow>();
+      for (const list of results) for (const x of list) if (x.check_in >= range.from && x.check_in <= range.to && !seen.has(x.id)) seen.set(x.id, x);
+      setRows([...seen.values()].sort((a, b) => (a.check_in < b.check_in ? -1 : a.check_in > b.check_in ? 1 : 0))); setError(null);
+    } catch (e) { setError(toArabicError(e)); setRows([]); }
+  }, [branchId, range, allBranches, branches]);
   useEffect(() => { load(); }, [load]);
   const toggle = async (r: PlatformCheckRow) => { setBusy(r.id); try { await opsApi.platformMarkChecked(r.id, !r.verified_at); await load(); } catch (e) { setError(toArabicError(e)); } finally { setBusy(null); } };
   if (rows === null && !error) return <LoadingScreen />;
   const pending = (rows ?? []).filter((r) => !r.verified_at && !["cancelled", "no_show"].includes(r.status)).length;
   return (
     <div>
-      <SectionTitle title="مطابقة المنصات" subtitle={error && (rows ?? []).length === 0 ? "وصول اليوم والغد من المنصات: تعذّر تحميل القائمة" : `وصول اليوم والغد من المنصات: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex flex-wrap items-center gap-2"><input type="date" className="input" dir="ltr" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="اليوم" /><BranchPicker /></div>} />
+      <SectionTitle title="مطابقة المنصات" subtitle={error && (rows ?? []).length === 0 ? "وصول المنصات في اليوم أو الفترة المختارة: تعذّر تحميل القائمة" : `وصول المنصات في اليوم أو الفترة المختارة: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex flex-wrap items-center gap-2"><DateRangePicker className="w-52" label="اليوم أو الفترة" from={range.from} to={range.to} onChange={(a, b) => setRange({ from: a, to: b })} /><BranchPicker allowAll /></div>} />
       {/* 6.6 (U3): a failed load is one error card with a retry, never an error next to «لا حجوزات»; a failed mark keeps the rows and shows the banner */}
       {error && (rows ?? []).length > 0 && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {error && (rows ?? []).length === 0 ? <LoadErrorCard message={error} onRetry={load} /> : (rows ?? []).length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا حجوزات من المنصات في هذين اليومين" /> : (
@@ -40,7 +55,7 @@ export default function PlatformCheck() {
             <tbody>
               {(rows ?? []).map((r) => (
                 <tr key={r.id} className={`border-b border-ink-50 ${r.verified_at ? "bg-success-500/5" : ""}`} data-testid="platform-row">
-                  <td className="py-2 text-ink-700">{r.source_name}</td>
+                  <td className="py-2 text-ink-700">{r.source_name}{allBranches && <span className="block text-[11px] text-rai-ink-muted">{branches.find((b) => b.id === (r as PlatformCheckRow & { _branch?: string })._branch)?.name_ar}</span>}</td>
                   <td className="py-2 font-mono text-xs" dir="ltr"><Link to={`/staff/reservations/${r.id}`} className="text-brand-700 hover:underline">{r.external_ref ?? r.internal_ref}</Link>{r.group_ref && <span className="mr-1 text-[10px] text-ink-400">(مجموعة)</span>}</td>
                   <td className="py-2 text-ink-700">{r.guest_name ?? "—"}</td>
                   <td className="py-2 text-xs" dir="ltr">{r.check_in}</td>

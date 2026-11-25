@@ -212,7 +212,7 @@ test.describe("a disabled control says why (6.8)", () => {
     await go("/staff/reservations/new");
     await bookingNext(page);
     const next = page.getByRole("button", { name: "التالي" });
-    await expect(next).toBeDisabled();
+    await expect(next).toHaveAttribute("data-blocked", "true");
     await expect(next).toHaveAttribute("aria-describedby", "wizard-step-block-reason");
     await expect(page.getByTestId("wizard-step-block-reason")).toBeVisible();
   });

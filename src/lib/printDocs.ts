@@ -2,6 +2,7 @@
  * B7 (the owner's note 8): every voucher kind and every invoice prints on an A4 page or an 80 mm receipt, with the
  * amount in figures and in words. Pure builders (HTML text) — printed through the hidden frame of exports.ts.
  */
+import { DOC_ACCENT } from "./printTemplates";
 import { amountInWords } from "./amountWords";
 import { formatCurrency, formatDateTime } from "./utils";
 
@@ -10,7 +11,7 @@ export type PrintFormat = "a4" | "80mm";
 const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const sar = (h: number) => formatCurrency(h / 100);
 
-export interface PrintContext { property: string; branch: string; reservationRef: string; externalRef?: string | null; guest?: string | null; room?: string | null; checkIn?: string; checkOut?: string; printedBy?: string | null }
+export interface PrintContext { property: string; branch: string; reservationRef: string; reservationId?: string; /** the hotel identity, when known: shown under the name like on the stay summary */ identity?: { address?: string | null; phone?: string | null; commercialRegister?: string | null; logo?: string | null }; externalRef?: string | null; guest?: string | null; room?: string | null; checkIn?: string; checkOut?: string; printedBy?: string | null }
 
 export interface PrintVoucher { number: string; kind?: string; kindLabel: string; amount_halalas: number; methodLabel: string; reference: string | null; note: string | null; occurred_at: string; status: string; created_by_name?: string | null; original_number?: string | null; cancel_reason?: string | null }
 
@@ -24,8 +25,11 @@ function page(title: string, format: PrintFormat, body: string): string {
   * { box-sizing: border-box; }
   body { font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, Arial, sans-serif; color: #111; margin: 0; font-size: ${a4 ? "13px" : "11px"}; line-height: 1.6; }
   .doc { ${a4 ? "padding: 14mm 14mm;" : "width: 72mm; padding: 3mm 2mm;"} }
-  header { text-align: center; border-bottom: ${a4 ? "2px solid" : "1px dashed"} #111; padding-bottom: ${a4 ? "8px" : "4px"}; margin-bottom: ${a4 ? "12px" : "6px"}; }
-  header .p { font-size: ${a4 ? "18px" : "14px"}; font-weight: 700; margin: 0; }
+  header { text-align: center; border-bottom: ${a4 ? `3px solid ${DOC_ACCENT}` : "1px dashed #111"}; padding-bottom: ${a4 ? "8px" : "4px"}; margin-bottom: ${a4 ? "12px" : "6px"}; }
+  header .p { font-size: ${a4 ? "20px" : "14px"}; font-weight: 700; margin: 0; color: ${a4 ? DOC_ACCENT : "inherit"}; }
+  header .m { margin: 0; opacity: .75; font-size: ${a4 ? "11px" : "9px"}; overflow-wrap: anywhere; }
+  header img { max-height: ${a4 ? "56px" : "32px"}; max-width: 120px; object-fit: contain; }
+  h1 { color: ${a4 ? DOC_ACCENT : "inherit"}; }
   header .b { margin: 0; color: #333; }
   h1 { font-size: ${a4 ? "16px" : "13px"}; margin: 0 0 ${a4 ? "8px" : "4px"}; text-align: center; }
   .meta { display: grid; grid-template-columns: ${a4 ? "1fr 1fr" : "1fr"}; gap: ${a4 ? "4px 24px" : "1px"}; margin-bottom: ${a4 ? "12px" : "6px"}; }
@@ -50,7 +54,10 @@ function page(title: string, format: PrintFormat, body: string): string {
 }
 
 function header(ctx: PrintContext): string {
-  return `<header><p class="p">${esc(ctx.property)}</p><p class="b">${esc(ctx.branch)}</p></header>`;
+  const i = ctx.identity;
+  const lines = i ? [i.address, i.phone ? `<span class="ltr">${esc(i.phone)}</span>` : "", i.commercialRegister ? `السجل التجاري: <span class="ltr">${esc(i.commercialRegister)}</span>` : ""] : [];
+  const more = [i?.address ? esc(i.address) : "", lines[1], lines[2]].filter(Boolean).map((l) => `<p class="m">${l}</p>`).join("");
+  return `<header>${i?.logo ? `<img src="${esc(i.logo)}" alt="">` : ""}<p class="p">${esc(ctx.property)}</p><p class="b">${esc(ctx.branch)}</p>${more}</header>`;
 }
 
 function stayMeta(ctx: PrintContext): string {

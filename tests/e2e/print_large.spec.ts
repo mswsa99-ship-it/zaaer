@@ -2,7 +2,7 @@
  * خطة التصحيح 6.10 (U2 الطباعة): صفحة طباعة مستقلة مقسّمة؛ قائمة من 5,000 صف لا تُجمّد التبويب.
  * بيانات اصطناعية مخترعة بالكامل تُزرع في مخزن العرض المحلي (localStorage) قبل الإقلاع. أسماء وصفية بلا رموز.
  */
-import { test, expect } from "./fixtures";
+import { test, expect, pickRange } from "./fixtures";
 
 const STORE_KEY = "zaaer_demo_store_v9";
 const ROWS = 5000;
@@ -18,8 +18,7 @@ async function selectSeededRange(page: import("@playwright/test").Page) {
     const now = Date.now();
     return { from: fmt(now - (rows + 1) * 1000), to: fmt(now) };
   }, ROWS);
-  await page.getByLabel("من", { exact: true }).fill(range.from);
-  await page.getByLabel("إلى", { exact: true }).fill(range.to);
+  await pickRange(page, "اليوم أو الفترة", range.from, range.to);
 }
 
 test.describe("طباعة قائمة ضخمة", () => {

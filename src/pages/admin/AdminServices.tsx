@@ -9,6 +9,7 @@ import { useAuth } from "../../lib/auth";
 import { BranchPicker } from "../../components/BranchPicker";
 import { BILLING_UNIT_LABELS } from "../../lib/types";
 import { formatCurrency } from "../../lib/utils";
+import { TimeInput } from "../../components/TimeInput";
 
 interface Service { id: string; name_ar: string; name_en: string | null; description: string | null; billing_unit: string; price_halalas: number; is_free: boolean; taxable: boolean; task_type_id: string | null; late_checkout_until: string | null; is_active: boolean; archived_at: string | null; version: number }
 
@@ -76,7 +77,7 @@ export default function AdminServices() {
               <Field label={draft.is_free ? "السعر (مجانية)" : "السعر (إلزامي)"} hint={draft.is_free ? undefined : "أكبر من صفر؛ للخدمة بلا مقابل اختر «مجانية»."}><MoneyInput valueHalalas={draft.is_free ? null : draft.price_halalas ?? null} onChange={(h) => setDraft({ ...draft, price_halalas: h as number })} disabled={draft.is_free} /></Field>
               {(draft.billing_unit ?? "once") === "once" && (
                 <Field label="مغادرة متأخرة حتى الساعة (اختياري)" className="sm:col-span-2" hint="خدمة مغادرة متأخرة: تنقل موعد مغادرة الإقامة إلى هذه الساعة، وتكون بعد موعد المغادرة في الفرع. تُحتسب مرة واحدة.">
-                  <input type="time" className="input" dir="ltr" value={draft.late_checkout_until?.slice(0, 5) ?? ""} onChange={(e) => setDraft({ ...draft, late_checkout_until: e.target.value || null })} aria-label="مغادرة متأخرة حتى الساعة" />
+                  <TimeInput clearable blankLabel="بلا حد" label="مغادرة متأخرة حتى الساعة" value={draft.late_checkout_until?.slice(0, 5) ?? ""} onChange={(v) => setDraft({ ...draft, late_checkout_until: v || null })} />
                 </Field>
               )}
               <Field label="نوع المهمة المرتبط (اختياري)" className="sm:col-span-2"><select className="input" value={draft.task_type_id ?? ""} onChange={(e) => setDraft({ ...draft, task_type_id: e.target.value || null })}><option value="">—</option>{taskTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>

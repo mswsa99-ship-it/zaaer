@@ -157,6 +157,9 @@ export const VALIDATION_AR: Record<string, string> = {
   // M1 (plan 4.1): the arrival's vouchers — an explicit «استلمت», and never more than the shortage
   received_confirm: "أكّد «استلمت المبلغ فعلًا» قبل تسجيل السند.",
   amount_exceeds_short: "المبلغ أكبر من المطلوب قبل الوصول؛ لا يقبل سند الوصول أكثر من قيمة النقص.",
+  deposit_exceeds_short: "المبلغ أكبر من نقص التأمين؛ لا يقبل سند التأمين أكثر من الباقي من تأمين الفرع.",
+  deposit_no_authorization: "التأمين أقل من تأمين الفرع: أجب «نعم» بوجود تفويض من المدير مع تفاصيله، أو أكمل المبلغ.",
+  deposit_auth_details: "اكتب تفاصيل تفويض المدير قبل قبول تأمين أقل.",
   deposit_refund_before_checkout: "يُرد تأمين الإقامة بعد تسجيل المغادرة وفحصها.",
   inspection_result: "اختر نتيجة الفحص: سليمة أو بملاحظات.",
   inspection_notes: "اكتب ملاحظات الفحص.",
@@ -976,6 +979,9 @@ export const opsApi = {
   createReservation: (p: Record<string, unknown>) => rpc<{ ok: boolean; id: string; internal_ref: string; quote: Quote }>("fn_staff_create_reservation", { p }),
   amendStay: (id: string, newCheckOut: string, pricingMode: "keep_rate" | "reprice", reason: string, version?: number) =>
     rpc<{ ok: boolean; delta_nights?: number; finance?: Finance }>("fn_staff_amend_stay", { p_reservation: id, p_new_check_out: newCheckOut, p_pricing_mode: pricingMode, p_reason: reason, p_expected_version: version ?? null }),
+  /** 0142: the company's VAT number and national address on a company reservation (owner, manager, supervisor); null clears */
+  setCompanyTax: (id: string, vat: string | null, address: Record<string, string> | null, version?: number) =>
+    rpc<{ ok: boolean }>("fn_staff_set_company_tax", { p_reservation: id, p_vat: vat, p_address: address, p_expected_version: version ?? null }),
   switchRoom: (id: string, roomId: string, effective: string | null, reason: string, version?: number) =>
     rpc<{ ok: boolean; entry_code_review_required: boolean; code_delivery_required?: boolean }>("fn_staff_switch_room", { p_reservation: id, p_room: roomId, p_effective: effective, p_reason: reason, p_expected_version: version ?? null }),
   adjustPrice: (id: string, kind: "discount" | "adjustment" | "penalty" | "addon", amountHalalas: number, description: string, reason: string, version?: number) =>
@@ -1009,7 +1015,7 @@ export const opsApi = {
   list: (branchId: string, filters: ReservationListFilters, limit = 50, offset = 0) => rpc<{ total: number; rows: ReservationRow[] }>("fn_reservation_list", { p_branch: branchId, p_filters: filters, p_limit: limit, p_offset: offset }),
 
   // money
-  createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; account_id?: string; reference?: string; note?: string; reason?: string; idempotency_key: string; duplicate_reference_ok?: boolean }) =>
+  createVoucher: (p: { reservation_id: string; kind: "receipt" | "deposit"; amount_halalas: number; method: string; account_id?: string; reference?: string; note?: string; reason?: string; idempotency_key: string; duplicate_reference_ok?: boolean; received_confirmed?: boolean }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; finance: Finance }>("fn_create_voucher", { p }),
   refund: (p: { reservation_id: string; kind: "refund" | "deposit_refund" | "deposit_apply"; amount_halalas: number; method?: string; account_id?: string; reference?: string; reason: string; idempotency_key: string; original_voucher_id?: string; method_reason?: string }) =>
     rpc<{ ok: boolean; duplicate: boolean; voucher_id: string; number: string; finance: Finance }>("fn_refund", { p }),

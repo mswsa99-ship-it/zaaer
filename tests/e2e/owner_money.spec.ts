@@ -3,7 +3,7 @@
  * from what was collected, both occupancy figures with their definitions, one period rule on the reports page with no
  * stale figures after an error, every day in the daily chart, and the phone view of the branches.
  */
-import { test, expect } from "./fixtures";
+import { test, expect, pickRange } from "./fixtures";
 
 test.describe("owner money", () => {
   test("QO08 the dashboard says money taken at the property and money the platforms hold apart, and both occupancy figures with their definitions", async ({ page, loginAs, go, errors }) => {
@@ -33,7 +33,7 @@ test.describe("owner money", () => {
     await loginAs("owner");
     await go("/admin/reports");
     await expect(page.getByText("المحصّل في المنشأة", { exact: true })).toBeVisible();
-    await page.getByLabel("من").fill("2020-01-01");
+    await pickRange(page, "اليوم أو الفترة", "2020-01-01", new Date().toISOString().slice(0, 10));
     await expect(page.getByText(/الفترة أطول من 366 يومًا/)).toBeVisible();
     await expect(page.getByText("المحصّل في المنشأة", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("late-entries-report")).toHaveCount(0);

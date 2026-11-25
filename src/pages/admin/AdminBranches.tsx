@@ -7,6 +7,7 @@ import { opsApi, branchMediaApi, guestApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, ErrorBanner, LoadErrorCard } from "../../components/ui";
 import { formatCurrency, COUNT } from "../../lib/utils";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput , NumberInput, dropLegacyDrafts, useFormDraft, useEditDraft, DraftRestoreBanner} from "../../components/forms";
+import { TimeInput } from "../../components/TimeInput";
 
 interface Branch { id: string; name_ar: string; name_en: string | null; city: string | null; address: string | null; phone: string | null; email: string | null; is_active: boolean; check_in_time: string; check_out_time: string; timezone: string; tax_rate_bp: number; prices_include_tax: boolean;
   // 0069 (W2): each of rent, services and products has its switch and its rate; tax_rate_bp is the rent rate in force
@@ -103,10 +104,10 @@ export default function AdminBranches() {
               <Field label="الاسم الإنجليزي (مطلوب)" hint="يظهر في مطبوعات النزيل بالإنجليزية"><input className="input" dir="ltr" value={draft.name_en ?? ""} onChange={(e) => setDraft({ ...draft, name_en: e.target.value })} aria-label="الاسم الإنجليزي" /></Field>
               <Field label="المدينة"><input className="input" value={draft.city ?? ""} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></Field>
               <Field label="العنوان"><input className="input" value={draft.address ?? ""} onChange={(e) => setDraft({ ...draft, address: e.target.value })} /></Field>
-              <Field label="الهاتف"><input className="input" dir="ltr" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></Field>
+              <Field label="الهاتف"><input className="input" dir="ltr" inputMode="tel" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></Field>
               <Field label="البريد"><input className="input" dir="ltr" value={draft.email ?? ""} onChange={(e) => setDraft({ ...draft, email: e.target.value })} /></Field>
-              <Field label="وقت الوصول"><input type="time" className="input" dir="ltr" value={draft.check_in_time?.slice(0, 5) ?? "16:00"} onChange={(e) => setDraft({ ...draft, check_in_time: e.target.value })} /></Field>
-              <Field label="وقت المغادرة"><input type="time" className="input" dir="ltr" value={draft.check_out_time?.slice(0, 5) ?? "12:00"} onChange={(e) => setDraft({ ...draft, check_out_time: e.target.value })} /></Field>
+              <Field label="وقت الوصول"><TimeInput label="وقت الوصول" value={draft.check_in_time?.slice(0, 5) ?? "16:00"} onChange={(v) => setDraft({ ...draft, check_in_time: v })} /></Field>
+              <Field label="وقت المغادرة"><TimeInput label="وقت المغادرة" value={draft.check_out_time?.slice(0, 5) ?? "12:00"} onChange={(v) => setDraft({ ...draft, check_out_time: v })} /></Field>
               <Field label="المنطقة الزمنية"><input className="input" dir="ltr" value={draft.timezone ?? "Asia/Riyadh"} onChange={(e) => setDraft({ ...draft, timezone: e.target.value })} /></Field>
               <Field label="التأمين لكل وحدة" hint="المبلغ المقترح عند قبض التأمين، وهو منفصل عن الإيراد ويُرد بعد فحص المغادرة."><MoneyInput valueHalalas={draft.default_deposit_halalas ?? 0} onChange={(h) => setDraft({ ...draft, default_deposit_halalas: h ?? 0 })} /></Field>
               <Field label="السجل التجاري"><input className="input" dir="ltr" value={draft.commercial_register ?? ""} onChange={(e) => setDraft({ ...draft, commercial_register: e.target.value })} /></Field>

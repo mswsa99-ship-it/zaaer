@@ -4,7 +4,7 @@
  * Controls: G21 (no data outside the role), G25 (report and export match definition, filters and permissions — X09),
  * G26 (the usage report removes nothing), G27 (the screen shows the server's refusal).
  */
-import { test, expect, createReservation } from "./fixtures";
+import { test, expect, createReservation, pickRange } from "./fixtures";
 import { readFileSync } from "node:fs";
 import type { Download, Page } from "@playwright/test";
 import { firstSheetRows } from "./helpers/xlsx";
@@ -38,7 +38,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     expect(total).toBeGreaterThan(0);
     await page.getByTestId("toggle-advanced").click();
     await expect(page.getByTestId("advanced-filters")).toBeVisible();
-    for (const label of ["الوصول من", "المغادرة من", "تاريخ الإنشاء من", "مقيم في يوم", "المصدر", "نوع الوحدة", "رقم الوحدة", "فرد / شركة", "الشركة", "نوع الإيجار", "حالة الدفع", "الهوية", "الوصول للوحدة", "المجموعة", "من يقبض", "الترتيب"]) await expect(page.getByLabel(label).first(), label).toBeVisible();
+    for (const label of ["الوصول: يوم أو فترة", "المغادرة: يوم أو فترة", "تاريخ الإنشاء: يوم أو فترة", "مقيم في يوم", "المصدر", "نوع الوحدة", "رقم الوحدة", "فرد / شركة", "الشركة", "نوع الإيجار", "حالة الدفع", "الهوية", "الوصول للوحدة", "المجموعة", "من يقبض", "الترتيب"]) await expect(page.getByLabel(label).first(), label).toBeVisible();
     // a status filter narrows the set and is said in words
     await page.getByLabel("الحالة").selectOption("confirmed");
     await expect(page.getByText(/الحالة: مؤكد/).first()).toBeVisible();
@@ -177,7 +177,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
   test("LE05 / X09a the ledger: filters, totals over the whole set, and an export that holds exactly the matching vouchers", async ({ page, loginAs, go }) => {
     await loginAs("finance");
     await go("/admin/finance");
-    await page.getByLabel("من", { exact: true }).fill("2020-01-01");
+    await pickRange(page, "اليوم أو الفترة", "2020-01-01", new Date().toISOString().slice(0, 10));
     const total = await matching(page, /السندات المطابقة: (\d+)/);
     expect(total).toBeGreaterThan(0);
     await expect(page.getByTestId("finance-totals")).toContainText("قبض إقامة");
@@ -202,7 +202,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await go("/admin/reports");
     await expect(page.getByTestId("report-filters")).toBeVisible();
     // 0059 (OWNER-08): the widest period the page takes is 366 days
-    await page.getByLabel("من", { exact: true }).fill(new Date(Date.now() - 360 * 86400000).toISOString().slice(0, 10));
+    await pickRange(page, "اليوم أو الفترة", new Date(Date.now() - 360 * 86400000).toISOString().slice(0, 10), new Date().toISOString().slice(0, 10));
     await page.getByTestId("filter-method").selectOption("cash");
     await expect(page.getByTestId("report-filter-words")).toContainText("طريقة الدفع: نقد");
     await expect(page.getByText("مرشّح").first()).toBeVisible();

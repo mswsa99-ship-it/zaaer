@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { NationalityField } from "../../components/NationalityField";
 import { GuestLinkError } from "../../components/GuestLinkError";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowRight, ArrowLeft, UserPlus, CheckCircle2, AlertCircle, IdCard, Baby, Plus, X } from "lucide-react";
@@ -292,7 +293,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
         {hasSaudiIdentityChecksumWarning(identityType, identityNumber) && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900" role="status" data-testid="identity-checksum-warning">{t("تنبيه: رقم التحقق للهوية غير مطابق. راجع الرقم مع الوثيقة الأصلية؛ هذا التنبيه لا يمنع الحفظ.", "Warning: the ID checksum does not match. Check the number against the original document; this warning does not prevent saving.")}</p>}
         <div className="grid grid-cols-2 gap-4">
           <Field label={t("رقم الإصدار (إن وجد)", "Issue number (if any)")}><input value={issueNumber} onChange={(e) => setIssueNumber(e.target.value)} className="input" dir="ltr" /></Field>
-          <Field label={t("الجنسية", "Nationality")}><input value={nationality} onChange={(e) => setNationality(e.target.value)} className="input" /></Field>
+          <Field label={t("الجنسية", "Nationality")}><NationalityField value={nationality} onChange={setNationality} otherLabel={t("أخرى", "Other")} manualLabel={t("اكتب الجنسية", "Type the nationality")} ariaLabel={t("الجنسية", "Nationality")} /></Field>
         </div>
         {!isPrimary && (
           <Field label={t("صلة القرابة", "Relationship")} hint={t("الأطفال دون 15 سنة يُذكرون بأعمارهم في «أطفال دون 15 سنة» ولا يُسجَّلون هنا.", "Children under 15 are given by age under «Children under 15», not registered here.")}>

@@ -14,6 +14,7 @@ import { SectionTitle, Card, Spinner, LoadErrorCard, EmptyState, AmountBox, Amou
 import { Field, Modal, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO } from "../../lib/utils";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 const sar = (h: number) => formatCurrency(h / 100);
 const monthStart = () => todayISO().slice(0, 8) + "01";
@@ -47,8 +48,9 @@ export default function Accounts() {
       {current !== "months" && (
         <Card className="mb-4">
           <div className="grid gap-3 sm:grid-cols-3">
-            {current !== "balance" && current !== "chart" && <Field label="من"><input type="date" className="input" dir="ltr" max={to} value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} aria-label="من" /></Field>}
-            <Field label={current === "balance" || current === "chart" ? "حتى تاريخ" : "إلى"}><input type="date" className="input" dir="ltr" min={current === "balance" || current === "chart" ? undefined : from} max={todayISO()} value={to} onChange={(e) => e.target.value && setTo(e.target.value)} aria-label="إلى" /></Field>
+            {current === "balance" || current === "chart"
+              ? <Field label="حتى تاريخ"><DateRangePicker single label="حتى تاريخ" from={to} to={to} max={todayISO()} onChange={(a) => setTo(a)} /></Field>
+              : <Field label="اليوم أو الفترة" className="sm:col-span-2"><DateRangePicker label="اليوم أو الفترة" from={from} to={to} max={todayISO()} onChange={(a, b) => { setFrom(a); setTo(b); }} /></Field>}
             <label className="flex min-h-[44px] items-center gap-2 self-end text-sm text-ink-700"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> كل فروعي</label>
           </div>
         </Card>

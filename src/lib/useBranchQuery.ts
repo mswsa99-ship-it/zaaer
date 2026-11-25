@@ -15,6 +15,8 @@ export interface BranchQuery<T> {
   error: string | null;
   /** The branch the data belongs to (null when the user has no authorised branch). */
   branchId: string | null;
+  /** True when the owner chose «جميع الفروع» and this query merged every branch (a read-only view). */
+  all: boolean;
   reload: () => void;
 }
 
@@ -28,8 +30,15 @@ export interface BranchQuery<T> {
  *  - a failed reload keeps the branch's current data and reports the error beside it.
  * `deps` are the loader's other inputs (filters, page…): a change reloads.
  */
-export function useBranchQuery<T>(load: (branchId: string) => Promise<T>, deps: DependencyList, empty: T): BranchQuery<T> {
-  const { branchId, loading: branchLoading } = useBranch();
+export function useBranchQuery<T>(load: (branchId: string) => Promise<T>, deps: DependencyList, empty: T, opts?: { merge?: (parts: T[]) => T }): BranchQuery<T> {
+  const { branchId, branches, allBranches, loading: branchLoading } = useBranch();
+  // «جميع الفروع» (owner only): every authorised branch is loaded and merged; without a merge function the screen stays single-branch.
+  const fan = allBranches && !!opts?.merge;
+  const key = fan ? "all:" + branches.map((b) => b.id).join(",") : branchId;
+  const mergeRef = useRef(opts?.merge);
+  mergeRef.current = opts?.merge;
+  const branchesRef = useRef(branches);
+  branchesRef.current = branches;
   const emptyRef = useRef(empty);
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -41,18 +50,21 @@ export function useBranchQuery<T>(load: (branchId: string) => Promise<T>, deps: 
   useEffect(() => {
     const token = ++reqRef.current;
     if (branchLoading) return;
-    if (!branchId) { setState({ key: null, data: emptyRef.current, loading: false, refreshing: false, error: null }); return; }
-    setState((s) => (s.key === branchId
+    if (!key) { setState({ key: null, data: emptyRef.current, loading: false, refreshing: false, error: null }); return; }
+    setState((s) => (s.key === key
       ? { ...s, refreshing: true, error: null }
-      : { key: branchId, data: emptyRef.current, loading: true, refreshing: false, error: null }));
-    loadRef.current(branchId).then(
-      (data) => { if (token === reqRef.current) setState({ key: branchId, data, loading: false, refreshing: false, error: null }); },
+      : { key, data: emptyRef.current, loading: true, refreshing: false, error: null }));
+    const run: Promise<T> = fan
+      ? Promise.all(branchesRef.current.map((b) => loadRef.current(b.id))).then((parts) => mergeRef.current!(parts))
+      : loadRef.current(key);
+    run.then(
+      (data) => { if (token === reqRef.current) setState({ key, data, loading: false, refreshing: false, error: null }); },
       (e) => {
         if (token !== reqRef.current) return;
-        setState((s) => ({ key: branchId, data: s.key === branchId ? s.data : emptyRef.current, loading: false, refreshing: false, error: toArabicError(e) }));
+        setState((s) => ({ key, data: s.key === key ? s.data : emptyRef.current, loading: false, refreshing: false, error: toArabicError(e) }));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId, branchLoading, tick, ...deps]);
+  }, [key, branchLoading, tick, ...deps]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // Room AI confirmed a write for this branch: the open page reloads its list (no other behaviour change)
@@ -61,13 +73,14 @@ export function useBranchQuery<T>(load: (branchId: string) => Promise<T>, deps: 
     window.addEventListener(ROOM_AI_CHANGED, onChanged);
     return () => window.removeEventListener(ROOM_AI_CHANGED, onChanged);
   }, []);
-  const current = state.key === branchId && branchId !== null;
+  const current = state.key === key && key !== null;
   return {
     data: current ? state.data : emptyRef.current,
-    loading: branchLoading || (branchId !== null && (!current || state.loading)),
+    loading: branchLoading || (key !== null && (!current || state.loading)),
     refreshing: current && state.refreshing,
     error: current ? state.error : null,
     branchId,
+    all: fan,
     reload,
   };
 }

@@ -15,6 +15,7 @@ import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, EmptyState, AmountBo
 import { Field, MoneyInput, Modal, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, formatDateTime, todayISO, addDaysISO } from "../../lib/utils";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 const sar = (h: number) => formatCurrency(h / 100);
 const MAX_FILES = 5, MAX_BYTES = 2 * 1024 * 1024;
@@ -30,7 +31,7 @@ export async function openAttachment(id: string) {
 }
 
 export default function Expenses() {
-  const { branchId } = useBranch();
+  const { branchId, branches, allBranches } = useBranch();
   const { can, permissions, profile: me } = useAuth();
   // expense categories (candidate, UNADOPTED): an individual non-owner follows the /staff/expenses page grant (add = new category, edit = rename/stop), every other account keeps the 'definitions' capability
   const pageAccess = permissions.pageAccess;
@@ -39,7 +40,7 @@ export default function Expenses() {
   const catEdit = individualCats && pageAccess ? individualAllows(pageAccess, "/staff/expenses", "edit") : can("definitions");
   const [from, setFrom] = useState(addDaysISO(todayISO(), -6));
   const [to, setTo] = useState(todayISO());
-  const [rows, setRows] = useState<ExpenseRow[] | null>(null);
+  const [rows, setRows] = useState<(ExpenseRow & { branch_name?: string })[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -51,9 +52,13 @@ export default function Expenses() {
   useEffect(() => {
     if (!branchId) return;
     let alive = true; setError(null); setRows(null);
-    expenseApi.list(branchId, from, to).then((r) => { if (alive) setRows(r); }, (e) => { if (alive) setError(toArabicError(e)); });
+    // «جميع الفروع» (owner): every branch's expenses for the period in one list, newest first; read-only (no new voucher here)
+    const load = allBranches
+      ? Promise.all(branches.map((b) => expenseApi.list(b.id, from, to).then((r) => r.map((x) => ({ ...x, branch_name: b.name_ar }))))).then((l) => l.flat().sort((x, y) => (x.occurred_at < y.occurred_at ? 1 : -1)))
+      : expenseApi.list(branchId, from, to);
+    load.then((r) => { if (alive) setRows(r); }, (e) => { if (alive) setError(toArabicError(e)); });
     return () => { alive = false; };
-  }, [branchId, from, to, tick]);
+  }, [branchId, from, to, tick, allBranches, branches]);
 
   const live = (rows ?? []).filter((r) => r.status === "approved");
   const total = live.reduce((s, r) => s + r.amount_halalas, 0);
@@ -62,14 +67,13 @@ export default function Expenses() {
   return (
     <div>
       <SectionTitle title="المصروفات" subtitle="سندات الصرف من صندوق الفرع أو حسابه البنكي، بتصنيفها ومرفقها" action={
-        <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker />
+        <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker allowAll />
           {(catAdd || catEdit) && <button type="button" className="btn-outline text-sm" onClick={() => setCats(true)}><Tags className="h-4 w-4" /> التصنيفات</button>}
-          {can("expense.create") && <button type="button" className="btn-primary text-sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> سند صرف</button>}
+          {can("expense.create") && !allBranches && <button type="button" className="btn-primary text-sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> سند صرف</button>}
         </div>} />
       <Card className="mb-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="من"><input type="date" className="input" dir="ltr" max={to} value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} aria-label="من" /></Field>
-          <Field label="إلى"><input type="date" className="input" dir="ltr" min={from} max={todayISO()} value={to} onChange={(e) => e.target.value && setTo(e.target.value)} aria-label="إلى" /></Field>
+          <Field label="اليوم أو الفترة" className="sm:col-span-2"><DateRangePicker label="اليوم أو الفترة" from={from} to={to} max={todayISO()} onChange={(a, b) => { setFrom(a); setTo(b); }} /></Field>
         </div>
         <AmountGrid className="mt-3" testId="expense-totals">
           <AmountBox label="مجموع المصروفات" value={sar(total)} />
@@ -92,6 +96,7 @@ export default function Expenses() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
                   <span className="font-mono" dir="ltr">{r.number}</span>
+                  {allBranches && r.branch_name && <Badge className="bg-rai-spark-tint text-rai-spark-text">{r.branch_name}</Badge>}
                   <span>{formatDateTime(r.occurred_at)}</span>
                   <Badge className="bg-ink-100 text-ink-600">{r.category ?? "—"}</Badge>
                   <span>{r.account_kind === "cash_box" ? "من الصندوق" : "من الحساب البنكي"}{r.reference ? <> · <span dir="ltr">{r.reference}</span></> : null}</span>

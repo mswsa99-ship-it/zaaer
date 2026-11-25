@@ -9,6 +9,7 @@
  *  - StaySummaryDialog: «ملخص الإقامة» to print, and the guest's paper signature recorded against it.
  * Nothing here computes a rule the server does not enforce; every button names what it does.
  */
+import { NationalityField } from "./NationalityField";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ShieldAlert, ShieldBan, Star, IdCard, Printer, Link2, CheckCircle2, Users, Ban, FileSignature, PencilLine } from "lucide-react";
@@ -20,6 +21,7 @@ import { Modal, Field, ActionForm, Submit, ReasonInput, Toggle } from "./forms";
 import { IDENTITY_TYPE_LABELS, type IdentityType } from "../lib/types";
 import { formatCurrency, formatDateTime, todayISO, maskId, COUNT } from "../lib/utils";
 import { hasSaudiIdentityChecksumWarning } from "../lib/identityChecks";
+import { printableDocument, staySummaryHtml } from "../lib/printTemplates";
 import { checkIdentityNumber, checkMinAge, checkPersonName, checkPhone, fieldError, latinDigits, maxBirthDate } from "../lib/validation";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
@@ -146,7 +148,7 @@ export function OfficeGuestDialog({ open, reservationId, guest, onClose, onDone 
           <Field label={correcting ? "رقم الوثيقة (فارغ = الرقم المحفوظ)" : "رقم الوثيقة"} error={errs.number} hint={guest?.identity_number_last4 ? `المحفوظ: ${maskId(guest.identity_number_last4)}` : undefined}><input className="input" dir="ltr" inputMode="numeric" autoComplete="off" value={f.identity_number} onChange={(e) => setF({ ...f, identity_number: e.target.value })} aria-label="رقم الوثيقة" /></Field>
           {hasSaudiIdentityChecksumWarning(f.identity_type, idNumber) && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2" role="status" data-testid="identity-checksum-warning">تنبيه: رقم التحقق للهوية غير مطابق. راجع الرقم مع الوثيقة الأصلية؛ هذا التنبيه لا يمنع الحفظ.</p>}
           <Field label="رقم الإصدار (إن وجد)"><input className="input" dir="ltr" value={f.identity_issue_number} onChange={(e) => setF({ ...f, identity_issue_number: e.target.value })} /></Field>
-          <Field label="الجنسية"><input className="input" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })} aria-label="الجنسية" /></Field>
+          <Field label="الجنسية"><NationalityField value={f.nationality} onChange={(v) => setF({ ...f, nationality: v })} /></Field>
           <Field label="تاريخ الميلاد (ميلادي)" error={errs.birth}><input type="date" className="input" dir="ltr" max={maxBirthDate(todayISO())} value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} aria-label="تاريخ الميلاد" /></Field>
           <Field label={`الجوال ${guest?.is_primary ? "(فارغ = الرقم المسجل)" : "(اختياري)"}`} error={errs.phone}><input className="input" dir="ltr" inputMode="tel" placeholder="05xxxxxxxx" aria-invalid={!!errs.phone} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
           {!guest?.is_primary && <Field label="صلة القرابة"><select className="input" value={f.relationship} onChange={(e) => setF({ ...f, relationship: e.target.value })}><option value="spouse">زوج/زوجة</option><option value="child">ابن/ابنة</option><option value="parent">والد/والدة</option><option value="sibling">أخ/أخت</option><option value="other">أخرى</option></select></Field>}
@@ -334,14 +336,7 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
     if (!s) return;
     const w = window.open("", "_blank", "width=800,height=900");
     if (!w) return;
-    const esc = (x: string) => x.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
-    const en = s.language === "en";
-    w.document.write(`<!doctype html><html dir="${en ? "ltr" : "rtl"}" lang="${s.language}"><head><meta charset="utf-8"><title>${esc(s.reservation.internal_ref)}</title>
-      <style>body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;margin:32px;color:#111;font-size:14px;line-height:1.7}header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px}img{max-height:64px}pre{white-space:pre-wrap;font:inherit;margin:0}.sig{margin-top:40px;display:flex;justify-content:space-between;gap:24px}.sig div{flex:1;border-top:1px solid #111;padding-top:6px;font-size:12px}.hash{margin-top:24px;font-family:monospace;font-size:10px;color:#666;direction:ltr;text-align:left}@media print{body{margin:16mm}}</style></head><body>
-      <header><div><strong>${esc(s.branch.name)}</strong>${s.branch.city ? `<br><small>${esc(s.branch.city)}${s.branch.address ? " — " + esc(s.branch.address) : ""}</small>` : ""}${s.branch.phone ? `<br><small dir="ltr">${esc(s.branch.phone)}</small>` : ""}</div>${logo ? `<img src="${logo}" alt="">` : ""}</header>
-      <pre>${esc(s.text)}</pre>
-      <div class="sig"><div>${en ? "Guest signature" : "توقيع النزيل"}</div><div>${en ? "Date" : "التاريخ"}</div><div>${en ? "Reception" : "الاستقبال"}</div></div>
-      <p class="hash">${esc(s.hash)}</p></body></html>`);
+    w.document.write(printableDocument(staySummaryHtml(s, logo), s.reservation.internal_ref, s.language));
     w.document.close(); w.focus(); w.print();
   };
   return (
@@ -350,8 +345,10 @@ export function StaySummaryDialog({ open, reservationId, canRecord, onClose, onC
       {!s && !err && <div className="py-6 text-center"><Spinner /></div>}
       {s && (
         <div className="space-y-3">
-          <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl border border-ink-100 bg-ink-50 p-3 text-xs leading-relaxed text-ink-700" dir={s.language === "en" ? "ltr" : "rtl"} data-testid="stay-summary-text">{s.text}</pre>
-          <p className="text-[11px] text-ink-400" dir="ltr">بصمة النص: {s.hash.slice(0, 16)}…</p>
+          {/* the same template as the print window: hotel identity, stacked on a phone, readable dates. The text the guest signs (its hash) is kept below. */}
+          <iframe title="ملخص الإقامة" className="h-[55vh] w-full rounded-xl border border-rai-line bg-rai-surface" sandbox="" srcDoc={printableDocument(staySummaryHtml(s, logo), s.reservation.internal_ref, s.language)} data-testid="stay-summary-frame" />
+          <details className="text-xs text-rai-ink-muted"><summary className="cursor-pointer">نص الإقرار المعتمد للتوقيع</summary><pre className="mt-2 whitespace-pre-wrap rounded-xl border border-ink-100 bg-ink-50 p-3 text-xs leading-relaxed text-ink-700" dir={s.language === "en" ? "ltr" : "rtl"} data-testid="stay-summary-text">{s.text}</pre></details>
+          <p className="text-[11px] text-rai-ink-muted">بصمة النص (للتحقق من الإقرار): <bdi dir="ltr" className="font-mono">{s.hash.slice(0, 16)}</bdi></p>
           <div>
             <h4 className="mb-1 text-xs font-semibold text-ink-600">الإقرارات المسجلة</h4>
             {s.acknowledgements.length === 0 ? <p className="text-xs text-ink-400">لم يُقر النزيل بعد (إلكترونيًا عند التسجيل، أو ورقيًا من هنا).</p> : (

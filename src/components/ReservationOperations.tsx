@@ -3,6 +3,7 @@
  * charges · receipts/deposits · refunds · invoices · extend/shorten · switch room · cancel / no-show · allocation history.
  * Every button explains its effect before executing; nothing here writes to tables directly.
  */
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { auditActionLabel } from "../lib/auditLabels";
 import { Wallet, Receipt, Undo2, FileText, CalendarRange, ArrowLeftRight, Ban, UserX, History, Plus, ShieldAlert, Hammer, PencilLine } from "lucide-react";
@@ -12,6 +13,8 @@ import { CancelDialog } from "./Guests";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner, AmountBox, AmountGrid } from "./ui";
+import { checkVatNumber, checkBuyerAddress, BUYER_ADDRESS_LABELS_AR } from "../lib/buyerTax";
+import { latinDigits } from "../lib/validation";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput , NumberInput} from "./forms";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, CHARGE_KIND_LABELS, CLEANLINESS_LABELS, ACTIVE_PAYMENT_METHODS, METHOD_ACCOUNT_KIND, METHOD_NEEDS_REFERENCE, type PaymentMethod, type VoucherKind, type ChargeKind } from "../lib/types";
 import { useCashAccounts, accountLabel } from "../lib/useCashAccounts";
@@ -22,7 +25,7 @@ import { buildVoucherPrint } from "../lib/printDocs";
 import { useBranches } from "../lib/branch";
 
 const sar = (h: number | undefined | null) => formatCurrency((h ?? 0) / 100);
-type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice" | "damage";
+type Dialog = null | "receipt" | "deposit" | "refund" | "deposit_refund" | "deposit_apply" | "adjust" | "service" | "extend" | "switch" | "cancel" | "no_show" | "invoice" | "damage" | "company_tax";
 type Voucher = NonNullable<ReservationDetail["vouchers"]>[number];
 const DAY_MS = 24 * 3_600_000;
 
@@ -64,9 +67,9 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   // B7 (note 8): every voucher prints on A4 or an 80 mm receipt, its amount in figures and words
   const printCtx = stayPrintContext(d, branches.find((b) => b.id === d.reservation.branch_id)?.name_ar ?? "", profile?.full_name);
   const printVoucher = (v: Voucher) => (
-    <PrintButton testId={`print-voucher-${v.number}`} build={(f) => buildVoucherPrint({ number: v.number, kind: v.kind, kindLabel: VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind, amount_halalas: v.amount_halalas,
+    <PrintButton testId={`print-voucher-${v.number}`} reservationId={d.reservation.id} build={(f, identity) => buildVoucherPrint({ number: v.number, kind: v.kind, kindLabel: VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind, amount_halalas: v.amount_halalas,
       methodLabel: v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method, reference: v.reference, note: v.note, occurred_at: v.occurred_at, status: v.status,
-      created_by_name: v.created_by_name ?? null, original_number: v.original_number ?? null, cancel_reason: v.cancel_reason }, printCtx, f)} />
+      created_by_name: v.created_by_name ?? null, original_number: v.original_number ?? null, cancel_reason: v.cancel_reason }, { ...printCtx, identity }, f)} />
   );
   const r = d.reservation; const f = d.finance ?? ({ rent: 0, addons: 0, discounts: 0, penalties: 0, adjustments: 0, tax: 0, total: 0, received: 0, refunded: 0, deposit_applied: 0, net_collected: 0, balance_due: 0, credit: 0, deposit_received: 0, deposit_refunded: 0, deposit_balance: 0, payment_status: "pending" } as Finance);
   const open = !["cancelled", "rejected", "closed", "no_show"].includes(r.status);
@@ -101,6 +104,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
         )}
         {tab === "stay" && (can("stay.extend") || can("room.assign") || can("res.cancel")) && (
           <div className="mt-4 flex flex-wrap gap-2 border-t border-ink-50 pt-3">
+            {isMgr && r.booking_type === "company" && open && <button onClick={() => setDialog("company_tax")} className="btn-outline text-xs" data-testid="company-tax-open"><FileText className="h-3.5 w-3.5" /> الرقم الضريبي وعنوان الشركة</button>}
             {can("stay.extend") && ["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("extend")} className="btn-outline text-xs"><CalendarRange className="h-3.5 w-3.5" /> تغيير المغادرة / تمديد</button>}
             {can("room.assign") && ["confirmed", "checked_in", "pending_verification"].includes(r.status) && <button onClick={() => setDialog("switch")} className="btn-outline text-xs"><ArrowLeftRight className="h-3.5 w-3.5" /> تبديل الوحدة</button>}
             {can("res.cancel") && ["confirmed", "pending_verification", "draft"].includes(r.status) && <button onClick={() => setDialog("cancel")} className="btn-ghost text-xs text-danger-600"><Ban className="h-3.5 w-3.5" /> إلغاء الحجز</button>}
@@ -119,7 +123,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
           </Card>
           <Card>
             <h3 className="mb-2 text-sm font-semibold text-ink-700">السندات</h3>
-            <Table rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="text-[10px] text-ink-400">{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}{accounts.nameOf(v.account_id) ? ` · ${accounts.nameOf(v.account_id)}` : ""}{v.reference ? ` · ${v.reference}` : ""} · {formatDateTime(v.occurred_at)}{v.created_by_name ? ` · ${v.created_by_name}` : ""}</div>
+            <VoucherList rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 break-words text-[11px] text-rai-ink-muted"><span>{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}</span>{accounts.nameOf(v.account_id) && <span>{accounts.nameOf(v.account_id)}</span>}{v.reference && <span>المرجع: <bdi dir="ltr" className="font-mono">{v.reference}</bdi></span>}<span><bdi dir="rtl">{formatDateTime(v.occurred_at)}</bdi></span>{v.created_by_name && <span>{v.created_by_name}</span>}</div>
                 {v.original_number && <div className="text-[10px] text-brand-700">تصحيح للسند {v.original_number}</div>}
                 {v.replaced_by_number && <div className="text-[10px] text-ink-500">صُحّح بالسند {v.replaced_by_number}</div>}</span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
               v.status === "cancelled" ? <div key="s" className="flex flex-col items-end gap-0.5"><Badge className="bg-danger-500/10 text-danger-600" >ملغى</Badge>{printVoucher(v)}</div> : (
@@ -170,6 +174,7 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
       <DamageDialog open={dialog === "damage"} reservationId={reservationId} depositBalance={f.deposit_balance} onClose={() => setDialog(null)} onDone={done} />
       <AdjustDialog open={dialog === "adjust"} reservationId={reservationId} version={r.version} isMgr={can("price.adjust")} onClose={() => setDialog(null)} onDone={done} />
       <ServiceDialog open={dialog === "service"} reservationId={reservationId} branchId={r.branch_id} onClose={() => setDialog(null)} onDone={done} />
+      <CompanyTaxDialog open={dialog === "company_tax"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <ExtendDialog open={dialog === "extend"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <SwitchDialog open={dialog === "switch"} d={d} onClose={() => setDialog(null)} onDone={done} />
       <CancelDialog open={dialog === "cancel"} d={d} group={group} onClose={() => setDialog(null)} onDone={done} />
@@ -300,6 +305,22 @@ export function PaymentFields({ method, setMethod, accountId, setAccountId, refe
   );
 }
 
+/** Vouchers as stacked cards: the number and amount on one line, the details wrapping under them, the actions in a row. A four-column table crushed the text to one or two letters per line on a phone. */
+function VoucherList({ rows, empty }: { rows: ReactNode[][]; empty: string }) {
+  if (rows.length === 0) return <p className="text-sm text-rai-ink-muted">{empty}</p>;
+  return (
+    <ul className="divide-y divide-rai-line" data-testid="voucher-list">
+      {rows.map((r, i) => (
+        <li key={i} className="py-3">
+          <div className="flex items-baseline justify-between gap-3"><span className="min-w-0 break-all">{r[0]}</span><span className="shrink-0 text-sm font-semibold tabular-nums">{r[2]}</span></div>
+          <div className="mt-1 min-w-0 break-words text-sm">{r[1]}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 [&>div]:flex-row [&>div]:flex-wrap [&>div]:items-center">{r[3]}</div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose, onDone }: { open: boolean; kind: "receipt" | "deposit"; reservationId: string; accounts: CashAccount[]; suggested: number; onClose: () => void; onDone: () => Promise<void> }) {
   const [amount, setAmount] = useState<number | null>(suggested || null); const [method, setMethod] = useState<PaymentMethod>("cash"); const [accountId, setAccountId] = useState(""); const [ref, setRef] = useState(""); const [note, setNote] = useState("");
   const [key, setKey] = useState(newIdempotencyKey());
@@ -313,7 +334,7 @@ function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose
         if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
         if (METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
         try {
-          await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key, ...(dupWarn ? { duplicate_reference_ok: true } : {}) });
+          await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key, received_confirmed: true, ...(dupWarn ? { duplicate_reference_ok: true } : {}) });
         } catch (e) {
           if (!dupWarn && /DUPLICATE_REFERENCE/.test((e as Error).message ?? "")) { setDupWarn(toArabicError(e)); return; }
           throw e;
@@ -327,6 +348,7 @@ function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose
           <Field label="ملاحظة"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
           {dupWarn && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" data-testid="duplicate-reference">{dupWarn} يظهر هذا للمالك في «المراجعة».</p>}
         </div>
+        <p className="mt-3 text-xs text-rai-ink-muted" data-testid="save-is-receipt-ack">بضغط «{dupWarn ? "تأكيد التسجيل رغم التكرار" : "حفظ السند"}» تُقرّ أنك استلمت المبلغ فعلًا.</p>
         <Submit label={dupWarn ? "تأكيد التسجيل رغم التكرار" : "حفظ السند"} onCancel={onClose} />
       </ActionForm>
     </Modal>
@@ -491,6 +513,38 @@ function ExtendDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
           <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">{delta > 0 ? `تمديد ${COUNT.night(delta)}: يُفحص تعارض الوحدة في الفترة المضافة أولًا، ثم يُضاف بند إيجار جديد ويُعاد حساب الإجمالي.` : delta < 0 ? `تقصير ${COUNT.night(-delta)}: تُضاف تسوية سالبة بقيمة الليالي المحذوفة.` : "لا تغيير."}</div>
         </div>
         <Submit label="تطبيق" onCancel={onClose} />
+      </ActionForm>
+    </Modal>
+  );
+}
+
+function CompanyTaxDialog({ open, d, onClose, onDone }: { open: boolean; d: ReservationDetail; onClose: () => void; onDone: () => Promise<void> }) {
+  const r = d.reservation;
+  const cur = (r.company_address ?? {}) as Record<string, string>;
+  const [vat, setVat] = useState(""); const [a, setA] = useState({ street: "", building_number: "", postal_code: "", city: "", district: "" });
+  useEffect(() => { if (open) { setVat(String(r.company_vat_number ?? "")); setA({ street: cur.street ?? "", building_number: cur.building_number ?? "", postal_code: cur.postal_code ?? "", city: cur.city ?? "", district: cur.district ?? "" }); } // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, r.id, r.version]);
+  const anyAddr = Object.values(a).some((x) => x.trim());
+  return (
+    <Modal open={open} title="الرقم الضريبي وعنوان الشركة" onClose={onClose}>
+      <ActionForm onSubmit={async () => {
+        const v = latinDigits(vat).replace(/\s/g, ""); checkVatNumber(v);
+        let address: Record<string, string> | null = null;
+        if (anyAddr) { const miss = checkBuyerAddress(a); if (miss.length) throw new Error("VALIDATION: " + miss.map((m) => BUYER_ADDRESS_LABELS_AR[m]).join("، ")); address = { street: a.street.trim(), building_number: latinDigits(a.building_number.trim()), postal_code: latinDigits(a.postal_code.trim()), city: a.city.trim(), district: a.district.trim(), country_code: "SA" }; }
+        await opsApi.setCompanyTax(r.id, v || null, address, r.version); await onDone();
+      }}>
+        <div className="space-y-3" data-testid="company-tax-form">
+          <Field label="الرقم الضريبي (15 رقمًا يبدأ وينتهي بـ 3)"><input className="input" dir="ltr" inputMode="numeric" value={vat} data-testid="company-vat" onChange={(e) => setVat(e.target.value)} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="اسم الشارع"><input className="input" value={a.street} onChange={(e) => setA({ ...a, street: e.target.value })} /></Field>
+            <Field label="رقم المبنى (4 أرقام)"><input className="input" dir="ltr" inputMode="numeric" value={a.building_number} onChange={(e) => setA({ ...a, building_number: e.target.value })} /></Field>
+            <Field label="الرمز البريدي (5 أرقام)"><input className="input" dir="ltr" inputMode="numeric" value={a.postal_code} onChange={(e) => setA({ ...a, postal_code: e.target.value })} /></Field>
+            <Field label="المدينة"><input className="input" value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} /></Field>
+            <Field label="الحي"><input className="input" value={a.district} onChange={(e) => setA({ ...a, district: e.target.value })} /></Field>
+          </div>
+          <p className="text-xs text-rai-ink-muted">اتركها فارغة لمسح البيانات. العنوان إما كاملًا أو فارغًا.</p>
+        </div>
+        <Submit label="حفظ" onCancel={onClose} />
       </ActionForm>
     </Modal>
   );

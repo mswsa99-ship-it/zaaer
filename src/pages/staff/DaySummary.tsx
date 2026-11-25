@@ -11,6 +11,8 @@ import { SectionTitle, LoadingScreen, Card, EmptyState, LoadErrorCard, ErrorBann
 import { BranchPicker } from "../../components/BranchPicker";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, type PaymentMethod, type VoucherKind } from "../../lib/types";
 import { formatCurrency, todayISO, COUNT } from "../../lib/utils";
+import { DateRangePicker } from "../../components/DateRangePicker";
+import { mergeRows } from "../../lib/allBranches";
 
 const sar = (h: number) => formatCurrency(h / 100);
 /** money that came in (+) or went back out (−); applying the deposit moves money between the guest's two balances */
@@ -20,16 +22,23 @@ const PLATFORM = ["ota_deferred", "booking_platform"];
 
 export default function DaySummary() {
   const [date, setDate] = useState(todayISO());
-  const q = useBranchQuery<Summary | null>((branchId) => stayApi.daySummary(branchId, date), [date], null);
+  const q = useBranchQuery<Summary | null>((branchId) => stayApi.daySummary(branchId, date), [date], null, {
+    // «جميع الفروع» (owner): each employee's rows from every branch add up by kind and method
+    merge: (parts) => {
+      const ok = parts.filter((x): x is NonNullable<Summary> => !!x);
+      if (ok.length === 0) return null;
+      return { ...ok[0], everyone: ok.every((x) => x.everyone), rows: mergeRows(ok.map((x) => x.rows as unknown as Record<string, unknown>[]), (r) => [r.staff_name, r.kind, r.method].join("|"), ["count", "total"]) as unknown as NonNullable<Summary>["rows"] };
+    },
+  });
   if (q.loading) return <LoadingScreen />;
   const sum = q.data;
   const staff = new Map<string, NonNullable<Summary>["rows"]>();
   for (const r of sum?.rows ?? []) { const k = r.staff_name; staff.set(k, [...(staff.get(k) ?? []), r]); }
   return (
     <div>
-      <SectionTitle title="ملخص اليوم للموظفين" subtitle="ما قبضه كل موظف وما ردّه في يوم الفرع، بالنوع والطريقة" action={<BranchPicker />} />
+      <SectionTitle title="ملخص اليوم للموظفين" subtitle="ما قبضه كل موظف وما ردّه في يوم الفرع، بالنوع والطريقة" action={<BranchPicker allowAll />} />
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <label className="text-sm text-ink-600">اليوم <input type="date" className="input mt-1" dir="ltr" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value || todayISO())} aria-label="اليوم" /></label>
+        <div className="text-sm text-ink-600">اليوم <DateRangePicker single className="mt-1" label="اليوم" from={date} to={date} max={todayISO()} onChange={(a) => setDate(a || todayISO())} /></div>
         {sum && !sum.everyone && <p className="text-xs text-ink-500">تظهر هنا سنداتك أنت؛ يرى المالك والمدير والمالية سندات الجميع.</p>}
       </div>
       {q.error && !sum ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : q.error ? <ErrorBanner message={q.error} /> : null}

@@ -13,12 +13,15 @@ import { accountLabel } from "../../lib/useCashAccounts";
 import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, Spinner, EmptyState, AmountBox, AmountGrid } from "../../components/ui";
 import { Field, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
+import { DateRangePicker } from "../../components/DateRangePicker";
+import { useBranch } from "../../lib/branch";
 import { VOUCHER_KIND_LABELS, type VoucherKind } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO, addDaysISO } from "../../lib/utils";
 import { DisabledReason } from "../../components/DisabledReason";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
-interface Data { accounts: CashAccount[]; history: Settlement[] }
+type Hist = Settlement & { branch_id?: string };
+interface Data { accounts: CashAccount[]; history: Hist[] }
 const NO_DATA: Data = { accounts: [], history: [] };
 
 export default function PosSettlement() {
@@ -31,12 +34,14 @@ export default function PosSettlement() {
     const [a, h] = await Promise.all([
       supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version")
         .eq("branch_id", branchId).eq("kind", "bank_account").eq("is_active", true).is("archived_at", null).order("name"),
-      supabase.from("pos_settlements").select("id, account_id, business_date, terminal_total_halalas, system_total_halalas, difference_halalas, voucher_count, status, note, version, updated_at")
+      supabase.from("pos_settlements").select("id, branch_id, account_id, business_date, terminal_total_halalas, system_total_halalas, difference_halalas, voucher_count, status, note, version, updated_at")
         .eq("branch_id", branchId).gte("business_date", addDaysISO(todayISO(), -14)).order("business_date", { ascending: false }),
     ]);
-    return { accounts: must(a) as CashAccount[], history: must(h) as Settlement[] };
-  }, [tick], NO_DATA);
+    return { accounts: must(a) as CashAccount[], history: must(h) as Hist[] };
+  }, [tick], NO_DATA, { merge: (parts) => ({ accounts: parts.flatMap((p) => p.accounts), history: parts.flatMap((p) => p.history).sort((x, y) => (x.business_date < y.business_date ? 1 : -1)) }) });
   const { accounts, history } = q.data; const branchId = q.branchId;
+  const { branches } = useBranch();
+  const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
   useEffect(() => {
     if (!accounts.some((a) => a.id === accountId)) setAccountId(accounts.find((a) => a.is_default)?.id ?? accounts[0]?.id ?? "");
   }, [accounts, accountId]);
@@ -46,18 +51,19 @@ export default function PosSettlement() {
 
   return (
     <div>
-      <SectionTitle title="تسوية الشبكة" subtitle="إجمالي جهاز الشبكة لليوم مقابل سندات الشبكة المسجلة على الحساب نفسه" action={<BranchPicker />} />
+      <SectionTitle title="تسوية الشبكة" subtitle="إجمالي جهاز الشبكة لليوم مقابل سندات الشبكة المسجلة على الحساب نفسه" action={<BranchPicker allowAll />} />
       {q.error && <div className="mb-4">{accounts.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
       {!q.error && accounts.length === 0 ? <EmptyState icon={<CreditCard className="h-10 w-10" />} title="لا يوجد حساب بنكي فعّال" description="يعرّف المالك أو المدير حساب الشبكة من «الصناديق والحسابات»." /> : accounts.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="space-y-4 lg:col-span-2">
             <Card>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="اليوم"><input type="date" className="input" dir="ltr" max={todayISO()} value={date} onChange={(e) => e.target.value && setDate(e.target.value)} /></Field>
-                <Field label="الحساب البنكي (جهاز الشبكة)"><select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="الحساب البنكي">{accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}{a.is_default ? " (الافتراضي)" : ""}</option>)}</select></Field>
+                <Field label="اليوم"><DateRangePicker single label="اليوم" from={date} to={date} max={todayISO()} onChange={(a) => setDate(a)} /></Field>
+                {!q.all && <Field label="الحساب البنكي (جهاز الشبكة)"><select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="الحساب البنكي">{accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}{a.is_default ? " (الافتراضي)" : ""}</option>)}</select></Field>}
               </div>
             </Card>
-            {branchId && accountId && <DayCard branchId={branchId} accountId={accountId} date={date} onSaved={() => setTick((t) => t + 1)} />}
+            {q.all && <Card data-testid="pos-all-branches"><h2 className="mb-2 text-sm font-semibold text-rai-ink">تسويات اليوم المختار في جميع الفروع</h2><p className="mb-2 text-xs text-rai-ink-muted">عرض للقراءة فقط. لإدخال تسوية اختر فرعًا واحدًا.</p>{history.filter((x) => x.business_date === date).length === 0 ? <p className="text-xs text-rai-ink-muted">لا تسويات مسجلة في هذا اليوم.</p> : <div className="divide-y divide-ink-50 text-sm">{history.filter((x) => x.business_date === date).map((x) => <div key={x.id} className="flex items-center justify-between gap-2 py-2"><span>{branchName(x.branch_id)}<span className="block text-[11px] text-rai-ink-muted">{nameOf(x.account_id)}</span></span>{x.status === "matched" ? <Badge className="bg-rai-success-tint text-rai-success">مطابقة</Badge> : <Badge className="bg-rai-danger-tint text-rai-danger">فرق <span dir="ltr">{sar(x.difference_halalas)}</span></Badge>}</div>)}</div>}</Card>}
+            {!q.all && branchId && accountId && <DayCard branchId={branchId} accountId={accountId} date={date} onSaved={() => setTick((t) => t + 1)} />}
           </div>
           <Card>
             <h2 className="mb-2 text-sm font-semibold text-ink-700">آخر أسبوعين</h2>
@@ -65,7 +71,7 @@ export default function PosSettlement() {
               <div className="divide-y divide-ink-50 text-sm" data-testid="pos-history">
                 {history.map((s) => (
                   <button key={s.id} type="button" onClick={() => { setDate(s.business_date); setAccountId(s.account_id); }} className="flex w-full items-center justify-between gap-2 py-2 text-right hover:bg-ink-50/50">
-                    <span><span dir="ltr" className="font-medium text-ink-700">{s.business_date}</span><span className="block text-[11px] text-ink-400">{nameOf(s.account_id)}</span></span>
+                    <span><span dir="ltr" className="font-medium text-ink-700">{s.business_date}</span><span className="block text-[11px] text-ink-400">{q.all && branchName(s.branch_id) ? branchName(s.branch_id) + " · " : ""}{nameOf(s.account_id)}</span></span>
                     {s.status === "matched" ? <Badge className="bg-success-500/10 text-success-600">مطابقة</Badge> : <Badge className="bg-danger-500/10 text-danger-600">فرق <span dir="ltr">{sar(s.difference_halalas)}</span></Badge>}
                   </button>
                 ))}

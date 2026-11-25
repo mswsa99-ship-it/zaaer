@@ -10,15 +10,17 @@ import { Wallet } from "lucide-react";
 import { SectionTitle, Card, Badge, DataState, Spinner } from "../../components/ui";
 import { ExportMenu } from "../../components/ExportMenu";
 import { useBranchQuery } from "../../lib/useBranchQuery";
+import { sumDeep, mergeRows } from "../../lib/allBranches";
 import { BranchPicker } from "../../components/BranchPicker";
 import { PAYMENT_METHOD_LABELS, VOUCHER_KIND_LABELS, type PaymentMethod, type VoucherKind } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import { useCashAccounts } from "../../lib/useCashAccounts";
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
-import { listsApi, fetchAllPages, type VoucherList, type VoucherListFilters, type VoucherRow, type ReportFilterOptions } from "../../lib/api";
+import { listsApi, fetchAllPages, type VoucherList, type VoucherTotals, type VoucherListFilters, type VoucherRow, type ReportFilterOptions } from "../../lib/api";
 import { money, type ExportScope, type ExportStatement } from "../../lib/exports";
 import { DisabledReason } from "../../components/DisabledReason";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 const sar = (h: number) => formatCurrency(h / 100);
 const monthStart = () => todayISO().slice(0, 8) + "01";
@@ -29,14 +31,23 @@ type F = Omit<VoucherListFilters, "branch_id" | "limit" | "offset">;
 export default function AdminFinance() {
   const [f, setF] = useState<F>({ from: monthStart(), to: todayISO(), status: "approved" });
   const [page, setPage] = useState(0);
-  const { branchId, branch } = useBranch();
+  const { branchId, branch, branches, allBranches } = useBranch();
   const { profile } = useAuth();
   const accounts = useCashAccounts(branchId);
   const options = useBranchQuery<ReportFilterOptions | null>(async (b) => { const o = await listsApi.filterOptions(b); return o && "staff" in o ? (o as ReportFilterOptions) : null; }, [], null);
   const accountText = (r: VoucherRow) => r.account_name ?? accounts.nameOf(r.account_id) ?? (r.method === "ota_deferred" ? (r.payout_id ? "المنصة · مطابق" : "المنصة · بانتظار الإيداع") : "—");
 
   // G24: the ledger of the active branch only; a late answer for another branch is dropped
-  const ledger = useBranchQuery<VoucherList>((b) => listsApi.vouchers({ ...f, branch_id: b, limit: PAGE, offset: page * PAGE }), [f, page], EMPTY);
+  // «جميع الفروع» (owner): each branch is read down to the end of the current page, merged newest first, then the page is cut; totals add up
+  const ledger = useBranchQuery<VoucherList>((b) => listsApi.vouchers({ ...f, branch_id: b, limit: allBranches ? PAGE * (page + 1) : PAGE, offset: allBranches ? 0 : page * PAGE }), [f, page, allBranches], EMPTY, {
+    merge: (parts) => {
+      const totals = sumDeep(parts.map((x) => ({ ...x.totals, by_method: [], by_account: [] }))) as VoucherTotals;
+      totals.by_method = mergeRows(parts.map((x) => x.totals.by_method as unknown as Record<string, unknown>[]), (r) => String(r.method), ["amount_halalas"]) as unknown as VoucherTotals["by_method"];
+      totals.by_account = mergeRows(parts.map((x) => x.totals.by_account as unknown as Record<string, unknown>[]), (r) => String(r.account_id), ["in_halalas", "out_halalas"]) as unknown as VoucherTotals["by_account"];
+      const all = parts.flatMap((x, i) => x.rows.map((r) => ({ ...r, branch_name: branches[i]?.name_ar }) as VoucherRow & { branch_name?: string })).sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1));
+      return { ...parts[0], total: parts.reduce((a, x) => a + x.total, 0), rows: all.slice(page * PAGE, (page + 1) * PAGE), totals };
+    },
+  });
   const { rows, totals, total } = ledger.data;
   const set = (k: keyof F, v: string | undefined) => { setPage(0); setF((x) => { const n: Record<string, unknown> = { ...x, [k]: v }; if (v === "" || v === undefined) delete n[k]; return n as F; }); };
   const pages = Math.max(1, Math.ceil(total / PAGE));
@@ -53,22 +64,21 @@ export default function AdminFinance() {
   }, [f, accounts, options.data]);
 
   const COLS = ["السند", "النوع", "الحجز", "المبلغ", "الطريقة", "الصندوق أو الحساب", "المرجع", "الوقت", "المنشئ", "الحالة", "السبب / الملاحظة"];
-  const rowOut = (r: VoucherRow) => [r.number, VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind, r.reservation?.internal_ref ?? "", money(r.amount_halalas), PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method, accountText(r), r.reference ?? "", formatDateTime(r.occurred_at), r.creator_name ?? "", r.status === "approved" ? "معتمد" : `ملغى${r.cancel_reason ? ` · ${r.cancel_reason}` : ""}`, r.reason ?? r.note ?? ""];
-  const statement = (scope: ExportScope): ExportStatement => ({ title: "دفتر السندات", branch: branch?.name_ar ?? null, period: { from: f.from, to: f.to }, filters: words, scope, generatedAt: formatDateTime(new Date().toISOString()), by: profile?.full_name ?? null });
+  const rowOut = (r: VoucherRow & { branch_name?: string }) => [...(allBranches ? [r.branch_name ?? ""] : []), r.number, VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind, r.reservation?.internal_ref ?? "", money(r.amount_halalas), PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method, accountText(r), r.reference ?? "", formatDateTime(r.occurred_at), r.creator_name ?? "", r.status === "approved" ? "معتمد" : `ملغى${r.cancel_reason ? ` · ${r.cancel_reason}` : ""}`, r.reason ?? r.note ?? ""];
+  const statement = (scope: ExportScope): ExportStatement => ({ title: "دفتر السندات", branch: allBranches ? "جميع الفروع" : branch?.name_ar ?? null, period: { from: f.from, to: f.to }, filters: words, scope, generatedAt: formatDateTime(new Date().toISOString()), by: profile?.full_name ?? null });
   const table = async (scope: ExportScope) => {
-    const all = scope.kind === "page" ? rows : (await fetchAllPages((limit, offset) => listsApi.vouchers({ ...f, branch_id: branchId!, limit, offset }), 500)).rows;
+    const all = scope.kind === "page" ? rows : (await Promise.all((allBranches ? branches : [{ id: branchId!, name_ar: "" }]).map(async (b) => (await fetchAllPages((limit, offset) => listsApi.vouchers({ ...f, branch_id: b.id, limit, offset }), 500)).rows.map((x) => ({ ...x, branch_name: b.name_ar }) as VoucherRow & { branch_name?: string })))).flat();
     const body = all.map(rowOut);
     // the totals line of the file is the server's, over the whole filtered set (the same figures as the screen)
     const sumRow = scope.kind === "all" ? [[`الإجمالي (${COUNT.voucher(all.length)}): قبض ${sar(totals.receipts)} · استرداد ${sar(totals.refunds)} · تأمين ${sar(totals.deposits)} · رد تأمين ${sar(totals.deposit_refunds)} · تأمين مستخدم ${sar(totals.deposit_applied)}`]] : [];
-    return { columns: COLS, rows: [...body, ...sumRow], count: body.length, widths: [16, 18, 14, 12, 12, 24, 14, 18, 16, 14, 30] };
+    return { columns: allBranches ? ["الفرع", ...COLS] : COLS, rows: [...body, ...sumRow], count: body.length, widths: allBranches ? [20, 16, 18, 14, 12, 12, 24, 14, 18, 16, 14, 30] : [16, 18, 14, 12, 12, 24, 14, 18, 16, 14, 30] };
   };
 
   return (
     <div>
-      <SectionTitle title="المالية — دفتر السندات" subtitle={`السندات المطابقة: ${total} · التأمين دفتر مستقل ولا يُحسب ضمن إيراد الإقامة`} action={<div className="flex flex-wrap items-center gap-2"><BranchPicker /><ExportMenu source={{ statement, table, pageCount: rows.length, total }} disabled={!branchId} /></div>} />
+      <SectionTitle title="المالية — دفتر السندات" subtitle={`السندات المطابقة: ${total} · التأمين دفتر مستقل ولا يُحسب ضمن إيراد الإقامة`} action={<div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><ExportMenu source={{ statement, table, pageCount: rows.length, total }} disabled={!branchId} /></div>} />
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        <label className="flex items-center gap-1.5 text-ink-600">من <input type="date" className="input w-auto py-1" dir="ltr" value={f.from ?? ""} onChange={(e) => set("from", e.target.value)} aria-label="من" /></label>
-        <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={f.to ?? ""} onChange={(e) => set("to", e.target.value)} aria-label="إلى" /></label>
+        <span className="flex items-center gap-1.5 text-ink-600">اليوم أو الفترة <DateRangePicker clearable className="w-56" label="اليوم أو الفترة" from={f.from ?? ""} to={f.to ?? ""} onChange={(a, b) => { set("from", a); set("to", b); }} /></span>
         <select className="input w-auto py-1" value={f.kind ?? ""} onChange={(e) => set("kind", e.target.value)} aria-label="النوع"><option value="">كل الأنواع</option>{Object.entries(VOUCHER_KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <select className="input w-auto py-1" value={f.method ?? ""} onChange={(e) => set("method", e.target.value)} aria-label="الطريقة"><option value="">كل الطرق</option>{Object.entries(PAYMENT_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <select className="input w-auto py-1" value={f.account_id ?? ""} onChange={(e) => set("account_id", e.target.value)} aria-label="الصندوق أو الحساب"><option value="">كل الصناديق والحسابات</option>{accounts.all.map((a) => <option key={a.id} value={a.id}>{a.name}{a.archived_at ? " (مؤرشف)" : ""}</option>)}<option value="none">بلا صندوق (آجل المنصات والخصم من التأمين)</option></select>

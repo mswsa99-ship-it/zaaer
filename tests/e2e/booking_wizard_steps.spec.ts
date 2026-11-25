@@ -14,7 +14,7 @@ test.describe("booking wizard in three steps", () => {
     await page.getByRole("button", { name: "التالي" }).click();
     // step 2: the guest
     await expect(page.getByTestId("step-2")).toBeVisible();
-    await expect(page.getByRole("button", { name: "التالي" })).toBeDisabled();   // name and phone are required first
+    await expect(page.getByRole("button", { name: "التالي" })).toHaveAttribute("data-blocked", "true");   // name and phone are required first (the button now explains where, instead of staying dead)
     await page.locator("div:has(> label:has-text('الاسم (مطلوب)')) input").first().fill("ضيف اختبار الخطوات");
     await page.getByPlaceholder("05xxxxxxxx").fill("0501234567");
     // draft: reload and restore

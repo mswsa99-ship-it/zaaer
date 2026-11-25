@@ -24,6 +24,11 @@ describe("VD07 the forms apply the same data rules as the server (0047)", () => 
     for (const v of ["محمد 123", "R2-D2", "@@", "أ", "Ali \u00d7 Bob", "أحمد \u00f7"]) expect(() => checkPersonName(v)).toThrow("VALIDATION: name_letters_only");
   });
 
+  it("25 Nov 13:17 rule: two letters at least in every part, a part of one repeated letter is refused", () => {
+    for (const v of ["طه", "طه محمد الحربي", "Al Ali Bo", "عبد الله", "Li Wu"]) expect(() => checkPersonName(v)).not.toThrow();
+    for (const v of ["ا ح ت", "احمد ا ت", "محمد اااا الحربي", "xx yy zz", "Ali B Smith", "أحمد ـ سعد"]) expect(() => checkPersonName(v)).toThrow("VALIDATION: name_letters_only");
+  });
+
   it("refuses anyone under 15 on the day; 15 exactly is accepted", () => {
     expect(() => checkMinAge("2011-10-30", "2026-10-29")).toThrow("VALIDATION: minimum_age_15");
     expect(() => checkMinAge("2011-10-29", "2026-10-29")).not.toThrow();

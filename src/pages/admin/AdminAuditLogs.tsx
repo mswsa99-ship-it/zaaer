@@ -16,6 +16,7 @@ import { ScrollText, Search, AlertTriangle, CheckCircle2, X } from "lucide-react
 import { formatDateTime, todayISO, COUNT } from "../../lib/utils";
 import type { ExportScope, ExportStatement } from "../../lib/exports";
 import { DisabledReason } from "../../components/DisabledReason";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 /** Where an operation came from (0026), in the employee's words. */
 const SOURCE_AR: Record<string, string> = {
@@ -82,8 +83,7 @@ export default function AdminAuditLogs() {
       {canLookup && <TraceSearch />}
       <Card className="mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-600">
-          <label className="flex items-center gap-1.5">من <input type="date" className="input w-auto py-1 text-xs" dir="ltr" value={f.from ?? ""} onChange={(e) => set("from", e.target.value)} aria-label="من" /></label>
-          <label className="flex items-center gap-1.5">إلى <input type="date" className="input w-auto py-1 text-xs" dir="ltr" value={f.to ?? ""} onChange={(e) => set("to", e.target.value)} aria-label="إلى" /></label>
+          <span className="flex items-center gap-1.5">اليوم أو الفترة <DateRangePicker clearable className="w-56" label="اليوم أو الفترة" from={f.from ?? ""} to={f.to ?? ""} onChange={(a, b) => { set("from", a); set("to", b); }} /></span>
           <button type="button" className="btn-ghost py-1 text-xs" onClick={() => { setPage(0); setF((x) => ({ ...x, from: todayISO(), to: todayISO() })); }}>اليوم</button>
           <button type="button" className="btn-ghost py-1 text-xs" onClick={() => { setPage(0); setF((x) => { const n = { ...x }; delete n.from; delete n.to; return n; }); }}>كل الفترات</button>
           <select className="input w-auto py-1 text-xs" value={f.branch_id ?? ""} onChange={(e) => set("branch_id", e.target.value)} aria-label="الفرع"><option value="">كل الفروع المخوّلة</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}</select>

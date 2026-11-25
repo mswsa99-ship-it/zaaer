@@ -230,7 +230,7 @@ function InvoiceRow({ inv, ctx, canEdit, canCancel, onEdit, onCancel }: { inv: I
         {issued ? <Badge className="bg-success-500/10 text-success-600">صادرة</Badge> : <Badge className="bg-danger-500/10 text-danger-600">ملغاة</Badge>}
         <div className="flex gap-1">
           <button type="button" onClick={() => setShown((x) => !x)} className="btn-ghost px-2 py-1 text-[11px]" aria-expanded={shown}>{shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />} {shown ? "إخفاء" : "عرض"}</button>
-          <PrintButton testId={`print-invoice-${inv.number}`} build={(f) => buildInvoicePrint({ ...inv, kindLabel: `فاتورة — ${invoiceKindLabel(inv)}`, lines: inv.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price_halalas: l.unit_price_halalas, amount_halalas: l.amount_halalas })) }, ctx, f)} />
+          <PrintButton testId={`print-invoice-${inv.number}`} reservationId={ctx.reservationId} build={(f, identity) => buildInvoicePrint({ ...inv, kindLabel: `فاتورة — ${invoiceKindLabel(inv)}`, lines: inv.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price_halalas: l.unit_price_halalas, amount_halalas: l.amount_halalas })) }, { ...ctx, identity }, f)} />
           {issued && canEdit && <button type="button" onClick={onEdit} className="btn-ghost px-2 py-1 text-[11px]"><PencilLine className="h-3.5 w-3.5" /> تعديل</button>}
           {issued && canCancel && <button type="button" onClick={onCancel} className="btn-ghost px-2 py-1 text-[11px] text-danger-600"><Ban className="h-3.5 w-3.5" /> إلغاء</button>}
         </div>

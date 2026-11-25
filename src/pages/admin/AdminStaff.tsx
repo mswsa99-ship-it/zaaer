@@ -204,7 +204,7 @@ export default function AdminStaff() {
                 : <Field label="البريد الإلكتروني" hint="يُصحَّح البريد ما دام الموظف لم يسجّل دخوله بعد."><input className="input" dir="ltr" type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} data-testid="edit-email" /></Field>}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="الاسم الكامل"><input className="input" value={edit.full_name} onChange={(e) => setEdit({ ...edit, full_name: e.target.value })} data-testid="edit-name" /></Field>
-                <Field label="الهاتف"><input className="input" dir="ltr" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="05xxxxxxxx" data-testid="edit-phone" /></Field>
+                <Field label="الهاتف"><input className="input" dir="ltr" inputMode="tel" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="05xxxxxxxx" data-testid="edit-phone" /></Field>
               </div>
               <Field label="الدور" hint={edit.s.is_me ? "لا يغيّر أحد دوره بنفسه." : undefined}>
                 <select className="input" value={edit.role} disabled={edit.s.is_me} onChange={(e) => setEdit({ ...edit, role: e.target.value })} data-testid="edit-role">{roleChoices.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>

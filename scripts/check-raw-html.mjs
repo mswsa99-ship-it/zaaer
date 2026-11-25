@@ -33,6 +33,12 @@ export const RULES = [
 export const ALLOWLIST = [
   {
     file: "src/components/Guests.tsx",
+    rule: "iframe-srcdoc",
+    max: 1,
+    why: "معاينة ملخص الإقامة: إطار sandbox بلا سكربتات يعرض القالب نفسه المستعمل في الطباعة، وكل قيمة تمر بـ esc() في printTemplates.ts",
+  },
+  {
+    file: "src/components/Guests.tsx",
     rule: "document-write",
     max: 1,
     why: "نافذة طباعة ملخص الإقامة: مستند مستقل وكل قيمة تمر بـ esc() قبل التركيب",

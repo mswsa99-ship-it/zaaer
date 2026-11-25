@@ -53,3 +53,27 @@ describe("PV02 every voucher and invoice prints on A4 or an 80 mm receipt, its a
     expect(html).toContain("إيجار 2 ليلة"); expect(html).toContain("فقط مئة وخمسون ريالًا لا غير"); expect(html).not.toContain("<span>الضريبة</span>");
   });
 });
+
+describe("voucher and invoice print: hotel identity header", () => {
+  it("shows address, phone and register when known, and nothing extra when not", async () => {
+    const { buildVoucherPrint } = await import("../../src/lib/printDocs");
+    const v = { number: "RCP-1", kind: "receipt", kindLabel: "سند قبض", amount_halalas: 10000, methodLabel: "نقد", reference: null, note: null, occurred_at: "2026-11-25T10:00:00Z", status: "approved" } as never;
+    const base = { property: "RoomAI", branch: "فرع بريدة", reservationRef: "R-1" };
+    const withId = buildVoucherPrint(v, { ...base, identity: { address: "بريدة", phone: "0500000000", commercialRegister: "1010000000" } }, "a4");
+    expect(withId).toContain("1010000000"); expect(withId).toContain("0500000000");
+    expect(buildVoucherPrint(v, base, "a4")).not.toContain("السجل التجاري");
+  });
+});
+
+describe("invoice print totals", () => {
+  const ctx = { property: "RoomAI", branch: "فرع", reservationRef: "R-1" };
+  const inv = { number: "INV-1", kindLabel: "فاتورة", status: "issued", version: 1, issued_at: "2026-11-30T09:00:00Z", issued_by: null, period_from: "2026-11-25", period_to: "2026-11-30", bill_to: {},
+    lines: [{ description: "rent", quantity: 5, unit_price_halalas: 6000, amount_halalas: 30000 }], subtotal_halalas: 30000, tax_halalas: 4500, total_halalas: 34500 };
+  it("prints subtotal, tax and total from the invoice, and no tax row without tax", async () => {
+    const { buildInvoicePrint } = await import("../../src/lib/printDocs");
+    const taxed = buildInvoicePrint(inv, ctx, "a4");
+    expect(taxed).toContain("300.00"); expect(taxed).toContain("45.00"); expect(taxed).toContain("345.00"); expect(taxed).toContain("الضريبة");
+    const none = buildInvoicePrint({ ...inv, tax_halalas: 0, total_halalas: 30000 }, ctx, "a4");
+    expect(none).not.toContain("<span>الضريبة</span>");
+  });
+});

@@ -12,6 +12,7 @@ import { OwnerOverview } from "../../components/OwnerOverview";
 import { HBars } from "../../components/HBars";
 import { useAuth } from "../../lib/auth";
 import { useReviewSummary } from "../../lib/reviewAlerts";
+import { sumDeep, pct, mergeRows } from "../../lib/allBranches";
 
 /**
  * The selected branch's figures (review of 31 October, Phase 4a). Every figure names what it counts:
@@ -80,16 +81,40 @@ async function loadStats(branchId: string): Promise<Stats> {
   };
 }
 
+/** «جميع الفروع» (owner): every branch's figures added; the percentages are recomputed from the summed units. */
+function mergeStats(parts: Stats[]): Stats {
+  const sums = parts.map((p) => p.summary).filter((x): x is DailySummary => !!x);
+  const summary = sums.length === parts.length && sums.length > 0 ? (() => {
+    const m = sumDeep(sums);
+    m.occupancy_pct = pct(m.units.occupied, m.units.active);
+    if (m.units.all !== undefined) m.occupancy_all_pct = pct(m.units.occupied, m.units.all);
+    return m;
+  })() : null;
+  const fins = parts.map((p) => p.finance).filter((x): x is ReportsFinance => !!x);
+  const finance = fins.length === parts.length && fins.length > 0 ? (() => {
+    const m = sumDeep(fins.map((f) => ({ ledger: f.ledger, charges: f.charges, reservations: { count: f.reservations.count, nights: f.reservations.nights, cancelled: f.reservations.cancelled, no_show: f.reservations.no_show } })));
+    return { ...fins[0], ...m, reservations: { ...m.reservations, by_source: mergeRows(fins.map((f) => f.reservations.by_source), (r) => String(r.source_id ?? r.source), ["count", "total_halalas"]) },
+      by_method: mergeRows(fins.map((f) => f.by_method), (r) => r.method + (r.platform ? "*" : ""), ["amount_halalas"]), by_day: mergeRows(fins.map((f) => f.by_day), (r) => r.day, ["receipts", "refunds", "platform"]), collection_rate_pct: null, collection: null } as ReportsFinance;
+  })() : null;
+  return {
+    summary, finance,
+    totalRooms: parts.reduce((x, p) => x + p.totalRooms, 0), pendingPayments: parts.reduce((x, p) => x + p.pendingPayments, 0),
+    pendingPaymentsDead: parts.reduce((x, p) => x + p.pendingPaymentsDead, 0), openHandoffs: parts.reduce((x, p) => x + p.openHandoffs, 0),
+    unmatched: parts.reduce((x, p) => x + p.unmatched, 0), deliveryFailures: parts.reduce((x, p) => x + p.deliveryFailures, 0),
+    weekly: parts[0].weekly.map((d, i) => ({ day: d.day, bookings: parts.reduce((x, p) => x + p.weekly[i].bookings, 0), net: parts.reduce((x, p) => x + p.weekly[i].net, 0), platform: parts.reduce((x, p) => x + p.weekly[i].platform, 0) })),
+  };
+}
+
 const pct1 = (n: number | null | undefined) => (n == null ? "—" : `${Number(n).toFixed(1)}%`);
 
 export default function AdminDashboard() {
   // G24 (decision 40): the active branch's figures only — a slow answer for the previous branch is dropped
-  const q = useBranchQuery<Stats | null>(loadStats, [], null);
+  const q = useBranchQuery<Stats | null>(loadStats, [], null, { merge: (parts) => (parts.length ? mergeStats(parts.filter((x): x is Stats => !!x)) : null) });
   const stats = q.data;
   const review = useReviewSummary(true);
   const { profile } = useAuth();   // the owner: what waits for review, and the monitors when due (decision 54)
 
-  const header = <SectionTitle title="لوحة الإدارة" subtitle="مؤشرات الأداء التشغيلي" action={<BranchPicker />} />;
+  const header = <SectionTitle title="لوحة الإدارة" subtitle="مؤشرات الأداء التشغيلي" action={<BranchPicker allowAll />} />;
   if (q.loading) return <LoadingScreen />;
   if (!stats) return (
     <div>
@@ -129,7 +154,7 @@ export default function AdminDashboard() {
       {q.error && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       {/* U3: the owner's view across the branches, then the active branch's figures below */}
       {profile?.role === "owner" && <OwnerOverview />}
-      <h2 className="mb-3 text-base font-semibold text-ink-800">مؤشرات الفرع المختار</h2>
+      <h2 className="mb-3 text-base font-semibold text-ink-800">{q.all ? "مؤشرات جميع الفروع" : "مؤشرات الفرع المختار"}</h2>
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map((k) => {
           const body = <>

@@ -23,9 +23,11 @@ import { money, type ExportScope, type ExportStatement } from "../../lib/exports
 import type { XlsxCell } from "../../lib/xlsx";
 import { supabase } from "../../lib/supabase";
 import { DisabledReason } from "../../components/DisabledReason";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 const PAGE = 25;
-const NO_ROWS: { total: number; rows: ReservationRow[] } = { total: 0, rows: [] };
+type Row = ReservationRow & { branch_name?: string };
+const NO_ROWS: { total: number; rows: Row[] } = { total: 0, rows: [] };
 const sar = (h: number | null | undefined) => (h == null ? "—" : formatCurrency(h / 100));
 const BOOKING_TYPE_LABELS: Record<string, string> = { individual: "فرد", company: "شركة" };
 const PRICE_BASIS_LABELS: Record<string, string> = { daily: "يومي", weekly: "أسبوعي", monthly: "شهري", manual: "سعر يدوي" };
@@ -100,7 +102,7 @@ export function filterWords(f: Filters, opts?: ReportFilterOptions | null): stri
 
 export default function StaffReservations() {
   const { profile, permissions, can } = useAuth();
-  const { branch } = useBranch();
+  const { branch, branches, allBranches } = useBranch();
   const moneyRole = permissions.seesMoney;
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(0);
@@ -116,7 +118,7 @@ export default function StaffReservations() {
 
   useEffect(() => { try { localStorage.setItem(COLUMNS_KEY, JSON.stringify(columns)); } catch { /* per-browser convenience only */ } }, [columns]);
 
-  const visibleColumns = useMemo(() => COLUMNS.filter((c) => columns.includes(c.key) && (moneyRole || !c.money)), [columns, moneyRole]);
+  const visibleColumns = useMemo(() => [...(allBranches ? [{ key: "branch", label: "الفرع", cell: (r: Row) => r.branch_name ?? "", out: (r: Row) => r.branch_name ?? "" } as Col] : []), ...COLUMNS.filter((c) => columns.includes(c.key) && (moneyRole || !c.money))], [columns, moneyRole, allBranches]);
 
   // FRONT-15: «٠٥٠…» finds what «050…» finds; an arrival or departure range typed backwards is read the right way round
   const swapped = (["check_in", "check_out", "created"] as const).filter((k) => filters[`${k}_from`] && filters[`${k}_to`] && String(filters[`${k}_from`]) > String(filters[`${k}_to`]));
@@ -126,7 +128,18 @@ export default function StaffReservations() {
     for (const k of swapped) { const a = out[`${k}_from`]; out[`${k}_from`] = out[`${k}_to`]; out[`${k}_to`] = a; }
     return out as Filters;
   }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
-  const list = useBranchQuery((b) => opsApi.list(b, serverFilters, PAGE, page * PAGE), [serverFilters, page], NO_ROWS);
+  // «جميع الفروع» (owner): each branch is read to the end of the current page and merged in the list's own sort order, then the page is cut
+  const sortKey = (serverFilters as { sort?: string }).sort;
+  const cmp = (a: Row, b: Row) => sortKey === "check_in_asc" ? (a.check_in < b.check_in ? -1 : a.check_in > b.check_in ? 1 : 0)
+    : sortKey === "check_out" ? (a.check_out < b.check_out ? 1 : a.check_out > b.check_out ? -1 : 0)
+    : sortKey === "created" ? (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0)
+    : sortKey === "ref" ? (a.internal_ref < b.internal_ref ? -1 : a.internal_ref > b.internal_ref ? 1 : 0)
+    : a.check_in !== b.check_in ? (a.check_in < b.check_in ? 1 : -1) : (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0);
+  const list = useBranchQuery<{ total: number; rows: Row[] }>(async (b) => {
+    const r = await opsApi.list(b, serverFilters, allBranches ? PAGE * (page + 1) : PAGE, allBranches ? 0 : page * PAGE);
+    const name = branches.find((x) => x.id === b)?.name_ar;
+    return allBranches ? { total: r.total, rows: r.rows.map((x) => ({ ...x, branch_name: name })) } : r;
+  }, [serverFilters, page, allBranches], NO_ROWS, { merge: (parts) => ({ total: parts.reduce((s, x) => s + x.total, 0), rows: parts.flatMap((x) => x.rows).sort(cmp).slice(page * PAGE, (page + 1) * PAGE) }) });
   const options = useBranchQuery<ReportFilterOptions | null>(async (b) => { const o = await listsApi.filterOptions(b); return o && "sources" in o ? (o as ReportFilterOptions) : null; }, [], null);
   const { data, branchId, reload } = list;
   useEffect(() => {
@@ -153,13 +166,13 @@ export default function StaffReservations() {
   const activeCount = Object.keys(filters).filter((k) => k !== "sort" && !(k === "open_only" && isOn(filters.open_only))).length + (isOn(filters.open_only) ? 0 : 1);
 
   const statement = (scope: ExportScope): ExportStatement => ({
-    title: "الحجوزات", branch: branch?.name_ar ?? null,
+    title: "الحجوزات", branch: allBranches ? "جميع الفروع" : branch?.name_ar ?? null,
     period: filters.check_in_from || filters.check_in_to ? { from: filters.check_in_from, to: filters.check_in_to } : null,
     filters: words, scope, generatedAt: formatDateTime(new Date().toISOString()), by: profile?.full_name ?? null,
   });
   const table = async (scope: ExportScope) => {
     const cols = visibleColumns;
-    const rows = scope.kind === "page" ? data.rows : (await fetchAllPages((limit, offset) => opsApi.list(branchId!, serverFilters, limit, offset), 500)).rows;
+    const rows = scope.kind === "page" ? data.rows : (await Promise.all((allBranches ? branches : [{ id: branchId!, name_ar: "" }]).map(async (b) => (await fetchAllPages((limit, offset) => opsApi.list(b.id, serverFilters, limit, offset), 500)).rows.map((x) => ({ ...x, branch_name: b.name_ar }) as Row)))).flat();
     return { columns: cols.map((c) => c.label), rows: rows.map((r) => cols.map((c) => c.out(r))), widths: cols.map((c) => c.width ?? 14) };
   };
 
@@ -185,9 +198,7 @@ export default function StaffReservations() {
   );
   const dateRange = (label: string, from: keyof Filters, to: keyof Filters) => (
     <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-600"><span className="w-20">{label}</span>
-      <input type="date" className="input w-auto py-1 text-xs" dir="ltr" aria-label={`${label} من`} value={String(filters[from] ?? "")} onChange={(e) => set(from, e.target.value)} />
-      <span>→</span>
-      <input type="date" className="input w-auto py-1 text-xs" dir="ltr" aria-label={`${label} إلى`} value={String(filters[to] ?? "")} onChange={(e) => set(to, e.target.value)} />
+      <DateRangePicker clearable className="w-56" label={`${label}: يوم أو فترة`} from={String(filters[from] ?? "")} to={String(filters[to] ?? "")} onChange={(a, b) => { set(from, a); set(to, b); }} />
     </div>
   );
 
@@ -195,7 +206,7 @@ export default function StaffReservations() {
     <div className="reservations-contrast">
       <SectionTitle title="الحجوزات" subtitle={`${data.total ? `الحجوزات المطابقة: ${data.total}` : list.error ? "تعذّر تحميل القائمة" : "لا حجوزات مطابقة"}${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
         <div className="flex flex-wrap items-center gap-2">
-          <BranchPicker />
+          <BranchPicker allowAll />
           <Link to="/staff/rooms?view=calendar" className="btn-outline text-sm" data-testid="open-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</Link>
           <ExportMenu source={{ statement, table, pageCount: data.rows.length, total: data.total }} disabled={!branchId} />
           {can("res.create") && <Link to="/staff/reservations/new" className="btn-primary text-sm"><Plus className="h-4 w-4" /> حجز جديد</Link>}

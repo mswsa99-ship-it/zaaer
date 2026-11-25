@@ -39,7 +39,7 @@ async function newReceipt(page: Page, vouchers: Locator): Promise<{ row: Locator
   await expect(dlg).toBeHidden();
   await expect.poll(async () => (await numbers(vouchers)).length).toBe(before.length + 1);
   const number = (await numbers(vouchers)).find((n) => !before.includes(n))!;
-  return { row: vouchers.locator("div.grid").filter({ has: page.locator("span.font-mono", { hasText: number }) }), number };
+  return { row: vouchers.locator("li").filter({ has: page.locator("span.font-mono", { hasText: number }) }), number };
 }
 async function previewTotal(dlg: Locator): Promise<number> {
   const total = dlg.getByTestId("invoice-preview-total");
@@ -129,7 +129,7 @@ test.describe("invoices, voucher correction and the review list (phase 4)", () =
     await dlg.getByRole("button", { name: "تصحيح السند" }).click();
     await expect(dlg).toBeHidden();
     await expect(vouchers).toContainText(`تصحيح للسند ${original}`);
-    const old = vouchers.locator("div.grid").filter({ has: page.locator("span.font-mono", { hasText: original }) });
+    const old = vouchers.locator("li").filter({ has: page.locator("span.font-mono", { hasText: original }) });
     await expect(old).toContainText("ملغى");
     await expect(old).toContainText("صُحّح بالسند");
   });

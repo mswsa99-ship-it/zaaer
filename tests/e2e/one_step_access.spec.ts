@@ -83,13 +83,24 @@ test.describe("one-step access (plan 6.3)", () => {
     await expect(page.getByText(/استلمت|تأكيد/).first()).toBeVisible();
     await expect(arrival).toBeVisible();
     await expect(page.getByTestId("in-house")).toHaveCount(0);
-    // no amount, no reason: refused by the server's deposit rule
+    // 25 Nov 12:46 rule: a deposit below the branch deposit asks «هل لديك تفويض من المدير؟» at once; «لا» refuses it
     await deposit.locator("input[data-money]").fill("0");
+    await expect(page.getByTestId("deposit-auth")).toContainText("هل لديك تفويض من المدير؟");
+    await deposit.getByRole("radio", { name: "لا" }).click();
+    await expect(page.getByTestId("deposit-no-auth")).toBeVisible();
     await arrival.getByRole("button", { name: "تسجيل الوصول", exact: true }).click();
-    await expect(page.getByTestId("reasons").first()).toContainText("التأمين لم يُستلم كاملًا");
+    await expect(page.getByText("التأمين أقل من تأمين الفرع").first()).toBeVisible();
     await expect(page.getByTestId("in-house")).toHaveCount(0);
-    // the valid path: the amount, the confirmation
+    // above the shortage: refused at once with the deposit's own wording
+    await deposit.locator("input[data-money]").fill("5000");
+    await expect(page.getByTestId("deposit-over")).toContainText("أكبر من نقص التأمين");
+    // below the branch deposit, «نعم» opens the written authorization (required); typing the full deposit hides the question
+    await deposit.locator("input[data-money]").fill("30");
+    await deposit.getByRole("radio", { name: "نعم" }).click();
+    await expect(deposit.getByLabel(/تفاصيل التفويض/)).toBeVisible();
+    // the valid path: the full deposit and the confirmation
     await deposit.locator("input[data-money]").fill("50");
+    await expect(page.getByTestId("deposit-auth")).toHaveCount(0);
     await deposit.getByLabel(/استلمت المبلغ/).check();
     await arrival.getByRole("button", { name: "تسجيل الوصول", exact: true }).click();
     await expect(page.getByTestId("stay-notice")).toContainText("سُجِّل الوصول");

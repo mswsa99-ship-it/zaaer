@@ -136,7 +136,7 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block min-w-0"><span className="label">رقم واتساب الفرع (يراه النزلاء في رمز QR)</span>
-          <div className="flex gap-2"><input className="input" dir="ltr" placeholder="05xxxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <div className="flex gap-2"><input className="input" dir="ltr" inputMode="tel" placeholder="05xxxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value)} />
             <button type="button" className="btn-outline shrink-0" disabled={!!busy || phone === (row.display_phone ?? "")} aria-describedby={phone === (row.display_phone ?? "") ? "dr-adminwhatsapp-3" : undefined} title={phone === (row.display_phone ?? "") ? "لا يوجد تغيير للحفظ" : undefined} onClick={() => run("phone", () => whatsappApi.save(row.branch_id, { display_phone: phone }), "تم حفظ الرقم.")}>{busy === "phone" ? <Spinner /> : "حفظ"}</button><DisabledReason id="dr-adminwhatsapp-3" show={phone === (row.display_phone ?? "")} text="لا يوجد تغيير للحفظ" /></div>
         </label>
         <div className="min-w-0">
@@ -241,7 +241,7 @@ function CloudPanel({ row, busy, run, onChecked }: { row: WaChannelRow; busy: st
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block min-w-0"><span className="label">رقم واتساب الفرع (يراه النزلاء)</span><input className="input" dir="ltr" placeholder="05xxxxxxxx" value={form.display_phone} onChange={set("display_phone")} /></label>
+        <label className="block min-w-0"><span className="label">رقم واتساب الفرع (يراه النزلاء)</span><input className="input" dir="ltr" inputMode="tel" placeholder="05xxxxxxxx" value={form.display_phone} onChange={set("display_phone")} /></label>
         <label className="block min-w-0"><span className="label">Phone Number ID</span><input className="input" dir="ltr" inputMode="numeric" placeholder="1234567890…" value={form.phone_number_id} onChange={set("phone_number_id")} /></label>
         <label className="block min-w-0"><span className="label">رمز الوصول الدائم (Access Token)</span><input className="input" dir="ltr" type="password" autoComplete="off" placeholder={row.has_token ? `محفوظ ••••${row.token_last4 ?? ""} — اتركه فارغًا للإبقاء عليه` : "EAAG…"} value={form.access_token} onChange={set("access_token")} /></label>
         <label className="block min-w-0"><span className="label">App Secret (للتحقق من رسائل Meta)</span><input className="input" dir="ltr" type="password" autoComplete="off" placeholder={row.has_app_secret ? "محفوظ — اتركه فارغًا للإبقاء عليه" : "من إعدادات التطبيق ← Basic"} value={form.app_secret} onChange={set("app_secret")} /></label>

@@ -78,7 +78,8 @@ test.describe("guests, platforms and the website (phase 5)", () => {
     await expect(dlg).toContainText("من الوثيقة");
     await dlg.getByLabel("الاسم الثلاثي").fill("أحمد علي المنصوري");
     await dlg.getByLabel("رقم الوثيقة").fill("1345678901");   // a national ID starts with 1 (0047)
-    await dlg.getByLabel("الجنسية").fill("إماراتي");
+    await dlg.getByTestId("nationality-select").selectOption({ label: "أخرى" });
+    await dlg.getByTestId("nationality-other").fill("إماراتي");
     await dlg.getByLabel("تاريخ الميلاد").fill("1985-03-12");
     await dlg.getByRole("button", { name: "حفظ واعتماد" }).click();
     await expect(dlg.getByText("أكّد «طابقتُ الوثيقة الأصلية» قبل الحفظ.")).toBeVisible();   // the server's refusal, nothing saved

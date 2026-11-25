@@ -16,12 +16,14 @@ import { formatCurrency, formatDateTime, todayISO, COUNT, arabicCount } from "..
 import { HBars } from "../../components/HBars";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { useBranch } from "../../lib/branch";
+import { mergeReportsFinance, mergeReportsPlatforms, mergeDiscounts, mergeLateEntries, mergeIdentities } from "../../lib/allBranches";
 import { opsApi, ratesApi, guestReportsApi, listsApi, type ReportsPlatforms, type ReportsFinance, type DiscountReport, type ReportFilters, type ReportFilterOptions } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { Link } from "react-router-dom";
 import { ROLE_LABELS } from "../../lib/types";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/types";
 import { money, type ExportScope, type ExportStatement, type ExportTable } from "../../lib/exports";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 // Operational columns only — money is never read from the reservations table (GAP05).
 interface ResRow { status: string; check_in: string }
@@ -83,14 +85,14 @@ export default function AdminReports() {
   const [period, setPeriod] = useState(last30);
   const [filters, setFilters] = useState<ReportFilters>({});
   const { profile } = useAuth();
-  const { branch } = useBranch();
+  const { branch, allBranches } = useBranch();
   const options = useBranchQuery<ReportFilterOptions | null>(async (b) => { const o = await listsApi.filterOptions(b); return o && "staff" in o ? (o as ReportFilterOptions) : null; }, [], null);
   // G24 (decision 40): both loads belong to the active branch; switching branch clears them, a stale answer is dropped.
   // Ledger KPIs for the branch + period + filters (a change refreshes in place; a failed refresh keeps the shown figures).
   const problem = periodProblem(period.from, period.to);
-  const fin = useBranchQuery<ReportsFinance | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsFinance(branchId, period.from, period.to, filters)), [period.from, period.to, filters], null);
-  const opsQ = useBranchQuery<OpsData | null>(loadOps, [], null);
-  const platQ = useBranchQuery<ReportsPlatforms | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsPlatforms(branchId, period.from, period.to)), [period.from, period.to], null);
+  const fin = useBranchQuery<ReportsFinance | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsFinance(branchId, period.from, period.to, filters)), [period.from, period.to, filters], null, { merge: (parts) => { const ok = parts.filter((x): x is ReportsFinance => !!x); return ok.length ? mergeReportsFinance(ok) : null; } });
+  const opsQ = useBranchQuery<OpsData | null>(loadOps, [], null, { merge: (parts) => { const ok = parts.filter((x): x is OpsData => !!x); return ok.length ? { reservations: ok.flatMap((x) => x.reservations), ops: { handoffs: ok.reduce((s, x) => s + x.ops.handoffs, 0), unmatched: ok.reduce((s, x) => s + x.ops.unmatched, 0), aiRequests14: ok[0].ops.aiRequests14, aiFallbacks14: ok[0].ops.aiFallbacks14 } } : null; } });
+  const platQ = useBranchQuery<ReportsPlatforms | null>((branchId) => (problem ? Promise.resolve(null) : opsApi.reportsPlatforms(branchId, period.from, period.to)), [period.from, period.to], null, { merge: (parts) => { const ok = parts.filter((x): x is ReportsPlatforms => !!x); return ok.length ? mergeReportsPlatforms(ok) : null; } });
   const branchId = fin.branchId;
   // OWNER-08: after an error nothing from an earlier period stays on screen, and nothing can be exported
   const reportError = problem ?? fin.error;
@@ -99,13 +101,12 @@ export default function AdminReports() {
   const ops = opsQ.data?.ops;
   const words = useMemo(() => reportFilterWords(filters, options.data), [filters, options.data]);
   const setFilter = (k: keyof ReportFilters, v: string) => setFilters((f) => { const n: Record<string, unknown> = { ...f, [k]: v }; if (!v) delete n[k]; return n as ReportFilters; });
-  const statementFor = (title: string, extra: string[] = []) => (scope: ExportScope): ExportStatement => ({ title, branch: branch?.name_ar ?? null, period, filters: [...words, ...extra], scope, generatedAt: formatDateTime(new Date().toISOString()), by: profile?.full_name ?? null });
+  const statementFor = (title: string, extra: string[] = []) => (scope: ExportScope): ExportStatement => ({ title, branch: allBranches ? "جميع الفروع" : branch?.name_ar ?? null, period, filters: [...words, ...extra], scope, generatedAt: formatDateTime(new Date().toISOString()), by: profile?.full_name ?? null });
   const today = todayISO();
 
   const periodPicker = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <label className="flex items-center gap-1.5 text-ink-600">من <input type="date" className="input w-auto py-1" dir="ltr" value={period.from} max={period.to < today ? period.to : today} onChange={(e) => e.target.value && setPeriod({ ...period, from: e.target.value })} aria-label="من" /></label>
-      <label className="flex items-center gap-1.5 text-ink-600">إلى <input type="date" className="input w-auto py-1" dir="ltr" value={period.to} min={period.from} max={today} onChange={(e) => e.target.value && setPeriod({ ...period, to: e.target.value > today ? today : e.target.value })} aria-label="إلى" /></label>
+      <span className="flex items-center gap-1.5 text-ink-600">اليوم أو الفترة <DateRangePicker className="w-56" label="اليوم أو الفترة" from={period.from} to={period.to} max={today} onChange={(a, b) => setPeriod({ ...period, from: a, to: b > today ? today : b })} /></span>
       <button type="button" onClick={() => setPeriod(last30())} className="btn-ghost py-1 text-xs">آخر 30 يومًا</button>
       <button type="button" onClick={() => setPeriod(thisMonth())} className="btn-ghost py-1 text-xs">هذا الشهر</button>
       {fin.refreshing && <Spinner className="h-4 w-4" />}
@@ -127,7 +128,7 @@ export default function AdminReports() {
   if (!branchId) {
     return (
       <div>
-        <SectionTitle title="التقارير" subtitle="مؤشرات مالية من دفتر السندات وإحصاءات تشغيلية" action={<BranchPicker />} />
+        <SectionTitle title="التقارير" subtitle="مؤشرات مالية من دفتر السندات وإحصاءات تشغيلية" action={<BranchPicker allowAll />} />
         <EmptyState icon={<BarChart3 className="h-10 w-10" />} title="لا توجد بيانات للتقارير" />
       </div>
     );
@@ -204,7 +205,7 @@ export default function AdminReports() {
     <div>
       <SectionTitle title="التقارير" subtitle="مؤشرات مالية من دفتر السندات وإحصاءات تشغيلية" action={
         <div className="flex flex-wrap items-center gap-2">
-          <BranchPicker />
+          <BranchPicker allowAll />
           <ExportMenu allOnly source={{ statement: (scope) => ({ ...statementFor("التقرير المالي")(scope), report: true }), table: financeTable, pageCount: report?.by_day.length ?? 0, total: report ? Math.max(1, report.by_day.length) : 0 }} disabled={!report} />
         </div>
       } />
@@ -346,7 +347,7 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
   const { profile } = useAuth();
   const allowed = profile?.role === "owner" || profile?.role === "manager";
   const f = useMemo(() => ({ staff_id: filters.staff_id, source_id: filters.source_id }), [filters.staff_id, filters.source_id]);
-  const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.lateEntries>> | null>((branchId) => (allowed ? guestReportsApi.lateEntries(branchId, from, to, 1, f) : Promise.resolve(null)), [from, to, allowed, f], null);
+  const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.lateEntries>> | null>((branchId) => (allowed ? guestReportsApi.lateEntries(branchId, from, to, 1, f) : Promise.resolve(null)), [from, to, allowed, f], null, { merge: (parts) => { const ok = parts.filter((x) => !!x); return ok.length ? mergeLateEntries(ok as never) as never : null; } });
   const d = q.error ? null : q.data;   // OWNER-08: an error blanks the figures
   if (!allowed) return null;
   const table = async (): Promise<ExportTable> => ({ columns: ["الحجز", "رقم المنصة", "المنصة", "حُجز في المنصة", "أُدخل", "التأخير (يوم)", "بعد الوصول", "الوصول", "الحالة", "الموظف"], rows: (d?.rows ?? []).map((r) => [r.internal_ref, r.external_ref ?? "", r.source_name ?? "", r.booked_on, r.entered_on, r.lag_days, r.after_arrival ? "نعم" : "", r.check_in, r.status, r.created_by ?? ""]) });
@@ -386,7 +387,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
   const allowed = can("reports.identities_usage");
   const [path, setPath] = useState<"office" | "guest" | "all">("office");
   const f = useMemo(() => ({ staff_id: filters.staff_id }), [filters.staff_id]);
-  const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.identities>> | null>((branchId) => (allowed ? guestReportsApi.identities(branchId, from, to, path, f) : Promise.resolve(null)), [from, to, path, allowed, f], null);
+  const q = useBranchQuery<Awaited<ReturnType<typeof guestReportsApi.identities>> | null>((branchId) => (allowed ? guestReportsApi.identities(branchId, from, to, path, f) : Promise.resolve(null)), [from, to, path, allowed, f], null, { merge: (parts) => { const ok = parts.filter((x) => !!x); return ok.length ? mergeIdentities(ok as never) as never : null; } });
   const d = q.error ? null : q.data;   // OWNER-08: an error blanks the figures
   if (!allowed) return null;
   const pathWord = path === "office" ? "من المكتب (من الوثيقة)" : path === "guest" ? "أدخلها النزيل وطابقها المشرف" : "كل المسارات";
@@ -431,7 +432,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
 function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: string; filters: ReportFilters; statementFor: StatementFor }) {
   const [afterArrival, setAfterArrival] = useState(false);
   const f = useMemo(() => ({ staff_id: filters.staff_id, source_id: filters.source_id, category_id: filters.category_id, after_arrival: afterArrival || undefined }), [filters.staff_id, filters.source_id, filters.category_id, afterArrival]);
-  const q = useBranchQuery<DiscountReport | null>((branchId) => ratesApi.discounts(branchId, from, to, f), [from, to, f], null);
+  const q = useBranchQuery<DiscountReport | null>((branchId) => ratesApi.discounts(branchId, from, to, f), [from, to, f], null, { merge: (parts) => { const ok = parts.filter((x): x is DiscountReport => !!x); return ok.length ? mergeDiscounts(ok as never) as unknown as DiscountReport : null; } });
   const d = q.error ? null : q.data;   // OWNER-08: an error blanks the figures
   const table = async (): Promise<ExportTable> => ({ columns: ["الحجز", "المبلغ", "السبب", "الموظف", "الدور", "الوقت", "بعد الوصول"], rows: (d?.rows ?? []).map((r) => [r.internal_ref, money(r.amount_halalas), r.reason ?? "", r.staff ?? "", r.role ? ROLE_LABELS[r.role as keyof typeof ROLE_LABELS] ?? r.role : "", formatDateTime(r.created_at), r.after_arrival ? "نعم" : ""]), sheets: [{ name: "حسب الموظف", rows: [["الموظف", "الدور", "عدد", "الإجمالي"], ...(d?.by_staff ?? []).map((s) => [s.staff ?? "—", s.role ? ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role : "", s.count, money(s.total_halalas)])], headerRow: 0, widths: [24, 14, 8, 14] }] });
   return (

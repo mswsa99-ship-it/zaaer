@@ -143,7 +143,11 @@ test.describe("the guest journey after the stay", () => {
     await rule.getByRole("button", { name: "حفظ القاعدة" }).click();
     await expect(page.getByRole("status").filter({ hasText: "حُفظت قاعدة «تأخر رد التأمين عن مهلته»" })).toBeVisible();
     // the free hour cannot end before the branch's check-out time
-    await page.locator("input[type=time]").nth(1).fill("11:00");
+    await page.getByRole("button", { name: "الخروج بلا رسوم حتى" }).click();
+    const freeHour = page.getByRole("dialog", { name: "الخروج بلا رسوم حتى" });
+    await freeHour.getByRole("listbox", { name: /الساعة/ }).getByRole("option", { name: /^11 صباحًا/ }).click();
+    await freeHour.getByRole("listbox", { name: /الدقائق/ }).getByRole("option", { name: "00", exact: true }).click();
+    await freeHour.getByRole("button", { name: "موافق" }).click();
     await page.getByTestId("journey-save").click();
     await expect(page.getByRole("alert")).toContainText("لا تسبق موعد الخروج المعتمد");
     await signOut(page);

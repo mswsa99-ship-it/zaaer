@@ -15,6 +15,7 @@ import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, ErrorBanner, AmountB
 import { Field, MoneyInput, Modal, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, formatDateTime, todayISO, addDaysISO } from "../../lib/utils";
+import { DateRangePicker } from "../../components/DateRangePicker";
 
 const sar = (h: number | null | undefined) => (h == null ? "—" : formatCurrency(h / 100));
 const timeOf = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Riyadh" }) : "—");
@@ -32,15 +33,16 @@ const draftOf = (d: ClosingDay): Draft => Object.fromEntries(d.lines.map((l) => 
 const linesOf = (draft: Draft): ClosingLineInput[] => Object.entries(draft).map(([key, v]) => ({ key, entered_halalas: v.entered, reason: v.reason.trim() || null }));
 
 export default function DayClosing() {
-  const { branchId } = useBranch();
+  const { branchId, branches, allBranches } = useBranch();
   const { can } = useAuth();
   const [date, setDate] = useState(todayISO());
   const [tick, setTick] = useState(0);
   const reload = () => setTick((t) => t + 1);
   return (
     <div>
-      <SectionTitle title="إقفال اليوم" subtitle="أرقام اليوم كما سجّلها النظام، مقابل ما عُدّ فعلًا وسبب كل فرق" action={<BranchPicker />} />
-      {branchId && (
+      <SectionTitle title="إقفال اليوم" subtitle="أرقام اليوم كما سجّلها النظام، مقابل ما عُدّ فعلًا وسبب كل فرق" action={<BranchPicker allowAll />} />
+      {allBranches && <AllBranchesClosing branches={branches} date={date} setDate={setDate} tick={tick} />}
+      {!allBranches && branchId && (
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="min-w-0 space-y-4 lg:col-span-2">
             <DayPanel branchId={branchId} date={date} setDate={setDate} tick={tick} onChanged={reload} canEdit={can("day.close")} />
@@ -106,7 +108,7 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
     <>
       <Card>
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <Field label="اليوم"><input type="date" className="input" dir="ltr" max={todayISO()} value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="اليوم" /></Field>
+          <Field label="اليوم"><DateRangePicker single label="اليوم" from={date} to={date} max={todayISO()} onChange={(a) => setDate(a)} /></Field>
           <div className="flex flex-wrap items-center gap-2" data-testid="closing-state">
             <Badge className={badge.cls}>{day.state === "locked" ? <Lock className="ml-1 inline h-3 w-3" /> : day.state === "open" ? <Unlock className="ml-1 inline h-3 w-3" /> : <FileClock className="ml-1 inline h-3 w-3" />}{badge.label}</Badge>
             {day.state === "open" && <span className="text-xs text-ink-500">يُعدَّل حتى <span dir="ltr">{timeOf(day.closing?.edit_until)}</span></span>}
@@ -354,5 +356,43 @@ function WindowSetting({ branchId, tick, onChanged }: { branchId: string; tick: 
         </ActionForm>
       )}
     </Card>
+  );
+}
+
+/** «جميع الفروع» (owner only): a read-only line per branch for one day, from the same server read each branch uses. Nothing here is saved or sent; pick one branch to count and send. */
+function AllBranchesClosing({ branches, date, setDate, tick }: { branches: Array<{ id: string; name_ar: string }>; date: string; setDate: (d: string) => void; tick: number }) {
+  const [rows, setRows] = useState<Array<{ id: string; name: string; day: ClosingDay | null; error: boolean }> | null>(null);
+  useEffect(() => {
+    let alive = true; setRows(null);
+    Promise.all(branches.map(async (b) => { try { return { id: b.id, name: b.name_ar, day: await closingApi.get(b.id, date), error: false }; } catch { return { id: b.id, name: b.name_ar, day: null, error: true }; } })).then((r) => { if (alive) setRows(r); });
+    return () => { alive = false; };
+  }, [branches, date, tick]);
+  const sum = (f: (d: ClosingDay) => number) => (rows ?? []).reduce((t, r) => t + (r.day ? f(r.day) : 0), 0);
+  const sent = (d: ClosingDay) => (d.state === "open" || d.state === "locked") && d.closing?.figures ? d.closing.figures : d.live;
+  return (
+    <div className="space-y-4" data-testid="closing-all">
+      <Card>
+        <Field label="اليوم"><DateRangePicker single label="اليوم" from={date} to={date} max={todayISO()} onChange={(a) => setDate(a)} /></Field>
+        <p className="mt-2 text-xs text-rai-ink-muted">عرض للقراءة فقط لكل الفروع في اليوم المختار. لعدّ الصناديق وإرسال الإقفال اختر فرعًا واحدًا.</p>
+      </Card>
+      {!rows ? <Spinner /> : (
+        <Card>
+          <AmountGrid>
+            <AmountBox label="الفروع" value={String(rows.length)} />
+            <AmountBox label="وحدات مؤجرة" value={String(sum((d) => sent(d).rooms.rented))} />
+            <AmountBox label="وصول" value={String(sum((d) => sent(d).rooms.arrivals))} />
+            <AmountBox label="مغادرة" value={String(sum((d) => sent(d).rooms.departures))} />
+          </AmountGrid>
+          <ul className="mt-3 divide-y divide-rai-line text-sm">
+            {rows.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="closing-all-row">
+                <span className="font-semibold">{r.name}</span>
+                {r.day ? <><Badge className={STATE_BADGE[r.day.state].cls}>{STATE_BADGE[r.day.state].label}</Badge><span className="text-xs text-rai-ink-muted">مؤجرة {sent(r.day).rooms.rented} من {sent(r.day).rooms.units} · وصول {sent(r.day).rooms.arrivals} · مغادرة {sent(r.day).rooms.departures}</span></> : <span className="text-xs text-rai-danger">تعذّر تحميل الفرع</span>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
   );
 }
