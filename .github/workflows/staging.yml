@@ -113,6 +113,8 @@ jobs:
           npm run build:demo
           mkdir -p dist/review
           cp -r dist-demo/. dist/review/
+          # the review copy carries its own commit stamp (review/version.json) so a reviewer can prove which revision it is
+          node scripts/build-version.mjs write dist/review
           echo "entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1)" >> "$GITHUB_OUTPUT"
           echo "base=${BASE_PATH%/}" >> "$GITHUB_OUTPUT"
       - name: Package the reception-computer WhatsApp program (Windows) next to the site

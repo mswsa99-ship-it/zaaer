@@ -29,7 +29,7 @@ export function DailyBriefing() {
     <Card>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-base font-semibold text-ink-800"><Sunrise className="h-5 w-5 text-warning-500" /> إحاطة اليوم</h2>
-        <button onClick={load} className="btn-ghost p-1.5" aria-label="تحديث"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button>
+        <button onClick={load} className="btn-ghost min-h-[44px] min-w-[44px]" aria-label="تحديث"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button>
       </div>
       {error && <ErrorBanner message={error} />}
       {!b && loading && <div className="py-6 text-center"><Spinner /></div>}

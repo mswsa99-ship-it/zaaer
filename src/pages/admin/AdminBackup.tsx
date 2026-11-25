@@ -46,7 +46,7 @@ export function BackupStatusView({ status, loading, error, reload }: {
       <SectionTitle
         title="النسخ الاحتياطي"
         subtitle="نسخة مشفّرة أسبوعية وقبل كل نشر، وتمرين استعادة شهري. تُدار النسخ من خادم النظام وتظهر هنا حالتها الموثّقة."
-        action={<button type="button" className="btn-outline" onClick={reload}>تحديث</button>}
+        action={<button type="button" className="btn-outline min-h-[44px]" onClick={reload}>تحديث</button>}
       />
       <DataState loading={loading} error={error} onRetry={reload} empty={!status && !!error} emptyTitle="" emptyDescription="">
         <>

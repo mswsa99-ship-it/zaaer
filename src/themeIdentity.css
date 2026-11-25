@@ -257,11 +257,23 @@ body, #root {background:var(--paper);color:var(--ink);}
    On a phone each row becomes a card of labelled fields, from the same markup (one row in the DOM, no duplicate list). */
 @media (max-width: 639px) {
   :root .overflow-x-auto table.res-table, :root .res-table, .res-table tbody {display:block;width:100%;max-width:100%;min-width:0;}
-  :root .res-table td.font-mono {white-space:normal;}
+  :root .res-table td.font-mono {white-space:nowrap;overflow-wrap:normal;}
   :root .res-table thead {display:none;}
   :root .res-table tr {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem .75rem;padding:.75rem;border-top:1px solid var(--line);}
   :root .res-table td {display:block;padding:0;white-space:normal;min-width:0;overflow-wrap:anywhere;}
   :root .res-table td[data-label]::before {content:attr(data-label);display:block;font-size:11px;color:var(--ink-muted);}
   :root .res-table td:last-child {grid-column:1 / -1;}
   :root .res-table td:last-child a {width:100%;}
+}
+
+/* A table that scrolls sideways on a phone shows a soft edge on the side that has more, so the cut-off amounts are not mistaken for the whole table. */
+@media (max-width: 639px) {
+  :root .card.overflow-x-auto {
+    background:
+      linear-gradient(to right, #fff 30%, rgba(255,255,255,0)) left center / 32px 100% no-repeat local,
+      linear-gradient(to left, #fff 30%, rgba(255,255,255,0)) right center / 32px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(15,23,42,.22), rgba(15,23,42,0)) left center / 12px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.22), rgba(15,23,42,0)) right center / 12px 100% no-repeat scroll,
+      #fff;
+  }
 }
