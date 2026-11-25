@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
+import { BranchPicker } from "../../components/BranchPicker";
 import { staffApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Wrench, Plus, LifeBuoy, CheckCircle2 } from "lucide-react";
@@ -16,6 +18,7 @@ interface Ticket {
   room_id: string;
   room?: { room_number: string } | null;
   created_at: string;
+  branch_id?: string;
 }
 
 interface HandoffTicket {
@@ -28,6 +31,7 @@ interface HandoffTicket {
   created_at: string;
   reservation_id: string | null;
   conversation_id: string | null;
+  branch_id?: string;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -73,7 +77,7 @@ function detailsText(d: Record<string, unknown> | string | null): string {
   return parts.join(" · ").slice(0, 300);
 }
 
-const NO_TICKETS: { tickets: Ticket[]; rooms: { id: string; room_number: string }[]; handoffs: HandoffTicket[] } = { tickets: [], rooms: [], handoffs: [] };
+const NO_TICKETS: { tickets: Ticket[]; rooms: { id: string; room_number: string; branch_id?: string }[]; handoffs: HandoffTicket[] } = { tickets: [], rooms: [], handoffs: [] };
 
 export default function Tickets() {
   const { profile, can } = useAuth();
@@ -96,11 +100,19 @@ export default function Tickets() {
       supabase.from("human_handoff_tickets").select("id, kind, external_ref, source_name, details, status, created_at, reservation_id, conversation_id").eq("branch_id", branchId).order("created_at", { ascending: false }).limit(100),
     ]);
     return {
-      tickets: must(t) as unknown as Ticket[],
-      rooms: must(r) as { id: string; room_number: string }[],
-      handoffs: h.error ? [] : ((h.data as HandoffTicket[]) ?? []),   // not readable by every role
+      tickets: (must(t) as unknown as Ticket[]).map((x) => ({ ...x, branch_id: branchId })),
+      rooms: (must(r) as { id: string; room_number: string }[]).map((x) => ({ ...x, branch_id: branchId })),
+      handoffs: (h.error ? [] : ((h.data as HandoffTicket[]) ?? [])).map((x) => ({ ...x, branch_id: branchId })),   // not readable by every role
     };
-  }, [], NO_TICKETS);
+  }, [], NO_TICKETS,
+    // «جميع الفروع» (owner): every branch's reports, rooms and hand-offs together, newest first; each row keeps its branch
+    { merge: (ps) => ({
+      tickets: ps.flatMap((p) => p.tickets).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      rooms: ps.flatMap((p) => p.rooms),
+      handoffs: ps.flatMap((p) => p.handoffs).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    }) });
+  const { branches } = useBranch();
+  const branchOf = (id?: string) => (q.all && id ? branches.find((b) => b.id === id)?.name_ar ?? "" : "");
   const { tickets, rooms, handoffs } = q.data;
   const branchId = q.branchId;
   const load = q.reload;
@@ -182,7 +194,7 @@ export default function Tickets() {
                       </p>
                       {h.details && <p className="mt-1 text-xs text-ink-400">{detailsText(h.details)}</p>}
                       <p className="mt-1 text-xs text-ink-400">
-                        {formatDateTime(h.created_at)}
+                        {branchOf(h.branch_id) && <span data-testid="ticket-branch">{branchOf(h.branch_id)} · </span>}{formatDateTime(h.created_at)}
                         {h.reservation_id && <> · <Link to={`/staff/reservations/${h.reservation_id}`} className="text-brand-600 hover:underline">فتح الحجز</Link></>}
                         {h.conversation_id && <> · <Link to="/staff/inbox" className="text-brand-600 hover:underline">المحادثة</Link></>}
                       </p>
@@ -202,7 +214,7 @@ export default function Tickets() {
 
       <section>
         <SectionTitle level={2} title="البلاغات والصيانة" subtitle={`بلاغات مفتوحة: ${openMaint}`} action={
-          <button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلاغ جديد</button>
+          <div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلاغ جديد</button></div>
         } />
 
         {showForm && (
@@ -211,7 +223,7 @@ export default function Tickets() {
               <div><label className="label">الوحدة</label>
                 <select value={newRoom} onChange={(e) => setNewRoom(e.target.value)} className="input">
                   <option value="">اختيار وحدة</option>
-                  {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}</option>)}
+                  {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}{branchOf(r.branch_id) ? ` — ${branchOf(r.branch_id)}` : ""}</option>)}
                 </select>
               </div>
               <div><label className="label">العنوان</label><input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="input" /></div>
@@ -234,7 +246,7 @@ export default function Tickets() {
                   <Wrench className={`h-5 w-5 ${t.status === "resolved" ? "text-success-600" : "text-danger-500"}`} />
                   <div>
                     <p className="text-sm font-medium text-ink-800">{t.title}</p>
-                    <p className="text-xs text-ink-400">وحدة {t.room?.room_number ?? "—"} · {t.status === "resolved" ? "تم الحل" : t.status === "in_progress" ? "قيد المعالجة" : "مفتوح"} · {formatDateTime(t.created_at)}</p>
+                    <p className="text-xs text-ink-400">{branchOf(t.branch_id) && <span data-testid="ticket-branch">{branchOf(t.branch_id)} · </span>}وحدة {t.room?.room_number ?? "—"} · {t.status === "resolved" ? "تم الحل" : t.status === "in_progress" ? "قيد المعالجة" : "مفتوح"} · {formatDateTime(t.created_at)}</p>
                     {t.description && <p className="mt-1 text-xs text-ink-500">{t.description}</p>}
                   </div>
                 </div>

@@ -6,13 +6,14 @@ import { staffApi, opsApi, stayApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { Modal, Field, ActionForm, Submit, ReasonInput, MoneyInput } from "../../components/forms";
+import { useBranch } from "../../lib/branch";
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, type RoomStatus } from "../../lib/types";
 import { formatDateTime, radioGroupKeys } from "../../lib/utils";
 
-interface Task { id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; scheduled_end: string | null; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
-interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string }
-interface Opt { id: string; name: string }
+interface Task { branch_id?: string; id: string; status: string; priority: string; room_id: string | null; facility_id: string | null; reservation_id: string | null; task_type_name_snapshot: string; assignee_id: string | null; scheduled_start: string; scheduled_end: string | null; description: string | null; created_at: string; version: number; room?: { room_number: string; status: RoomStatus; cleanliness: string } | null; facility?: { name: string } | null; assignee?: { full_name: string } | null }
+interface RoomLite { id: string; room_number: string; status: RoomStatus; cleanliness: string; branch_id?: string }
+interface Opt { id: string; name: string; branch_id?: string }
 interface HkData { tasks: Task[]; rooms: RoomLite[]; facilities: Opt[]; types: Opt[]; staff: Opt[]; inspected: Record<string, "ok" | "notes"> }
 const NO_HK: HkData = { tasks: [], rooms: [], facilities: [], types: [], staff: [], inspected: {} };
 /** the cleaning a departure creates: its inspection is recorded from the task (decision 5) */
@@ -33,7 +34,7 @@ export default function Housekeeping() {
   const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<"open" | "done" | "board">("open");
   // decision 28: the task's start (required, «الآن» by default) and its end (optional); no reminder, no automatic end
-  const [create, setCreate] = useState<null | { target: "room" | "facility"; room_id?: string; facility_id?: string; task_type_id?: string; priority: string; assignee_id?: string; description?: string; scheduled_start: string; scheduled_end: string }>(null);
+  const [create, setCreate] = useState<null | { branch_id?: string; target: "room" | "facility"; room_id?: string; facility_id?: string; task_type_id?: string; priority: string; assignee_id?: string; description?: string; scheduled_start: string; scheduled_end: string }>(null);
   const [cancelTask, setCancelTask] = useState<Task | null>(null); const [cancelReason, setCancelReason] = useState("");
   const [assignTask, setAssignTask] = useState<Task | null>(null); const [assignee, setAssignee] = useState("");
   const [maintTarget, setMaintTarget] = useState<RoomLite | null>(null); const [maintTitle, setMaintTitle] = useState(""); const [maintDesc, setMaintDesc] = useState("");
@@ -49,12 +50,20 @@ export default function Housekeeping() {
       supabase.from("checkout_inspections").select("reservation_id, result").eq("branch_id", branchId).eq("status", "active"),
     ]);
     return {
-      tasks: must(t) as unknown as Task[], rooms: must(r) as RoomLite[], facilities: must(f) as Opt[], types: must(tt) as Opt[],
+      tasks: (must(t) as unknown as Task[]).map((x) => ({ ...x, branch_id: branchId })), rooms: (must(r) as RoomLite[]).map((x) => ({ ...x, branch_id: branchId })),
+      facilities: (must(f) as Opt[]).map((x) => ({ ...x, branch_id: branchId })), types: (must(tt) as Opt[]).map((x) => ({ ...x, branch_id: branchId })),
       staff: (must(s) as { id: string; full_name: string }[]).map((x) => ({ id: x.id, name: x.full_name })),
       inspected: Object.fromEntries(((ins.data ?? []) as { reservation_id: string; result: "ok" | "notes" }[]).map((x) => [x.reservation_id, x.result])),
     };
-  }, [], NO_HK);
+  }, [], NO_HK,
+    // «جميع الفروع» (owner): every branch's tasks and units together; each row keeps its branch, every action acts on that row; a new task picks its branch explicitly
+    { merge: (ps) => ({ tasks: ps.flatMap((p) => p.tasks).sort((a, b) => b.created_at.localeCompare(a.created_at)), rooms: ps.flatMap((p) => p.rooms), facilities: ps.flatMap((p) => p.facilities),
+      types: ps.flatMap((p) => p.types), staff: ps[0]?.staff ?? [], inspected: Object.assign({}, ...ps.map((p) => p.inspected)) }) });
   const { tasks, rooms, facilities, types, staff, inspected } = hk.data;
+  const { branches } = useBranch();
+  const bName = (id?: string) => (hk.all && id ? branches.find((b) => b.id === id)?.name_ar ?? "" : "");
+  // the new-task form: in «جميع الفروع» only the chosen branch's units, facilities and task types are offered
+  const inBranch = <T extends { branch_id?: string }>(xs: T[], b?: string) => (hk.all ? xs.filter((x) => x.branch_id === b) : xs);
   const [inspect, setInspect] = useState<Task | null>(null); const [inspResult, setInspResult] = useState<"ok" | "notes">("ok"); const [inspNotes, setInspNotes] = useState(""); const [inspSuggested, setInspSuggested] = useState<number | null>(null);
   const { reload } = hk;
   useEffect(() => {
@@ -68,11 +77,11 @@ export default function Housekeeping() {
   const mine = (t: Task) => role !== "housekeeping" || !t.assignee_id || t.assignee_id === profile?.id;
 
   if (hk.loading) return <LoadingScreen />;
-  if (hk.error && tasks.length === 0 && rooms.length === 0) return <div><SectionTitle title="خدمة الغرف والمرافق" action={<BranchPicker />} /><LoadErrorCard message={hk.error} onRetry={reload} /></div>;
+  if (hk.error && tasks.length === 0 && rooms.length === 0) return <div><SectionTitle title="خدمة الغرف والمرافق" action={<BranchPicker allowAll />} /><LoadErrorCard message={hk.error} onRetry={reload} /></div>;
   return (
     <div>
       <SectionTitle title="خدمة الغرف والمرافق" subtitle={`مهام مفتوحة: ${openTasks.length} · وحدات تحتاج تنظيفًا: ${rooms.filter((r) => r.cleanliness !== "clean").length}`} action={
-        <div className="flex flex-wrap items-center gap-2"><BranchPicker /><button onClick={() => setCreate({ target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id, scheduled_start: localNow(), scheduled_end: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
+        <div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><button onClick={() => setCreate(hk.all ? { target: "room", priority: "medium", scheduled_start: localNow(), scheduled_end: "" } : { target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id, scheduled_start: localNow(), scheduled_end: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
       {(error || hk.error) && <div className="mb-4"><ErrorBanner message={(error ?? hk.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
       <div className="mb-4 flex gap-1 rounded-xl bg-ink-100 p-1 text-sm w-fit">
@@ -86,7 +95,7 @@ export default function Housekeeping() {
               <div className="flex items-center gap-3">
                 {t.room_id ? <DoorClosed className="h-5 w-5 text-brand-600" /> : <Landmark className="h-5 w-5 text-accent-700" />}
                 <div>
-                  <p className="text-sm font-medium text-ink-800">{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name ?? "مرفق"} <span className="font-normal text-ink-500">· {t.task_type_name_snapshot}</span></p>
+                  <p className="text-sm font-medium text-ink-800">{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name ?? "مرفق"} <span className="font-normal text-ink-500">· {t.task_type_name_snapshot}</span>{bName(t.branch_id) && <Badge className="ms-2" testId="hk-branch">{bName(t.branch_id)}</Badge>}</p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-400">
                     <Badge className={t.priority === "high" ? "bg-danger-500/10 text-danger-600" : t.priority === "low" ? "bg-ink-100 text-ink-500" : "bg-warning-500/10 text-warning-700"}>{TASK_PRIORITY_LABELS[t.priority]}</Badge>
                     <Badge className={t.status === "in_progress" ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge>
@@ -114,7 +123,7 @@ export default function Housekeeping() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {rooms.map((r) => (
             <Card key={r.id}>
-              <div className="flex items-start justify-between"><p className="font-semibold text-ink-800">{r.room_number}</p><Badge className={ROOM_STATUS_COLORS[r.status]}>{roomStatusLabel(r.status, r.cleanliness)}</Badge></div>
+              <div className="flex items-start justify-between"><p className="font-semibold text-ink-800">{r.room_number}{bName(r.branch_id) && <Badge className="ms-2" testId="hk-branch">{bName(r.branch_id)}</Badge>}</p><Badge className={ROOM_STATUS_COLORS[r.status]}>{roomStatusLabel(r.status, r.cleanliness)}</Badge></div>
               <div className="mt-2 flex items-center justify-between">
                 <Badge className={CLEANLINESS_COLORS[r.cleanliness]}>الحالة الحالية: {CLEANLINESS_LABELS[r.cleanliness]}</Badge>
                 {r.cleanliness === "clean" ? <button onClick={() => act("c" + r.id, async () => { await opsApi.setCleanliness(r.id, "dirty", "علامة يدوية"); })} className="btn-ghost px-2 py-1 text-[11px]">وضع علامة متسخة</button>
@@ -126,21 +135,22 @@ export default function Housekeeping() {
       )}
 
       {view === "done" && (doneTasks.length === 0 ? <EmptyState icon={<CheckCircle2 className="h-10 w-10" />} title="لا مهام منجزة بعد" /> : (
-        <div className="space-y-2">{doneTasks.map((t) => <div key={t.id} className="card flex items-center justify-between px-4 py-2 text-sm"><span>{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name} · {t.task_type_name_snapshot} · {t.assignee?.full_name ?? "—"}</span><Badge className={t.status === "completed" ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge></div>)}</div>
+        <div className="space-y-2">{doneTasks.map((t) => <div key={t.id} className="card flex items-center justify-between px-4 py-2 text-sm"><span>{bName(t.branch_id) ? `${bName(t.branch_id)} · ` : ""}{t.room ? `وحدة ${t.room.room_number}` : t.facility?.name} · {t.task_type_name_snapshot} · {t.assignee?.full_name ?? "—"}</span><Badge className={t.status === "completed" ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{TASK_STATUS_LABELS[t.status]}</Badge></div>)}</div>
       ))}
 
       {/* create task */}
       <Modal open={!!create} title="مهمة جديدة" onClose={() => setCreate(null)}>
         {create && (
-          <ActionForm onSubmit={async () => { if (!create.scheduled_start) throw new Error("VALIDATION: schedule_start"); if (create.scheduled_end && create.scheduled_end < create.scheduled_start) throw new Error("VALIDATION: schedule"); await opsApi.createTask({ room_id: create.target === "room" ? create.room_id : null, facility_id: create.target === "facility" ? create.facility_id : null, task_type_id: create.task_type_id, priority: create.priority, assignee_id: create.assignee_id || null, description: create.description || null, scheduled_start: toIso(create.scheduled_start), scheduled_end: create.scheduled_end ? toIso(create.scheduled_end) : null }); setCreate(null); reload(); }}>
+          <ActionForm onSubmit={async () => { if (hk.all && !create.branch_id) throw new Error("VALIDATION: branch"); if (!create.scheduled_start) throw new Error("VALIDATION: schedule_start"); if (create.scheduled_end && create.scheduled_end < create.scheduled_start) throw new Error("VALIDATION: schedule"); await opsApi.createTask({ room_id: create.target === "room" ? create.room_id : null, facility_id: create.target === "facility" ? create.facility_id : null, task_type_id: create.task_type_id, priority: create.priority, assignee_id: create.assignee_id || null, description: create.description || null, scheduled_start: toIso(create.scheduled_start), scheduled_end: create.scheduled_end ? toIso(create.scheduled_end) : null }); setCreate(null); reload(); }}>
             <div className="space-y-3">
+              {hk.all && <Field label="الفرع"><select className="input" required value={create.branch_id ?? ""} data-testid="hk-new-branch" onChange={(e) => { const b = e.target.value; setCreate({ ...create, branch_id: b, room_id: rooms.find((x) => x.branch_id === b)?.id, facility_id: facilities.find((x) => x.branch_id === b)?.id, task_type_id: types.find((x) => x.branch_id === b)?.id }); }}><option value="">اختر الفرع</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}</select></Field>}
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setCreate({ ...create, target: "room", room_id: rooms[0]?.id })} className={`rounded-xl border px-3 py-2 text-sm ${create.target === "room" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>وحدة</button>
-                <button type="button" onClick={() => setCreate({ ...create, target: "facility", facility_id: facilities[0]?.id })} className={`rounded-xl border px-3 py-2 text-sm ${create.target === "facility" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>مرفق</button>
+                <button type="button" onClick={() => setCreate({ ...create, target: "room", room_id: inBranch(rooms, create.branch_id)[0]?.id })} className={`rounded-xl border px-3 py-2 text-sm ${create.target === "room" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>وحدة</button>
+                <button type="button" onClick={() => setCreate({ ...create, target: "facility", facility_id: inBranch(facilities, create.branch_id)[0]?.id })} className={`rounded-xl border px-3 py-2 text-sm ${create.target === "facility" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100"}`}>مرفق</button>
               </div>
-              {create.target === "room" ? <Field label="الوحدة"><select className="input" value={create.room_id ?? ""} onChange={(e) => setCreate({ ...create, room_id: e.target.value })}>{rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number} · {CLEANLINESS_LABELS[r.cleanliness]}</option>)}</select></Field>
-                : <Field label="المرفق" hint={facilities.length === 0 ? "لا توجد مرافق فعالة" : undefined}><select className="input" value={create.facility_id ?? ""} onChange={(e) => setCreate({ ...create, facility_id: e.target.value })}>{facilities.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>}
-              <Field label="نوع المهمة"><select className="input" value={create.task_type_id ?? ""} onChange={(e) => setCreate({ ...create, task_type_id: e.target.value })}>{types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+              {create.target === "room" ? <Field label="الوحدة"><select className="input" value={create.room_id ?? ""} onChange={(e) => setCreate({ ...create, room_id: e.target.value })}>{inBranch(rooms, create.branch_id).map((r) => <option key={r.id} value={r.id}>{r.room_number} · {CLEANLINESS_LABELS[r.cleanliness]}</option>)}</select></Field>
+                : <Field label="المرفق" hint={inBranch(facilities, create.branch_id).length === 0 ? "لا توجد مرافق فعالة" : undefined}><select className="input" value={create.facility_id ?? ""} onChange={(e) => setCreate({ ...create, facility_id: e.target.value })}>{inBranch(facilities, create.branch_id).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>}
+              <Field label="نوع المهمة"><select className="input" value={create.task_type_id ?? ""} onChange={(e) => setCreate({ ...create, task_type_id: e.target.value })}>{inBranch(types, create.branch_id).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="الأولوية"><select className="input" value={create.priority} onChange={(e) => setCreate({ ...create, priority: e.target.value })}>{Object.entries(TASK_PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
                 <Field label="الموكل إليه"><select className="input" value={create.assignee_id ?? ""} onChange={(e) => setCreate({ ...create, assignee_id: e.target.value })}><option value="">غير مسندة</option>{staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>

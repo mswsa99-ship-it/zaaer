@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { toArabicError, whatsappApi } from "../../lib/api";
+import { BranchPicker } from "../../components/BranchPicker";
+import { useBranch } from "../../lib/branch";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Inbox as InboxIcon, MessageCircle, Send, Bot, UserCheck, ShieldCheck, PauseCircle } from "lucide-react";
 import { formatDateTime, COUNT } from "../../lib/utils";
@@ -54,7 +56,12 @@ export default function Inbox() {
       .select("id, channel, status, created_at, last_message_at, branch_id, handoff_reason, guest_verified, human_active_until")
       .or(`branch_id.eq.${branchId},branch_id.is.null`)
       .order("last_message_at", { ascending: false, nullsFirst: false })
-      .limit(50)) as ConversationRow[], [], NO_CONVERSATIONS);
+      .limit(50)) as ConversationRow[], [], NO_CONVERSATIONS,
+    // «جميع الفروع» (owner): every authorised branch's conversations, unassigned ones once, newest first
+    { merge: (parts) => { const seen = new Set<string>(); return parts.flat().filter((c) => !seen.has(c.id) && !!seen.add(c.id))
+      .sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at)).slice(0, 100); } });
+  const { branches } = useBranch();
+  const branchOf = (id: string | null) => (q.all && id ? branches.find((b) => b.id === id)?.name_ar ?? null : null);
   const conversations = q.data; const loadConversations = q.reload;
   // a conversation of the previous branch is never left open after a branch switch
   useEffect(() => { setSelected(null); }, [q.branchId]);
@@ -145,7 +152,7 @@ export default function Inbox() {
 
   return (
     <div>
-      <SectionTitle title="الوارد الموحّد" subtitle={COUNT.conversation(conversations.length)} />
+      <SectionTitle title="الوارد الموحّد" subtitle={COUNT.conversation(conversations.length)} action={<BranchPicker allowAll />} />
       {(error || (q.error && conversations.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
       {notice && <p className="mb-4 rounded-xl bg-rai-success-tint px-3 py-2 text-sm text-rai-success">{notice}</p>}
       {q.error && conversations.length === 0 ? <LoadErrorCard message={q.error} onRetry={loadConversations} /> : conversations.length === 0 ? (
@@ -162,6 +169,7 @@ export default function Inbox() {
                     <Badge className={STATUS_COLORS[c.status] ?? "bg-rai-surface-sunken text-rai-ink-muted"}>{STATUS_LABELS[c.status] ?? c.status}</Badge>
                   </div>
                 </div>
+                {branchOf(c.branch_id) && <p className="mt-1 text-xs font-medium text-rai-ink-muted" data-testid="inbox-branch">{branchOf(c.branch_id)}</p>}
                 <p className="mt-1 text-xs text-rai-ink-muted">{c.last_message_at ? formatDateTime(c.last_message_at) : formatDateTime(c.created_at)}</p>
                 {c.handoff_reason && <p className="mt-1 truncate text-xs text-rai-warning">{c.handoff_reason}</p>}
               </button>
