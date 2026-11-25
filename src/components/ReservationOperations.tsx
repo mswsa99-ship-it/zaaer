@@ -326,12 +326,17 @@ function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose
   const [key, setKey] = useState(newIdempotencyKey());
   // 0054 (MONEY-03): a number already on another voucher is a warning — the operator confirms it, the owner sees it
   const [dupWarn, setDupWarn] = useState<string | null>(null);
+  // review 2: a receipt larger than what is still due is allowed (it becomes guest credit) but only after the operator confirms that same amount
+  const [overConfirmed, setOverConfirmed] = useState(false);
+  const overBy = kind === "receipt" && amount != null && amount > Math.max(0, suggested) ? amount - Math.max(0, suggested) : 0;
+  useEffect(() => { setOverConfirmed(false); }, [amount, open]);
   useEffect(() => { if (open) { setAmount(suggested || null); setKey(newIdempotencyKey()); setMethod("cash"); setRef(""); setNote(""); setDupWarn(null); } }, [open, suggested]);
   useEffect(() => { setDupWarn(null); }, [ref, method]);
   return (
     <Modal open={open} title={kind === "receipt" ? "سند قبض إقامة" : "سند قبض تأمين"} onClose={onClose}>
       <ActionForm onSubmit={async () => {
         if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
+        if (overBy > 0 && !overConfirmed) { setOverConfirmed(true); return; }
         if (METHOD_NEEDS_REFERENCE.includes(method) && !ref.trim()) throw new Error("VALIDATION: reference_required");
         try {
           await opsApi.createVoucher({ reservation_id: reservationId, kind, amount_halalas: amount, method, account_id: METHOD_ACCOUNT_KIND[method] ? accountId || undefined : undefined, reference: ref.trim() || undefined, note: note || undefined, idempotency_key: key, received_confirmed: true, ...(dupWarn ? { duplicate_reference_ok: true } : {}) });
@@ -346,10 +351,11 @@ function VoucherDialog({ open, kind, reservationId, accounts, suggested, onClose
           <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} /></Field>
           <PaymentFields method={method} setMethod={setMethod} accountId={accountId} setAccountId={setAccountId} reference={ref} setReference={setRef} accounts={accounts} verb="receive" deposit={kind === "deposit"} />
           <Field label="ملاحظة"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-          {dupWarn && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" data-testid="duplicate-reference">{dupWarn} يظهر هذا للمالك في «المراجعة».</p>}
+          
+          {(dupWarn || (overBy > 0 && overConfirmed)) && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" role={dupWarn ? undefined : "alert"} data-testid={dupWarn ? "duplicate-reference" : "overpay-warning"}>{dupWarn ? <>{dupWarn} يظهر هذا للمالك في «المراجعة».</> : <>المبلغ المُدخل {sar(amount ?? 0)} أكبر من المتبقي على الإقامة {sar(Math.max(0, suggested))}. سيصير الفرق {sar(overBy)} رصيدًا دائنًا للنزيل. اضغط «تأكيد المبلغ وحفظ السند» إن كان صحيحًا، أو صحّح المبلغ.</>}</p>}
         </div>
         <p className="mt-3 text-xs text-rai-ink-muted" data-testid="save-is-receipt-ack">بضغط «{dupWarn ? "تأكيد التسجيل رغم التكرار" : "حفظ السند"}» تُقرّ أنك استلمت المبلغ فعلًا.</p>
-        <Submit label={dupWarn ? "تأكيد التسجيل رغم التكرار" : "حفظ السند"} onCancel={onClose} />
+        <Submit label={dupWarn ? "تأكيد التسجيل رغم التكرار" : overBy > 0 && !overConfirmed ? "حفظ السند" : overBy > 0 ? "تأكيد المبلغ وحفظ السند" : "حفظ السند"} onCancel={onClose} />
       </ActionForm>
     </Modal>
   );

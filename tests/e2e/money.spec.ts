@@ -14,6 +14,26 @@ async function signOut(page: Page) {
 }
 
 test.describe("core money (phase 1)", () => {
+  test("MC-OVER a receipt above the remaining amount shows the entered amount, the remaining and the resulting credit, and saves only after the same amount is confirmed", async ({ page, loginAs }) => {
+    await loginAs("supervisor");
+    await createReservation(page, "ضيف الدفع الزائد", "0501112299");
+    await page.getByRole("button", { name: "سند قبض إقامة" }).click();
+    const dlg = page.getByRole("dialog");
+    await dlg.locator("input[data-money]").first().fill("99999");
+    await dlg.getByRole("button", { name: "حفظ السند" }).click();
+    const warn = dlg.getByTestId("overpay-warning");
+    await expect(warn).toBeVisible();
+    await expect(warn).toContainText("99,999");
+    await expect(warn).toContainText("رصيدًا دائنًا");
+    await expect(dlg).toBeVisible();                                  // nothing saved by the first press
+    await dlg.locator("input[data-money]").first().fill("99998");     // changing the amount asks again
+    await expect(dlg.getByTestId("overpay-warning")).toHaveCount(0);
+    await dlg.getByRole("button", { name: "حفظ السند" }).click();
+    await expect(dlg.getByTestId("overpay-warning")).toBeVisible();
+    await dlg.getByRole("button", { name: "تأكيد المبلغ وحفظ السند" }).click();
+    await expect(dlg).toBeHidden();
+  });
+
   test("MC04 a terminal payment needs its transaction number and lands in the default bank account; the deposit is never taken through the platform", async ({ page, loginAs }) => {
     await loginAs("supervisor");
     await createReservation(page, "ضيف الشبكة", "0501112233");
