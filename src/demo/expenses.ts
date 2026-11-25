@@ -98,6 +98,10 @@ export function expensesRpcs(c: ExpensesCtx): Record<string, (a: any) => any> {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > t || day < addDays(t, -31)) throw new Error("VALIDATION: occurred_on");
       const sentDay = T("day_closings").some((x) => x.branch_id === q.branch_id && x.business_date === day && x.status === "submitted");
       if (a.kind === "cash_box" && sentDay && !can("day.close.approve")) throw new Error("CLOSING_SENT_DAY");
+      if (a.kind === "cash_box") {   // the real rule (0096 4.3): the cash box never goes below zero
+        const bal = (a.opening_balance_halalas ?? 0) + movements(a.id).filter((m) => !a.opening_on || dayOf(m.at) >= a.opening_on).reduce((x, m) => x + m.in_halalas - m.out_halalas, 0);
+        if (amount > bal) throw new Error(`CASH_BOX_NEGATIVE: balance ${bal} halalas`);
+      }
       const files = Array.isArray(q.attachments) ? q.attachments : null;
       if (!files || files.length === 0) throw new Error("VALIDATION: attachment_required");
       if (files.length > 5) throw new Error("VALIDATION: attachments_count");

@@ -199,3 +199,15 @@ test("MONEYSIGN a minus or an exponent typed in an amount is refused out loud, n
   await box.pressSequentially("12.345");
   await expect(box).toHaveValue("12.34");   // a third decimal digit is still not taken
 });
+
+test("CASHFLOOR an expense above the cash-box balance is refused with the balance named (demo matches the real 0096 rule)", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/expenses", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /سند صرف/ }).click();
+  await page.locator("input[data-money]").first().fill("999999");
+  await page.locator('select[aria-label="التصنيف"]').selectOption({ index: 1 });
+  await page.getByLabel("الوصف").fill("اختبار تجاوز الرصيد");
+  await page.locator('input[type=file]').setInputFiles({ name: "r.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==", "base64") });
+  await page.getByRole("button", { name: "حفظ السند" }).click();
+  await expect(page.getByText(/أكبر من رصيد الصندوق/)).toBeVisible();
+});

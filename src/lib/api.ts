@@ -409,6 +409,8 @@ function arabicMessage(msg: string): string {
   // 0055: the price range of the caller's role, the units of a type, a contradicting answer
   const band = msg.match(/PRICE_(BELOW|ABOVE)_LIMIT:\s*(\d+)/);
   if (band) return `السعر ${band[1] === "BELOW" ? "أقل من أدنى" : "أعلى من أقصى"} سعر مسموح لدورك: ${(Number(band[2]) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س لليلة. يحدد المالك النطاق من «المنشأة».`;
+  const floor = msg.match(/CASH_BOX_NEGATIVE:\s*balance\s*(-?\d+)/);
+  if (floor) return `المبلغ أكبر من رصيد الصندوق (${(Number(floor[1]) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ر.س). لا يُصرف من الصندوق ما يتجاوز رصيده؛ خفّض المبلغ أو اصرف من حساب بنكي.`;
   const units = msg.match(/INVENTORY_OVER_UNITS:\s*(\d+)/);
   if (units) return `العدد أكبر من وحدات هذا النوع الفعلية (${units[1]}).`;
   if (/KNOWLEDGE_CONFLICT/.test(msg)) return "توجد إجابة مفعّلة لهذا السؤال نفسه. عدّل الإجابة الموجودة بدل إضافة إجابة تخالفها.";
