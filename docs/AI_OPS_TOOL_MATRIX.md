@@ -1,6 +1,6 @@
 # Staff assistant (ai-ops): read category to tool matrix
 
-Status of the evidence, not a security claim. The staff assistant is READ-ONLY for every role (OPS_READ_ONLY = true).
+Status of the evidence, not a security claim. Update 22:31: the security reviewer reported (via the coordinator, not re-run by the author) isolated-runtime DB evidence for all 7 read functions: auth-only execute, finance/voucher/context/find/reservation-finance org and branch denials, housekeeping money masking, and seeded rollback positive controls for available rooms and units board (own org/branches only, cross-branch 0, cross-org 0). The staff assistant is READ-ONLY for every role (OPS_READ_ONLY = true).
 Every tool runs as the signed-in person (their session, their role, the conversation's branch). The model cannot pick a branch.
 
 | Read category | Tool | Database function it calls | Role/branch gate lives in | Evidence in this repo | Not evidenced |
@@ -19,7 +19,7 @@ Every tool runs as the signed-in person (their session, their role, the conversa
 - fn_ai_ops_propose, fn_ai_ops_execute_proposal and fn_ai_ops_reject_proposal are not executable by authenticated (real and isolated, checked with has_function_privilege).
 - Real ai-ops is deployed from this source. A request without a token gets 401.
 
-## Not verified
+## Not verified (unchanged by the DB-level evidence)
 - No model-driven journey (no model key on the isolated project).
 - No authenticated HTTP probe by role on a deployed function.
-- Categories marked "not evidenced" above have unit proof of scoping only.
+- The "Not evidenced" column's DB-level items are now covered by the security runtime report above; HTTP, model-driven and prompt-injection paths remain untested.
