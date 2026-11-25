@@ -10,19 +10,20 @@ import { stayApi, type StayFollowups as Followups } from "../../lib/api";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { SectionTitle, LoadingScreen, Card, Badge, LoadErrorCard, ErrorBanner } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
+import { mergeFollowups } from "../../lib/allBranches";
 import { formatCurrency, formatDateTime } from "../../lib/utils";
 
 const sar = (h: number) => formatCurrency(h / 100);
 const NONE: Followups = { generated_at: "", overdue: [], departed_open: [], late_departures: [] };
 
 export default function StayFollowups() {
-  const q = useBranchQuery<Followups>((branchId) => stayApi.followups(branchId), [], NONE);
+  const q = useBranchQuery<Followups>((branchId) => stayApi.followups(branchId), [], NONE, { merge: (parts) => mergeFollowups(parts) ?? NONE });
   if (q.loading) return <LoadingScreen />;
-  if (q.error && !q.data.generated_at) return <div><SectionTitle title="متابعة الإقامات" action={<BranchPicker />} /><LoadErrorCard message={q.error} onRetry={q.reload} /></div>;
+  if (q.error && !q.data.generated_at) return <div><SectionTitle title="متابعة الإقامات" action={<BranchPicker allowAll />} /><LoadErrorCard message={q.error} onRetry={q.reload} /></div>;
   const f = q.data;
   return (
     <div>
-      <SectionTitle title="متابعة الإقامات" subtitle="ما ينتظر قرارًا اليوم: ليالٍ لم تُدفع بعد موعدها، ومغادرات لم تُغلق، ونزلاء تجاوزوا موعد المغادرة" action={<BranchPicker />} />
+      <SectionTitle title="متابعة الإقامات" subtitle="ما ينتظر قرارًا اليوم: ليالٍ لم تُدفع بعد موعدها، ومغادرات لم تُغلق، ونزلاء تجاوزوا موعد المغادرة" action={<BranchPicker allowAll />} />
       {q.error && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="space-y-6">
         <Group icon={Moon} title="ليالٍ غير مدفوعة بعد موعدها" count={f.overdue.length} empty="لا ليالي متأخرة السداد." testId="followups-overdue">

@@ -137,3 +137,14 @@ test("NATCAP nationality is a short dropdown plus «أخرى» (one manual field
   await nat.selectOption({ label: "أخرى" });
   await expect(page.getByTestId("nationality-other")).toBeVisible();
 });
+
+test("ALLFOLLOW owner sees «جميع الفروع» last on stay follow-ups and the page still renders merged groups", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/followups", { waitUntil: "networkidle" });
+  const sel = page.locator('select[aria-label="الفرع النشط"]').first();
+  await expect(sel.locator("option").last()).toHaveText("جميع الفروع");
+  await sel.selectOption({ label: "جميع الفروع" });
+  await expect(page.getByTestId("followups-overdue")).toBeVisible();
+  await expect(page.getByTestId("followups-departed")).toBeVisible();
+  await expect(page.getByTestId("followups-late")).toBeVisible();
+});
