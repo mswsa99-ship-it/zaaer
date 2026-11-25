@@ -815,6 +815,16 @@ do $$ declare c jsonb; begin
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000001','owner@test.local');
 do $$ begin perform t_record('RS18 0145: the owner reads the branch IBAN through the function', fn_branch_iban('00000000-0000-0000-0000-000000000010') = 'SA0380000000608010167519'); end $$;
+do $$ begin
+  perform t_record('RS19 0146: signed-in staff cannot select reservations.payment_status or reservation_guests.identity_issue_number from the tables',
+    not has_column_privilege('authenticated', 'public.reservations', 'payment_status', 'select')
+    and not has_column_privilege('authenticated', 'public.reservation_guests', 'identity_issue_number', 'select'));
+  perform t_record('RS20 0146: the other reservation columns the app reads are still selectable (nothing else was closed)',
+    has_column_privilege('authenticated', 'public.reservations', 'status', 'select')
+    and has_column_privilege('authenticated', 'public.reservations', 'identity_status', 'select')
+    and has_column_privilege('authenticated', 'public.reservation_guests', 'full_name', 'select'));
+  perform t_record('RS21 0146: the owner still reads the IBAN through the function', fn_branch_iban('00000000-0000-0000-0000-000000000010') = 'SA0380000000608010167519');
+end $$;
 reset role;
 update branches set bank_iban = null, bank_name = null, bank_beneficiary = null where id = '00000000-0000-0000-0000-000000000010';
 

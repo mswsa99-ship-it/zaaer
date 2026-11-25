@@ -142,7 +142,8 @@ do $$ declare unreadable text; begin
                           'tax_services_rate_bp', 'tax_products_rate_bp',   -- 0069: the tax policy of the stay, with tax_rate_bp
                           'taxes_halalas', 'total_halalas',
                           'company_vat_number', 'company_address',
-                          'company_name', 'gov_registration_ref', 'platform_collects');   -- 0144: read only through the role-masked fn_reservation_detail   -- 0142: the company tax identity is read only through the role-masked fn_reservation_detail (0143), never through the table
+                          'company_name', 'gov_registration_ref', 'platform_collects',
+                          'payment_status');   -- 0146: read only through fn_reservation_cards / fn_reservation_detail (masked unless the role sees money)   -- 0144: read only through the role-masked fn_reservation_detail   -- 0142: the company tax identity is read only through the role-masked fn_reservation_detail (0143), never through the table
   perform t_record('RF15c gate: every non-money reservations column is readable by staff (0011, 0033, 0035)', unreadable is null, unreadable);
   select string_agg(a.attname, ', ' order by a.attname) into unreadable
   from pg_attribute a
