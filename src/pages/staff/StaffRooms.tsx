@@ -5,6 +5,8 @@ import { supabase } from "../../lib/supabase";
 import { opsApi, listsApi, type UnitCard, type DailySummary, type ReservationCalendar, type CalendarSegment } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, Badge, LoadErrorCard, ErrorBanner, DataState } from "../../components/ui";
 import { useBranchQuery } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
+import { mergeDailySummary } from "../../lib/allBranches";
 import { BranchPicker } from "../../components/BranchPicker";
 import { roomStatusLabel, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, RESERVATION_STATUS_LABELS, PAYMENT_STATUS_LABELS, type RoomStatus, type ReservationStatus } from "../../lib/types";
 import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../../lib/utils";
@@ -30,7 +32,10 @@ export default function StaffRooms() {
   const [floor, setFloor] = useState("");
 
   // G24: the board and its summary belong to the active branch only; a late answer for another branch is dropped
-  const board = useBranchQuery(async (b) => { const [units, summary] = await Promise.all([opsApi.unitsBoard(b), opsApi.dailySummary(b)]); return { units, summary }; }, [], NO_BOARD);
+  const { branches: allB, allBranches: allMode } = useBranch();
+  const tag = (b: string, n: string) => (allMode ? `${n} · ${allB.find((x) => x.id === b)?.name_ar ?? ""}` : n);
+  const board = useBranchQuery(async (b) => { const [units, summary] = await Promise.all([opsApi.unitsBoard(b), opsApi.dailySummary(b)]); return { units: units.map((u) => ({ ...u, room_number: tag(b, u.room_number) })), summary }; }, [], NO_BOARD,
+    { merge: (parts) => ({ units: parts.flatMap((p) => p.units), summary: mergeDailySummary(parts.map((p) => p.summary)) }) });
   const { units, summary } = board.data;
   // 0075: the unit's licence number on its card — the owner, the manager and the supervisor only (no other role asks)
   const lic = useUnitLicenses();
@@ -94,7 +99,7 @@ export default function StaffRooms() {
   }, [units, bookings, today]);
 
   if (board.loading) return <LoadingScreen />;
-  if (board.error && units.length === 0) return <div><SectionTitle title="لوحة الوحدات" action={<BranchPicker />} /><LoadErrorCard message={board.error} onRetry={reload} /></div>;
+  if (board.error && units.length === 0) return <div><SectionTitle title="لوحة الوحدات" action={<BranchPicker allowAll />} /><LoadErrorCard message={board.error} onRetry={reload} /></div>;
   const u = summary?.units;
   const tabs = (
     <div className="flex gap-1 rounded-xl bg-ink-100 p-1 text-sm" role="tablist">
@@ -104,7 +109,7 @@ export default function StaffRooms() {
   );
   return (
     <div>
-      <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? (view === "calendar" ? `الإشغال ${summary.occupancy_pct}% — مؤجرة ${u?.occupied} من ${u?.active} فعالة · جاهزة ${u?.ready} · تحتاج تنظيفًا ${u?.dirty} · صيانة ${u?.maintenance} · آخر تحديث ${formatDateTime(summary.generated_at)}` : `آخر تحديث ${formatDateTime(summary.generated_at)}`) : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker /></div>} />
+      <SectionTitle title={view === "calendar" ? "تقويم الحجوزات" : "لوحة الوحدات"} subtitle={summary ? (view === "calendar" ? `الإشغال ${summary.occupancy_pct}% — مؤجرة ${u?.occupied} من ${u?.active} فعالة · جاهزة ${u?.ready} · تحتاج تنظيفًا ${u?.dirty} · صيانة ${u?.maintenance} · آخر تحديث ${formatDateTime(summary.generated_at)}` : `آخر تحديث ${formatDateTime(summary.generated_at)}`) : ""} action={<div className="flex flex-wrap items-center gap-2">{tabs}<BranchPicker allowAll /></div>} />
       {board.error && <div className="mb-4"><ErrorBanner message={board.error} /></div>}
       {view === "board" && now.length > 0 && (
         <section aria-label="ينتظرك الآن" className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-warning-500/30 bg-warning-50 px-4 py-3" data-testid="units-now">
@@ -197,7 +202,9 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
   const [from, setFrom] = useState(() => addDaysISO(todayISO(), -2));
   const [span, setSpan] = useState<14 | 30>(14);
   const to = addDaysISO(from, span - 1);
-  const cal = useBranchQuery<ReservationCalendar | null>((b) => listsApi.calendar(b, from, to), [from, to], NO_CAL);
+  const { branches: allB, allBranches: allMode } = useBranch();
+  const cal = useBranchQuery<ReservationCalendar | null>(async (b) => { const r = await listsApi.calendar(b, from, to); return allMode ? { ...r, units: r.units.map((u) => ({ ...u, room_number: `${u.room_number} · ${allB.find((x) => x.id === b)?.name_ar ?? ""}` })) } : r; }, [from, to], NO_CAL,
+    { merge: (parts) => { const ok = parts.filter((p): p is ReservationCalendar => !!p); return ok.length ? { ...ok[0], units: ok.flatMap((p) => p.units), segments: ok.flatMap((p) => p.segments) } : null; } });
   const data = cal.data;
   const days = useMemo(() => Array.from({ length: span }, (_, i) => addDaysISO(from, i)), [from, span]);
   const today = data?.today ?? todayISO();

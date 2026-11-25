@@ -19,6 +19,6 @@ export function useUnitLicenses() {
   const q = useBranchQuery<ReadonlyMap<string, string>>(async (b) => {
     if (!reads) return NONE;
     return new Map((await opsApi.roomLicenses(b)).map((l) => [l.room_id, l.license_number]));
-  }, [reads], NONE);
+  }, [reads], NONE, { merge: (parts) => new Map(parts.flatMap((m) => [...m])) });
   return { reads, onCreate, licenses: q.data, reload: q.reload, error: q.error };
 }

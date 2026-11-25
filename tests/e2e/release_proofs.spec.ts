@@ -148,3 +148,16 @@ test("ALLFOLLOW owner sees «جميع الفروع» last on stay follow-ups and
   await expect(page.getByTestId("followups-departed")).toBeVisible();
   await expect(page.getByTestId("followups-late")).toBeVisible();
 });
+
+test("ALLROOMS owner «جميع الفروع» on the units board and calendar: units of both branches, each tagged with its branch", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/rooms", { waitUntil: "networkidle" });
+  const sel = page.locator('select[aria-label="الفرع النشط"]').first();
+  await expect(sel.locator("option").last()).toHaveText("جميع الفروع");
+  await sel.selectOption({ index: 0 });
+  const one = await page.locator("[data-testid=unit-card]").count();
+  await sel.selectOption({ label: "جميع الفروع" });
+  await expect.poll(() => page.locator("[data-testid=unit-card]").count()).toBeGreaterThan(one);
+  await page.getByRole("tab", { name: /التقويم|تقويم/ }).click();
+  await expect(page.getByText(/ · فرع جدة/).first()).toBeVisible();
+});
