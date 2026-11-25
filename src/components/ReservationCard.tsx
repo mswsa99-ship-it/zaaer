@@ -21,7 +21,7 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="font-mono text-sm font-semibold text-ink-800">{r.internal_ref}</p>
+              <p className="whitespace-nowrap font-mono text-sm font-semibold text-ink-800" dir="ltr">{r.internal_ref}</p>
               <StatusBadge status={r.status} map={RESERVATION_STATUS_LABELS} />
             </div>
             <p className="mt-1 text-sm text-ink-600">{maskName(r.primary_guest?.full_name)}</p>

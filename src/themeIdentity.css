@@ -277,3 +277,14 @@ body, #root {background:var(--paper);color:var(--ink);}
       #fff;
   }
 }
+
+/* The hub tab strip scrolls sideways on a phone (up to 7 tabs): a soft edge shows the side with more tabs. */
+@media (max-width: 639px) {
+  :root nav[data-testid="hub-tabs"] {
+    background:
+      linear-gradient(to right, var(--paper) 30%, rgba(255,255,255,0)) left center / 28px 100% no-repeat local,
+      linear-gradient(to left, var(--paper) 30%, rgba(255,255,255,0)) right center / 28px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(15,23,42,.25), rgba(15,23,42,0)) left center / 10px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.25), rgba(15,23,42,0)) right center / 10px 100% no-repeat scroll;
+  }
+}

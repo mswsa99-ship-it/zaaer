@@ -76,17 +76,17 @@ export default function Ledger() {
           {data.lines.length === 0 ? <EmptyState icon={<BookOpen className="h-10 w-10" />} title="لا حركة في هذه الفترة" /> : (
             <Card>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-sm" data-testid="ledger-lines">
+                <table className="res-table w-full min-w-[40rem] text-sm" data-testid="ledger-lines">
                   <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">التاريخ</th><th className="py-2 text-right font-medium">الحركة</th><th className="py-2 text-right font-medium">البيان</th><th className="py-2 text-left font-medium">داخل</th><th className="py-2 text-left font-medium">خارج</th><th className="py-2 text-left font-medium">الرصيد</th></tr></thead>
                   <tbody>
                     {data.lines.map((l) => (
                       <tr key={l.kind + l.ref_id} className="border-b border-ink-50" data-testid="ledger-line">
-                        <td className="py-2 text-xs text-ink-500">{formatDateTime(l.at)}</td>
-                        <td className="py-2">{KIND[l.kind] ?? l.kind} <span className="block font-mono text-[11px] text-ink-400" dir="ltr">{l.number}</span></td>
-                        <td className="py-2 text-ink-600">{l.description || "—"}</td>
-                        <td className="py-2 text-left tabular-nums text-success-600" dir="ltr">{l.in_halalas ? sar(l.in_halalas) : ""}</td>
-                        <td className="py-2 text-left tabular-nums text-danger-600" dir="ltr">{l.out_halalas ? sar(l.out_halalas) : ""}</td>
-                        <td className="py-2 text-left font-semibold tabular-nums" dir="ltr">{sar(l.balance_halalas)}</td>
+                        <td data-label="التاريخ" className="py-2 text-xs text-ink-500">{formatDateTime(l.at)}</td>
+                        <td data-label="الحركة" className="py-2">{KIND[l.kind] ?? l.kind} <span className="block font-mono text-[11px] text-ink-400" dir="ltr">{l.number}</span></td>
+                        <td data-label="البيان" className="py-2 text-ink-600">{l.description || "—"}</td>
+                        <td data-label="داخل" className="py-2 text-left tabular-nums text-success-600" dir="ltr">{l.in_halalas ? sar(l.in_halalas) : ""}</td>
+                        <td data-label="خارج" className="py-2 text-left tabular-nums text-danger-600" dir="ltr">{l.out_halalas ? sar(l.out_halalas) : ""}</td>
+                        <td data-label="الرصيد" className="py-2 text-left font-semibold tabular-nums" dir="ltr">{sar(l.balance_halalas)}</td>
                       </tr>
                     ))}
                   </tbody>
