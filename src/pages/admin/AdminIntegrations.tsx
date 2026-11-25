@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { supabase, isDemo } from "../../lib/supabase";
 import { aiHealth, whatsappApi } from "../../lib/api";
 import { isFreeTierError, providerErrorHint } from "../../lib/providerErrors";
 import { COUNT } from "../../lib/utils";
@@ -51,7 +51,7 @@ export default function AdminIntegrations() {
         aiHealth(),
       ]);
       if (settings.error) setLoadError("تعذّر تحميل حالة التكاملات. تحقق من الاتصال ثم أعد المحاولة.");
-      setDb({ name: "قاعدة البيانات (Supabase)", status: settings.error && /fetch|network/i.test(settings.error.message) ? "error" : "connected", description: "قاعدة البيانات والمصادقة وRealtime" });
+      setDb({ name: "قاعدة البيانات (Supabase)", status: settings.error && /fetch|network/i.test(settings.error.message) ? "error" : "connected", description: isDemo ? "نسخة تجريبية: قاعدة بيانات محاكاة داخل المتصفح، وليست متصلة بخادم حقيقي" : "قاعدة البيانات والمصادقة وRealtime" });
       const s = settings.data as { enabled: boolean; provider: string; model: string } | null;
       const base = { name: "مزود الذكاء الاصطناعي (Gemini)", link: "/admin/ai-settings" };
       if (!s || !s.enabled || s.provider === "none") setAi({ ...base, status: "disabled", description: "معطّل من الإعدادات — يعمل المسار الحواري التقليدي" });
@@ -85,7 +85,7 @@ export default function AdminIntegrations() {
               </div>
             </div>
             {i.status === "checking" && <Spinner className="h-4 w-4" />}
-            {i.status === "connected" && <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> متصل</Badge>}
+            {i.status === "connected" && (isDemo && i.name.includes("Supabase") ? <Badge className="bg-warning-500/10 text-warning-700"><AlertCircle className="h-3 w-3" /> محاكاة (غير متصل بخادم)</Badge> : <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> متصل</Badge>)}
             {i.status === "awaiting" && <Badge className="bg-warning-500/10 text-warning-700"><Clock className="h-3 w-3" /> بانتظار الاعتماد</Badge>}
             {i.status === "disabled" && <Badge className="bg-ink-100 text-ink-500"><AlertCircle className="h-3 w-3" /> معطّل</Badge>}
             {i.status === "error" && <Badge className="bg-danger-500/10 text-danger-600"><XCircle className="h-3 w-3" /> خطأ</Badge>}
