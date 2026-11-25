@@ -88,5 +88,5 @@ test("CAL1 departure picker: days up to the arrival are disabled, click is rejec
   await page.getByRole("button", { name: "المغادرة", exact: true }).click();
   const disabledCount = await dlg.locator("button[data-day]:disabled").count();
   expect(disabledCount).toBeGreaterThan(0);
-  await page.screenshot({ path: "/downloads/after-departure-calendar.png" });
+  await page.screenshot({ path: process.env.CAL1_SHOT ?? "test-results/after-departure-calendar.png" });
 });
