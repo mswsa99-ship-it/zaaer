@@ -40,7 +40,7 @@ export function DailyBriefing() {
             {b.items.map((i, k) => (
               <li key={k} className="flex items-start gap-2 text-sm text-ink-700">
                 <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot[i.level]}`} />
-                <span className="flex-1">{i.text}{i.link && <Link to={i.link} className="mr-2 text-xs text-brand-600 hover:underline">فتح</Link>}</span>
+                <span className="flex-1">{i.text}{i.link && <Link to={i.link} className="mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
               </li>
             ))}
           </ul>

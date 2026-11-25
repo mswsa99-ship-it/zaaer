@@ -181,3 +181,21 @@ test("COMPCAP companions are capped by the unit's capacity: adults + companions 
   const c2 = (await comps.locator("option").allTextContents()).map(Number);
   expect(Math.max(...c2)).toBe(0);
 });
+
+test("MONEYSIGN a minus or an exponent typed in an amount is refused out loud, never dropped (-100 never becomes 100, 1e3 never 13)", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/staff/expenses", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /سند صرف/ }).click();
+  const box = page.locator("input[data-money]").first();
+  await box.click();
+  await box.pressSequentially("-100");
+  await expect(page.getByTestId("money-refused")).toBeVisible();
+  await expect(box).not.toHaveValue("100");
+  await box.fill("");
+  await box.pressSequentially("1e3");
+  await expect(page.getByTestId("money-refused")).toBeVisible();
+  await expect(box).not.toHaveValue("13");
+  await box.fill("");
+  await box.pressSequentially("12.345");
+  await expect(box).toHaveValue("12.34");   // a third decimal digit is still not taken
+});

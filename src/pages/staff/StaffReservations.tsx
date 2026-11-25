@@ -39,7 +39,7 @@ type Col = { key: string; label: string; money?: boolean; cell: (r: ReservationR
 const status = (s: string) => RESERVATION_STATUS_LABELS[s as ReservationStatus] ?? s;
 const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "");
 const COLUMNS: Col[] = [
-  { key: "internal_ref", label: "رقم الحجز", cell: (r) => <><Link to={`/staff/reservations/${r.id}`} className="font-mono text-xs hover:underline">{r.internal_ref}</Link>{r.external_ref && <div className="text-[10px] text-ink-400">{r.source_name} · <span dir="ltr">{r.external_ref}</span></div>}</>, out: (r) => r.internal_ref, width: 14 },
+  { key: "internal_ref", label: "رقم الحجز", cell: (r) => <><Link to={`/staff/reservations/${r.id}`} className="inline-flex min-h-[44px] items-center font-mono text-xs hover:underline">{r.internal_ref}</Link>{r.external_ref && <div className="text-[10px] text-ink-400">{r.source_name} · <span dir="ltr">{r.external_ref}</span></div>}</>, out: (r) => r.internal_ref, width: 14 },
   { key: "external_ref", label: "رقم المنصة", cell: (r) => <span className="font-mono text-xs" dir="ltr">{r.external_ref ?? "—"}</span>, out: (r) => r.external_ref ?? "" },
   { key: "guest_name", label: "النزيل", cell: (r) => <>{r.guest_name ?? "—"}{r.ban && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600" data-testid="row-ban">محظور</span>}{r.hold && <span className="mr-1 inline-flex items-center rounded-md bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-600">حظر على الحجز</span>}{r.rating != null && r.rating <= 2 && <span className="mr-1 inline-flex items-center rounded-md bg-warning-500/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-700">تقييم {r.rating}/5</span>}</>, out: (r) => r.guest_name ?? "", width: 24 },
   { key: "booking_type", label: "فرد / شركة", cell: (r) => <>{BOOKING_TYPE_LABELS[r.booking_type ?? ""] ?? r.booking_type ?? "—"}{r.company_name && <div className="text-[10px] text-ink-400">{r.company_name}</div>}</>, out: (r) => `${BOOKING_TYPE_LABELS[r.booking_type ?? ""] ?? r.booking_type ?? ""}${r.company_name ? ` · ${r.company_name}` : ""}` },
@@ -275,7 +275,7 @@ export default function StaffReservations() {
               {data.rows.map((r) => (
                 <tr key={r.id} className="border-t border-ink-50 hover:bg-ink-50/60" data-testid="reservation-row">
                   {visibleColumns.map((c) => <td key={c.key} className="whitespace-nowrap px-3 py-2 text-ink-700" dir={c.money ? "ltr" : undefined}>{c.cell(r)}</td>)}
-                  <td className="px-3 py-2"><Link to={`/staff/reservations/${r.id}`} className="btn-outline px-2 py-1 text-xs">فتح</Link></td>
+                  <td className="px-3 py-2"><Link to={`/staff/reservations/${r.id}`} className="btn-outline inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 py-1 text-xs">فتح</Link></td>
                 </tr>
               ))}
             </tbody>

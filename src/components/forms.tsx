@@ -85,6 +85,12 @@ export function NumberInput({ value, onChange, onCommit, decimals, disabled, pla
 
 /** SAR input that yields integer halalas. */
 /** The one money field of the system (design system «AmountInput»): starts empty, never rewrites what the user is typing. */
+/** The one character that was added to `before` to make `after` (after is exactly one longer). */
+function insertedChar(before: string, after: string): string {
+  let i = 0; while (i < before.length && before[i] === after[i]) i++;
+  return after[i] ?? "";
+}
+
 export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placeholder, label }: { valueHalalas: number | null; onChange: (h: number | null) => void; min?: number; disabled?: boolean; placeholder?: string; label?: string }) {
   const [text, setText] = useState(formatMoneyInput(valueHalalas));
   // the last value this field sent up: a different value arriving is set from outside (a suggestion, a reset) and shows
@@ -97,7 +103,7 @@ export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placehol
       <input type="text" inputMode="decimal" autoComplete="off" data-money="" value={text} disabled={disabled} placeholder={placeholder ?? "0"} aria-label={label}
         onBlur={() => { if (refused) return; setText(formatMoneyInput(moneyTextToHalalas(text))); }}
         aria-invalid={refused || undefined}
-        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null && e.target.value.length === text.length + 1) return;   // one extra typed key (a third decimal, a stray letter): not taken, the field keeps what it had
+        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null && e.target.value.length === text.length + 1 && /^\d$/.test(insertedChar(text, e.target.value))) return;   // one extra DIGIT (a third decimal): not taken, the field keeps what it had; a letter, a minus or an exponent is refused out loud, never dropped silently (finance review: «-100» became «100», «1e3» became «13»)
           if (t == null) { setRefused(true); setText(e.target.value); sent.current = null; onChange(null); return; } setRefused(false); setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
         className="input pl-12 tabular-nums" dir="ltr" />
       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-500">ر.س</span>
