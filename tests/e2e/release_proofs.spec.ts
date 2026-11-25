@@ -121,3 +121,19 @@ test("STAYON the reservations «مقيم في يوم» filter uses the day picke
   await page.getByRole("button", { name: "موافق" }).click();
   await expect(page.getByText(/مقيم في يوم/).first()).toBeVisible();
 });
+
+test("NATCAP nationality is a short dropdown plus «أخرى» (one manual field)", async ({ page, loginAs }) => {
+  await loginAs("supervisor");
+  await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+  const roomSel = page.locator("select").filter({ has: page.locator("option:has-text('تخصيص لاحقًا')") });
+  await expect.poll(() => roomSel.locator("option").count()).toBeGreaterThan(1);
+  await roomSel.selectOption({ index: 1 });
+  await page.getByRole("button", { name: "التالي" }).click();
+  const nat = page.getByTestId("nationality-select");
+  await expect(nat).toBeVisible();
+  const n = await nat.locator("option").count();
+  expect(n).toBeLessThanOrEqual(13); // placeholder + 10 + «أخرى» (+ slack of one)
+  await expect(page.getByTestId("nationality-other")).toHaveCount(0);
+  await nat.selectOption({ label: "أخرى" });
+  await expect(page.getByTestId("nationality-other")).toBeVisible();
+});
