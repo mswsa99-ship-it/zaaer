@@ -30,6 +30,30 @@ test.describe("expenses and ledger", () => {
     await expect(row.getByRole("button", { name: "إلغاء" })).toHaveCount(0);
   });
 
+  test("EX12 a pasted -100 or 1e3 is kept visible as invalid and cannot be saved until the amount is corrected", async ({ page, loginAs, go }) => {
+    await loginAs("supervisor");
+    await go("/staff/expenses");
+    await page.getByRole("button", { name: "سند صرف" }).click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByLabel("التصنيف").selectOption({ label: "صيانة وإصلاح" });
+    await dlg.getByLabel("الوصف").fill("لصق مبلغ غير صالح");
+    await dlg.getByLabel("المرفق").setInputFiles({ name: "فاتورة.png", mimeType: "image/png", buffer: PNG });
+    for (const bad of ["-100", "1e3"]) {
+      await dlg.getByLabel("المبلغ").fill(bad);                         // a paste: the whole text arrives at once
+      await expect(dlg.getByLabel("المبلغ")).toHaveValue(bad);          // never silently turned into 100 / 13
+      await expect(dlg.getByTestId("money-refused")).toBeVisible();
+      await dlg.getByRole("button", { name: "حفظ السند" }).click();
+      await expect(dlg).toBeVisible();                                   // not saved
+      await expect(dlg.getByText("أحد المبالغ المكتوبة غير صالح")).toBeVisible();
+      await expect(page.getByTestId("expense-row").filter({ hasText: "لصق مبلغ غير صالح" })).toHaveCount(0);
+    }
+    await dlg.getByLabel("المبلغ").fill("45");
+    await expect(dlg.getByTestId("money-refused")).toHaveCount(0);
+    await dlg.getByRole("button", { name: "حفظ السند" }).click();
+    await expect(dlg).toBeHidden();
+    await expect(page.getByTestId("expense-row").filter({ hasText: "لصق مبلغ غير صالح" })).toContainText("45.00");
+  });
+
   test("EX11 the owner sees the expense in the ledger with the running balance, sets the opening, and cancels the expense with a reason", async ({ page, loginAs, go }) => {
     await loginAs("owner");
     await go("/staff/expenses");

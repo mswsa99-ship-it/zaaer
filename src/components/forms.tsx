@@ -95,11 +95,12 @@ export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placehol
   return (
     <div className="relative">
       <input type="text" inputMode="decimal" autoComplete="off" data-money="" value={text} disabled={disabled} placeholder={placeholder ?? "0"} aria-label={label}
-        onBlur={() => { setRefused(false); setText(formatMoneyInput(moneyTextToHalalas(text))); }}
-        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) { setRefused(true); return; } setRefused(false); setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
+        onBlur={() => { if (refused) return; setText(formatMoneyInput(moneyTextToHalalas(text))); }}
+        aria-invalid={refused || undefined}
+        onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null) { setRefused(true); setText(e.target.value); sent.current = null; onChange(null); return; } setRefused(false); setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
         className="input pl-12 tabular-nums" dir="ltr" />
       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-500">ر.س</span>
-      {refused && <p role="alert" data-testid="money-refused" className="mt-1 text-xs text-danger-600">لم يُقبل هذا الإدخال. اكتب أرقامًا فقط{min < 0 ? "" : " (بدون إشارة سالب)"}، وبحد أقصى خانتين بعد الفاصلة.</p>}
+      {refused && <div data-testid="money-refused" className="mt-1"><ErrorBanner message={`القيمة المكتوبة غير صالحة ولن تُحفظ. صحّحها: اكتب أرقامًا فقط${min < 0 ? "" : " (بدون إشارة سالب)"}، وبحد أقصى خانتين بعد الفاصلة.`} /></div>}
     </div>
   );
 }
@@ -123,6 +124,9 @@ export function ActionForm({ onSubmit, children, error }: { onSubmit: () => Prom
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (inFlight.current) return;
+    // a money field that holds a refused value (pasted «-100», «1e3») blocks the save until the user corrects it
+    const bad = (e.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>('input[data-money][aria-invalid="true"]');
+    if (bad) { setErr("أحد المبالغ المكتوبة غير صالح. صحّحه ثم احفظ."); bad.focus(); return; }
     inFlight.current = true; setBusy(true); setErr(null);
     try { await onSubmit(); } catch (ex) { setErr(toArabicError(ex)); } finally { inFlight.current = false; setBusy(false); }
   };
