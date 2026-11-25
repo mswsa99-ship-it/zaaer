@@ -2,5 +2,6 @@
 # Keys come from scripts/migration-snapshot.sql (rows:<table>, money:..., reservations:..., allocations:...).
 # When a migration listed here reaches production (supabase/production-applied.txt), remove its lines.
 # Exact form (preferred): "<key>: expect=<before>-><after> | <reason>". Only that transition is explained; any other value of the key fails. A line without expect= explains any change of its key.
-rows:permission_page_map: expect=59->60 | 0125 adds exactly one row (history.details); remove with the two permmap lines once 0125 is in supabase/production-applied.txt
+rows:permission_page_map: expect=59->61 | 0125 adds history.details and 0137 adds payment.settings (exactly two rows); remove with the permmap lines once 0125 and 0137 are in supabase/production-applied.txt
 permmap:history_details_row: expect=->history.details;/staff/reservations;view;true;false | the single row 0125 inserts; remove once 0125 is in production-applied.txt
+permmap:rows_except_history_details: expect=dadb49687ea03590669c1760bf86acdc->456450bd5d574164584f7a7cd6748078 | 0137 adds exactly one row to the 59 existing rows (payment.settings;/admin/payment-providers;edit;true;false); the hash pins all 60 rows other than history.details, so any other change still fails; remove once 0137 is in production-applied.txt
