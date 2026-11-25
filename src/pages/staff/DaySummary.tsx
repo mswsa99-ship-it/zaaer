@@ -47,9 +47,10 @@ export default function DaySummary() {
         {[...staff.entries()].map(([name, rows]) => {
           // OWNER-04: the drawer's movement — deposits in and out included, what a platform holds left out
           const net = rows.reduce((a, r) => a + (PLATFORM.includes(r.method ?? "") ? 0 : (SIGN[r.kind] ?? 0) * r.total), 0);
+          const cash = rows.reduce((a, r) => a + (r.method === "cash" ? (SIGN[r.kind] ?? 0) * r.total : 0), 0);   // finance review: the all-methods net is not the cash in the drawer
           return (
             <Card key={name}>
-              <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold text-ink-800">{name}</h2><span className="text-xs text-ink-500">صافي حركة الصندوق (يشمل التأمين) <span dir="ltr" className="font-medium text-ink-800">{sar(net)}</span></span></div>
+              <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold text-ink-800">{name}</h2><span className="text-end text-xs text-ink-500">صافي الحركة (نقد وشبكة وتحويل، يشمل التأمين) <span dir="ltr" className="font-medium text-ink-800">{sar(net)}</span><br />منه نقدًا في الصندوق <span dir="ltr" data-testid="day-summary-cash" className="font-medium text-ink-800">{sar(cash)}</span></span></div>
               <div className="divide-y divide-ink-50 text-sm">
                 {rows.map((r, i) => (
                   <div key={i} className="flex items-center justify-between gap-3 py-1.5">

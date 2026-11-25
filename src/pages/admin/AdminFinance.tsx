@@ -49,6 +49,7 @@ export default function AdminFinance() {
     },
   });
   const { rows, totals, total } = ledger.data;
+  const platformReceipts = totals.by_method.filter((m) => m.method === "booking_platform" || m.method === "ota_deferred").reduce((x, m) => x + m.amount_halalas, 0);
   const set = (k: keyof F, v: string | undefined) => { setPage(0); setF((x) => { const n: Record<string, unknown> = { ...x, [k]: v }; if (v === "" || v === undefined) delete n[k]; return n as F; }); };
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
@@ -87,10 +88,11 @@ export default function AdminFinance() {
         <input className="input w-40 py-1" placeholder="رقم السند / المرجع / الحجز" value={f.q ?? ""} onChange={(e) => set("q", e.target.value)} aria-label="بحث" />
       </div>
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="finance-totals">
-        {[["قبض إقامة", totals.receipts, "text-success-600"], ["استرداد إقامة", totals.refunds, "text-danger-600"], ["صافي تحصيل الإقامة", totals.receipts - totals.refunds + totals.deposit_applied, "text-ink-800"], ["قبض تأمين", totals.deposits, "text-brand-700"], ["رد تأمين", totals.deposit_refunds, "text-brand-700"]].map(([l, v, c]) => (
+        {[["قبض إقامة", totals.receipts, "text-success-600"], ["استرداد إقامة", totals.refunds, "text-danger-600"], [platformReceipts > 0 ? "صافي الإقامة (يشمل الآجل عند المنصات)" : "صافي تحصيل الإقامة", totals.receipts - totals.refunds + totals.deposit_applied, "text-ink-800"], ["قبض تأمين", totals.deposits, "text-brand-700"], ["رد تأمين", totals.deposit_refunds, "text-brand-700"]].map(([l, v, c]) => (
           <Card key={String(l)} className="p-3"><p className="text-[11px] text-ink-400">{l}</p><p className={`text-lg font-bold ${c}`} dir="ltr">{sar(Number(v))}</p></Card>
         ))}
       </div>
+      {platformReceipts > 0 && <p className="mb-1 text-xs text-warning-700" data-testid="finance-platform-note">منه {sar(platformReceipts)} آجل عند المنصات: لم يصل المنشأة بعد، ويُطابق في «إيداعات المنصات»، وليس نقدًا في الصندوق.</p>}
       <p className="mb-1 text-[11px] text-ink-400">المجاميع على كل السندات المطابقة ({totals.approved} معتمدًا{totals.cancelled ? ` و${totals.cancelled} ملغى` : ""})، لا على الصفحة المعروضة.</p>
       {totals.by_method.length > 0 && <p className="mb-2 text-xs text-ink-500">قبض الإقامة حسب الطريقة: {totals.by_method.map((m) => `${PAYMENT_METHOD_LABELS[m.method as PaymentMethod] ?? m.method}: ${sar(m.amount_halalas)}`).join(" · ")}</p>}
       {totals.by_account.length > 0 && <p className="mb-4 text-xs text-ink-500" data-testid="finance-by-account">حركة الفترة حسب الصندوق والحساب: {totals.by_account.map((a) => `${a.account_name ?? accounts.nameOf(a.account_id) ?? "—"}: قبض ${sar(a.in_halalas)}، صرف ${sar(a.out_halalas)}`).join(" · ")}</p>}
