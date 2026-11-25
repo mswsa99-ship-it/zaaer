@@ -56,6 +56,10 @@ const ALL_OPS_TOOL_DECLARATIONS_DORMANT: ToolDeclaration[] = [
     parameters: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, category_id: { type: "string" }, exclude_reservation_id: { type: "string" } }, required: ["from", "to"] } },
   { name: "list_units_board", description: "لوحة الوحدات: لكل وحدة الحالة والنظافة والإقامة الحالية والوصول القادم والمهام المفتوحة.",
     parameters: { type: "object", properties: {} } },
+  { name: "get_finance_report", description: "تقرير مالي مشتق لفترة [من، إلى]: المقبوض والمسترد والتأمينات والمصروفات وطرق الدفع. قراءة فقط، وتحكمه صلاحيات المستخدم المالية.",
+    parameters: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] } },
+  { name: "list_vouchers", description: "سجل السندات (قبض وصرف) لفترة [من، إلى] مع الأرقام والمبالغ والطرق. قراءة فقط، وتحكمه صلاحيات المستخدم المالية.",
+    parameters: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, kind: { type: "string" } }, required: ["from", "to"] } },
   { name: "propose_action", description: "يقترح إجراءً تشغيليًا يتطلب تأكيد الموظف قبل التنفيذ. لا ينفذ شيئًا بنفسه. الإجراءات: create_task{room_id|facility_id,task_type_id,priority,assignee_id,description}, complete_task{task_id,note}, assign_task{task_id,assignee_id}, set_cleanliness{room_id,state:clean|dirty,reason}, amend_stay{reservation_id,new_check_out,pricing_mode:keep_rate|reprice,reason}, switch_room{reservation_id,room_id,effective,reason}, cancel_reservation{reservation_id,reason}, no_show{reservation_id,reason}, create_receipt{reservation_id,amount_halalas,method:cash|pos|bank_transfer|ota_deferred,reference}, create_deposit{reservation_id,amount_halalas,method:cash|pos|bank_transfer,reference} (رقم العملية إلزامي للشبكة والتحويل؛ يُقيَّد السند في الصندوق أو الحساب الافتراضي للفرع), add_service{reservation_id,service_id,quantity}, create_invoice{reservation_id}.",
     parameters: { type: "object", properties: { action: { type: "string", enum: [...OPS_ACTIONS] }, args: { type: "object", description: "وسائط الإجراء؛ اكتب منها ما يخص الإجراء المختار فقط", properties: OPS_ACTION_ARG_PROPERTIES }, summary: { type: "string", description: "وصف عربي قصير لما سيحدث وأثره" } }, required: ["action", "args", "summary"] } },
 ];
@@ -103,6 +107,8 @@ export function validateOpsArgs(name: string, args: Record<string, unknown>): Re
     case "get_reservation_finance": return { reservation_id: str("reservation_id", UUID_RE) };
     case "list_available_rooms": return { from: str("from", DATE_RE), to: str("to", DATE_RE), category_id: str("category_id", UUID_RE), exclude_reservation_id: str("exclude_reservation_id", UUID_RE) };
     case "list_units_board": return {};
+    case "get_finance_report": { const f = str("from", DATE_RE), t = str("to", DATE_RE); if (!f || !t) throw new Error("INVALID_ARG: period"); return { from: f, to: t }; }
+    case "list_vouchers": { const f = str("from", DATE_RE), t = str("to", DATE_RE); if (!f || !t) throw new Error("INVALID_ARG: period"); return { from: f, to: t, kind: str("kind", /^[a-z_]{1,30}$/) }; }
     case "propose_action": {
       if (OPS_READ_ONLY) throw new Error("READ_ONLY: the operations assistant cannot propose or execute actions");
       const action = str("action");
@@ -131,6 +137,8 @@ export async function executeOpsTool(name: string, args: Record<string, unknown>
     case "get_reservation_finance": return await call("fn_reservation_finance", { p_reservation: args.reservation_id });
     case "list_available_rooms": return await call("fn_available_rooms", { p_branch: ctx.branchId, p_from: args.from, p_to: args.to, p_category: args.category_id ?? null, p_exclude_reservation: args.exclude_reservation_id ?? null });
     case "list_units_board": return await call("fn_ops_units_board", { p_branch: ctx.branchId });
+    case "get_finance_report": return await call("fn_reports_finance", { p_branch: ctx.branchId, p_from: args.from, p_to: args.to, p_filters: {} });
+    case "list_vouchers": return await call("fn_voucher_list", { p: { branch_id: ctx.branchId, from: args.from, to: args.to, ...(args.kind ? { kind: args.kind } : {}), limit: 50 } });
     case "propose_action": if (OPS_READ_ONLY) throw new Error("READ_ONLY: the operations assistant cannot propose or execute actions"); return await call("fn_ai_ops_propose", { p_conversation: ctx.conversationId, p_action: args.action, p_args: args.args, p_summary: args.summary });
     default: throw new Error("UNKNOWN_TOOL");
   }
