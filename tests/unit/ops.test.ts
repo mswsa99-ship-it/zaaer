@@ -38,11 +38,11 @@ describe("ops tool argument validation", () => {
     expect(calls).toEqual([]);   // no write RPC was even attempted
   });
   it("READ-ONLY: every tool the model can call reads only (a fixed allowlist of read RPCs), none mutates", () => {
-    expect(OPS_TOOL_DECLARATIONS.map((t) => t.name).sort()).toEqual(["find_reservation", "get_finance_report", "get_operations_context", "get_reservation_finance", "list_available_rooms", "list_units_board", "list_vouchers"]);
+    expect(OPS_TOOL_DECLARATIONS.map((t) => t.name).sort()).toEqual(["find_reservation", "get_day_summary", "get_finance_report", "get_operations_context", "get_reservation_finance", "get_stay_followups", "list_available_rooms", "list_units_board", "list_vouchers"]);
     const src = readFileSync("supabase/functions/_shared/ops.ts", "utf8");
     const exec = src.slice(src.indexOf("export async function executeOpsTool"), src.indexOf("Branch-local calendar day"));
     const rpcs = [...exec.matchAll(/call\("(\w+)"/g)].map((m) => m[1]).sort();
-    expect(rpcs).toEqual(["fn_ai_ops_context", "fn_ai_ops_find_reservation", "fn_available_rooms", "fn_ai_ops_propose", "fn_ops_units_board", "fn_reservation_finance", "fn_reports_finance", "fn_voucher_list"].sort());
+    expect(rpcs).toEqual(["fn_ai_ops_context", "fn_ai_ops_find_reservation", "fn_available_rooms", "fn_ai_ops_propose", "fn_ops_units_board", "fn_reservation_finance", "fn_reports_finance", "fn_voucher_list", "fn_stay_followups", "fn_staff_day_summary"].sort());
     const reachable = exec.replace(/case "propose_action":[^\n]*\n/, "");
     expect(reachable).not.toMatch(/fn_ai_ops_propose|fn_ai_ops_execute/);
   });
@@ -156,5 +156,29 @@ describe("audit log hygiene and timezone safety", () => {
   it("localDay falls back to Asia/Riyadh for an invalid zone instead of throwing", () => {
     expect(localDay("Riyadh")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(localDay(null)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("followups and day summary read tools (read-only, signed-in person's own session)", () => {
+  it("validate: the day is required, nothing else is accepted", () => {
+    expect(validateOpsArgs("get_day_summary", { date: "2026-11-25" })).toEqual({ date: "2026-11-25" });
+    expect(() => validateOpsArgs("get_day_summary", {})).toThrow("INVALID_ARG");
+    expect(() => validateOpsArgs("get_day_summary", { date: "tomorrow" })).toThrow("INVALID_ARG");
+    expect(validateOpsArgs("get_stay_followups", { branch_id: "theirs" })).toEqual({});
+  });
+  it("call the existing role-gated RPCs for the conversation's branch only, and a refusal returns no data", async () => {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const ok = { rpc: async (fn: string, a: Record<string, unknown>) => { calls.push([fn, a]); return { data: {}, error: null }; } };
+    const c = { db: ok, branchId: "mine", conversationId: "c", today: "2026-11-25" };
+    await executeOpsTool("get_stay_followups", { branch_id: "theirs" } as never, c);
+    await executeOpsTool("get_day_summary", { date: "2026-11-25", branch_id: "theirs" } as never, c);
+    expect(calls.map((x) => x[0])).toEqual(["fn_stay_followups", "fn_staff_day_summary"]);
+    expect(JSON.stringify(calls)).not.toContain("theirs");
+    for (const msg of ["FORBIDDEN: role", "FORBIDDEN: branch"]) {
+      const bad = { rpc: async () => ({ data: { leaked: 1 }, error: { message: msg } }) };
+      const cc = { db: bad, branchId: "other", conversationId: "c", today: "2026-11-25" };
+      await expect(executeOpsTool("get_stay_followups", {}, cc)).rejects.toThrow(/FORBIDDEN/);
+      await expect(executeOpsTool("get_day_summary", { date: "2026-11-25" }, cc)).rejects.toThrow(/FORBIDDEN/);
+    }
   });
 });
