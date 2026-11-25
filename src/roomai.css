@@ -81,3 +81,11 @@ button.rai-stat { font: inherit; text-align: start; cursor: pointer; } /* a tile
 @media (prefers-reduced-motion: no-preference) {
   .rai-btn, .rai-notice, .rai-pill { transition: background-color 150ms, color 150ms, border-color 150ms; }
 }
+
+.rai-in { color: var(--success); }
+.rai-out { color: var(--danger); }
+.rai-lcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.rai-lfoot { border-top: 1px solid var(--line); }
+.rai-lchip { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-size: 12px; }
+
+select.input { max-width: 100%; min-width: 0; }

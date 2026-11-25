@@ -26,9 +26,9 @@ export function KeyboxAlertBanner({ alerts }: { alerts: KeyboxAlerts | null }) {
   const names = alerts.rooms.slice(0, 6).join("، ") + (alerts.rooms.length > 6 ? "…" : "");
   return (
     <Link to="/staff/codes" role="status" aria-live="polite" data-testid="keybox-alert"
-      className="flex items-center gap-3 bg-danger-500 px-4 py-2.5 text-sm text-white hover:bg-danger-600 lg:px-8">
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-danger-500 px-4 py-2.5 text-sm text-white hover:bg-danger-600 lg:px-8">
       <CodeLight tone="white" />
-      <span className="min-w-0 flex-1 leading-relaxed">
+      <span className="min-w-[min(100%,14rem)] flex-1 basis-[12rem] leading-relaxed">
         <span className="font-semibold">{unitsNeedingChange(alerts.count)} تغيير رمز الصندوق</span> بعد مغادرة النزيل: {names}
         {alerts.oldest_since && <span className="text-white"> · أقدمها {sinceArabic(alerts.oldest_since)}</span>}
       </span>

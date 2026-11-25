@@ -13,7 +13,7 @@ import { supabase } from "../../lib/supabase";
 import { expenseApi, toArabicError, type CashAccount, type Ledger as LedgerData } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
-import { SectionTitle, Card, Spinner, LoadErrorCard, EmptyState, AmountBox, AmountGrid } from "../../components/ui";
+import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, EmptyState, AmountBox, AmountGrid } from "../../components/ui";
 import { Field, MoneyInput, Modal, ActionForm, Submit, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, formatDateTime, todayISO } from "../../lib/utils";
@@ -64,29 +64,53 @@ export default function Ledger() {
           <Card className="mb-4">
             <AmountGrid testId="ledger-totals">
               <AmountBox label="الرصيد أول الفترة" value={<span data-testid="ledger-opening">{sar(data.opening_halalas)}</span>} />
+              <AmountBox label="الرصيد آخر الفترة" value={<span data-testid="ledger-closing">{sar(data.closing_halalas)}</span>} />
               <AmountBox label="الداخل" value={sar(data.in_halalas)} tone="text-success-600" />
               <AmountBox label="الخارج" value={sar(data.out_halalas)} tone="text-danger-600" />
-              <AmountBox label="الرصيد آخر الفترة" value={<span data-testid="ledger-closing">{sar(data.closing_halalas)}</span>} />
             </AmountGrid>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-500">
               <span>الرصيد الافتتاحي: <span dir="ltr">{sar(data.account.opening_balance_halalas)}</span>{data.account.opening_on ? <> بتاريخ <span dir="ltr">{data.account.opening_on}</span></> : " (لم يُحدَّد تاريخه: يبدأ الحساب من أول حركة)"}</span>
-              {can("cash_accounts") && <button type="button" className="btn-ghost min-h-[44px] text-xs" onClick={() => setOpening(true)}>تحديد الرصيد الافتتاحي</button>}
+              {can("cash_accounts") && <button type="button" className="btn-outline min-h-[44px] text-xs" onClick={() => setOpening(true)}>تحديد الرصيد الافتتاحي</button>}
             </div>
           </Card>
           {data.lines.length === 0 ? <EmptyState icon={<BookOpen className="h-10 w-10" />} title="لا حركة في هذه الفترة" /> : (
             <Card>
-              <div className="overflow-x-auto">
-                <table className="res-table w-full min-w-[40rem] text-sm" data-testid="ledger-lines">
+              {/* phone: one compact card per movement (what + when on top, the amount and the running balance together below); the table is for wider screens */}
+              <ul className="space-y-3 sm:hidden" data-testid="ledger-cards">
+                {data.lines.map((l) => {
+                  const inn = l.in_halalas > 0;
+                  const amount = inn ? l.in_halalas : l.out_halalas;
+                  return (
+                    <li key={l.kind + l.ref_id} className="rai-lcard" data-testid="ledger-card">
+                      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                        <span className="flex items-center gap-2"><span className="font-medium">{KIND[l.kind] ?? l.kind}</span><Badge className="rai-hint rai-lchip">{inn ? "داخل" : "خارج"}</Badge></span>
+                        <span className="rai-hint">{formatDateTime(l.at)}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                        <bdi dir="ltr" className={"text-xl font-semibold tabular-nums " + (inn ? "rai-in" : "rai-out")} data-testid="ledger-card-amount">{(inn ? "+" : "−") + sar(amount)}</bdi>
+                        <span className="font-mono rai-hint" dir="ltr">{l.number}</span>
+                      </div>
+                      {l.description ? <p className="mt-1 rai-hint">البيان: {l.description}</p> : null}
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rai-lfoot pt-2 rai-hint">
+                        <span>الرصيد بعد الحركة</span>
+                        <bdi dir="ltr" className="text-sm font-semibold tabular-nums" data-testid="ledger-card-balance">{sar(l.balance_halalas)}</bdi>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full min-w-[40rem] text-sm" data-testid="ledger-lines">
                   <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">التاريخ</th><th className="py-2 text-right font-medium">الحركة</th><th className="py-2 text-right font-medium">البيان</th><th className="py-2 text-left font-medium">داخل</th><th className="py-2 text-left font-medium">خارج</th><th className="py-2 text-left font-medium">الرصيد</th></tr></thead>
                   <tbody>
                     {data.lines.map((l) => (
                       <tr key={l.kind + l.ref_id} className="border-b border-ink-50" data-testid="ledger-line">
-                        <td data-label="التاريخ" className="py-2 text-xs text-ink-500">{formatDateTime(l.at)}</td>
-                        <td data-label="الحركة" className="py-2">{KIND[l.kind] ?? l.kind} <span className="block font-mono text-[11px] text-ink-400" dir="ltr">{l.number}</span></td>
-                        <td data-label="البيان" className="py-2 text-ink-600">{l.description || "—"}</td>
-                        <td data-label="داخل" className="py-2 text-left tabular-nums text-success-600" dir="ltr">{l.in_halalas ? sar(l.in_halalas) : ""}</td>
-                        <td data-label="خارج" className="py-2 text-left tabular-nums text-danger-600" dir="ltr">{l.out_halalas ? sar(l.out_halalas) : ""}</td>
-                        <td data-label="الرصيد" className="py-2 text-left font-semibold tabular-nums" dir="ltr">{sar(l.balance_halalas)}</td>
+                        <td className="py-2 text-xs text-ink-500">{formatDateTime(l.at)}</td>
+                        <td className="py-2">{KIND[l.kind] ?? l.kind} <span className="block font-mono text-[11px] text-ink-400" dir="ltr">{l.number}</span></td>
+                        <td className="py-2 text-ink-600">{l.description || "—"}</td>
+                        <td className="py-2 text-left tabular-nums text-success-600" dir="ltr">{l.in_halalas ? sar(l.in_halalas) : ""}</td>
+                        <td className="py-2 text-left tabular-nums text-danger-600" dir="ltr">{l.out_halalas ? sar(l.out_halalas) : ""}</td>
+                        <td className="py-2 text-left font-semibold tabular-nums" dir="ltr">{sar(l.balance_halalas)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -99,12 +99,12 @@ export default function StaffLayout() {
         <DemoBanner />
         <div className="sticky top-0 z-10">
           {/* phones/tablets only: a compact bar; the pages are in the bottom bar and «المزيد» */}
-          <header className="flex items-center gap-2 border-b border-ink-100 bg-white/90 px-3 py-1.5 backdrop-blur lg:hidden">
+          <header className="flex flex-wrap items-center gap-x-2 gap-y-0 border-b border-ink-100 bg-white/90 px-3 py-1.5 backdrop-blur lg:hidden">
             <img src={roomaiAsset("roomai-mark.svg")} alt="" className="h-8 w-8" />
-            <span className="text-sm font-semibold text-ink-800">{PRODUCT_NAME}</span>
+            <span className="min-w-0 truncate text-sm font-semibold text-ink-800">{PRODUCT_NAME}</span>
             <div id="ops-assistant-phone-dock" className="mr-auto" />
-            <Link to="/staff/account" className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
-            <button onClick={handleSignOut} className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="تسجيل الخروج">
+            <Link to="/staff/account" className="flex h-[44px] w-[44px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
+            <button onClick={handleSignOut} className="flex h-[44px] w-[44px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="تسجيل الخروج">
               <LogOut className="h-4 w-4" />
             </button>
           </header>

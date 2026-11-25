@@ -36,7 +36,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
     <div className={"relative " + (className ?? "")} data-testid="date-range-picker">
       <button ref={btn} type="button" className="input flex items-center justify-between gap-2 text-start" aria-haspopup="dialog" aria-expanded={open} aria-label={label} onClick={openIt}>
         <CalendarDays className="h-4 w-4 shrink-0 text-rai-ink-muted" />
-        <bdi dir="ltr" className="whitespace-nowrap tabular-nums" data-testid="date-range-value">{from ? describeRange(from, to) : "كل التواريخ"}</bdi>
+        <bdi dir="ltr" className="tabular-nums sm:whitespace-nowrap" data-testid="date-range-value">{from ? describeRange(from, to) : "كل التواريخ"}</bdi>
       </button>
       {open && (
         <>

@@ -55,7 +55,7 @@ export function Field({ label, children, hint, className, error }: { label: stri
     if (el && !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby") && !(el as HTMLInputElement).labels?.length) el.setAttribute("aria-labelledby", id);
   });
   return (
-    <div className={className} ref={box}>
+    <div className={"min-w-0 " + (className ?? "")} ref={box}>
       <label className="label" id={id}>{label}</label>
       {children}
       {error ? <p className="mt-1 text-xs text-danger-600" role="alert">{error}</p> : hint && <p className="mt-1 text-xs text-ink-400">{hint}</p>}

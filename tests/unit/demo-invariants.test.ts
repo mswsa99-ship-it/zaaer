@@ -954,6 +954,25 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
   });
 
   // ---- 0053: the front desk findings of the 31 October review, in the demo with the server's rules (QF*)
+  it("QF05b check-out refuses while money is due, for everyone: the stay stays in-house, the reason names the amount and the ways to clear it; once paid it closes; shortening an unpaid night is still allowed because it clears the amount", async () => {
+    const id = await inHouse(K2, -1, 1, 10000);   // two nights, only the first paid
+    const due = (await row(id)).balance_due_halalas as number;
+    expect(due).toBeGreaterThan(0);
+    const keep = { p: { reservation_id: id, early_departure: "keep", reason: "طلب النزيل" } };
+    const refused = await rpc<any>("fn_staff_check_out", keep);
+    expect(refused).toMatchObject({ ok: false, balance_due: due });
+    expect(String(refused.reasons?.[0] ?? "")).toContain("مبلغ مستحق");
+    expect((await row(id)).status).toBe("checked_in");
+    await pay(id, due);
+    expect((await rpc<any>("fn_staff_check_out", keep)).ok).toBe(true);
+    expect((await row(id)).status).toBe("checked_out");
+    const id2 = await inHouse(K1, -1, 1, 10000);
+    expect((await row(id2)).balance_due_halalas).toBeGreaterThan(0);
+    const short = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id2, early_departure: "shorten", reason: "ظرف عائلي" } });
+    expect(short.ok).toBe(true);
+    expect((await row(id2)).balance_due_halalas).toBe(0);
+  });
+
   it("QF05 leaving before the departure date asks first; «تقصير» ends the stay with the nights left as the guest's credit; «إبقاء» keeps them paid, both with a reason", async () => {
     const id = await inHouse(K1, 0, 3);
     const first = await rpc<any>("fn_staff_check_out", { p: { reservation_id: id } });

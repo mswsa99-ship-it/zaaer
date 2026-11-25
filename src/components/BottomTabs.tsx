@@ -28,18 +28,18 @@ const SHORT: Record<string, string> = {
 export function BottomTabs({ items, onMore, moreOpen }: { items: TabItem[]; onMore: () => void; moreOpen: boolean }) {
   return (
     <nav aria-label="التنقل الرئيسي" data-testid="bottom-tabs"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-ink-100 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
+      className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap border-t border-ink-100 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
       {items.map((it) => (
         <NavLink key={it.to} to={it.to}
-          className={({ isActive }) => cn("flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold", isActive ? "text-brand-700" : "text-ink-500")}>
+          className={({ isActive }) => cn("flex min-h-[56px] basis-[3.6rem] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold", isActive ? "text-brand-700" : "text-ink-500")}>
           <it.icon className="h-5 w-5" aria-hidden="true" />
-          <span>{SHORT[it.to] ?? it.label}</span>
+          <span className="whitespace-nowrap px-0.5 text-center leading-tight">{SHORT[it.to] ?? it.label}</span>
         </NavLink>
       ))}
       <button type="button" onClick={onMore} aria-expanded={moreOpen} data-testid="bottom-tabs-more"
-        className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold text-ink-500">
+        className="flex min-h-[56px] basis-[3.6rem] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold text-ink-500">
         <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
-        <span>المزيد</span>
+        <span className="whitespace-nowrap px-0.5 text-center leading-tight">المزيد</span>
       </button>
     </nav>
   );

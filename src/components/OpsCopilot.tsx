@@ -105,7 +105,7 @@ export function OpsCopilot() {
   if (!branchId) return null;
   return (
     <>
-      {dock && createPortal(<button onClick={() => setOpen((o) => !o)} data-testid="ops-copilot-fab" data-collapsed={collapsed || undefined} className={`flex h-11 w-11 lg:w-full origin-center items-center justify-center gap-2 rounded-xl bg-ink-800 text-sm font-medium text-white transition-transform duration-200 ease-out hover:bg-ink-900 motion-reduce:transition-none ${collapsed && !open ? "scale-[0.6]" : ""}`} aria-label="مساعد العمليات" aria-expanded={open}>
+      {dock && createPortal(<button onClick={() => setOpen((o) => !o)} data-testid="ops-copilot-fab" data-collapsed={collapsed || undefined} className={`flex h-[44px] w-[44px] lg:w-full origin-center items-center justify-center gap-2 rounded-xl bg-ink-800 text-sm font-medium text-white transition-transform duration-200 ease-out hover:bg-ink-900 motion-reduce:transition-none ${collapsed && !open ? "scale-[0.6]" : ""}`} aria-label="مساعد العمليات" aria-expanded={open}>
         <Bot className="h-5 w-5" /> <span className="hidden lg:inline">مساعد العمليات</span>
       </button>, dock)}
       {open && (
