@@ -82,7 +82,7 @@ export default function AdminRooms() {
                   {allBranches && r.branch_id && <p className="mt-1"><Badge testId="admin-unit-branch">{branches.find((x) => x.id === r.branch_id)?.name_ar}</Badge></p>}
                   <p className="text-xs text-ink-400">{r.category?.name_ar} · {r.block?.name ?? "—"} / {r.floor?.name ?? "—"}</p>
                 </div>
-                                {canEdit && allBranches && r.branch_id && <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-unit-open-branch" aria-label={`فتح فرع الوحدة ${r.room_number} للتعديل`}>فتح الفرع</button>}
+                                {canEdit && allBranches && r.branch_id && <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1.5 text-xs" data-testid="admin-unit-open-branch" aria-label={`فتح فرع الوحدة ${r.room_number} للتعديل`}>فتح الفرع</button>}
                 {canEdit && !allBranches && <button onClick={() => setDraft({ ...r, license: lic.licenses.get(r.id) ?? "" })} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">

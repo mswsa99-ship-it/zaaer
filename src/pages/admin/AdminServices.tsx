@@ -62,7 +62,7 @@ export default function AdminServices() {
                   {allBranches && r.branch_id && <p className="mt-1"><Badge testId="admin-row-branch">{branches.find((x) => x.id === r.branch_id)?.name_ar}</Badge></p>}
                   {r.description && <p className="mt-1 text-xs text-ink-500">{r.description}</p>}
                 </div>
-                {allBranches ? <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع الخدمة ${r.name_ar} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل الخدمة" title="تعديل"><Pencil className="h-4 w-4" /></button>}
+                {allBranches ? <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع الخدمة ${r.name_ar} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل الخدمة" title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
             </Card>
           ))}

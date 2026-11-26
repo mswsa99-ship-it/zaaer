@@ -71,7 +71,7 @@ export default function AdminRoomCategories() {
                   <p className="mt-1 text-xs text-ink-400" data-testid="category-prices">{[c.weekly_price_halalas != null ? `أسبوعي ${sar(c.weekly_price_halalas)}` : null, c.monthly_price_halalas != null ? `شهري ${sar(c.monthly_price_halalas)}` : null, c.min_nightly_halalas != null ? `الأدنى ${sar(c.min_nightly_halalas)}` : null, c.price_mode === "by_channel" ? "مختلف للمنصات" : "سعر موحد"].filter(Boolean).join(" · ")}</p>
                   {c.amenities && c.amenities.length > 0 && <p className="mt-1 text-xs text-ink-400">{c.amenities.join(" · ")}</p>}
                 </div>
-                {allBranches ? <button onClick={() => setBranchId(c.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع النوع ${c.name_ar} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(c)} className="btn-ghost p-1.5" title="تعديل" aria-label={`تعديل ${c.name_ar}`}><Pencil className="h-4 w-4" /></button>}
+                {allBranches ? <button onClick={() => setBranchId(c.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع النوع ${c.name_ar} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(c)} className="btn-ghost p-1.5" title="تعديل" aria-label={`تعديل ${c.name_ar}`}><Pencil className="h-4 w-4" /></button>}
               </div>
             </Card>
           ))}
