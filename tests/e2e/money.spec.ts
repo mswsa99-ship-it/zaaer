@@ -157,7 +157,7 @@ test.describe("core money (phase 1)", () => {
     await dlg.getByRole("button", { name: "تأكيد" }).click();
     await expect(dlg).toBeHidden();
     await expect(page.getByRole("cell", { name: "PAYOUT-2026-10" })).toBeVisible();
-    await expect(page.getByText("عمولة المنصة")).toBeVisible();
+    await expect(page.getByRole("table").getByText("عمولة المنصة")).toBeVisible();
     expect(await rows.count()).toBeLessThan(before);
   });
 
