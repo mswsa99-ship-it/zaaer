@@ -12,6 +12,8 @@ describe("the reservation's stages and its next step (U3)", () => {
     expect(nextStep({ ...base, status: "checked_in", identity_status: "verified" })).toBeNull();
     expect(nextStep({ ...base, status: "checked_in", identity_status: "verified", check_out: "2026-10-31" })?.title).toBe("تسجيل المغادرة");
     expect(nextStep({ ...base, status: "checked_out" })?.title).toBe("فحص الوحدة ورد التأمين");
+    // a departed stay that still owes money names the money first (R0005: inspection done, deposit used, 30 owed)
+    expect(nextStep({ ...base, status: "checked_out", total_halalas: 33000, paid_halalas: 30000 })).toMatchObject({ title: "تحصيل المتبقي", section: "ops" });
     for (const s of ["closed", "cancelled", "rejected", "no_show", "draft"]) expect(nextStep({ ...base, status: s })).toBeNull();
     expect([stagesDone(base), stagesDone({ ...base, identity_status: "verified" }), stagesDone({ ...base, status: "checked_in" }), stagesDone({ ...base, status: "closed" })]).toEqual([1, 2, 3, 5]);
   });

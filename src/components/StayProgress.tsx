@@ -35,6 +35,8 @@ export function stagesDone(r: StayProgressInput): number {
 export function nextStep(r: StayProgressInput): { title: string; why?: string; label: string; section: StaySection } | null {
   if (ENDED.includes(r.status) || r.status === "closed" || r.status === "draft") return null;
   const remaining = Math.max(0, (r.total_halalas ?? 0) - (r.paid_halalas ?? 0));
+  // a departed stay with money still owed: that is the step in front of the clerk (the closing rules refuse a balance), not the inspection
+  if (r.status === "checked_out" && remaining > 0) return { title: "تحصيل المتبقي", why: `على الحجز ${formatCurrency(remaining / 100)}؛ تُغلق الإقامة بعد تصفيره ثم الفحص ورد التأمين أو خصمه.`, label: "فتح الملخص المالي", section: "ops" };
   if (r.status === "checked_out") return { title: "فحص الوحدة ورد التأمين", why: "تُغلق الإقامة بعد الفحص ورد التأمين أو خصمه بسبب.", label: "عرض خطوات الإقامة", section: "stay" };
   if (r.status === "checked_in") {
     if (r.access_status === "approved" || r.access_status === "delivery_pending") return { title: "تسليم الرمز", why: "سُجّل الوصول؛ يُسلَّم رمز الصندوق أو المفتاح الآن.", label: "عرض خطوات الإقامة", section: "stay" };
