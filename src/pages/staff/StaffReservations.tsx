@@ -198,7 +198,7 @@ export default function StaffReservations() {
   );
   const dateRange = (label: string, from: keyof Filters, to: keyof Filters) => (
     <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-600"><span className="w-20">{label}</span>
-      <DateRangePicker clearable className="w-56" label={`${label}: يوم أو فترة`} from={String(filters[from] ?? "")} to={String(filters[to] ?? "")} onChange={(a, b) => { set(from, a); set(to, b); }} />
+      <DateRangePicker clearable className="w-56 max-w-full" label={`${label}: يوم أو فترة`} from={String(filters[from] ?? "")} to={String(filters[to] ?? "")} onChange={(a, b) => { set(from, a); set(to, b); }} />
     </div>
   );
 
@@ -215,7 +215,7 @@ export default function StaffReservations() {
 
       <div className="card mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 pr-9" placeholder="مرجع / نزيل / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
+          <div className="relative max-w-full"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 max-w-full pr-9" placeholder="مرجع / نزيل / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
           <select className="input w-auto" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); set("open_only", !e.target.value); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.open_only)} onChange={(e) => set("open_only", e.target.checked)} /> المفتوحة فقط</label>
           {moneyRole && <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.has_balance)} onChange={(e) => set("has_balance", e.target.checked)} /> عليها متبقٍ</label>}
@@ -231,7 +231,7 @@ export default function StaffReservations() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1" data-testid="saved-views">
+          <div className="flex max-w-full flex-wrap items-center gap-1" data-testid="saved-views">
             <Bookmark className="h-4 w-4 text-ink-400" />
             <select className="input w-auto py-1 text-xs" value={viewId} onChange={(e) => { const v = views.find((x) => x.id === e.target.value); if (v) applyView(v); else setViewId(""); }} aria-label="العروض المحفوظة">
               <option value="">— عرض محفوظ —</option>

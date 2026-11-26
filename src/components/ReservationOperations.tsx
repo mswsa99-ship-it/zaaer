@@ -82,9 +82,9 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
   return (
     <div className="space-y-4">
       <Card>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold text-ink-800"><Wallet className="h-5 w-5 text-brand-600" /> الملخص المالي</h2>
-          <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-xs">
+          <div className="flex max-w-full flex-wrap gap-1 rounded-xl bg-ink-50 p-1 text-xs">
             {(["ledger", "stay", "history"] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-3 py-1.5 ${tab === t ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{t === "ledger" ? "الدفتر" : t === "stay" ? "الإقامة" : "السجل"}</button>)}
           </div>
         </div>

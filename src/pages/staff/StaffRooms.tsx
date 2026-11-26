@@ -102,7 +102,7 @@ export default function StaffRooms() {
   if (board.error && units.length === 0) return <div><SectionTitle title="لوحة الوحدات" action={<BranchPicker allowAll />} /><LoadErrorCard message={board.error} onRetry={reload} /></div>;
   const u = summary?.units;
   const tabs = (
-    <div className="flex gap-1 rounded-xl bg-ink-100 p-1 text-sm" role="tablist">
+    <div className="flex max-w-full flex-wrap gap-1 rounded-xl bg-ink-100 p-1 text-sm" role="tablist">
       <button role="tab" aria-selected={view === "board"} onClick={() => setView("board")} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 ${view === "board" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}><LayoutGrid className="h-4 w-4" /> اللوحة</button>
       <button role="tab" aria-selected={view === "calendar"} onClick={() => setView("calendar")} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 ${view === "calendar" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`} data-testid="tab-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</button>
     </div>

@@ -228,7 +228,7 @@ export default function StaffReservationDetail() {
 
       {loadError && <div className="mb-4"><ErrorBanner message={loadError} /></div>}
       {actionError && <div className="mb-4"><ErrorBanner message={actionError} /></div>}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         {/* Guests / Identity */}
         <Card id="res-guests" className="scroll-mt-20">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

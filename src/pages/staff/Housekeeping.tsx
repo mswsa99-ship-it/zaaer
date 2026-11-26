@@ -84,7 +84,7 @@ export default function Housekeeping() {
         <div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><button onClick={() => setCreate(hk.all ? { target: "room", priority: "medium", scheduled_start: localNow(), scheduled_end: "" } : { target: "room", priority: "medium", task_type_id: types[0]?.id, room_id: rooms[0]?.id, scheduled_start: localNow(), scheduled_end: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مهمة جديدة</button></div>} />
       {(error || hk.error) && <div className="mb-4"><ErrorBanner message={(error ?? hk.error) as string} /></div>}
       {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
-      <div className="mb-4 flex gap-1 rounded-xl bg-ink-100 p-1 text-sm w-fit">
+      <div className="mb-4 flex max-w-full flex-wrap gap-1 rounded-xl bg-ink-100 p-1 text-sm w-fit">
         {(["open", "board", "done"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-lg px-4 py-1.5 ${view === v ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{v === "open" ? "المهام المفتوحة" : v === "board" ? "حالة الوحدات" : "المنجزة"}</button>)}
       </div>
 
