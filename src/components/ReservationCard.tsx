@@ -1,3 +1,4 @@
+import { useBranch } from "../lib/branch";
 import { nextStep } from "./StayProgress";
 import { todayISO } from "../lib/utils";
 import { Link } from "react-router-dom";
@@ -15,6 +16,7 @@ export function StatusBadge({ status, map, colorMap }: { status: string; map: Re
 }
 
 export function ReservationCardRow({ r }: { r: import("../lib/hooks").ReservationCard }) {
+  const { allBranches } = useBranch();   // the branch name shows only in «جميع الفروع» (the card data may carry it in any mode)
   return (
     <Link to={`/staff/reservations/${r.id}`} className="block">
       <Card className="transition-all hover:border-brand-300 hover:shadow-md">
@@ -26,7 +28,7 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
             </div>
             <p className="mt-1 text-sm text-ink-600">{maskName(r.primary_guest?.full_name)}</p>
             <p className="mt-0.5 text-xs text-ink-400">
-              {r.branch ? `${r.branch.name_ar} · ` : ""}{r.room?.room_number ?? "—"} · {r.room_category?.name_ar} · {r.source?.name ?? "—"}
+              {allBranches && r.branch ? `${r.branch.name_ar} · ` : ""}{r.room?.room_number ?? "—"} · {r.room_category?.name_ar} · {r.source?.name ?? "—"}
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">

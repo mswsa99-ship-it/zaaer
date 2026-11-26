@@ -19,6 +19,12 @@ test.describe("branch labels and filter targets (390px)", () => {
     await cards.filter({ hasText: /جدة/ }).first().scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/proof/bl1-payments-390.png" });
   });
+  test("BL1b payments with one branch selected: no card carries a branch name (unchanged)", async ({ page, loginAs, go }) => {
+    await loginAs("owner"); await go("/staff/payments"); await page.waitForTimeout(1200);
+    const single = page.locator("a[href*='/staff/reservations/']"); expect(await single.count()).toBeGreaterThan(0);
+    for (let i = 0; i < await single.count(); i++) await expect(single.nth(i)).not.toContainText(/فرع/);
+    await page.screenshot({ path: "/tmp/proof/bl1b-single-390.png" });
+  });
   test("BL2 follow-ups in all branches: every row names its branch", async ({ page, loginAs, go }) => {
     await loginAs("owner"); await go("/staff/followups"); await page.waitForTimeout(800);
     await all(page);
