@@ -176,6 +176,8 @@ test("KB-R1 the rooms board never says «must change» for a unit that simply ha
   await page.goto("/#/staff/rooms", { waitUntil: "networkidle" });
   await picker(page).selectOption({ label: "فرع جدة — الكورنيش" });
   await expect(page.getByText("J-1").first()).toBeVisible();
+  // readiness: the J-1 unit card itself is on the board (the text J-1 can also come from the banner while the board still says «جارٍ التحميل…»)
+  await expect(page.locator('[data-testid="unit-card"][data-room="J-1"]')).toBeVisible();
   const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   expect(text).toContain("الرمز غير جاهز");
   expect(text).not.toContain("يجب تغيير الرمز");
