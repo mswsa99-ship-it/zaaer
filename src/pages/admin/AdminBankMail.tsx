@@ -130,7 +130,18 @@ export default function AdminBankMail() {
           <SectionTitle level={2} title="كلمات قراءة الرسائل" subtitle="أول كلمة تظهر في الرسالة (بالأولوية) تحدّد نوع الحركة واتجاهها" />
           <button type="button" className="btn-primary min-h-[44px]" onClick={() => setRule({ kind: "deposit", priority: 100 })}><Plus className="h-4 w-4" /> كلمة</button>
         </div>
-        <div className="overflow-x-auto">
+        {/* phones: one card per word (priority, word, kind, direction, edit); the table is for wider screens */}
+        <ul className="divide-y divide-ink-50 text-sm sm:hidden" data-testid="bank-rule-cards">
+          {rules.map((r) => (
+            <li key={r.id} className={`flex items-center justify-between gap-3 py-2 ${r.is_active ? "" : "text-rai-ink-muted"}`} data-testid="bank-rule-card">
+              <div className="min-w-0">
+                <p className="break-words font-medium">{r.keyword}</p>
+                <p className="text-xs text-rai-ink-muted">{KIND_AR[r.kind]} · {r.direction === "in" ? "داخل" : "خارج"}{r.is_active ? "" : " (موقوفة)"} · الأولوية <span className="tabular-nums">{r.priority}</span></p>
+              </div>
+              <button type="button" className="btn-ghost min-h-[44px] shrink-0 text-xs" aria-label={`تعديل ${r.keyword}`} onClick={() => setRule(r)}>تعديل</button>
+            </li>))}
+        </ul>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[30rem] text-sm" data-testid="bank-rules">
             <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">الأولوية</th><th className="py-2 text-right font-medium">الكلمة</th><th className="py-2 text-right font-medium">النوع</th><th className="py-2 text-right font-medium">الاتجاه</th><th /></tr></thead>
             <tbody>{rules.map((r) => (
