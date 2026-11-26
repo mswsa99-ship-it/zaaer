@@ -12,12 +12,14 @@ import { branchGuideApi, toArabicError, type PaymentProvider, type PaymentSettin
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
 
+const completeCls = (ok: boolean) => (ok ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500");
 const PROVIDERS: Record<PaymentProvider, string> = { moyasar: "ميسّر (Moyasar)", tap: "تاب (Tap)", hyperpay: "هايبر باي (HyperPay)", paytabs: "باي تابس (PayTabs)", other: "مزوّد آخر" };
 
 export default function AdminPaymentProviders() {
   const { can } = useAuth();
   const owner = can("security");
-  const { branches, branchId, setBranchId } = useBranch();
+  const { branches, branchId, setBranchId, canAll, allBranches, setAllBranches } = useBranch();
+  const [rows, setRows] = useState<{ id: string; name: string; s: PaymentSettings | null; err: boolean }[] | null>(null);
   const [s, setS] = useState<PaymentSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState({ provider: "", provider_label: "", merchant_id: "", publishable_key: "", pos_terminal_id: "" });
@@ -26,15 +28,23 @@ export default function AdminPaymentProviders() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
+  // «جميع الفروع» (owner): each branch's provider status side by side, read-only; the keys are edited inside one branch
+  useEffect(() => {
+    if (!allBranches || !owner) { setRows(null); return; }
+    let alive = true;
+    void Promise.all(branches.map(async (b) => { try { return { id: b.id, name: b.name_ar, s: await branchGuideApi.paymentSettings(b.id), err: false }; } catch { return { id: b.id, name: b.name_ar, s: null, err: true }; } }))
+      .then((r) => { if (alive) setRows(r); });
+    return () => { alive = false; };
+  }, [allBranches, owner, branches]);
   const load = async () => {
-    if (!branchId || !owner) return; setLoadError(null); setS(null);
+    if (!branchId || !owner || allBranches) return; setLoadError(null); setS(null);
     try {
       const r = await branchGuideApi.paymentSettings(branchId); setS(r);
       setForm({ provider: r.provider ?? "", provider_label: r.provider_label ?? "", merchant_id: r.merchant_id ?? "", publishable_key: r.publishable_key ?? "", pos_terminal_id: r.pos_terminal_id ?? "" });
       setSecret("");
     } catch (e) { setLoadError(toArabicError(e)); }
   };
-  useEffect(() => { void load(); }, [branchId, owner]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); }, [branchId, owner, allBranches]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save(extra: Record<string, unknown> = {}) {
     if (!branchId) return; setBusy(true); setError(null); setSaved(null);
@@ -50,7 +60,7 @@ export default function AdminPaymentProviders() {
   return (
     <div className="space-y-4">
       <SectionTitle title="مزودو الدفع" subtitle="بيانات حساب مزوّد الدفع وجهاز نقاط البيع لكل فرع"
-        action={branches.length > 1 ? <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">{branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}</select> : undefined} />
+        action={branches.length > 1 ? <select className="input w-auto" value={allBranches ? "__all__" : branchId ?? ""} onChange={(e) => (e.target.value === "__all__" ? setAllBranches(true) : setBranchId(e.target.value))} aria-label="الفرع">{branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}{canAll && <option value="__all__">جميع الفروع</option>}</select> : undefined} />
 
       <div className="flex items-start gap-2 rounded-xl bg-warning-500/10 p-4 text-sm text-warning-700" role="note">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -58,12 +68,33 @@ export default function AdminPaymentProviders() {
       </div>
 
       {!owner ? <div className="rounded-xl bg-ink-50 p-3 text-sm text-ink-600">هذه الإعدادات يعدّلها المالك وحده.</div>
+        : allBranches ? (
+          <div className="space-y-3" data-testid="payment-all">
+            <div className="rounded-xl border-2 border-dashed px-3 py-2 text-sm" role="note"><b>عرض جميع الفروع للقراءة فقط.</b> لتعديل بيانات المزوّد أو مفتاحه افتح الفرع. لا تظهر هنا قيم المفاتيح.</div>
+            {!rows ? <LoadingScreen /> : rows.map((r) => (
+              <Card key={r.id} className="space-y-2" >
+                <div className="flex flex-wrap items-center gap-2" data-testid="payment-branch-row">
+                  <h2 className="text-sm font-semibold">{r.name}</h2>
+                  {r.s && <Badge className={completeCls(r.s.complete)}>{r.s.complete ? "البيانات مكتملة" : "البيانات غير مكتملة"}</Badge>}
+                  <button type="button" className="btn-ghost mr-auto shrink-0 whitespace-nowrap p-1.5 text-xs" onClick={() => setBranchId(r.id)} aria-label={`فتح فرع ${r.name} لتعديل مزوّد الدفع`}>فتح الفرع للتعديل</button>
+                </div>
+                {r.err || !r.s ? <ErrorBanner message="تعذّر تحميل بيانات هذا الفرع." /> : (
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <dt>المزوّد</dt><dd>{r.s.provider ? (r.s.provider === "other" ? r.s.provider_label || PROVIDERS.other : PROVIDERS[r.s.provider]) : "لم يُختر"}</dd>
+                    <dt>رقم التاجر</dt><dd dir="ltr" className="text-right">{r.s.merchant_id || "غير مُدخل"}</dd>
+                    <dt>المفتاح السري</dt><dd>{r.s.has_secret ? "محفوظ ومشفّر" : "غير مُدخل"}</dd>
+                    <dt>جهاز نقاط البيع</dt><dd dir="ltr" className="text-right">{r.s.pos_terminal_id || "غير مُدخل"}</dd>
+                  </dl>
+                )}
+              </Card>
+            ))}
+          </div>)
         : loadError ? <LoadErrorCard message={loadError} onRetry={load} />
         : !s ? <LoadingScreen /> : (
         <Card className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-800"><CreditCard className="h-4 w-4 text-brand-600" /> حساب المزوّد</h2>
-            <Badge className={s.complete ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}>{s.complete ? "البيانات مكتملة" : "البيانات غير مكتملة"}</Badge>
+            <Badge className={completeCls(s.complete)}>{s.complete ? "البيانات مكتملة" : "البيانات غير مكتملة"}</Badge>
             {s.updated_at && <span className="mr-auto text-xs text-ink-400">آخر تعديل {new Date(s.updated_at).toLocaleDateString("ar-SA-u-nu-latn")}{s.updated_by ? ` — ${s.updated_by}` : ""}</span>}
           </div>
           {error && <ErrorBanner message={error} />}

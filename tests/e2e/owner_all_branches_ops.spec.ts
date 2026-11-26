@@ -196,3 +196,15 @@ test("AB-R3 rates: the owner's all-branches calendar stacks both branches read-o
   await expect(page.getByTestId("rates-branch")).toHaveCount(0);
   expect(await page.getByTestId("rates-cell").first().isDisabled()).toBe(false);
 });
+
+test("AB-P2 payment providers: the owner's all-branches view lists each branch read-only without key values, and a row opens its own branch form", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/payment-providers", { waitUntil: "networkidle" });
+  await page.getByLabel("الفرع", { exact: true }).selectOption({ label: "جميع الفروع" });
+  await expect(page.getByTestId("payment-branch-row")).toHaveCount(2);
+  await expect(page.getByTestId("save-payment-settings")).toHaveCount(0);
+  await expect(page.locator("input")).toHaveCount(0);
+  await page.getByRole("button", { name: /فتح فرع .* لتعديل مزوّد الدفع/ }).first().click();
+  await expect(page.getByTestId("payment-all")).toHaveCount(0);
+  await expect(page.getByTestId("save-payment-settings")).toBeVisible();
+});
