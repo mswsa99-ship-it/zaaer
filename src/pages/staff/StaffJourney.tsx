@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { LogOut, Moon, Clock, Wallet, Star, BellRing, CheckCircle2, AlertTriangle, MessageCircle, ExternalLink, Settings } from "lucide-react";
+import { mergeReviews } from "../../lib/journeyMerge";
 import { journeyApi, toArabicError, type StaffJourney as Board, type StaffReviews, type StaffReview, type JourneyAlert, type ExtensionStatus } from "../../lib/api";
 import { useBranch } from "../../lib/branch";
 import { useAuth } from "../../lib/auth";
@@ -38,11 +39,15 @@ const MESSAGE_AR: Record<string, string> = {
 type Tab = "departing" | "requests" | "awaiting" | "deposits" | "reviews" | "alerts";
 
 export default function StaffJourney() {
-  const { branchId } = useBranch();
+  const { branchId, branches, allBranches, setBranchId } = useBranch();
+  const [perBranch, setPerBranch] = useState<Array<{ id: string; name: string; settings: Board["settings"]; channel_ready: boolean }>>([]);
+  const [branchOf, setBranchOf] = useState<Record<string, string>>({});   // owner «جميع الفروع»: row id to its branch name
   const { can, profile } = useAuth();
   const [tab, setTab] = useState<Tab>("departing");
   const [board, setBoard] = useState<Board | null>(null);
   const [reviews, setReviews] = useState<StaffReviews | null>(null);
+  const [reviewParts, setReviewParts] = useState<Array<{ name: string; count: number; overall: number | null }>>([]);
+  const [approx, setApprox] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -56,13 +61,35 @@ export default function StaffJourney() {
   useEffect(() => {
     if (!branchId) return;
     let alive = true; setError(null);
-    // the journey's clock first (its messages, its alerts), then the board
-    journeyApi.tick(branchId).catch(() => null).finally(() => {
-      Promise.all([journeyApi.board(branchId), canReviews ? journeyApi.reviews(branchId, 30).catch(() => null) : Promise.resolve(null)])
-        .then(([b, r]) => { if (alive) { setBoard(b); setReviews(r); setNow(Date.now()); } }, (e) => { if (alive) setError(toArabicError(e)); });
+    const ids = allBranches ? branches.map((x) => x.id) : [branchId];
+    // the journey's clock first (its messages, its alerts), then the board; owner «جميع الفروع»: every branch, merged, each row keeps its branch
+    Promise.all(ids.map((id) => journeyApi.tick(id).catch(() => null))).finally(() => {
+      Promise.all(ids.map(async (id) => ({ id, board: await journeyApi.board(id), reviews: canReviews ? await journeyApi.reviews(id, 30).catch(() => null) : null })))
+        .then((parts) => {
+          if (!alive) return;
+          if (parts.length === 1) { setPerBranch([]); setBranchOf({}); setBoard(parts[0].board); setReviews(parts[0].reviews); setNow(Date.now()); return; }
+          const name = (id: string) => branches.find((x) => x.id === id)?.name_ar ?? "";
+          const of: Record<string, string> = {};
+          const tag = <T,>(rows: T[], key: (r: T) => string, id: string) => { rows.forEach((r) => { of[key(r)] = name(id); }); return rows; };
+          const first = parts[0].board;
+          const merged: Board = {
+            settings: first.settings, sees_money: parts.every((x) => x.board.sees_money), channel_ready: parts.every((x) => x.board.channel_ready),
+            departing: parts.flatMap((x) => tag(x.board.departing, (r) => r.reservation_id, x.id)),
+            requests: parts.flatMap((x) => tag(x.board.requests, (r) => r.id, x.id)),
+            awaiting_check: parts.flatMap((x) => tag(x.board.awaiting_check, (r) => r.reservation_id, x.id)),
+            deposits: parts.flatMap((x) => tag(x.board.deposits, (r) => r.reservation_id, x.id)),
+            alerts: parts.flatMap((x) => tag(x.board.alerts, (r) => r.id, x.id)),
+          };
+          const rvIds = parts.filter((y) => y.reviews).map((y) => y.id);
+          const { merged: mergedReviews, exact } = mergeReviews(parts.map((x) => x.reviews).filter((x): x is StaffReviews => !!x));
+          parts.filter((y) => y.reviews).forEach((y, k) => tag(y.reviews!.reviews, (r) => r.id, rvIds[k]));
+          const complete0 = exact;
+          setApprox(!!mergedReviews && !complete0); setReviewParts(parts.filter((x) => x.reviews).map((x) => ({ name: name(x.id), count: x.reviews!.summary.count, overall: x.reviews!.summary.overall })));
+          setPerBranch(parts.map((x) => ({ id: x.id, name: name(x.id), settings: x.board.settings, channel_ready: x.board.channel_ready }))); setBranchOf(of); setBoard(merged); setReviews(mergedReviews); setNow(Date.now());
+        }, (e) => { if (alive) setError(toArabicError(e)); });
     });
     return () => { alive = false; };
-  }, [branchId, tick, canReviews]);
+  }, [branchId, branches, allBranches, tick, canReviews]);
   // a guest's choice or departure arrives while the page is open: looked for again every minute
   useEffect(() => {
     const id = setInterval(() => { if (typeof document === "undefined" || document.visibilityState === "visible") reload(); }, 60_000);
@@ -86,26 +113,40 @@ export default function StaffJourney() {
   return (
     <div>
       <SectionTitle title="رحلة الضيف" subtitle="يوم المغادرة وخيارات النزيل، والتحقق من الوحدة، وعدّاد رد التأمين، والتقييمات، والتنبيهات" action={
-        <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker />
+        <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker allowAll />
           {["owner", "manager"].includes(profile?.role ?? "") && <Link to="/admin/journey" className="btn-outline text-sm"><Settings className="h-4 w-4" /> الإعدادات</Link>}
         </div>} />
       {error ? <LoadErrorCard message={error} onRetry={reload} /> : !b ? <div className="py-10 text-center"><Spinner /></div> : (
         <>
           {!b.channel_ready && (
             <p className="mb-3 flex items-start gap-2 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-800" role="alert" data-testid="journey-channel-warning">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> واتساب الفرع غير مربوط بكمبيوتر الاستقبال: رسائل الرحلة لا تصل للنزلاء، فأبلغهم بنفسك. يُربط من «واتساب الفروع» في الإدارة.
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {allBranches && perBranch.length ? `واتساب ${perBranch.filter((x) => !x.channel_ready).map((x) => x.name).join(" و")}` : "واتساب الفرع"} غير مربوط بكمبيوتر الاستقبال: رسائل الرحلة لا تصل للنزلاء، فأبلغهم بنفسك. يُربط من «واتساب الفروع» في الإدارة.
             </p>
           )}
           {!b.settings.journey_enabled && <p className="mb-3 rounded-xl bg-ink-50 px-3 py-2 text-sm text-ink-600" role="status">رسائل الرحلة متوقفة لهذا الفرع من الإعدادات؛ التنبيهات تعمل.</p>}
           <Card className="mb-4">
             <AmountGrid testId="journey-totals">
-              <AmountBox label="رسالة صباح المغادرة" value={b.settings.checkout_message_time} />
-              <AmountBox label="الخروج بلا رسوم حتى" value={b.settings.free_until} />
+              {!allBranches && <AmountBox label="رسالة صباح المغادرة" value={b.settings.checkout_message_time} />}   {/* per-branch settings: not merged */}
+              {!allBranches && <AmountBox label="الخروج بلا رسوم حتى" value={b.settings.free_until} />}
               <AmountBox label="بانتظار التحقق" value={<span data-testid="journey-awaiting-count">{b.awaiting_check.length}</span>} tone={b.awaiting_check.length ? "text-warning-700" : "text-ink-900"} />
-              <AmountBox label={`رد التأمين خلال ${hoursAr(b.settings.refund_hours)}`} value={overdueDeposits ? `${overdueDeposits} متأخر` : `${b.deposits.length}`} tone={overdueDeposits ? "text-danger-600" : "text-ink-900"} />
+              <AmountBox label={allBranches ? "رد التأمين" : `رد التأمين خلال ${hoursAr(b.settings.refund_hours)}`} value={overdueDeposits ? `${overdueDeposits} متأخر` : `${b.deposits.length}`} tone={overdueDeposits ? "text-danger-600" : "text-ink-900"} />
               <AmountBox label="تنبيهات مفتوحة" value={<span data-testid="journey-alerts-count">{b.alerts.length}</span>} tone={b.alerts.length ? "text-danger-600" : "text-ink-900"} />
             </AmountGrid>
           </Card>
+          {allBranches && perBranch.length > 0 && (
+            <Card className="mb-4" data-testid="journey-branch-settings">
+              <h3 className="mb-2 text-sm font-semibold">إعدادات كل فرع (تختلف من فرع لآخر)</h3>
+              <div className="divide-y divide-ink-50 text-sm">
+                {perBranch.map((x) => (
+                  <div key={x.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span className="font-medium">{x.name}</span>
+                    <span className="text-xs opacity-70">رسالة الصباح {x.settings.checkout_message_time} · الخروج بلا رسوم حتى {x.settings.free_until} · رد التأمين خلال {hoursAr(x.settings.refund_hours)}{x.settings.journey_enabled ? "" : " · الرحلة متوقفة"}</span>
+                    <button type="button" className="btn-outline text-sm" onClick={() => setBranchId(x.id)} data-testid="journey-open-branch">افتح {x.name}</button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
           <div className="mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-ink-50 p-1" role="tablist" aria-label="أقسام رحلة الضيف">
             {TABS.map(([v, label, n]) => (
               <button key={v} type="button" role="tab" aria-selected={tab === v} onClick={() => setTab(v)} data-testid={`journey-tab-${v}`}
@@ -121,7 +162,7 @@ export default function StaffJourney() {
               <Card key={d.reservation_id} data-testid="journey-departing-row">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-ink-800">غرفة {d.room_number ?? "—"}</h3>
+                    <h3 className="font-semibold text-ink-800">غرفة {d.room_number ?? "—"}{allBranches && branchOf[d.reservation_id] ? <Badge className="ms-2" testId="journey-branch">{branchOf[d.reservation_id]}</Badge> : null}</h3>
                     <p className="text-xs text-ink-500"><Link className="font-mono hover:underline" dir="ltr" to={`/staff/reservations/${d.reservation_id}`}>{d.internal_ref}</Link></p>
                   </div>
                   {d.departed_at ? <Badge className="bg-success-50 text-success-700">أبلغ بمغادرته {clock(d.departed_at)}</Badge>
@@ -141,7 +182,7 @@ export default function StaffJourney() {
                 <Card key={x.id} className={open ? "" : "opacity-80"} data-testid="journey-request">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <h3 className="flex items-center gap-1.5 font-semibold text-ink-800">{x.kind === "night" ? <Moon className="h-4 w-4 text-brand-600" /> : <Clock className="h-4 w-4 text-brand-600" />} غرفة {x.room_number ?? "—"} — {x.kind === "night" ? "ليلة إضافية" : `خروج متأخر ${hoursAr(x.hours ?? 0)} حتى ${x.late_until}`}</h3>
+                      <h3 className="flex items-center gap-1.5 font-semibold text-ink-800">{x.kind === "night" ? <Moon className="h-4 w-4 text-brand-600" /> : <Clock className="h-4 w-4 text-brand-600" />} غرفة {x.room_number ?? "—"} — {x.kind === "night" ? "ليلة إضافية" : `خروج متأخر ${hoursAr(x.hours ?? 0)} حتى ${x.late_until}`}{allBranches && branchOf[x.id] ? <Badge className="ms-2" testId="journey-branch">{branchOf[x.id]}</Badge> : null}</h3>
                       <p className="text-xs text-ink-500"><Link className="font-mono hover:underline" dir="ltr" to={`/staff/reservations/${x.reservation_id}`}>{x.internal_ref}</Link> · {x.source === "whatsapp" ? "من واتساب" : "من صفحة الحجز"} · {formatDateTime(x.created_at)}</p>
                     </div>
                     <Badge className={tone}>{label}</Badge>
@@ -164,7 +205,7 @@ export default function StaffJourney() {
               <Card key={a.reservation_id} data-testid="journey-awaiting-row">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-ink-800">غرفة {a.room_number ?? "—"}</h3>
+                    <h3 className="font-semibold text-ink-800">غرفة {a.room_number ?? "—"}{allBranches && branchOf[a.reservation_id] ? <Badge className="ms-2" testId="journey-branch">{branchOf[a.reservation_id]}</Badge> : null}</h3>
                     <p className="text-xs text-ink-500"><span className="font-mono" dir="ltr">{a.internal_ref}</span> · غادر {clock(a.departed_at)} {a.via === "whatsapp" ? "(واتساب)" : a.via === "page" ? "(صفحة الحجز)" : ""}</p>
                   </div>
                   <Badge className="bg-warning-500/10 text-warning-700">افحص ثم أكمل المغادرة</Badge>
@@ -179,7 +220,7 @@ export default function StaffJourney() {
               <Card key={d.reservation_id} data-testid="journey-deposit">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-ink-800">غرفة {d.room_number ?? "—"}{d.deposit_halalas != null ? <> — <span className="tabular-nums">{sar(d.deposit_halalas)}</span></> : null}</h3>
+                    <h3 className="font-semibold text-ink-800">غرفة {d.room_number ?? "—"}{d.deposit_halalas != null ? <> — <span className="tabular-nums">{sar(d.deposit_halalas)}</span></> : null}{allBranches && branchOf[d.reservation_id] ? <Badge className="ms-2" testId="journey-branch">{branchOf[d.reservation_id]}</Badge> : null}</h3>
                     <p className="text-xs text-ink-500"><span className="font-mono" dir="ltr">{d.internal_ref}</span> · خرج {formatDateTime(d.checked_out_at)}</p>
                   </div>
                   <Badge className={left.late ? "bg-danger-500/10 text-danger-600" : "bg-brand-50 text-brand-700"} testId="deposit-countdown">{left.text}</Badge>
@@ -187,7 +228,7 @@ export default function StaffJourney() {
                 <Link to={`/staff/reservations/${d.reservation_id}`} className="btn-outline mt-3 text-sm"><Wallet className="h-4 w-4" /> رد التأمين</Link>
               </Card>); })}</div>)}
 
-          {tab === "reviews" && canReviews && <ReviewsTab data={reviews} onReply={setReplying} />}
+          {tab === "reviews" && canReviews && <ReviewsTab data={reviews} approx={approx} parts={reviewParts} onReply={setReplying} />}
 
           {tab === "alerts" && (b.alerts.length === 0
             ? <EmptyState icon={<BellRing className="h-10 w-10" />} title="لا تنبيهات مفتوحة" description="لكل حدث في رحلة الضيف قاعدة: من يُبلَّغ، وبأي قناة، وبعد كم دقيقة، وإلى من يُصعَّد إن لم يُعالَج. القواعد من «رحلة الضيف» في الإدارة." />
@@ -202,7 +243,7 @@ export default function StaffJourney() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-500">{a.label}{a.mine && <span className="rounded-full bg-brand-50 px-1.5 text-[11px] text-brand-700" data-testid="alert-mine">لك</span>}</p>
-                    <h3 className="font-semibold text-ink-800" dir="auto">{a.title}</h3>
+                    <h3 className="font-semibold text-ink-800" dir="auto">{a.title}{allBranches && branchOf[a.id] ? <Badge className="ms-2" testId="journey-branch">{branchOf[a.id]}</Badge> : null}</h3>
                     {a.body && <p className="mt-1 text-sm text-ink-600" dir="auto">{a.body}</p>}
                   </div>
                   {a.escalated_at ? <Badge className="bg-danger-500/10 text-danger-600">صُعِّد {clock(a.escalated_at)}</Badge> : a.notified_at ? <Badge className="bg-warning-500/10 text-warning-700">أُبلغ {clock(a.notified_at)}</Badge> : <Badge className="bg-ink-100 text-ink-600">يُبلَّغ {clock(a.notify_at)}</Badge>}
@@ -231,14 +272,22 @@ export default function StaffJourney() {
   );
 }
 
-function ReviewsTab({ data, onReply }: { data: StaffReviews | null; onReply: (r: StaffReview) => void }) {
+function ReviewsTab({ data, approx, parts, onReply }: { data: StaffReviews | null; approx: boolean; parts: Array<{ name: string; count: number; overall: number | null }>; onReply: (r: StaffReview) => void }) {
   if (!data) return <div className="py-10 text-center"><Spinner /></div>;
   const s = data.summary;
   return (
     <div className="space-y-4" data-testid="journey-reviews">
+      {parts.length > 1 && (
+        <Card data-testid="journey-reviews-branches">
+          <div className="divide-y divide-ink-50 text-sm">
+            {parts.map((x) => <div key={x.name} className="flex justify-between gap-2 py-1"><span className="font-medium">{x.name}</span><span><bdi dir="ltr">{x.overall != null ? `${x.overall} / 10` : "—"}</bdi>{" "}<span>({x.count} تقييم)</span></span></div>)}
+          </div>
+          {approx && <p className="mt-2 text-xs opacity-70" data-testid="journey-reviews-approx">المتوسط الإجمالي تقريبي: محسوب من متوسطات الفروع المقرّبة، والأرقام الدقيقة لكل فرع أعلاه.</p>}
+        </Card>
+      )}
       <Card>
         <AmountGrid>
-          <AmountBox label="التقييم العام (30 يومًا)" value={s.overall != null ? `${s.overall} / 10` : "—"} tone={s.overall != null && s.overall < data.alert_below ? "text-danger-600" : "text-ink-900"} />
+          <AmountBox label={`التقييم العام (30 يومًا)${approx ? " (تقريبي)" : ""}`} value={s.overall != null ? `${s.overall} / 10` : "—"} tone={s.overall != null && s.overall < data.alert_below ? "text-danger-600" : "text-ink-900"} />
           {data.aspects.map((a) => <AmountBox key={a.key} label={a.label} value={s[a.key] != null ? String(s[a.key]) : "—"} />)}
           <AmountBox label="أُرسلت / دُعي" value={`${s.count} / ${data.invited}`} />
           <AmountBox label={`أقل من ${data.alert_below}`} value={s.below} tone={s.below ? "text-danger-600" : "text-ink-900"} />

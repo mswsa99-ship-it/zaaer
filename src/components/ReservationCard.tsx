@@ -18,9 +18,9 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
   return (
     <Link to={`/staff/reservations/${r.id}`} className="block">
       <Card className="transition-all hover:border-brand-300 hover:shadow-md">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="whitespace-nowrap font-mono text-sm font-semibold text-ink-800" dir="ltr">{r.internal_ref}</p>
               <StatusBadge status={r.status} map={RESERVATION_STATUS_LABELS} />
             </div>

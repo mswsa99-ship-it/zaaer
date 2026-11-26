@@ -137,6 +137,7 @@ export function seed(): Store {
   R["U4"] = mk("U-4", cat.two, blockU, fl.uG, "out_of_service", "clean", { is_active: false, notes: "تجديد كامل" });
   rooms.push({ id: fixed(199), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-1", floor: 1, status: "ready", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   rooms.push({ id: fixed(198), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-2", floor: 1, status: "available", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
+  rooms.push({ id: fixed(197), branch_id: BRANCH_B, organization_id: ORG, category_id: cat.jed, room_number: "J-3", floor: 1, status: "available", cleanliness: "clean", is_active: true, notes: null, block_id: fixed(402), floor_id: fl.bG, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_at: ts(-200), updated_at: ts(-1) });
   put("rooms", rooms);
   // 0075: the licence number of two units (fictional), read by the owner, the manager and the supervisor only
   put("room_licenses", [
@@ -165,6 +166,8 @@ export function seed(): Store {
       last_changed_at: ts(-2), last_changed_by: STAFF.supervisor.id, field_tested: r.cleanliness === "clean", last_reservation_id: null, requires_rotation: true,
       last_delivered_at: r.status === "occupied" ? ts(-1, 17) : null, created_at: ts(-400) };
   }));
+  // second branch (invented): J-1 has a code that needs changing, so the owner's all-branches keybox alert has a row from each branch
+  s.keyboxes.push({ id: uid(), room_id: fixed(199), branch_id: BRANCH_B, code_encrypted: null, code_plain: "4821", code_version: 1, code_status: "needs_change", needs_change_since: new Date(Date.now() - 50 * 60_000).toISOString(), last_changed_at: ts(-2), last_changed_by: STAFF.owner.id, field_tested: true, last_reservation_id: null, requires_rotation: true, last_delivered_at: null, created_at: ts(-200) });
   put("facilities", [
     { id: fixed(430), organization_id: ORG, branch_id: BRANCH_A, block_id: blockMain, floor_id: fl.g, name: "الممر الرئيسي", description: "ممر الطابق الأرضي", images: [], is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: STAFF.owner.id, created_at: ts(-400), updated_at: ts(-400) },
     { id: fixed(431), organization_id: ORG, branch_id: BRANCH_A, block_id: blockMain, floor_id: null, name: "البوابة الرئيسية", description: null, images: [], is_active: true, archived_at: null, archived_by: null, archive_reason: null, version: 1, created_by: STAFF.owner.id, created_at: ts(-400), updated_at: ts(-400) },
@@ -191,13 +194,14 @@ export function seed(): Store {
   const res: Row[] = []; const guests: Row[] = []; const allocs: Row[] = []; const charges: Row[] = []; const vouchers: Row[] = []; const audits: Row[] = [];
   let vnum = 100; let rnum = 1;
   const nextNum = (prefix: string) => `${prefix}-2026-${String(++vnum).padStart(6, "0")}`;
-  const money = (resId: string, kind: string, amount: number, method: string, dayOff: number, reference: string | null = null, status = "approved") => {
-    const account_id = method === "cash" ? CASH_A : method === "pos" || method === "bank_transfer" ? BANK_A : null;
-    vouchers.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: resId, number: nextNum(kind === "receipt" ? "RCP" : kind === "deposit" ? "DEP" : kind === "refund" ? "RFD" : "DRF"), kind, amount_halalas: amount, method, account_id, payout_id: null, status, reference, note: null, reason: kind.includes("refund") ? "تسوية" : null, original_voucher_id: null, payment_transaction_id: null, idempotency_key: uid(), content_hash: "x", occurred_at: ts(dayOff, 14), created_by: STAFF.supervisor.id, created_at: ts(dayOff, 14), cancelled_by: null, cancelled_at: null, cancel_reason: null });
+  const money = (resId: string, kind: string, amount: number, method: string, dayOff: number, reference: string | null = null, status = "approved", br: string = BRANCH_A) => {
+    const B = br === BRANCH_B; const account_id = method === "cash" ? (B ? fixed(702) : CASH_A) : method === "pos" || method === "bank_transfer" ? (B ? fixed(703) : BANK_A) : null;
+    vouchers.push({ id: uid(), organization_id: ORG, branch_id: br, reservation_id: resId, number: nextNum(kind === "receipt" ? "RCP" : kind === "deposit" ? "DEP" : kind === "refund" ? "RFD" : "DRF"), kind, amount_halalas: amount, method, account_id, payout_id: null, status, reference, note: null, reason: kind.includes("refund") ? "تسوية" : null, original_voucher_id: null, payment_transaction_id: null, idempotency_key: uid(), content_hash: "x", occurred_at: ts(dayOff, 14), created_by: STAFF.supervisor.id, created_at: ts(dayOff, 14), cancelled_by: null, cancelled_at: null, cancel_reason: null });
   };
-  interface MkRes { guest: string; phone: string; nat?: string; cat: string; room?: string; ci: number; co: number; status: string; source?: string; ext?: string | null; adults?: number; comp?: number; identity?: string; access?: string; gov?: boolean; receipts?: number[]; otaPaid?: boolean; deposit?: number; depositRefund?: number; discount?: number; addon?: { d: string; a: number } | null; actualIn?: boolean; actualOut?: boolean; createdDays?: number; bookedDays?: number; keyboxDelivered?: boolean }
+  interface MkRes { branch?: string; roomId?: string; guest: string; phone: string; nat?: string; cat: string; room?: string; ci: number; co: number; status: string; source?: string; ext?: string | null; adults?: number; comp?: number; identity?: string; access?: string; gov?: boolean; receipts?: number[]; otaPaid?: boolean; deposit?: number; depositRefund?: number; discount?: number; addon?: { d: string; a: number } | null; actualIn?: boolean; actualOut?: boolean; createdDays?: number; bookedDays?: number; keyboxDelivered?: boolean }
   const profileOf = new Map<string, string>();   // one profile per phone (decision 2: never merged by name)
   const mkRes = (o: MkRes) => {
+    const BR = o.branch ?? BRANCH_A;
     const id = uid(); const ci = addDays(T, o.ci); const co = addDays(T, o.co); const nights = o.co - o.ci;
     const rate = s.room_categories.find((c) => c.id === o.cat)!.base_price_halalas as number;
     const rent = rate * nights; const disc = o.discount ?? 0; const addon = o.addon?.a ?? 0;
@@ -210,9 +214,9 @@ export function seed(): Store {
     const dep = o.deposit ? 5000 : 0; const depRef = o.depositRefund ? (o.depositRefund >= (o.deposit ?? 0) ? 5000 : 2500) : 0;
     const paid = received; const due = Math.max(total - paid, 0);
     const payment_status = paid === 0 ? "pending" : paid < total ? "partially_paid" : "paid";
-    const roomId = o.room ? R[o.room] : null;
+    const roomId = o.roomId ?? (o.room ? R[o.room] : null);
     const platform = !!o.source && o.source !== fixed(21);
-    const r = { id, organization_id: ORG, branch_id: BRANCH_A, internal_ref: `R-26A${String(rnum++).padStart(4, "0")}`, external_ref: o.ext ?? null, source_id: o.source ?? fixed(21), status: o.status,
+    const r = { id, organization_id: ORG, branch_id: BR, internal_ref: `R-26A${String(rnum++).padStart(4, "0")}`, external_ref: o.ext ?? null, source_id: o.source ?? fixed(21), status: o.status,
       platform_booked_on: platform ? addDays(T, o.bookedDays ?? Math.min(o.createdDays ?? o.ci - 5, -1)) : null, platform_collects: platform ? !!o.otaPaid : null, platform_verified_at: null, platform_verified_by: null, cancel_reference: o.status === "cancelled" && platform ? "CXL-" + String(o.ext ?? "").slice(-5) : null, security_hold_by: null, security_hold_at: null, booking_type: "individual", company_name: null, visit_purpose: "سياحة", check_in: ci, check_out: co, adults: o.adults ?? 2, companions: o.comp ?? 0, room_category_id: o.cat, room_id: roomId,
       rent_amount_halalas: rent, discount_halalas: disc, addons_halalas: addon, taxes_halalas: tax, total_halalas: total, paid_halalas: paid, payment_status, identity_status: o.identity ?? "verified", government_registration: o.gov ?? (o.status === "checked_in" || o.status === "checked_out"), access_status: o.access ?? (o.status === "checked_in" ? "delivered" : o.status === "checked_out" ? "delivered" : "locked"), keybox_delivered: o.keyboxDelivered ?? (o.status === "checked_in"),
       checkin_approved_by: null, checkin_approved_at: null, actual_check_in: o.actualIn || o.status === "checked_in" || o.status === "checked_out" ? ts(o.ci, 17) : null, actual_check_out: o.actualOut || o.status === "checked_out" ? ts(o.co, 11) : null, notes: null, created_at: ts(o.createdDays ?? o.ci - 5), created_by: STAFF.supervisor.id, security_hold: false, security_hold_reason: null, gov_registration_ref: null, gov_registration_by: null, gov_registration_at: null, updated_at: ts(-1),
@@ -223,16 +227,16 @@ export function seed(): Store {
     guests.push({ id: uid(), reservation_id: id, guest_profile_id: profileOf.get(o.phone)!, is_primary: true, full_name: o.guest, identity_type: "national_id", identity_number_encrypted: null, identity_number_last4: last4, identity_issue_number: null, nationality: o.nat ?? "سعودي", birth_date: "1990-05-05", phone: o.phone, phone_verified: false, relationship: null, verification_status: o.identity ?? "verified",
       identity_fingerprint: verified ? "fp_sa_demo_" + o.phone.slice(-4) + last4 : null, entry_path: (o.identity ?? "verified") !== "not_started" ? "guest" : null, entered_by: null, entered_at: (o.identity ?? "verified") !== "not_started" ? ts(o.ci - 2) : null, verified_by: verified ? STAFF.supervisor.id : null, verified_at: verified ? ts(o.ci - 1) : null,
       data_submitted: (o.identity ?? "verified") !== "not_started", created_at: r.created_at });
-    if (roomId) allocs.push({ id: uid(), reservation_id: id, room_id: roomId, branch_id: BRANCH_A, from_date: ci, to_date: co, status: ["cancelled", "no_show", "rejected"].includes(o.status) ? "cancelled" : o.status === "checked_out" ? "closed" : "active", reason: "create", created_by: STAFF.supervisor.id, created_at: r.created_at, closed_at: null });
-    charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "rent", description: `إيجار ${nights} ليلة × ${(rate / 100).toFixed(2)} ر.س`, quantity: nights, unit_price_halalas: rate, total_halalas: rent, taxable: true, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
-    if (disc) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "discount", description: "خصم ضيف دائم", quantity: 1, unit_price_halalas: disc, total_halalas: -disc, taxable: true, service_definition_id: null, invoice_id: null, reason: "ضيف دائم", created_by: STAFF.manager.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
-    if (o.addon) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "addon", description: o.addon.d, quantity: 1, unit_price_halalas: o.addon.a, total_halalas: o.addon.a, taxable: true, service_definition_id: svc.breakfast, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: ci, base_charge_id: null });
-    if (tax) charges.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, reservation_id: id, kind: "tax", description: "ضريبة القيمة المضافة", quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
+    if (roomId) allocs.push({ id: uid(), reservation_id: id, room_id: roomId, branch_id: BR, from_date: ci, to_date: co, status: ["cancelled", "no_show", "rejected"].includes(o.status) ? "cancelled" : o.status === "checked_out" ? "closed" : "active", reason: "create", created_by: STAFF.supervisor.id, created_at: r.created_at, closed_at: null });
+    charges.push({ id: uid(), organization_id: ORG, branch_id: BR, reservation_id: id, kind: "rent", description: `إيجار ${nights} ليلة × ${(rate / 100).toFixed(2)} ر.س`, quantity: nights, unit_price_halalas: rate, total_halalas: rent, taxable: true, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
+    if (disc) charges.push({ id: uid(), organization_id: ORG, branch_id: BR, reservation_id: id, kind: "discount", description: "خصم ضيف دائم", quantity: 1, unit_price_halalas: disc, total_halalas: -disc, taxable: true, service_definition_id: null, invoice_id: null, reason: "ضيف دائم", created_by: STAFF.manager.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
+    if (o.addon) charges.push({ id: uid(), organization_id: ORG, branch_id: BR, reservation_id: id, kind: "addon", description: o.addon.d, quantity: 1, unit_price_halalas: o.addon.a, total_halalas: o.addon.a, taxable: true, service_definition_id: svc.breakfast, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: ci, base_charge_id: null });
+    if (tax) charges.push({ id: uid(), organization_id: ORG, branch_id: BR, reservation_id: id, kind: "tax", description: "ضريبة القيمة المضافة", quantity: 1, unit_price_halalas: tax, total_halalas: tax, taxable: false, service_definition_id: null, invoice_id: null, reason: null, created_by: STAFF.supervisor.id, created_at: r.created_at, service_from: ci, service_to: co, base_charge_id: null });
     // a platform collects when the guest books (never later than yesterday here); it pays the property later, monthly
-    receipts.forEach((amt, i) => (o.otaPaid ? money(id, "receipt", amt, "ota_deferred", Math.min(o.createdDays ?? o.ci - 5, -1), o.ext ?? null) : money(id, "receipt", amt, i === 0 ? "pos" : "cash", o.ci - 1 + i, i === 0 ? "TRX-" + (7000 + rnum) : null)));
-    if (dep) money(id, "deposit", dep, "cash", o.ci);
-    if (depRef) money(id, "deposit_refund", depRef, "cash", o.co);
-    audits.push({ id: uid(), organization_id: ORG, branch_id: BRANCH_A, actor_id: STAFF.supervisor.id, action: "reservation.created", entity_type: "reservation", entity_id: id, details: { after: { internal_ref: r.internal_ref, check_in: ci, check_out: co } }, created_at: r.created_at });
+    receipts.forEach((amt, i) => (o.otaPaid ? money(id, "receipt", amt, "ota_deferred", Math.min(o.createdDays ?? o.ci - 5, -1), o.ext ?? null, "approved", BR) : money(id, "receipt", amt, i === 0 ? "pos" : "cash", o.ci - 1 + i, i === 0 ? "TRX-" + (7000 + rnum) : null, "approved", BR)));
+    if (dep) money(id, "deposit", dep, "cash", o.ci, null, "approved", BR);
+    if (depRef) money(id, "deposit_refund", depRef, "cash", o.co, null, "approved", BR);
+    audits.push({ id: uid(), organization_id: ORG, branch_id: BR, actor_id: STAFF.supervisor.id, action: "reservation.created", entity_type: "reservation", entity_id: id, details: { after: { internal_ref: r.internal_ref, check_in: ci, check_out: co } }, created_at: r.created_at });
     return id;
   };
   // in-house
@@ -285,6 +289,9 @@ export function seed(): Store {
   for (const a of allocs) if (a.status === "closed") a.closed_at = res.find((r) => r.id === a.reservation_id)?.actual_check_out ?? null;
   // a code delivered to a guest in house is that guest's (fn_staff_deliver_access_code sets it)
   for (const r of res) if (r.status === "checked_in" && r.access_status === "delivered") { const kb = s.keyboxes.find((k) => k.room_id === r.room_id); if (kb) Object.assign(kb, { last_reservation_id: r.id, last_delivered_at: r.actual_check_in }); }
+  // second branch (Jeddah), invented data: one stay in house with a cash receipt and a deposit, so the owner's all-branches pages and the finance totals have rows in both branches
+  mkRes({ branch: BRANCH_B, roomId: fixed(199), guest: "سلطان جدة التجريبي", phone: "0509990001", cat: cat.jed, ci: -1, co: 2, status: "checked_in", receipts: [34500], deposit: 5000 });
+  mkRes({ branch: BRANCH_B, roomId: fixed(198), guest: "ماجد جدة التجريبي", phone: "0509990002", cat: cat.jed, ci: -2, co: 0, status: "checked_in", receipts: [69000] });   // departs today in Jeddah (second-branch journey rows)
   put("reservations", res); put("reservation_guests", guests); put("reservation_allocations", allocs); put("reservation_charges", charges); put("financial_vouchers", vouchers);
   // invoices: the first checked-out stay, and every stay of the history — whose stays are «مغلق» (decision 59: departed, nothing
   // owed either way, the deposit settled, every line invoiced)
@@ -362,17 +369,19 @@ export function seed(): Store {
     task({ room: "U-1" }, tt.clean, "completed", "medium", STAFF.housekeeping.id, -1),
     task({ facility: fixed(432) }, tt.corridors, "completed", "low", STAFF.housekeeping.id, -2),
   ]);
-  put("maintenance_tickets", [{ id: uid(), room_id: R["106"], branch_id: BRANCH_A, title: "تسريب في حمام الغرفة", description: "صيانة السباكة مطلوبة قبل إعادة التسكين", status: "open", created_by: STAFF.supervisor.id, created_at: ts(-1, 15) }]);
+  put("maintenance_tickets", [{ id: uid(), room_id: R["106"], branch_id: BRANCH_A, title: "تسريب في حمام الغرفة", description: "صيانة السباكة مطلوبة قبل إعادة التسكين", status: "open", created_by: STAFF.supervisor.id, created_at: ts(-1, 15) },
+    { id: uid(), room_id: fixed(198), branch_id: BRANCH_B, title: "مكيف J-2 لا يبرّد (تجريبي)", description: "فرع جدة، بيانات مخترعة", status: "open", created_by: STAFF.owner.id, created_at: ts(-1, 16) }]);
   put("code_rotation_events", [{ id: uid(), room_id: R["102"], from_version: 2, to_version: 3, field_tested: true, created_at: ts(-1, 13) }, { id: uid(), room_id: R["203"], from_version: 2, to_version: 3, field_tested: true, created_at: ts(-1, 14) }]);
   put("access_delivery_events", res.filter((r) => r.status === "checked_in" && r.access_status === "delivered").map((r) => ({ id: uid(), reservation_id: r.id, keybox_id: s.keyboxes.find((k) => k.room_id === r.room_id)?.id ?? null, channel: "screen", delivered_by: STAFF.supervisor.id, acknowledged: true, created_at: at(r.actual_check_in, 5) })));
   put("access_release_requests", []);
   put("notifications", [{ id: uid(), branch_id: BRANCH_A, audience: "supervisor", title: "مغادرة — تنظيف وتغيير رمز مطلوب", body: "غرفة 206", link: "/staff/housekeeping", read_at: null, created_at: ts(0, 11) }]);
 
   // conversations / tickets
-  const conv1 = uid(); const conv2 = uid();
+  const conv1 = uid(); const conv2 = uid(); const convJ = uid();
   put("conversations", [
     { id: conv1, reservation_id: rArr1, channel: "screen", status: "handed_off", branch_id: BRANCH_A, guest_token: null, client_fingerprint: "fp1", created_at: ts(0, 8), last_message_at: ts(0, 8), handed_off_at: ts(0, 8), handoff_reason: "طلب صريح من النزيل" },
     { id: conv2, reservation_id: null, channel: "screen", status: "active", branch_id: BRANCH_A, guest_token: null, client_fingerprint: "fp2", created_at: ts(-1, 20), last_message_at: ts(-1, 20), handed_off_at: null, handoff_reason: null },
+    { id: convJ, reservation_id: null, channel: "screen", status: "handed_off", branch_id: BRANCH_B, guest_token: null, client_fingerprint: "fpJ", created_at: ts(0, 9), last_message_at: ts(0, 9), handed_off_at: ts(0, 9), handoff_reason: "طلب صريح من النزيل" },
   ]);
   put("conversation_messages", [
     { id: uid(), conversation_id: conv1, sender: "guest", content: "أبغى أعرف متى أقدر أدخل الشقة؟", meta: { mode: "ai" }, created_at: ts(0, 8) },
@@ -381,10 +390,12 @@ export function seed(): Store {
     { id: uid(), conversation_id: conv1, sender: "assistant", content: "تم تحويل محادثتك إلى مشرف الاستقبال وسيرد عليك هنا قريبًا.", meta: { mode: "scripted" }, created_at: ts(0, 8) },
     { id: uid(), conversation_id: conv2, sender: "guest", content: "هل توجد مواقف سيارات؟", meta: { mode: "ai" }, created_at: ts(-1, 20) },
     { id: uid(), conversation_id: conv2, sender: "assistant", content: "نعم، مواقف مجانية أمام المبنى لنزلاء المنشأة.", meta: { mode: "ai" }, created_at: ts(-1, 20) },
+    { id: uid(), conversation_id: convJ, sender: "guest", content: "أحتاج موظف في فرع جدة (تجريبي)", meta: { mode: "ai" }, created_at: ts(0, 9) },
   ]);
   put("human_handoff_tickets", [
     { id: uid(), organization_id: ORG, branch_id: BRANCH_A, conversation_id: conv1, reservation_id: rArr1, kind: "guest_request", external_ref: "BK-4471029", source_name: "Booking.com", details: "طلب صريح من النزيل", status: "open", resolved_by: null, resolved_at: null, created_at: ts(0, 8) },
     { id: uid(), organization_id: ORG, branch_id: BRANCH_A, conversation_id: null, reservation_id: null, kind: "unmatched_reservation", external_ref: "BK-9999999", source_name: "Booking.com", details: "رقم حجز غير مطابق", status: "open", resolved_by: null, resolved_at: null, created_at: ts(-1, 21) },
+    { id: uid(), organization_id: ORG, branch_id: BRANCH_B, conversation_id: convJ, reservation_id: null, kind: "guest_request", external_ref: null, source_name: null, details: "طلب صريح من النزيل (جدة، تجريبي)", status: "open", resolved_by: null, resolved_at: null, created_at: ts(0, 9) },
   ]);
   put("registration_sessions", []);
   put("guest_lookup_attempts", []);

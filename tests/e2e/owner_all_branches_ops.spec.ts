@@ -42,9 +42,47 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     await picker(page).selectOption({ label: "جميع الفروع" });
     await expect(page.getByText("الوارد الموحّد")).toBeVisible();
   });
+  test("AB-M1 mixed rows: the owner's all-branches Tickets and Inbox hold rows of both branches with their branch; one branch alone shows only its own; a supervisor never sees the other branch's rows", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/tickets", { waitUntil: "networkidle" });
+    await picker(page).selectOption({ label: "جميع الفروع" });
+    await expect(page.getByText("تسريب في حمام الغرفة").first()).toBeVisible();
+    await expect(page.getByText("مكيف J-2").first()).toBeVisible();
+    const badges = new Set(await page.getByTestId("ticket-branch").allTextContents());
+    expect(badges.size).toBeGreaterThanOrEqual(2);
+    await page.goto("/#/staff/inbox", { waitUntil: "networkidle" });
+    await picker(page).selectOption({ label: "جميع الفروع" });
+    await expect(page.getByText("فرع جدة — الكورنيش").first()).toBeVisible();
+    await expect(page.getByText("فرع الرياض — طريق الملك فهد").first()).toBeVisible();
+    await picker(page).selectOption({ index: 0 });
+    await expect(page.getByRole("button", { name: /فرع جدة/ })).toHaveCount(0);   // no conversation row of the other branch (the picker option is not a button)
+  });
+  test("AB-M2 a supervisor of the first branch sees none of the second branch's tickets, inbox rows or codes", async ({ page, loginAs }) => {
+    await loginAs("supervisor");
+    for (const [u, text] of [["/#/staff/tickets", "مكيف J-2"], ["/#/staff/inbox", "فرع جدة"], ["/#/staff/codes", "J-1"]] as const) {
+      await page.goto(u, { waitUntil: "networkidle" });
+      await expect(page.getByText(text)).toHaveCount(0);
+    }
+  });
+  test("AB-J1 guest journey: the owner's all-branches board merges the departures of both branches and tags each row with its branch; a supervisor has none (see AB-N1)", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/journey", { waitUntil: "networkidle" });
+    await expect(picker(page).locator("option").last()).toHaveText("جميع الفروع");
+    await picker(page).selectOption({ label: "جميع الفروع" });
+    await expect(page.getByTestId("journey-departing")).toBeVisible();
+    const names = new Set(await page.getByTestId("journey-branch").allTextContents());
+    expect(names.size).toBeGreaterThanOrEqual(2);
+    await expect(page.getByTestId("journey-branch-settings")).toContainText("جدة");   // per-branch settings stay reachable, not merged away
+    await page.getByTestId("journey-tab-reviews").click();                                // each branch's own rating and count stay visible beside the merged mark
+    await expect(page.getByTestId("journey-reviews-branches")).toContainText("جدة");
+    await expect(page.getByTestId("journey-reviews-approx")).toHaveCount(0);               // raw rows complete: exact, not labelled approximate
+    await page.getByTestId("journey-open-branch").last().click();                          // a direct switch to that branch's own board
+    await expect(page.getByTestId("journey-branch")).toHaveCount(0);
+    await expect(picker(page)).toHaveValue(/.+/);
+  });
   test("AB-N1 a supervisor keeps single-branch pages (no «جميع الفروع» anywhere on them)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
-    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes"]) {
+    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey"]) {
       await page.goto(u, { waitUntil: "networkidle" });
       await expect(page.getByText("جميع الفروع")).toHaveCount(0);
     }

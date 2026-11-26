@@ -26,6 +26,21 @@ test.describe("mobile readability (390px)", () => {
     expect(m.height).toBeLessThan(170);                                 // compact: the scattered 2-column card was ~260px
   });
 
+  for (const w of [390, 195]) test(`MOBCARD ${w}px: no two status chips of an arrival card overlap`, async ({ page, loginAs }) => {
+    await page.setViewportSize({ width: w, height: 844 });
+    await loginAs("supervisor");
+    await page.goto("/#/staff/arrivals", { waitUntil: "networkidle" });
+    const cards = page.locator('a[href*="/staff/reservations/"]');
+    await expect(cards.first()).toBeVisible();
+    const bad = await cards.evaluateAll((els) => els.flatMap((el) => {
+      const bs = [...el.querySelectorAll(".badge")].map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0);
+      const out: string[] = [];
+      for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) { const a = bs[i], b = bs[j]; if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(`${i}/${j}`); }
+      return out;
+    }));
+    expect(bad).toEqual([]);
+  });
+
   test("MOBPAY a reservation code in the payments list stays on one line", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/staff/payments", { waitUntil: "networkidle" });

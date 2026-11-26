@@ -35,6 +35,7 @@ test.describe("branch scope (U02, control G24)", () => {
     const periodBookings = page.locator("div.card", { has: page.locator("p", { hasText: /^حجوزات الفترة$/ }) }).locator("p.text-xl");
     await page.getByRole("button", { name: "هذا الشهر" }).click();
     await expect(periodBookings).not.toHaveText("0");                      // Riyadh has bookings this month
+    const riyadhCount = (await periodBookings.textContent())!.trim();
     await page.getByRole("button", { name: "آخر 30 يومًا" }).click();
     await expect(periodBookings).toBeVisible();
 
@@ -42,9 +43,10 @@ test.describe("branch scope (U02, control G24)", () => {
     await page.evaluate((b) => { (window as unknown as { __demoLatency: unknown }).__demoLatency = (t: string, d: string[]) => (t === "rpc:fn_reports_finance" && (d[0] ?? "").includes(b) ? 1500 : 0); }, RIYADH);
     await page.getByRole("button", { name: "هذا الشهر" }).click();
     await picker.selectOption(JEDDAH);
-    await expect(periodBookings).toHaveText("0");                          // Jeddah: no bookings
+    await expect(periodBookings).not.toHaveText(riyadhCount);              // Jeddah has its own, smaller count (the demo seeds a few Jeddah stays)
+    const jeddahCount = (await periodBookings.textContent())!.trim();
     await page.waitForTimeout(2_000);                                      // Riyadh's late answer arrives …
-    await expect(periodBookings).toHaveText("0");                          // … and is dropped
+    await expect(periodBookings).toHaveText(jeddahCount);                  // … and is dropped: Jeddah keeps its own figure
     await expect(page.getByLabel("الفرع النشط")).toHaveValue(JEDDAH);
   });
 });

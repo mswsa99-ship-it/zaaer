@@ -298,6 +298,21 @@ describe("G10–G14 — money core (decisions 13, 24, 25, 47, 68, 69)", () => {
     await rpc("fn_admin_set_branch_guide", { p: { branch_id: BRANCH, bank_name: "مصرف", bank_beneficiary: "فايف اورز", bank_iban: "SA4480000000000000001192" } });
   });
 
+  it("AB-F1 the second branch carries its own synthetic money: Jeddah receipts and deposit sit in Jeddah's accounts and in Jeddah's finance report only; Riyadh's report has none of them; the owner's reports are per branch", async () => {
+    const JED = "00000000-0000-0000-0000-000000000012";
+    await login("owner@demo.sa");
+    const from = fut(-3), to = fut(3);
+    const rep = async (b: string) => rpc<any>("fn_reports_finance", { p_branch: b, p_from: from, p_to: to, p_filters: {} });
+    const rj = await rep(JED); const ra = await rep(BRANCH);
+    expect(rj.ledger.receipts).toBeGreaterThan(0);
+    const jedAccounts = (rj.by_account as any[]).map((a) => a.account_id);
+    const rivAccounts = (ra.by_account as any[]).map((a) => a.account_id);
+    expect(jedAccounts.length).toBeGreaterThan(0);
+    expect(jedAccounts.some((id) => rivAccounts.includes(id))).toBe(false);   // no account appears in both branches' reports
+    const list = await rpc<any>("fn_reservation_list", { p_branch: JED, p_filters: {}, p_limit: 50, p_offset: 0 });
+    expect(list.total).toBeGreaterThanOrEqual(1);
+  });
+
   it("DC02–DC07 the closing of the day in the demo: computed boxes, the review's hash, the window, the request after it", async () => {
     const day = today();
     const box = (g: any, key: string) => (g.live.boxes as any[]).find((b) => b.key === key)?.system_halalas ?? 0;
@@ -2244,7 +2259,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
     expect(await rpc<string[]>("fn_user_branch_ids", {})).toEqual([B]);
     expect(await fails(rpc("fn_reservation_calendar", { p_branch: A, p_from: day(0), p_to: day(7) }))).toBe("FORBIDDEN: branch not permitted");
     expect(await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 5, p_offset: 0 })).toEqual({ total: 0, rows: [] });
-    expect((await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 5, p_offset: 0 })).total).toBe(0);
+    { const lb = await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 5, p_offset: 0 }); expect(lb.total).toBe(2); expect((lb.rows as any[]).every((r) => r.branch_id === B || r.branch_id === undefined)).toBe(true); }   // the two seeded Jeddah stays, and only that branch's
     await login("owner@demo.sa");
     expect(await up({ staff_id: SUP, branch_ids: [B, A] })).toEqual({ ok: true, changed: ["branches"] });
     const back = await memberships(); expect(back).toHaveLength(2); expect(back[0]).toMatchObject({ id: before[0].id, branch_id: A, removed_at: null, removed_by: null });
