@@ -31,3 +31,15 @@ test("SW3 390px: a chosen period breaks only at the arrow, never inside a date",
   expect(await parts.count()).toBe(2);
   for (let i = 0; i < 2; i++) expect((await parts.nth(i).boundingBox())!.height).toBeLessThan(26);
 });
+
+test("SW4 195px reservation detail: each money figure in the summary stays on one line", async ({ page, loginAs, go }) => {
+  await page.setViewportSize({ width: 195, height: 700 });
+  await loginAs("supervisor"); await go("/staff/reservations");
+  await page.locator("a.font-mono").first().click();
+  await page.getByText("النزلاء ومطابقة الهوية").first().waitFor();
+  const amounts = page.locator("p.whitespace-nowrap", { hasText: "ر.س" });
+  expect(await amounts.count()).toBeGreaterThanOrEqual(3);
+  const hs = await amounts.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+  for (const h of hs) expect(h).toBeLessThan(1.6);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(195);
+});
