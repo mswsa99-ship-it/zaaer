@@ -43,7 +43,7 @@ export default function PlatformCheck() {
   const pending = (rows ?? []).filter((r) => !r.verified_at && !["cancelled", "no_show"].includes(r.status)).length;
   return (
     <div>
-      <SectionTitle title="مطابقة المنصات" subtitle={error && (rows ?? []).length === 0 ? "وصول المنصات في اليوم أو الفترة المختارة: تعذّر تحميل القائمة" : `وصول المنصات في اليوم أو الفترة المختارة: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex flex-wrap items-center gap-2"><DateRangePicker className="w-52" label="اليوم أو الفترة" from={range.from} to={range.to} onChange={(a, b) => setRange({ from: a, to: b })} /><BranchPicker allowAll /></div>} />
+      <SectionTitle title="مطابقة المنصات" subtitle={error && (rows ?? []).length === 0 ? "وصول المنصات في اليوم أو الفترة المختارة: تعذّر تحميل القائمة" : `وصول المنصات في اليوم أو الفترة المختارة: ${COUNT.booking(rows?.length ?? 0)}، بانتظار المطابقة: ${pending}`} action={<div className="flex max-w-full min-w-0 flex-wrap items-center gap-2"><DateRangePicker className="w-52 max-w-full" label="اليوم أو الفترة" from={range.from} to={range.to} onChange={(a, b) => setRange({ from: a, to: b })} /><BranchPicker allowAll /></div>} />
       {/* 6.6 (U3): a failed load is one error card with a retry, never an error next to «لا حجوزات»; a failed mark keeps the rows and shows the banner */}
       {error && (rows ?? []).length > 0 && <div className="mb-4"><ErrorBanner message={error} /></div>}
       {error && (rows ?? []).length === 0 ? <LoadErrorCard message={error} onRetry={load} /> : (rows ?? []).length === 0 ? <EmptyState icon={<Link2 className="h-10 w-10" />} title="لا حجوزات من المنصات في هذين اليومين" /> : (
