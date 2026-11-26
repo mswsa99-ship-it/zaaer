@@ -73,11 +73,17 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     const names = new Set(await page.getByTestId("journey-branch").allTextContents());
     expect(names.size).toBeGreaterThanOrEqual(2);
     await expect(page.getByTestId("journey-branch-settings")).toContainText("جدة");   // per-branch settings stay reachable, not merged away
+    const rows = await page.getByTestId("journey-branch-settings").innerText();
+    expect(rows).toContain("10:00");  expect(rows).toContain("11:00");                    // Riyadh and Jeddah keep their own morning-message times
+    expect(rows).toContain("13:00");  expect(rows).toContain("14:00");
     await page.getByTestId("journey-tab-reviews").click();                                // each branch's own rating and count stay visible beside the merged mark
     await expect(page.getByTestId("journey-reviews-branches")).toContainText("جدة");
     await expect(page.getByTestId("journey-reviews-approx")).toHaveCount(0);               // raw rows complete: exact, not labelled approximate
     await page.getByTestId("journey-open-branch").last().click();                          // a direct switch to that branch's own board
     await expect(page.getByTestId("journey-branch")).toHaveCount(0);
+    await page.getByTestId("journey-tab-reviews").click();                                // one branch: no cross-branch rating table left over from the merged view
+    await expect(page.getByTestId("journey-reviews")).toBeVisible();
+    await expect(page.getByTestId("journey-reviews-branches")).toHaveCount(0);
     await expect(picker(page)).toHaveValue(/.+/);
   });
   test("AB-R1 admin units: the owner's all-branches list merges both branches' units with a branch tag, offers no add, and each row opens its own branch for editing", async ({ page, loginAs }) => {
@@ -96,9 +102,25 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     await expect(page.getByRole("button", { name: /^تعديل الوحدة J-1/ })).toBeVisible();   // edit is back, on that branch
   });
 
+  for (const [route, noAdd, editName, label] of [["/#/admin/services", /خدمة جديدة/, /^تعديل الخدمة$/, "services"], ["/#/admin/facilities", /مرفق جديد/, /^تعديل المرفق$/, "facilities"]] as const) {
+    test(`AB-R2 admin ${label}: the owner's all-branches list merges both branches with a branch tag, offers no add or edit, and a row opens its own branch`, async ({ page, loginAs }) => {
+      await loginAs("owner");
+      await page.goto(route, { waitUntil: "networkidle" });
+      await picker(page).selectOption({ label: "جميع الفروع" });
+      if (label === "facilities") await page.getByText("إظهار المؤرشف").click();   // the seeded Jeddah facility is archived, so Jeddah's active list stays empty (U04)
+      await expect(page.getByTestId("admin-row-branch").first()).toBeVisible();
+      expect(new Set(await page.getByTestId("admin-row-branch").allTextContents()).size).toBeGreaterThanOrEqual(2);
+      await expect(page.getByRole("button", { name: noAdd })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: editName })).toHaveCount(0);
+      await page.getByTestId("admin-row-open-branch").last().click();                      // the Jeddah row (sorted after Riyadh's)
+      await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: editName }).first()).toBeVisible();   // edit is back, on that branch
+    });
+  }
+
   test("AB-N1 a supervisor keeps single-branch pages (no «جميع الفروع» anywhere on them)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
-    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey", "/#/admin/rooms"]) {
+    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey", "/#/admin/rooms", "/#/admin/services", "/#/admin/facilities"]) {
       await page.goto(u, { waitUntil: "networkidle" });
       await expect(page.getByText("جميع الفروع")).toHaveCount(0);
     }

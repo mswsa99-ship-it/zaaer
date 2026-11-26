@@ -67,7 +67,7 @@ export default function StaffJourney() {
       Promise.all(ids.map(async (id) => ({ id, board: await journeyApi.board(id), reviews: canReviews ? await journeyApi.reviews(id, 30).catch(() => null) : null })))
         .then((parts) => {
           if (!alive) return;
-          if (parts.length === 1) { setPerBranch([]); setBranchOf({}); setBoard(parts[0].board); setReviews(parts[0].reviews); setNow(Date.now()); return; }
+          if (parts.length === 1) { setPerBranch([]); setReviewParts([]); setApprox(false); setBranchOf({}); setBoard(parts[0].board); setReviews(parts[0].reviews); setNow(Date.now()); return; }
           const name = (id: string) => branches.find((x) => x.id === id)?.name_ar ?? "";
           const of: Record<string, string> = {};
           const tag = <T,>(rows: T[], key: (r: T) => string, id: string) => { rows.forEach((r) => { of[key(r)] = name(id); }); return rows; };
@@ -287,7 +287,7 @@ function ReviewsTab({ data, approx, parts, onReply }: { data: StaffReviews | nul
       )}
       <Card>
         <AmountGrid>
-          <AmountBox label={`التقييم العام (30 يومًا)${approx ? " (تقريبي)" : ""}`} value={s.overall != null ? `${s.overall} / 10` : "—"} tone={s.overall != null && s.overall < data.alert_below ? "text-danger-600" : "text-ink-900"} />
+          <AmountBox label={`التقييم العام (30 يومًا)${approx ? " (تقريبي)" : ""}`} value={s.overall != null ? <bdi dir="ltr">{`${s.overall} / 10`}</bdi> : "—"} tone={s.overall != null && s.overall < data.alert_below ? "text-danger-600" : "text-ink-900"} />
           {data.aspects.map((a) => <AmountBox key={a.key} label={a.label} value={s[a.key] != null ? String(s[a.key]) : "—"} />)}
           <AmountBox label="أُرسلت / دُعي" value={`${s.count} / ${data.invited}`} />
           <AmountBox label={`أقل من ${data.alert_below}`} value={s.below} tone={s.below ? "text-danger-600" : "text-ink-900"} />
@@ -302,7 +302,7 @@ function ReviewsTab({ data, approx, parts, onReply }: { data: StaffReviews | nul
                 <h3 className="font-semibold text-ink-800">غرفة {r.room_number ?? "—"}</h3>
                 <p className="text-xs text-ink-500"><span className="font-mono" dir="ltr">{r.internal_ref ?? ""}</span> · {formatDateTime(r.submitted_at)}</p>
               </div>
-              <Badge className={(r.overall ?? 10) < data.alert_below ? "bg-danger-500/10 text-danger-600" : "bg-success-50 text-success-700"}>{r.overall} / 10</Badge>
+              <Badge className={(r.overall ?? 10) < data.alert_below ? "bg-danger-500/10 text-danger-600" : "bg-success-50 text-success-700"}><bdi dir="ltr">{`${r.overall} / 10`}</bdi></Badge>
             </div>
             <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-500">{data.aspects.map((a) => <span key={a.key}>{a.label}: <span className="font-semibold text-ink-700 tabular-nums">{r[a.key]}</span></span>)}</p>
             {r.comment && <p className="mt-2 rounded-lg bg-ink-50 p-2 text-sm text-ink-700" dir="auto">{r.comment}</p>}

@@ -78,4 +78,23 @@ test.describe("mobile readability (390px)", () => {
     const tabs = await page.getByTestId("bottom-tabs").evaluate((e) => [...e.children].map((c) => { const b = c.getBoundingClientRect(); return b.left >= -1 && b.right <= innerWidth + 1 && b.bottom <= innerHeight + 1 && b.width > 0; }));
     expect(tabs.length).toBeGreaterThanOrEqual(5); expect(tabs.every(Boolean)).toBe(true);   // every destination, «المزيد» included, is on screen: no hidden scroll strip
   });
+  test("MOBRATE guest ratings on a phone read score first: every «n / 10» in the reviews tab shows the score left of the 10", async ({ page, loginAs }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginAs("owner");
+    await page.goto("/#/staff/journey", { waitUntil: "networkidle" });
+    await page.getByTestId("journey-tab-reviews").click();
+    await page.getByTestId("journey-reviews").waitFor();
+    const bad = await page.evaluate(() => {
+      const out: string[] = []; let n = 0;
+      document.querySelectorAll('[data-testid="journey-reviews"] bdi').forEach((b) => {
+        const t = b.textContent ?? ""; const m = t.match(/^(\S+) \/ 10$/); if (!m) return;
+        n++; const node = b.firstChild as Text; const r = document.createRange();
+        r.setStart(node, 0); r.setEnd(node, m[1].length); const a = r.getBoundingClientRect();
+        r.setStart(node, t.length - 2); r.setEnd(node, t.length); const c = r.getBoundingClientRect();
+        if (!(a.left < c.left)) out.push(t);
+      });
+      return n >= 2 ? out : ["fewer than two ratings found"];
+    });
+    expect(bad).toEqual([]);
+  });
 });

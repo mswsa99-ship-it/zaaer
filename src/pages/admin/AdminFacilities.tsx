@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Landmark, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
 import { opsApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 
-interface Facility { id: string; name: string; description: string | null; block_id: string | null; floor_id: string | null; is_active: boolean; archived_at: string | null; version: number; block?: { name: string } | null; floor?: { name: string } | null; open_tasks?: number }
+interface Facility { branch_id?: string; id: string; name: string; description: string | null; block_id: string | null; floor_id: string | null; is_active: boolean; archived_at: string | null; version: number; block?: { name: string } | null; floor?: { name: string } | null; open_tasks?: number }
 interface Opt { id: string; name: string; block_id?: string }
 
 const NO_DATA: { rows: Facility[]; blocks: Opt[]; floors: Opt[] } = { rows: [], blocks: [], floors: [] };
@@ -17,6 +18,7 @@ export default function AdminFacilities() {
   const [draft, setDraft] = useState<Partial<Facility> | null>(null);
 
   // G24 (decision 40): the definitions of the active branch only
+  const { branches, allBranches, setBranchId } = useBranch();
   const q = useBranchQuery(async (branchId) => {
     const [f, b, fl, t] = await Promise.all([
       supabase.from("facilities").select("id, name, description, block_id, floor_id, is_active, archived_at, version, block:blocks(name), floor:floors(name)").eq("branch_id", branchId).order("name"),
@@ -26,10 +28,10 @@ export default function AdminFacilities() {
     ]);
     const open = new Map<string, number>(); for (const x of (t.data ?? []) as { facility_id: string }[]) open.set(x.facility_id, (open.get(x.facility_id) ?? 0) + 1);
     return {
-      rows: (must(f) as unknown as Facility[]).map((x) => ({ ...x, open_tasks: open.get(x.id) ?? 0 })),
+      rows: (must(f) as unknown as Facility[]).map((x) => ({ ...x, branch_id: branchId, open_tasks: open.get(x.id) ?? 0 })),
       blocks: (b.data as Opt[]) ?? [], floors: (fl.data as Opt[]) ?? [],
     };
-  }, [], NO_DATA);
+  }, [], NO_DATA, { merge: (parts) => ({ rows: parts.flatMap((x) => x.rows), blocks: parts.flatMap((x) => x.blocks), floors: parts.flatMap((x) => x.floors) }) });
   const { rows, blocks, floors } = q.data; const load = q.reload; const branchId = q.branchId;
 
   if (q.loading) return <LoadingScreen />;
@@ -38,7 +40,7 @@ export default function AdminFacilities() {
   return (
     <div>
       <SectionTitle title="المرافق" subtitle="مساحات وعناصر مشتركة (ممرات، جلسات، دورات مياه، بوابات) — ليست وحدات إيجارية" action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name: "", description: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مرفق جديد</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker allowAll />{!allBranches && <button onClick={() => setDraft({ name: "", description: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> مرفق جديد</button>}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<Landmark className="h-10 w-10" />} title="لا توجد مرافق" /> : (
@@ -49,9 +51,10 @@ export default function AdminFacilities() {
                 <div>
                   <div className="flex items-center gap-2"><h3 className="font-semibold text-ink-800">{r.name}</h3><ArchivedBadge archivedAt={r.archived_at} />{!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطل</Badge>}</div>
                   <p className="text-xs text-ink-400">{r.block?.name ?? "—"} / {r.floor?.name ?? "—"}{r.open_tasks ? ` · مهام مفتوحة: ${r.open_tasks}` : ""}</p>
+                  {allBranches && r.branch_id && <p className="mt-1"><Badge testId="admin-row-branch">{branches.find((x) => x.id === r.branch_id)?.name_ar}</Badge></p>}
                   {r.description && <p className="mt-1 text-sm text-ink-500">{r.description}</p>}
                 </div>
-                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل المرفق" title="تعديل"><Pencil className="h-4 w-4" /></button>
+                {allBranches ? <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع المرفق ${r.name} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل المرفق" title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
             </Card>
           ))}

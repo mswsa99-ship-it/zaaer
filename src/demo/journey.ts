@@ -144,7 +144,9 @@ export function journeyRpcs(ctx: JourneyCtx) {
   /** the branch's journey settings (a row for every branch, as the SQL's trigger makes one) */
   const settings = (branch: string): Row => {
     let s = T("branch_journey_settings").find((x) => x.branch_id === branch);
-    if (!s) { s = { branch_id: branch, organization_id: ORG, ...DEFAULTS, updated_by: null, updated_at: nowISO() }; T("branch_journey_settings").push(s); }
+    // the demo's second branch (Jeddah) runs its own morning message, free-checkout hour and refund time, so merged views can prove they never blur two branches' rules
+    const own = branch === "00000000-0000-0000-0000-000000000012" ? { checkout_message_time: "11:00", free_checkout_until: "14:00", deposit_refund_hours: 5 } : {};
+    if (!s) { s = { branch_id: branch, organization_id: ORG, ...DEFAULTS, ...own, updated_by: null, updated_at: nowISO() }; T("branch_journey_settings").push(s); }
     return s;
   };
   /** the organisation's rules (the defaults are seeded with it) */

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ConciergeBell, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
 import { opsApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle, MoneyInput, dropLegacyDrafts, useFormDraft, useEditDraft, DraftRestoreBanner } from "../../components/forms";
@@ -11,7 +12,7 @@ import { BILLING_UNIT_LABELS } from "../../lib/types";
 import { formatCurrency } from "../../lib/utils";
 import { TimeInput } from "../../components/TimeInput";
 
-interface Service { id: string; name_ar: string; name_en: string | null; description: string | null; billing_unit: string; price_halalas: number; is_free: boolean; taxable: boolean; task_type_id: string | null; late_checkout_until: string | null; is_active: boolean; archived_at: string | null; version: number }
+interface Service { branch_id?: string; id: string; name_ar: string; name_en: string | null; description: string | null; billing_unit: string; price_halalas: number; is_free: boolean; taxable: boolean; task_type_id: string | null; late_checkout_until: string | null; is_active: boolean; archived_at: string | null; version: number }
 
 const NO_DATA: { rows: Service[]; taskTypes: { id: string; name: string }[] } = { rows: [], taskTypes: [] };
 
@@ -21,13 +22,14 @@ export default function AdminServices() {
   const [draft, setDraft] = useState<Partial<Service> | null>(null);
 
   // G24 (decision 40): the definitions of the active branch only
+  const { branches, allBranches, setBranchId } = useBranch();
   const q = useBranchQuery(async (branchId) => {
     const [s, t] = await Promise.all([
       supabase.from("service_definitions").select("id, name_ar, name_en, description, billing_unit, price_halalas, is_free, taxable, task_type_id, late_checkout_until, is_active, archived_at, version").eq("branch_id", branchId).order("name_ar"),
       supabase.from("task_types").select("id, name").eq("branch_id", branchId).is("archived_at", null).order("name"),
     ]);
-    return { rows: must(s) as Service[], taskTypes: (t.data as { id: string; name: string }[]) ?? [] };
-  }, [], NO_DATA);
+    return { rows: (must(s) as Service[]).map((x) => ({ ...x, branch_id: branchId })), taskTypes: (t.data as { id: string; name: string }[]) ?? [] };
+  }, [], NO_DATA, { merge: (parts) => ({ rows: parts.flatMap((x) => x.rows), taskTypes: parts.flatMap((x) => x.taskTypes) }) });
   const { rows, taskTypes } = q.data; const load = q.reload; const branchId = q.branchId;
 
   // 6.5 (U4): a new service's form survives a reload — the draft is offered back, never applied silently
@@ -45,7 +47,7 @@ export default function AdminServices() {
   return (
     <div>
       <SectionTitle title="الخدمات" subtitle="كتالوج الخدمات الاختيارية على الحجز — يُحفظ الاسم والسعر لحظة الإضافة ولا تتغير الحجوزات السابقة بتعديله" action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name_ar: "", billing_unit: "once", price_halalas: null as unknown as number, is_free: false, taxable: true })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> خدمة جديدة</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker allowAll />{!allBranches && <button onClick={() => setDraft({ name_ar: "", billing_unit: "once", price_halalas: null as unknown as number, is_free: false, taxable: true })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> خدمة جديدة</button>}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<ConciergeBell className="h-10 w-10" />} title="لا توجد خدمات" description="أضف خدمات مثل الإفطار أو التنظيف الإضافي أو الدخول المبكر." /> : (
@@ -57,9 +59,10 @@ export default function AdminServices() {
                   <div className="flex items-center gap-2"><h3 className="font-semibold text-ink-800">{r.name_ar}</h3><ArchivedBadge archivedAt={r.archived_at} />{!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطلة</Badge>}</div>
                   <p className="text-sm text-ink-700">{r.is_free ? "مجانية" : formatCurrency(r.price_halalas / 100)} <span className="text-xs text-ink-400">· {BILLING_UNIT_LABELS[r.billing_unit]} · {r.taxable ? "خاضعة للضريبة" : "بدون ضريبة"}</span></p>
                   {r.late_checkout_until && <p className="mt-1 text-xs text-brand-700">مغادرة متأخرة: تنقل المغادرة إلى الساعة <span dir="ltr">{r.late_checkout_until.slice(0, 5)}</span></p>}
+                  {allBranches && r.branch_id && <p className="mt-1"><Badge testId="admin-row-branch">{branches.find((x) => x.id === r.branch_id)?.name_ar}</Badge></p>}
                   {r.description && <p className="mt-1 text-xs text-ink-500">{r.description}</p>}
                 </div>
-                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل الخدمة" title="تعديل"><Pencil className="h-4 w-4" /></button>
+                {allBranches ? <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع الخدمة ${r.name_ar} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل الخدمة" title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
             </Card>
           ))}
