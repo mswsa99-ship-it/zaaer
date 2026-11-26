@@ -14,6 +14,9 @@ test.describe("branch labels and filter targets (390px)", () => {
     const cards = page.locator("a[href*='/staff/reservations/']");
     const n = await cards.count(); expect(n).toBeGreaterThan(0);
     for (let i = 0; i < n; i++) await expect(cards.nth(i)).toContainText(/فرع/);
+    await expect(cards.filter({ hasText: /جدة/ }).first()).toBeVisible();   // a Jeddah card is listed, with its branch
+    await expect(cards.filter({ hasNotText: /جدة/ }).first()).toContainText(/فرع/);
+    await cards.filter({ hasText: /جدة/ }).first().scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/proof/bl1-payments-390.png" });
   });
   test("BL2 follow-ups in all branches: every row names its branch", async ({ page, loginAs, go }) => {
@@ -22,7 +25,8 @@ test.describe("branch labels and filter targets (390px)", () => {
     const rows = page.locator("a[href*='/staff/reservations/']");
     const n = await rows.count(); expect(n).toBeGreaterThan(0);
     for (let i = 0; i < n; i++) await expect(rows.nth(i).locator("p.font-mono")).toContainText("·");
-    await expect(page.getByTestId("followups-departed")).toContainText("فرع");
+    await expect(page.getByTestId("followups-departed")).toContainText(/جدة/);
+    await rows.filter({ hasText: /جدة/ }).first().scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/proof/bl2-followups-390.png" });
   });
   for (const [name, path] of [["reservations", "/staff/reservations"], ["reports", "/admin/reports"]] as const) {
