@@ -52,7 +52,7 @@ function handler(entry: string, failed: "session" | "daily" | "page-denied" | "p
       propertyFacts: () => "", buildSystemPrompt: () => "", isEnglishMessage: () => false, gateInput: () => ({ scope: "in_scope", redacted: "سؤال تجريبي" }),
       scriptedReply: () => ({ intent: "unknown", text: "رد تجريبي", actions: [] }),
     },
-    "../_shared/ops.ts": { opsModelOrder: () => ({ model: "synthetic-model", fallbacks: [] }), localDay: () => "2026-01-01", buildBriefing: () => ({}), buildOpsSystemPrompt: () => "", fallbackOpsReply: () => "رد تجريبي" },
+    "../_shared/ops.ts": { opsModelOrder: () => ({ model: "synthetic-model", fallbacks: [] }), localDay: () => "2026-01-01", buildBriefing: () => ({}), fitOpsContext: (c: unknown) => ({ text: JSON.stringify(c), omitted: {}, droppedKeys: [], mode: "full" }), opsContextNote: () => "", buildOpsSystemPrompt: () => "", fallbackOpsReply: () => "رد تجريبي" },
     "../_shared/tools.ts": {},
   };
   const source = readFileSync(new URL(`../../supabase/functions/${entry}/index.ts`, import.meta.url), "utf8");
