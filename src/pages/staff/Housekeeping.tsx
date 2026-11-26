@@ -85,7 +85,7 @@ export default function Housekeeping() {
       {(error || hk.error) && <div className="mb-4"><ErrorBanner message={(error ?? hk.error) as string} /></div>}
       {notice && <div role="status" className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600">{notice}</div>}
       <div className="mb-4 flex max-w-full flex-wrap gap-1 rounded-xl bg-ink-100 p-1 text-sm w-fit">
-        {(["open", "board", "done"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-lg px-4 py-1.5 ${view === v ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{v === "open" ? "المهام المفتوحة" : v === "board" ? "حالة الوحدات" : "المنجزة"}</button>)}
+        {(["open", "board", "done"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`min-h-[44px] rounded-lg px-4 py-1.5 sm:min-h-0 ${view === v ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{v === "open" ? "المهام المفتوحة" : v === "board" ? "حالة الوحدات" : "المنجزة"}</button>)}
       </div>
 
       {view === "open" && (openTasks.length === 0 ? <EmptyState icon={<Sparkles className="h-10 w-10" />} title="لا مهام مفتوحة" description="تُنشأ مهام التنظيف تلقائيًا بعد المغادرة، ويمكن إنشاء مهام للوحدات والمرافق يدويًا." /> : (
