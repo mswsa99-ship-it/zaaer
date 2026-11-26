@@ -66,6 +66,8 @@ export default function StaffReservationDetail() {
   const [guests, setGuests] = useState<GuestDetail[]>([]);
   /** bumps on every load, so the stay cycle and the ledger refresh with the page */
   const [tick, setTick] = useState(0);
+  // bumped when a part of the page OTHER than the stay card changes the stay: the card's last message is then out of date
+  const [elsewhere, setElsewhere] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [action, setAction] = useState<string | null>(null);
@@ -358,12 +360,12 @@ export default function StaffReservationDetail() {
 
         {/* The stay cycle (0033): Shomoos, the arrival, the code, the nights, the departure, the inspection, «مغلق» */}
         <div className="scroll-mt-20 lg:col-span-2" id="res-stay">
-          <StayCycle reservationId={detail.id} branchId={detail.branch_id} refreshKey={tick} onChanged={load} />
+          <StayCycle reservationId={detail.id} branchId={detail.branch_id} refreshKey={tick} staleKey={elsewhere} onChanged={load} />
         </div>
 
         {/* Stay management & financial ledger (Zaaer core) */}
         <div className="scroll-mt-20 lg:col-span-2" id="res-ops">
-          <ReservationOperations reservationId={detail.id} refreshKey={tick} onChanged={load} />
+          <ReservationOperations reservationId={detail.id} refreshKey={tick} onChanged={() => { setElsewhere((n) => n + 1); return load(); }} />
         </div>
 
         {/* Audit */}

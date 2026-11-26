@@ -23,7 +23,7 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString(UI_LOCALE, { hour
 const when = (iso: string | null | undefined) => (iso ? formatDateTime(iso) : "—");
 type Done = (message?: string | null) => Promise<void>;
 
-export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { reservationId: string; branchId: string; refreshKey?: unknown; onChanged: () => void }) {
+export function StayCycle({ reservationId, branchId, refreshKey, staleKey, onChanged }: { reservationId: string; branchId: string; refreshKey?: unknown; staleKey?: unknown; onChanged: () => void }) {
   const { can, permissions } = useAuth();
   // the permissions matrix decides (decision 71); with the approved matrix: the supervisor, manager and owner act
   const canArrive = can("checkin"), canShomoos = can("shomoos");
@@ -41,15 +41,12 @@ export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { 
   const load = useCallback(async () => {
     try { setS(await stayApi.status(reservationId)); setLoadError(null); } catch (e) { setLoadError(toArabicError(e)); }
   }, [reservationId]);
-  // a change made elsewhere on the page (a deposit receipt, a room switch) makes the last message here out of date; our own
-  // done() sets a fresh notice first, so that one is kept
-  const ownAt = useRef(0);
-  useEffect(() => {
-    if (Date.now() - ownAt.current > 1500) { setReasons(null); setError(null); setNotice(null); }
-    load();
-  }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+  // a change made by another part of the page (a deposit receipt, a room switch) makes the last message here out of date.
+  // The page says so with `staleKey`; our own actions never bump it, so their success notice is kept.
+  useEffect(() => { setReasons(null); setError(null); setNotice(null); }, [staleKey]);
 
-  const done: Done = async (message) => { setReasons(null); setError(null); setNotice(message ?? null); await load(); ownAt.current = Date.now(); onChanged(); };
+  const done: Done = async (message) => { setReasons(null); setError(null); setNotice(message ?? null); await load(); onChanged(); };
   const fail = (message: string) => { setNotice(null); setError(message); };
   const refused = (items: string[]) => { setNotice(null); setError(null); setReasons(items.length ? items : ["تعذّر تنفيذ الإجراء"]); };
 

@@ -55,3 +55,27 @@ test("SN3 the arrival notice goes away when another part of the page changes the
   await expect(dlg).toHaveCount(0);
   await expect(notice).toHaveCount(0);
 });
+
+test("SN4 after a room switch the arrival notice about the old unit's key box is gone (no timing window involved)", async ({ page, loginAs, go }) => {
+  await loginAs("owner");
+  await openByRoom(page, go, "203", "confirmed");
+  const arrival = page.getByTestId("arrival");
+  const dep = arrival.locator("fieldset").filter({ hasText: "سند قبض التأمين" });
+  await dep.locator("input[data-money]").fill("50");
+  await dep.getByLabel(/استلمت المبلغ/).check();
+  await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
+  const notice = page.getByTestId("stay-notice");
+  await expect(notice).toContainText("سُجِّل الوصول");
+  await page.waitForTimeout(6000);                       // long after its own refresh: the own notice must still be there
+  await expect(notice).toContainText("سُجِّل الوصول");
+  await page.getByRole("button", { name: "الإقامة", exact: true }).click();
+  await page.getByRole("button", { name: "تبديل الوحدة" }).click();
+  const dlg = page.getByRole("dialog");
+  const select = dlg.locator("select");
+  await expect.poll(async () => await select.locator("option").count()).toBeGreaterThan(1);
+  await select.selectOption({ index: 1 });
+  await dlg.locator("textarea, input[type=text], input:not([type=date])").last().fill("اختبار تبديل الوحدة بسبب الاختبار");
+  await dlg.getByRole("button", { name: /تبديل|حفظ|تأكيد/ }).last().click();
+  await expect(dlg).toHaveCount(0);
+  await expect(notice).toHaveCount(0);
+});
