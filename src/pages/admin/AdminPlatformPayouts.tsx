@@ -133,14 +133,14 @@ export default function AdminPlatformPayouts() {
                 {allBranches && <Badge className="max-w-full whitespace-normal" testId="payout-branch">{branchName(p.branch_id)}</Badge>}
                 {p.status === "cancelled" && <Badge className="opacity-70">ملغاة</Badge>}
               </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                <dt className="opacity-70">التاريخ</dt><dd dir="ltr" className="whitespace-nowrap text-left">{p.received_on}</dd>
-                <dt className="opacity-70">الحساب</dt><dd>{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</dd>
-                <dt className="opacity-70">الإجمالي</dt><dd dir="ltr" className="text-left">{sar(p.expected_halalas)}</dd>
-                <dt className="opacity-70">العمولة</dt><dd dir="ltr" className="text-left">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] opacity-70">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</dd>
-                <dt className="opacity-70">المستلم</dt><dd dir="ltr" className="text-left">{sar(p.received_halalas)}</dd>
-                <dt className="opacity-70">الفرق</dt><dd dir="ltr" className={`text-left ${p.difference_halalas === 0 ? "" : "font-semibold"}`}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] opacity-70" dir="rtl">{p.note}</span>}</dd>
-                <dt className="opacity-70">المرجع</dt><dd className="break-all font-mono text-xs" dir="ltr" data-testid="payout-ref-phone">{p.reference}</dd>
+              <dl className="space-y-1 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">التاريخ</dt><dd dir="ltr" className="whitespace-nowrap text-left">{p.received_on}</dd></div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">الحساب</dt><dd>{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</dd></div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">الإجمالي</dt><dd dir="ltr" className="text-left">{sar(p.expected_halalas)}</dd></div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">العمولة</dt><dd dir="ltr" className="text-left">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] opacity-70">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</dd></div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">المستلم</dt><dd dir="ltr" className="text-left">{sar(p.received_halalas)}</dd></div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">الفرق</dt><dd dir="ltr" className={`text-left ${p.difference_halalas === 0 ? "" : "font-semibold"}`}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] opacity-70" dir="rtl">{p.note}</span>}</dd></div>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3"><dt className="whitespace-nowrap opacity-70">المرجع</dt><dd className="break-all font-mono text-xs" dir="ltr" data-testid="payout-ref-phone">{p.reference}</dd></div>
               </dl>
               {p.status !== "cancelled" && canCancel && <button className="btn-ghost mt-2 text-xs" onClick={() => { setReason(""); setCancelFor(p); }}><Ban className="h-3.5 w-3.5" /> إلغاء</button>}
             </Card>
