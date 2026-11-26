@@ -36,7 +36,7 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await go("/staff/reservations");
     const total = await matching(page, /الحجوزات المطابقة: (\d+)/);
     expect(total).toBeGreaterThan(0);
-    await page.getByTestId("toggle-advanced").click();
+    await openMoreIfPhone(page); await page.getByTestId("toggle-advanced").click();
     await expect(page.getByTestId("advanced-filters")).toBeVisible();
     for (const label of ["الوصول: يوم أو فترة", "المغادرة: يوم أو فترة", "تاريخ الإنشاء: يوم أو فترة", "مقيم في يوم", "المصدر", "نوع الوحدة", "رقم الوحدة", "فرد / شركة", "الشركة", "نوع الإيجار", "حالة الدفع", "الهوية", "الوصول للوحدة", "المجموعة", "من يقبض", "الترتيب"]) await expect(page.getByLabel(label).first(), label).toBeVisible();
     // a status filter narrows the set and is said in words
@@ -371,3 +371,6 @@ test.describe("Phase 6 — lists, calendar, log, ledger, reports, staff, usage",
     await expect(page.locator("main")).not.toContainText("+9665");
   });
 });
+
+// phones: the secondary list controls sit behind «خيارات العرض»
+async function openMoreIfPhone(page: import("@playwright/test").Page) { const t = page.getByTestId("toggle-more"); if (await t.isVisible()) { if ((await t.getAttribute("aria-expanded")) !== "true") await t.click(); } }

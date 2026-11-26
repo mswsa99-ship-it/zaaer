@@ -9,6 +9,9 @@ for (const [name, path] of [["housekeeping", "/staff/housekeeping"], ["rooms", "
   });
 }
 
+// phones: the secondary list controls sit behind «خيارات العرض»
+async function openMoreIfPhone(page: import("@playwright/test").Page) { const t = page.getByTestId("toggle-more"); if (await t.isVisible()) { if ((await t.getAttribute("aria-expanded")) !== "true") await t.click(); } }
+
 test("SW2 195px reservation detail is not wider than the screen", async ({ page, loginAs, go }) => {
   await page.setViewportSize({ width: 195, height: 700 });
   await loginAs("supervisor"); await go("/staff/reservations");
@@ -20,7 +23,7 @@ test("SW2 195px reservation detail is not wider than the screen", async ({ page,
 test("SW3 390px: a chosen period breaks only at the arrow, never inside a date", async ({ page, loginAs, go }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await loginAs("supervisor"); await go("/staff/reservations");
-  await page.getByTestId("toggle-advanced").click();
+  await openMoreIfPhone(page); await page.getByTestId("toggle-advanced").click();
   const picker = page.getByTestId("date-range-picker").first();
   await picker.getByRole("button").first().click();
   const dlg = page.getByRole("dialog").first();

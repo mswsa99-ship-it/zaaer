@@ -2,6 +2,9 @@
 import { test, expect, fillGuest } from "./fixtures";
 import * as fs from "node:fs";
 
+// phones: the secondary list controls sit behind «خيارات العرض»
+async function openMoreIfPhone(page: import("@playwright/test").Page) { const t = page.getByTestId("toggle-more"); if (await t.isVisible()) { if ((await t.getAttribute("aria-expanded")) !== "true") await t.click(); } }
+
 test("nights stepper walks 1 to 30 and back to 1, one step at a time", async ({ page, loginAs }) => {
   await loginAs("owner");
   await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
@@ -112,7 +115,7 @@ test("ALLDASH owner operations centre offers «جميع الفروع» (390px) a
 test("STAYON the reservations «مقيم في يوم» filter uses the day picker (one day + OK), not a raw date box", async ({ page, loginAs, go }) => {
   await loginAs("owner");
   await go("/staff/reservations");
-  await page.getByTestId("toggle-advanced").click();
+  await openMoreIfPhone(page); await page.getByTestId("toggle-advanced").click();
   await expect(page.locator('input[type="date"]')).toHaveCount(0);
   const picker = page.getByRole("button", { name: "مقيم في يوم" });
   await picker.click();
