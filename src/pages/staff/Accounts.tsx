@@ -104,7 +104,7 @@ function Trial({ from, to, branch }: { from: string; to: string; branch: string 
           <Card>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[40rem] text-sm" data-testid="trial-rows">
-                <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">الحساب</th><th className="py-2 text-left font-medium">أول الفترة</th><th className="py-2 text-left font-medium">مدين</th><th className="py-2 text-left font-medium">دائن</th><th className="py-2 text-left font-medium">آخر الفترة</th></tr></thead>
+                <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th scope="col" className="py-2 text-right font-medium">الحساب</th><th scope="col" className="py-2 text-left font-medium">أول الفترة</th><th scope="col" className="py-2 text-left font-medium">مدين</th><th scope="col" className="py-2 text-left font-medium">دائن</th><th scope="col" className="py-2 text-left font-medium">آخر الفترة</th></tr></thead>
                 <tbody>
                   {d.rows.map((x) => (
                     <tr key={x.account_id} className="border-b border-ink-50" data-testid="trial-row">
@@ -200,7 +200,7 @@ function Statement({ account, asOf, branch }: { account: string; asOf: string; b
         {d.lines.length === 0 ? <EmptyState icon={<BookOpen className="h-8 w-8" />} title="لا حركة في هذا الشهر" /> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[32rem] text-sm" data-testid="statement-lines">
-              <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">القيد</th><th className="py-2 text-right font-medium">البيان</th><th className="py-2 text-left font-medium">مدين</th><th className="py-2 text-left font-medium">دائن</th><th className="py-2 text-left font-medium">الرصيد</th></tr></thead>
+              <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th scope="col" className="py-2 text-right font-medium">القيد</th><th scope="col" className="py-2 text-right font-medium">البيان</th><th scope="col" className="py-2 text-left font-medium">مدين</th><th scope="col" className="py-2 text-left font-medium">دائن</th><th scope="col" className="py-2 text-left font-medium">الرصيد</th></tr></thead>
               <tbody>{d.lines.map((l, i) => (
                 <tr key={l.entry_id + i} className="border-b border-ink-50">
                   <td className="py-2 text-xs"><span className="font-mono" dir="ltr">{l.number}</span><span className="block text-ink-400" dir="ltr">{l.entry_date}</span></td>

@@ -101,7 +101,7 @@ export default function Ledger() {
               </ul>
               <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full min-w-[40rem] text-sm" data-testid="ledger-lines">
-                  <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">التاريخ</th><th className="py-2 text-right font-medium">الحركة</th><th className="py-2 text-right font-medium">البيان</th><th className="py-2 text-left font-medium">داخل</th><th className="py-2 text-left font-medium">خارج</th><th className="py-2 text-left font-medium">الرصيد</th></tr></thead>
+                  <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th scope="col" className="py-2 text-right font-medium">التاريخ</th><th scope="col" className="py-2 text-right font-medium">الحركة</th><th scope="col" className="py-2 text-right font-medium">البيان</th><th scope="col" className="py-2 text-left font-medium">داخل</th><th scope="col" className="py-2 text-left font-medium">خارج</th><th scope="col" className="py-2 text-left font-medium">الرصيد</th></tr></thead>
                   <tbody>
                     {data.lines.map((l) => (
                       <tr key={l.kind + l.ref_id} className="border-b border-ink-50" data-testid="ledger-line">
@@ -189,7 +189,7 @@ function AllBranchesLedger() {
           </div>
           <Card className="hidden md:block">
             <table className="w-full text-sm" data-testid="ledger-all-rows">
-              <thead><tr className="border-b border-rai-line text-xs text-rai-ink-muted"><th className="py-2 text-right font-medium">الفرع</th><th className="py-2 text-right font-medium">الحساب</th><th className="py-2 text-left font-medium">أول الفترة</th><th className="py-2 text-left font-medium">الداخل</th><th className="py-2 text-left font-medium">الخارج</th><th className="py-2 text-left font-medium">آخر الفترة</th></tr></thead>
+              <thead><tr className="border-b border-rai-line text-xs text-rai-ink-muted"><th scope="col" className="py-2 text-right font-medium">الفرع</th><th scope="col" className="py-2 text-right font-medium">الحساب</th><th scope="col" className="py-2 text-left font-medium">أول الفترة</th><th scope="col" className="py-2 text-left font-medium">الداخل</th><th scope="col" className="py-2 text-left font-medium">الخارج</th><th scope="col" className="py-2 text-left font-medium">آخر الفترة</th></tr></thead>
               <tbody>{rows.map((r) => <tr key={r.d.account.id} className="border-b border-rai-line"><td className="py-2">{r.branch}</td><td className="py-2">{r.account}</td><td className="py-2 text-left tabular-nums" dir="ltr">{sar(r.d.opening_halalas)}</td><td className="py-2 text-left tabular-nums text-rai-success" dir="ltr">{sar(r.d.in_halalas)}</td><td className="py-2 text-left tabular-nums text-rai-danger" dir="ltr">{sar(r.d.out_halalas)}</td><td className="py-2 text-left font-semibold tabular-nums" dir="ltr">{sar(r.d.closing_halalas)}</td></tr>)}</tbody>
             </table>
           </Card>

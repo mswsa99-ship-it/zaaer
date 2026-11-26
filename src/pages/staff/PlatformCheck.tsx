@@ -50,7 +50,7 @@ export default function PlatformCheck() {
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-ink-100 text-xs text-ink-400">
-              <th className="py-2 text-right font-medium">المنصة</th><th className="py-2 text-right font-medium">رقم الحجز في المنصة</th><th className="py-2 text-right font-medium">النزيل</th><th className="py-2 text-right font-medium">الوصول</th><th className="py-2 text-right font-medium">الليالي / الأشخاص</th><th className="py-2 text-right font-medium">من يقبض</th><th className="py-2 text-right font-medium">الإجمالي</th><th className="py-2 text-right font-medium">الحالة</th><th className="py-2 text-right font-medium">المطابقة</th>
+              <th scope="col" className="py-2 text-right font-medium">المنصة</th><th scope="col" className="py-2 text-right font-medium">رقم الحجز في المنصة</th><th scope="col" className="py-2 text-right font-medium">النزيل</th><th scope="col" className="py-2 text-right font-medium">الوصول</th><th scope="col" className="py-2 text-right font-medium">الليالي / الأشخاص</th><th scope="col" className="py-2 text-right font-medium">من يقبض</th><th scope="col" className="py-2 text-right font-medium">الإجمالي</th><th scope="col" className="py-2 text-right font-medium">الحالة</th><th scope="col" className="py-2 text-right font-medium">المطابقة</th>
             </tr></thead>
             <tbody>
               {(rows ?? []).map((r) => (

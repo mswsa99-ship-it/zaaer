@@ -21,6 +21,12 @@ interface ProposalState { status: "proposed" | "executing" | "executed" | "rejec
 const ACTION_LABELS: Record<string, string> = { create_task: "إنشاء مهمة", complete_task: "إتمام مهمة", assign_task: "إسناد مهمة", set_cleanliness: "تغيير حالة النظافة", amend_stay: "تغيير المغادرة", switch_room: "تبديل الوحدة", cancel_reservation: "إلغاء حجز", no_show: "عدم حضور", create_receipt: "سند قبض", create_deposit: "قبض تأمين", add_service: "إضافة خدمة", create_invoice: "إصدار فاتورة" };
 /** 6.12 (U5): the reply's upper bound (the server's own steps end long before it) and its clear message. */
 export const OPS_REPLY_TIMEOUT_MS = 90_000;
+/** Test hook (end-to-end tests only): `window.__opsReplyTimeoutMs` shortens the bound; unset → OPS_REPLY_TIMEOUT_MS. */
+function opsReplyTimeoutMs(): number {
+  const v = Number((globalThis as { __opsReplyTimeoutMs?: unknown }).__opsReplyTimeoutMs);
+  return Number.isFinite(v) && v >= 500 && v < OPS_REPLY_TIMEOUT_MS ? v : OPS_REPLY_TIMEOUT_MS;
+}
+export const OPS_LATE_REPLY_PREFIX = "وصل ردّ متأخر على سؤالك السابق:\n";
 const OPS_TIMEOUT_TEXT = "استغرق الرد وقتًا أطول من المعتاد (٩٠ ثانية) دون أن يصل. أعد المحاولة، أو اسأل بصيغة أبسط.";
 const SUGGESTIONS = ["ما وضع اليوم؟", "من يصل اليوم ومن لم يكمل الهوية؟", "أي وحدات تحتاج تنظيفًا وعليها وصول اليوم؟", "من عليه رصيد متبقٍ من المقيمين؟", "تأمينات لم تُسوَّ بعد المغادرة"];
 
@@ -84,9 +90,22 @@ export function OpsCopilot() {
     setMsgs((m) => [...m, { role: "staff", text }]); setInput(""); setBusy(true);
     try {
       // U5: a clear upper bound — the employee is never left watching a spinner; a late reply is ignored
-      const r = await withTimeout<OpsReply | null>(aiOpsChat(text, branchId, conv), OPS_REPLY_TIMEOUT_MS, () => null);
+      const pending = aiOpsChat(text, branchId, conv);
+      const r = await withTimeout<OpsReply | null>(pending, opsReplyTimeoutMs(), () => null);
       if (branchRef.current !== sentFor) return;   // the branch changed meanwhile: this answer belongs to the old context (G24)
-      if (r === null) { setMsgs((m) => [...m, { role: "assistant", text: OPS_TIMEOUT_TEXT }]); return; }
+      if (r === null) {
+        setMsgs((m) => [...m, { role: "assistant", text: OPS_TIMEOUT_TEXT }]);
+        // F1: the original request is still running on the server. Its late reply is kept once (never duplicated, never
+        // blocking the input), and its conversation id is adopted if none exists yet so the next question joins it.
+        // Limit: a question sent before the late reply lands, in a first conversation, still opens a separate conversation.
+        pending.then((late) => {
+          if (branchRef.current !== sentFor) return;
+          setConv((c) => c ?? late.conversation_id);
+          setMsgs((m) => [...m, { role: "assistant", text: OPS_LATE_REPLY_PREFIX + late.reply, mode: late.mode, proposals: late.proposals, aiStatus: late.ai_status }]);
+          for (const lp of late.proposals ?? []) setProps((st) => ({ ...st, [lp.id]: { status: "proposed" } }));
+        }, () => { /* a late failure adds nothing: the timeout message was already shown */ });
+        return;
+      }
       setConv(r.conversation_id);
       setMsgs((m) => [...m, { role: "assistant", text: r.reply, mode: r.mode, proposals: r.proposals, aiStatus: r.ai_status }]);
       for (const p of r.proposals ?? []) setProps((s) => ({ ...s, [p.id]: { status: "proposed" } }));

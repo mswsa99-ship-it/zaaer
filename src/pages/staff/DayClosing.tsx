@@ -219,7 +219,7 @@ function Matrix({ figures }: { figures: ClosingFigures }) {
       {sources.length === 0 ? <p className="text-sm text-ink-400">لا سندات في هذا اليوم.</p> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[32rem] text-sm" data-testid="closing-matrix">
-            <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th className="py-2 text-right font-medium">المصدر</th>{COLUMNS.map((c) => <th key={c.box} className="py-2 text-left font-medium">{c.label}</th>)}<th className="py-2 text-left font-medium">المجموع</th></tr></thead>
+            <thead><tr className="border-b border-ink-100 text-xs text-ink-500"><th scope="col" className="py-2 text-right font-medium">المصدر</th>{COLUMNS.map((c) => <th scope="col" key={c.box} className="py-2 text-left font-medium">{c.label}</th>)}<th scope="col" className="py-2 text-left font-medium">المجموع</th></tr></thead>
             <tbody>
               {sources.map(([id, name]) => (
                 <tr key={id} className="border-b border-ink-50">

@@ -75,12 +75,12 @@ function ItemRow({ item, selected, onToggle, onMark, onObject, onUndo, busy }: {
   );
   return (
     <div className="flex gap-3 py-3" data-testid="review-item">
-      {open && <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={selected} onChange={onToggle} aria-label={`تحديد: ${item.summary}`} />}
+      {open && <label className="flex shrink-0 items-start justify-center pt-1 max-sm:-my-2 max-sm:h-11 max-sm:w-11 max-sm:items-center max-sm:pt-0"><input type="checkbox" className="h-4 w-4" checked={selected} onChange={onToggle} aria-label={`تحديد: ${item.summary}`} /></label>}
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={monitor ? "bg-warning-500/10 text-warning-700" : "bg-ink-100 text-ink-600"}>{monitor ? "مراقبة: " : ""}{KIND_AR[item.kind] ?? item.kind}</Badge>
           <span className="text-sm font-medium text-ink-800">{item.summary}</span>
-          {item.reservation_id && item.internal_ref && <Link to={`/staff/reservations/${item.reservation_id}`} className="text-xs text-brand-700 underline-offset-2 hover:underline" dir="ltr">{item.internal_ref}</Link>}
+          {item.reservation_id && item.internal_ref && <Link to={`/staff/reservations/${item.reservation_id}`} className="text-xs text-brand-700 underline-offset-2 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center" dir="ltr">{item.internal_ref}</Link>}
         </div>
         {item.reason && <p className="text-xs text-ink-600">السبب: {item.reason}</p>}
         <Details item={item} />
@@ -184,7 +184,7 @@ export default function AdminReview() {
         <Card>
           {status !== "reviewed" && selectable.length > 0 && (
             <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-ink-50 pb-3">
-              <label className="flex items-center gap-2 text-xs text-ink-600">
+              <label className="flex items-center gap-2 text-xs text-ink-600 max-sm:min-h-11">
                 <input type="checkbox" className="h-4 w-4" checked={selectable.length > 0 && selectable.every((id) => selected.has(id))}
                   onChange={(e) => setSelected(e.target.checked ? new Set(selectable) : new Set())} /> تحديد الكل ({selectable.length})
               </label>
