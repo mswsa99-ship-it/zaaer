@@ -294,6 +294,18 @@ export function seed(): Store {
   // second branch (Jeddah), invented data: one stay in house with a cash receipt and a deposit, so the owner's all-branches pages and the finance totals have rows in both branches
   mkRes({ branch: BRANCH_B, roomId: fixed(199), guest: "سلطان جدة التجريبي", phone: "0509990001", cat: cat.jed, ci: -1, co: 2, status: "checked_in", receipts: [34500], deposit: 5000 });
   mkRes({ branch: BRANCH_B, roomId: fixed(198), guest: "ماجد جدة التجريبي", phone: "0509990002", cat: cat.jed, ci: -2, co: 0, status: "checked_in", receipts: [69000] });   // departs today in Jeddah (second-branch journey rows)
+  // Jeddah platform deposits (synthetic): one Airbnb stay not yet matched and one Booking.com stay already matched, so the owner's all-branches deposits page has rows, groups and a matched deposit in both branches
+  const jUn = mkRes({ branch: BRANCH_B, roomId: fixed(197), guest: "عمر جدة التجريبي", phone: "0509990003", cat: cat.jed, ci: 1, co: 3, status: "confirmed", receipts: [], identity: "not_started", access: "locked", gov: false, otaPaid: true, source: fixed(22), ext: "HMJED001" });
+  const jMa = mkRes({ branch: BRANCH_B, roomId: fixed(196), guest: "نورة جدة التجريبية", phone: "0509990004", cat: cat.jed, ci: -3, co: -1, status: "checked_out", receipts: [], identity: "not_started", access: "locked", gov: false, otaPaid: true, source: fixed(20), ext: "BK-JED-5521" });
+  void jUn;
+  {
+    const jv = vouchers.filter((v) => v.reservation_id === jMa && v.method === "ota_deferred");
+    const expected = jv.reduce((t: number, v) => t + (v.kind === "receipt" ? v.amount_halalas : -v.amount_halalas), 0);
+    const bp = Number(s.booking_sources.find((x) => x.id === fixed(20))?.commission_bp ?? 0); const commission = Math.round((expected * bp) / 10000);
+    const payId = uid();
+    put("platform_payouts", [{ id: payId, organization_id: ORG, branch_id: BRANCH_B, source_id: fixed(20), account_id: (s.cash_accounts as Row[]).find((x) => x.branch_id === BRANCH_B)?.id ?? null, expected_halalas: expected, commission_bp: bp, commission_halalas: commission, received_halalas: expected - commission, difference_halalas: 0, voucher_count: jv.length, received_on: addDays(T, -1), reference: "JED-DEP-0001-مرجع-إيداع-طويل-للاختبار", note: null, status: "confirmed", created_by: null, created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null }]);
+    for (const v of jv) v.payout_id = payId;
+  }
   put("reservations", res); put("reservation_guests", guests); put("reservation_allocations", allocs); put("reservation_charges", charges); put("financial_vouchers", vouchers);
   // invoices: the first checked-out stay, and every stay of the history — whose stays are «مغلق» (decision 59: departed, nothing
   // owed either way, the deposit settled, every line invoiced)

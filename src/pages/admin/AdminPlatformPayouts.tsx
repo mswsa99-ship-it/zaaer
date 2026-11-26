@@ -84,6 +84,7 @@ export default function AdminPlatformPayouts() {
       <SectionTitle title="إيداعات المنصات" subtitle="الدفعات الآجلة عبر المنصات مقابل ما أودعته المنصة في الحساب — شهريًا" action={<BranchPicker allowAll />} />
       {q.error && <div className="mb-4">{unsettled.length + payouts.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
 
+      {allBranches && !q.error && branches.filter((b) => !unsettled.some((x) => (x as { branch_id?: string }).branch_id === b.id) && !payouts.some((x) => x.branch_id === b.id)).map((b) => <p key={b.id} data-testid="payout-branch-empty" className="mb-2 rounded-xl border-2 border-dashed px-3 py-2 text-sm">{b.name_ar}: لا دفعات آجلة ولا إيداعات مطابقة.</p>)}
       <h3 className="mb-2 text-sm font-semibold text-ink-700">دفعات لم تُطابق بعد</h3>
       {groups.length === 0 ? (!q.error && <EmptyState icon={<Building className="h-10 w-10" />} title="لا دفعات آجلة غير مطابقة" description="تظهر هنا كل دفعة سُجّلت «آجل عبر المنصة» حتى تُطابق مع إيداع المنصة." />) : (
         <div className="space-y-3">
@@ -104,7 +105,7 @@ export default function AdminPlatformPayouts() {
                     <label key={x.id} className={`flex items-center gap-3 py-1.5 ${allBranches ? "" : "cursor-pointer"}`} data-testid="platform-payment">
                       {!allBranches && <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id)} />}
                       <span className="font-mono text-xs">{x.number}</span>
-                      <span className="min-w-0 flex-1 truncate text-ink-600">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr">{x.check_in}</span></span>
+                      <span className="min-w-0 flex-1 break-words text-ink-600 sm:truncate">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr">{x.check_in}</span></span>
                       <span dir="ltr" className={x.kind === "refund" ? "text-danger-600" : "text-ink-800"}>{sar(x.signed_halalas)}</span>
                     </label>
                   ))}
@@ -125,14 +126,14 @@ export default function AdminPlatformPayouts() {
       {payouts.length === 0 ? <p className="text-sm text-ink-400">لا إيداعات بعد.</p> : (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">الإجمالي</th><th className="text-right font-medium">العمولة</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="text-right font-medium">المرجع</th><th></th></tr></thead>
+            <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">الإجمالي</th><th className="text-right font-medium">العمولة</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="hidden sm:table-cell text-right font-medium">المرجع</th><th></th></tr></thead>
             <tbody>
               {payouts.map((p) => (
                 <tr key={`${p.branch_id}:${p.id}`} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
-                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
+                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span><span className="block break-all font-mono text-[11px] opacity-70 no-underline sm:hidden" data-testid="payout-ref-phone">{p.reference}</span></td>
                   <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] text-ink-400">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</td><td dir="ltr">{sar(p.received_halalas)}</td>
                   <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
-                  <td className="font-mono text-xs">{p.reference}</td>
+                  <td className="hidden break-all font-mono text-xs sm:table-cell">{p.reference}</td>
                   <td className="text-left">{p.status === "cancelled" ? <Badge className="bg-ink-100 text-ink-500" >ملغاة</Badge> : canCancel ? <button className="btn-ghost text-xs text-danger-600" onClick={() => { setReason(""); setCancelFor(p); }}><Ban className="h-3.5 w-3.5" /> إلغاء</button> : null}</td>
                 </tr>
               ))}

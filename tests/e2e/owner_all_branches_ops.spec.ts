@@ -359,10 +359,34 @@ test("AB-W1 platform deposits: the owner's all-branches view is read-only with a
   await page.goto("/#/admin/platform-payouts", { waitUntil: "networkidle" });
   await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
   await page.getByTestId("payout-branch").first().waitFor();
-  expect(await page.getByTestId("platform-payment").count()).toBeGreaterThan(0);
+  expect(await page.getByTestId("platform-payment").count()).toBeGreaterThan(3);
   expect(await page.locator('[data-testid="platform-payment"] input[type=checkbox]').count()).toBe(0);
   expect(await page.getByRole("button", { name: /تحديد الكل|تأكيد/ }).count()).toBe(0);
   await page.getByTestId("payout-open-branch").first().click();
   await page.locator('[data-testid="platform-payment"] input[type=checkbox]').first().waitFor();
   expect(await page.getByTestId("payout-branch").count()).toBe(0);
+});
+
+test("AB-W2 platform deposits: both branches keep their own source/month groups and the matched deposit shows its branch; a branch with nothing is named, not left out", async ({ page, loginAs, go }) => {
+  await loginAs("owner");
+  await go("/admin/branches");
+  await page.getByRole("button", { name: "فرع جديد" }).click();
+  const dlg = page.getByRole("dialog");
+  await dlg.getByLabel("الاسم العربي").fill("فرع فارغ للمنصات");
+  await dlg.getByLabel("الاسم الإنجليزي").fill("Empty Platform Branch");
+  await dlg.getByRole("button", { name: "حفظ" }).click();
+  await expect(dlg).toBeHidden();
+  await go("/admin/platform-payouts");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("payout-branch").first().waitFor();
+  const tags = await page.getByTestId("payout-branch").allInnerTexts();
+  expect(new Set(tags.filter((t) => t.includes("الرياض"))).size).toBe(1);
+  expect(tags.some((t) => t.includes("جدة"))).toBe(true);
+  // the matched deposit belongs to Jeddah only and its full reference is readable
+  const row = page.locator("tbody tr", { hasText: "JED-DEP-0001" });
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("جدة");
+  await expect(page.getByTestId("payout-branch-empty")).toContainText("فرع فارغ للمنصات");
+  await expect(page.getByTestId("payout-branch-empty")).toHaveCount(1);
 });
