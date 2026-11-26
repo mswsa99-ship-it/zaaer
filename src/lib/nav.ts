@@ -167,7 +167,7 @@ export const PAGES: readonly NavPage[] = [
   // decision 55: «استعمال القدرات» from the audit log, for the owner
   { path: "/admin/usage", label: "استعمال القدرات", icon: Activity, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["reports.identities_usage"] },
   // §16: corrections, invoice edits and cancellations, and what the monitors find (decision 54) wait for the owner alone
-  { path: "/admin/review", label: "بحاجة لمراجعة وتدقيق", icon: ClipboardCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["review.list"] },
+  { path: "/admin/review", label: "بحاجة لمراجعة وتدقيق", tabLabel: "المراجعة", icon: ClipboardCheck, area: "admin", hub: "finance", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["review.list"] },
   { path: "/admin/backups", label: "النسخ الاحتياطي", icon: ShieldCheck, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["security"] },
   { path: "/admin/data-purge", label: "تفريغ البيانات", icon: Trash2, area: "admin", group: "الحوكمة", roles: ["owner"], scope: "org", cap: ["security"] },
 ];
@@ -216,14 +216,14 @@ export function staffNav(role: string | null | undefined, allows?: Allows): NavP
 /** The order of a centre's tabs (the first it has is where its menu link leads). */
 const HUB_ORDER: Record<HubId, string[]> = {
   guest: ["/staff/access-approvals", "/staff/arrivals", "/staff/identity-verification", "/staff/journey", "/staff/followups", "/staff/inbox"],
-  finance: ["/staff/payments", "/staff/orders", "/staff/expenses", "/staff/ledger", "/staff/accounts", "/staff/bank", "/staff/pos-settlement", "/staff/day-summary", "/staff/day-close", "/staff/platforms"],
+  finance: ["/staff/payments", "/staff/orders", "/staff/expenses", "/staff/ledger", "/staff/accounts", "/staff/bank", "/staff/pos-settlement", "/staff/day-summary", "/staff/day-close", "/staff/platforms", "/admin/review"],
   service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"],
   property: ["/admin/branches", "/admin/policies", "/admin/knowledge"],
 };
 /** The tabs of a centre for a role, in order (only pages the role sees). */
 export function hubTabs(hub: HubId, role: string | null | undefined, allows?: Allows): NavPage[] {
-  // the property centre holds admin pages; every centre lists a page by the same pageListed rule as its menu link
-  const pages = (hub === "property" ? PAGES.filter((p) => !p.hidden && pageListed(p, role, allows)) : staffNav(role, allows)).filter((p) => p.hub === hub);
+  // the property centre holds admin pages, and the finance centre one (the owner-only review); every centre lists a page by the same pageListed rule as its menu link
+  const pages = (hub === "property" || hub === "finance" ? PAGES.filter((p) => !p.hidden && pageListed(p, role, allows)) : staffNav(role, allows)).filter((p) => p.hub === hub);
   return HUB_ORDER[hub].map((path) => pages.find((p) => p.path === path)).filter((p): p is NavPage => !!p);
 }
 /** The staff menu (6.2): pages outside the centres, in table order, and one entry per centre the role has any tab of. */

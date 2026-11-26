@@ -44,7 +44,10 @@ describe("staff menu with centres (6.2)", () => {
       if (menu) expect(menu.members).toContain(menu.path);
     });
   }
-  it("/admin/review (owner only) is not a staff tab and no staff centre lists it", () => {
-    for (const hub of ["guest", "finance", "service"] as const) for (const role of ALL_STAFF) expect(hubTabs(hub, role).map((p) => p.path)).not.toContain("/admin/review");
+  it("/admin/review is the owner-only last tab of the finance centre; no other role sees it in any centre (26 Nov 13:10 merge ask, permissions unchanged)", () => {
+    const owner = hubTabs("finance", "owner").map((p) => p.path);
+    expect(owner[owner.length - 1]).toBe("/admin/review");
+    for (const hub of ["guest", "finance", "service"] as const) for (const role of ALL_STAFF.filter((r) => r !== "owner")) expect(hubTabs(hub, role).map((p) => p.path)).not.toContain("/admin/review");
+    for (const hub of ["guest", "service"] as const) expect(hubTabs(hub, "owner").map((p) => p.path)).not.toContain("/admin/review");
   });
 });
