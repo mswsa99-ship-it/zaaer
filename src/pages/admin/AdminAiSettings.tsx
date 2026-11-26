@@ -247,7 +247,7 @@ export default function AdminAiSettings() {
           </div>
           <div className="mt-4 flex items-center gap-3">
             <button onClick={save} disabled={!isOwner || saving} className="btn-primary text-sm">{saving ? <Spinner className="h-4 w-4" /> : "حفظ الإعدادات"}</button>
-            {saved && <Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> تم الحفظ</Badge>}
+            {saved && <span role="status"><Badge className="bg-success-500/10 text-success-600"><Check className="h-3 w-3" /> تم الحفظ</Badge></span>}
             {dirty && !saved && <Badge className="bg-warning-500/10 text-warning-700" testId="ai-unsaved">تغييرات غير محفوظة</Badge>}
             {form.updated_at && <span className="text-xs text-ink-400">آخر تحديث: {formatDateTime(form.updated_at)}</span>}
           </div>

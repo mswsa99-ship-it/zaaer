@@ -107,7 +107,7 @@ export default function AdminStaff() {
     <div>
       <SectionTitle title="الموظفون" subtitle={`${COUNT.staff(staff.length)} · النشطون ${staff.filter((s) => s.is_active).length}`} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
-      {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" data-testid="staff-notice">{notice}</div>}
+      {notice && <div role="status" className="mb-4 rounded-xl border border-success-500/30 bg-success-500/10 px-4 py-3 text-sm text-success-600" data-testid="staff-notice">{notice}</div>}
 
       {canManage && (
         <Card className="mb-5">

@@ -111,7 +111,7 @@ export default function AdminCashAccounts() {
       <SectionTitle title="الصناديق والحسابات" subtitle="لكل فرع صندوق نقد واحد وحساب بنكي واحد، ولا يُقيَّد فيهما إلا ما يخص هذا الفرع" action={
         <div className="flex min-w-0 flex-wrap items-center gap-3"><BranchPicker allowAll />{canEdit && missing.map((k) => <button key={k} onClick={() => setDraft({ kind: k, name: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> {k === "cash_box" ? "إضافة صندوق" : "إضافة حساب بنكي"}</button>)}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
-      {notice && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{notice}</p>}
+      {notice && <p role="status" className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{notice}</p>}
       {(allBranches
         ? branches.map((b) => { const mine = rows.filter((r) => r.branch_id === b.id); const miss = (["cash_box", "bank_account"] as const).filter((k) => !mine.some((r) => r.kind === k && r.is_default && r.is_active && !r.archived_at)); return mine.length > 0 && miss.length > 0 ? { key: b.id, text: `${b.name_ar}: لا يوجد ${miss.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم، فلا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.` } : null; })
         : missingDefault.length > 0 && rows.length > 0 ? [{ key: "one", text: `لا يوجد ${missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم في هذا الفرع: لا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.` }] : []

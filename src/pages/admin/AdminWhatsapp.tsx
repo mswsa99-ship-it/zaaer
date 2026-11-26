@@ -102,7 +102,7 @@ function BridgeSecurity({ branchId, keyTag }: { branchId: string; keyTag: string
           <input className="input w-28" dir="ltr" inputMode="numeric" value={n} onChange={(e) => setN(e.target.value)} aria-label="عدد المحادثات الجديدة في الساعة" />
           <button type="button" className="btn-outline text-xs" disabled={saving || latinDigits(n) === String(sec.alert_new_contacts_per_hour)} aria-describedby={latinDigits(n) === String(sec.alert_new_contacts_per_hour) ? "dr-adminwhatsapp-4" : undefined} title={latinDigits(n) === String(sec.alert_new_contacts_per_hour) ? "لا يوجد تغيير للحفظ" : undefined} onClick={save}>{saving ? <Spinner /> : "حفظ"}</button><DisabledReason id="dr-adminwhatsapp-4" show={latinDigits(n) === String(sec.alert_new_contacts_per_hour)} text="لا يوجد تغيير للحفظ" />
         </div>
-        {msg && <span className={`mt-1 block text-xs ${msg.ok ? "text-success-600" : "text-danger-600"}`}>{msg.text}</span>}
+        {msg && <span role="status" className={`mt-1 block text-xs ${msg.ok ? "text-success-600" : "text-danger-600"}`}>{msg.text}</span>}
       </label>
     </div>
   );
@@ -316,7 +316,7 @@ function BranchChannel({ row, live, onSaved, flash, setFlash }: { row: WaChannel
 
       {row.mode === "cloud_api" && row.last_error && <p className="flex items-start gap-1.5 rounded-xl bg-danger-500/10 px-3 py-2 text-xs text-danger-600" dir="auto"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {row.last_error}</p>}
       {error && <ErrorBanner message={error} />}
-      {notice && <p className="rounded-xl bg-success-500/10 px-3 py-2 text-xs text-success-600">{notice}</p>}
+      {notice && <p role="status" className="rounded-xl bg-success-500/10 px-3 py-2 text-xs text-success-600">{notice}</p>}
       {check && (
         <p className={`rounded-xl px-3 py-2 text-xs ${check.ok ? "bg-success-500/10 text-success-600" : "bg-danger-500/10 text-danger-600"}`} dir="auto">
           {check.ok

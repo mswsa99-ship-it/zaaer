@@ -9,6 +9,7 @@ import { staffApi, toArabicError } from "../../lib/api";
 import { SectionTitle, LoadingScreen, EmptyState, Card, Spinner, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Wrench, Plus, LifeBuoy, CheckCircle2 } from "lucide-react";
 import { formatDateTime } from "../../lib/utils";
+import { Field } from "../../components/forms";
 
 interface Ticket {
   id: string;
@@ -91,6 +92,8 @@ export default function Tickets() {
   const [newDesc, setNewDesc] = useState("");
   const [newRoom, setNewRoom] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  // per-field errors: the message sits at the field it is about (UX: a banner under the form did not say which field)
+  const [fieldErr, setFieldErr] = useState<{ room?: string; title?: string }>({});
 
   // G24: the reports of the active branch only; a late answer for another branch is dropped
   const q = useBranchQuery(async (branchId) => {
@@ -143,14 +146,18 @@ export default function Tickets() {
   async function createTicket(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!newTitle.trim() || !newRoom) { setFormError("العنوان والوحدة مطلوبان."); return; }
+    const fe: { room?: string; title?: string } = {};
+    if (!newRoom) fe.room = "اختر الوحدة.";
+    if (!newTitle.trim()) fe.title = "اكتب عنوان البلاغ.";
+    setFieldErr(fe);
+    if (fe.room || fe.title) { setFormError(null); window.setTimeout(() => document.querySelector<HTMLElement>("[data-ticket-form] [aria-invalid=true]")?.focus(), 0); return; }
     // 6.7 (U7): the lock is a ref, not only the acting state — two submits in the same tick create one ticket
     if (creatingRef.current) return;
     creatingRef.current = true;
     setActing("create");
     try {
       await staffApi.createMaintenance(newRoom, newTitle.trim(), newDesc.trim() || null);
-      setNewTitle(""); setNewDesc(""); setNewRoom(""); setShowForm(false);
+      setNewTitle(""); setNewDesc(""); setNewRoom(""); setFieldErr({}); setShowForm(false);
       load();
     } catch (err) {
       setFormError(toArabicError(err));
@@ -163,6 +170,7 @@ export default function Tickets() {
   if (q.loading) return <LoadingScreen />;
   if (q.error && tickets.length === 0) return <LoadErrorCard message={q.error} onRetry={load} />;
 
+  const dupOpen = newRoom ? tickets.filter((t) => t.room_id === newRoom && t.status !== "resolved") : [];
   const openMaint = tickets.filter((t) => t.status !== "resolved").length;
   const openHandoff = handoffs.filter((h) => h.status !== "resolved").length;
 
@@ -219,14 +227,15 @@ export default function Tickets() {
 
         {showForm && (
           <Card className="mb-4">
-            <form onSubmit={createTicket} className="space-y-3">
-              <div><label className="label">الوحدة</label>
-                <select value={newRoom} onChange={(e) => setNewRoom(e.target.value)} className="input">
+            <form onSubmit={createTicket} className="space-y-3" data-ticket-form noValidate>
+              <Field label="الوحدة" error={fieldErr.room}>
+                <select value={newRoom} onChange={(e) => { setNewRoom(e.target.value); setFieldErr((f) => ({ ...f, room: undefined })); }} className="input" aria-invalid={fieldErr.room ? true : undefined}>
                   <option value="">اختيار وحدة</option>
                   {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}{branchOf(r.branch_id) ? ` — ${branchOf(r.branch_id)}` : ""}</option>)}
                 </select>
-              </div>
-              <div><label className="label">العنوان</label><input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="input" /></div>
+              </Field>
+              {dupOpen.length > 0 && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" role="status" data-testid="ticket-dup-note">يوجد {dupOpen.length === 1 ? "بلاغ مفتوح" : `${dupOpen.length} بلاغات مفتوحة`} على هذه الوحدة: «{dupOpen[0].title}». يمكنك إنشاء بلاغ جديد إن كان العطل مختلفًا.</p>}
+              <Field label="العنوان" error={fieldErr.title}><input value={newTitle} onChange={(e) => { setNewTitle(e.target.value); setFieldErr((f) => ({ ...f, title: undefined })); }} className="input" aria-invalid={fieldErr.title ? true : undefined} /></Field>
               <div><label className="label">الوصف</label><textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="input" rows={2} /></div>
               {formError && <ErrorBanner message={formError} />}
               <button type="submit" disabled={acting === "create"} className="btn-primary text-sm">

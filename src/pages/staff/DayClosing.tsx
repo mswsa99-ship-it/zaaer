@@ -66,6 +66,8 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // an error from the buttons far below the boxes is brought into view once, when it appears
+  useEffect(() => { if (actionError) document.querySelector('[data-testid="closing-action-error"]')?.scrollIntoView({ block: "center" }); }, [actionError]);
   const [review, setReview] = useState<ClosingReview | null>(null);
   const [askEdit, setAskEdit] = useState(false);
   const [local, setLocal] = useState(0);
@@ -136,8 +138,8 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
           {figures.boxes.map((b) => <BoxRow key={b.key} b={b} value={draft[b.key]} editable={editable} blind={blind} onChange={(v) => setDraft({ ...draft, [b.key]: v })} />)}
         </div>
         <Field label="ملاحظة على اليوم" className="mt-3"><textarea className="input" rows={2} value={note} disabled={!(canEdit && (day.state === "none" || day.state === "draft"))} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة على اليوم" /></Field>
-        {actionError && <div className="mt-3"><ErrorBanner message={actionError} /></div>}
-        {notice && <p className="mt-3 flex items-center gap-1 text-sm text-success-600"><CheckCircle2 className="h-4 w-4" />{notice}</p>}
+        {actionError && <div className="mt-3" data-testid="closing-action-error"><ErrorBanner message={actionError} /></div>}
+        {notice && <p role="status" className="mt-3 flex items-center gap-1 text-sm text-success-600"><CheckCircle2 className="h-4 w-4" />{notice}</p>}
         {canEdit && (
           <div className="mt-4 flex flex-wrap gap-2">
             {(day.state === "none" || day.state === "draft") && <>

@@ -154,7 +154,7 @@ export default function Inbox() {
     <div>
       <SectionTitle title="الوارد الموحّد" subtitle={COUNT.conversation(conversations.length)} action={<BranchPicker allowAll />} />
       {(error || (q.error && conversations.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
-      {notice && <p className="mb-4 rounded-xl bg-rai-success-tint px-3 py-2 text-sm text-rai-success">{notice}</p>}
+      {notice && <p role="status" className="mb-4 rounded-xl bg-rai-success-tint px-3 py-2 text-sm text-rai-success">{notice}</p>}
       {q.error && conversations.length === 0 ? <LoadErrorCard message={q.error} onRetry={loadConversations} /> : conversations.length === 0 ? (
         <EmptyState icon={<InboxIcon className="h-10 w-10" />} title="لا توجد محادثات" description="تظهر محادثات النزلاء من الويب وواتساب هنا." />
       ) : (

@@ -161,7 +161,7 @@ function DayCard({ branchId, accountId, date, onSaved }: { branchId: string; acc
         {diff != null && <p className={`sm:col-span-2 text-sm ${diff === 0 ? "text-success-600" : "text-danger-600"}`} data-testid="pos-diff">{diff === 0 ? "مطابق للسندات." : <>الفرق: <span dir="ltr">{sar(diff)}</span> {diff > 0 ? "(الجهاز أكثر من السندات)" : "(السندات أكثر من الجهاز)"}</>}</p>}
         <div className="sm:col-span-2 flex items-center gap-3">
           <button type="submit" disabled={busy || terminal == null} aria-describedby={terminal == null ? "dr-possettlement-1" : undefined} title={terminal == null ? "أدخل إجمالي الشبكة من إيصال التسوية أولًا" : undefined} className="btn-primary text-sm">{busy ? <Spinner className="h-4 w-4" /> : null} {s ? "تحديث التسوية" : "حفظ التسوية"}</button><DisabledReason id="dr-possettlement-1" show={terminal == null} text="أدخل إجمالي الشبكة من إيصال التسوية أولًا" />
-          {saved && <span className="text-sm text-success-600">{saved}</span>}
+          {saved && <span role="status" className="text-sm text-success-600">{saved}</span>}
           {saveError && <span className="text-sm text-danger-600" role="alert">{saveError}</span>}
         </div>
       </form>

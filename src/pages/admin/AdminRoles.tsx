@@ -77,7 +77,7 @@ export default function AdminRoles() {
         {m.last_change && <span className="text-ink-400" data-testid="perm-last-change">آخر تعديل {formatDateTime(m.last_change.at)}{m.last_change.by ? ` · ${m.last_change.by}` : ""}{m.last_change.reason ? ` · «${m.last_change.reason}»` : ""}</span>}
         <button type="button" className="btn-ghost mr-auto px-2 py-1 text-xs" disabled={m.changed === 0} aria-describedby={m.changed === 0 ? "dr-roles-reset" : undefined} onClick={() => { setReason(""); setSaving("reset"); }} data-testid="perm-reset"><RotateCcw className="h-3 w-3" /> استعادة المصفوفة المعتمدة</button><DisabledReason id="dr-roles-reset" show={m.changed === 0} text="لا توجد تعديلات لاستعادتها" />
       </Card>
-      {notice && <div className="mb-4 rounded-xl border border-success-500/30 bg-success-500/5 p-3 text-sm text-success-700" data-testid="perm-notice">{notice}</div>}
+      {notice && <div role="status" className="mb-4 rounded-xl border border-success-500/30 bg-success-500/5 p-3 text-sm text-success-700" data-testid="perm-notice">{notice}</div>}
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full text-sm" data-testid="perm-matrix">
