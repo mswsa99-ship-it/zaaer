@@ -136,7 +136,7 @@ test.describe("Room AI founding (phase 1)", () => {
     await tickAll(page);
     await panel(page).getByTestId("rfo-confirm").click();
     await page.getByRole("button", { name: "إغلاق المساعد" }).click();
-    await page.getByLabel("الفرع", { exact: true }).first().selectOption({ index: 0 });
+    await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ index: 0 });
     await expect(page.locator('[data-testid^="policy-"]')).toHaveCount(before);
   });
 
