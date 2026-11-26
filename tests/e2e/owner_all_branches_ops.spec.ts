@@ -253,3 +253,30 @@ test("AB-C1 cash accounts: the owner's all-branches view lists both branches' ac
   await page.getByTestId("cash-open-branch").first().click();
   await expect(page.getByTestId("cash-branch")).toHaveCount(0);
 });
+
+test("AB-C2 cash accounts: each bank row's guide link opens that row's own branch form", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  for (const [city, expected] of [["الكورنيش", /جدة|الكورنيش/], ["الملك فهد", /الرياض|الملك/]] as const) {
+    await page.goto("/#/admin/cash-accounts", { waitUntil: "networkidle" });
+    await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+    await page.getByTestId("cash-branch").first().waitFor();
+    const card = page.getByTestId("cash-account").filter({ hasText: city }).filter({ has: page.getByRole("link", { name: /دليل الفرع/ }) }).first();
+    await card.getByRole("link", { name: /دليل الفرع/ }).click();
+    const dlg = page.getByRole("dialog");
+    await expect(dlg).toBeVisible();
+    await expect(dlg.locator("input").first()).toHaveValue(expected);
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("AB-Y1 policies: the owner's all-branches list tags each policy with its branch, is read-only, and opens a branch to edit", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/policies", { waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("admin-row-branch").first().waitFor();
+  await expect(page.getByRole("button", { name: /سياسة جديدة/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(تعديل|أرشفة) / })).toHaveCount(0);
+  await page.getByTestId("admin-row-open-branch").first().click();
+  await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /سياسة جديدة/ })).toBeVisible();
+});

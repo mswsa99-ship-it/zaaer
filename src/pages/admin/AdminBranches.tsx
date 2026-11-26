@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BranchGuideEditor } from "../../components/BranchGuideEditor";
 import { Building2, Plus, Pencil, Image as ImageIcon, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -52,6 +53,15 @@ export default function AdminBranches() {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // a link from another page (?edit=<branch id>) opens that branch's own form, not whichever branch was last active
+  const [sp, setSp] = useSearchParams();
+  const wanted = sp.get("edit");
+  useEffect(() => {
+    if (!wanted || loading) return;
+    const b = rows.find((r) => r.id === wanted);
+    if (b && isOwner) setDraft(b);
+    setSp((p) => { p.delete("edit"); return p; }, { replace: true });
+  }, [wanted, loading, rows, isOwner, setSp]);
 
   // 6.5 (U4): a new branch's long form survives a reload — the draft is offered back, never applied silently
   const isNew = !!draft && !draft.id;

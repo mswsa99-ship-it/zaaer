@@ -6,6 +6,7 @@ import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranch } from "../../lib/branch";
+import { BranchPicker } from "../../components/BranchPicker";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { toArabicError } from "../../lib/api";
 import { SectionTitle, Card, LoadingScreen, Badge, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
@@ -14,7 +15,7 @@ import { FileText, Plus, Pencil, Archive, RotateCcw, Bot } from "lucide-react";
 import { POLICY_TOPICS, policyTopic } from "../../lib/policies";
 
 
-interface PolicyRow { id: string; topic: string; topic_label: string | null; title: string; content_ar: string; is_public: boolean; sort_order: number | null; archived_at: string | null; archive_reason: string | null }
+interface PolicyRow { branch_id?: string; id: string; topic: string; topic_label: string | null; title: string; content_ar: string; is_public: boolean; sort_order: number | null; archived_at: string | null; archive_reason: string | null }
 type Draft = Omit<PolicyRow, "id" | "archived_at" | "archive_reason"> & { id?: string };
 
 const EMPTY: Draft = { topic: "checkin", topic_label: null, title: "", content_ar: "", is_public: true, sort_order: 0 };
@@ -22,8 +23,8 @@ const NO_POLICIES: PolicyRow[] = [];
 
 export default function AdminPolicies() {
   const { profile, can } = useAuth();
-  const canEdit = can("policies");
-  const { branches, setBranchId } = useBranch();
+  const { branches, allBranches, setBranchId } = useBranch();
+  const canEdit = can("policies") && !allBranches; // «جميع الفروع»: read-only; a policy is changed inside one branch
   const [draft, setDraft] = useState<Draft | null>(null);
   const [archiving, setArchiving] = useState<PolicyRow | null>(null);
   const [reason, setReason] = useState("");
@@ -31,8 +32,8 @@ export default function AdminPolicies() {
   const [error, setError] = useState<string | null>(null);
 
   // G24 (decision 40): the active branch's policies only
-  const q = useBranchQuery<PolicyRow[]>(async (branchId) => must(await supabase.from("property_policies")
-    .select("id, topic, topic_label, title, content_ar, is_public, sort_order, archived_at, archive_reason").eq("branch_id", branchId).order("sort_order").order("created_at")) as PolicyRow[], [], NO_POLICIES);
+  const q = useBranchQuery<PolicyRow[]>(async (branchId) => (must(await supabase.from("property_policies")
+    .select("id, topic, topic_label, title, content_ar, is_public, sort_order, archived_at, archive_reason").eq("branch_id", branchId).order("sort_order").order("created_at")) as PolicyRow[]).map((x) => ({ ...x, branch_id: branchId })), [], NO_POLICIES, { merge: (parts) => parts.flat() });
   const all = q.data; const branchId = q.branchId; const load = q.reload;
   const live = all.filter((p) => !p.archived_at); const archived = all.filter((p) => p.archived_at);
   const rows = showArchived ? archived : live;
@@ -70,9 +71,7 @@ export default function AdminPolicies() {
     <div>
       <SectionTitle title="السياسات" subtitle="ما يقرؤه النزيل ويُسمح للمساعد الذكي بذكره، لكل فرع" action={
         <div className="flex flex-wrap items-center gap-2">
-          <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
-          </select>
+          <BranchPicker allowAll />
           {canEdit && <button onClick={() => setDraft({ ...EMPTY, sort_order: live.length + 1 })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> سياسة جديدة</button>}
         </div>
       } />
@@ -92,14 +91,16 @@ export default function AdminPolicies() {
       ) : (
         <div className="space-y-3">
           {rows.map((p) => (
-            <Card key={p.id} data-testid={`policy-${p.id}`}>
+            <Card key={`${p.branch_id}:${p.id}`} data-testid={`policy-${p.id}`}>
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <FileText className="h-4 w-4 text-brand-600" />
                 <h3 className="text-sm font-semibold text-ink-800">{p.title}</h3>
+                {allBranches && <Badge testId="admin-row-branch">{branches.find((x) => x.id === p.branch_id)?.name_ar}</Badge>}
                 <Badge className="bg-ink-100 text-ink-500">{policyTopic(p)}</Badge>
                 {p.archived_at ? <Badge className="bg-ink-100 text-ink-500">مؤرشفة</Badge>
                   : <Badge className={p.is_public ? "bg-success-500/10 text-success-600" : "bg-warning-500/10 text-warning-700"}>{p.is_public ? "عامة — يراها النزيل والمساعد" : "داخلية"}</Badge>}
                 <span className="mr-auto text-xs text-ink-400">#{p.sort_order ?? 0}</span>
+                {allBranches && p.branch_id && <button onClick={() => setBranchId(p.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع ${p.title} لتعديل السياسة`}>فتح الفرع للتعديل</button>}
                 {canEdit && !p.archived_at && (
                   <>
                     <button onClick={() => setDraft({ ...p })} className="btn-ghost min-h-[44px] min-w-[44px] text-ink-500" aria-label={`تعديل ${p.title}`}><Pencil className="h-4 w-4" /></button>

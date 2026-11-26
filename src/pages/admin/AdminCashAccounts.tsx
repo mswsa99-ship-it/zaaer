@@ -86,7 +86,7 @@ export default function AdminCashAccounts() {
                       {a.account_prefix && a.account_suffix
                         ? <p className="mt-0.5 text-xs text-ink-500" data-testid="account-rule">رقم الحساب يبدأ بـ <span dir="ltr">{a.account_prefix}</span> وينتهي بـ <span dir="ltr">{a.account_suffix}</span></p>
                         : <p className="mt-1 rounded-lg bg-warning-500/10 px-2 py-1 text-xs text-warning-700" data-testid="account-rule-missing">لم تُكتب بداية رقم الحساب ونهايته: يحتاجهما رصد الرسائل البنكية لنسبة كل حركة إلى هذا الفرع.</p>}
-                      <p className="mt-0.5 text-xs text-ink-500">الآيبان: {(allBranches ? ibanMap[a.branch_id] : iban) ? <span dir="ltr" className="font-mono">{String(allBranches ? ibanMap[a.branch_id] : iban).replace(/(.{4})/g, "$1 ").trim()}</span> : "غير مُدخل"} · <Link to="/admin/branches" className="text-brand-700 underline">من «دليل الفرع»</Link></p>
+                      <p className="mt-0.5 text-xs text-ink-500">الآيبان: {(allBranches ? ibanMap[a.branch_id] : iban) ? <span dir="ltr" className="font-mono">{String(allBranches ? ibanMap[a.branch_id] : iban).replace(/(.{4})/g, "$1 ").trim()}</span> : "غير مُدخل"} · <Link to={allBranches ? `/admin/branches?edit=${a.branch_id}` : "/admin/branches"} className="text-brand-700 underline">من «دليل الفرع»</Link></p>
                     </>}
                     {a.archive_reason && <p className="mt-0.5 text-xs text-ink-400">سبب الأرشفة: {a.archive_reason}</p>}
                   </div>
@@ -112,7 +112,10 @@ export default function AdminCashAccounts() {
         <div className="flex min-w-0 flex-wrap items-center gap-3"><BranchPicker allowAll />{canEdit && missing.map((k) => <button key={k} onClick={() => setDraft({ kind: k, name: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> {k === "cash_box" ? "إضافة صندوق" : "إضافة حساب بنكي"}</button>)}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       {notice && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{notice}</p>}
-      {!allBranches && missingDefault.length > 0 && rows.length > 0 && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">لا يوجد {missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم في هذا الفرع: لا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.</p>}
+      {(allBranches
+        ? branches.map((b) => { const mine = rows.filter((r) => r.branch_id === b.id); const miss = (["cash_box", "bank_account"] as const).filter((k) => !mine.some((r) => r.kind === k && r.is_default && r.is_active && !r.archived_at)); return mine.length > 0 && miss.length > 0 ? { key: b.id, text: `${b.name_ar}: لا يوجد ${miss.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم، فلا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.` } : null; })
+        : missingDefault.length > 0 && rows.length > 0 ? [{ key: "one", text: `لا يوجد ${missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم في هذا الفرع: لا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.` }] : []
+      ).filter((w): w is { key: string; text: string } => !!w).map((w) => <p key={w.key} data-testid="cash-missing-default" className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{w.text}</p>)}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : rows.length === 0 ? <EmptyState icon={<Wallet className="h-10 w-10" />} title="لا توجد صناديق ولا حسابات" description="لكل فرع صندوق وحساب بنكي من البداية؛ أضف ما تحتاج." /> : (
         <div className="grid gap-6 lg:grid-cols-2">{group("cash_box")}{group("bank_account")}</div>
