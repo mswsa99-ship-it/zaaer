@@ -1,20 +1,21 @@
 import { useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard, Badge } from "../../components/ui";
 import { todayISO } from "../../lib/utils";
 import { useBranch } from "../../lib/branch";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { inventoryApi, toArabicError } from "../../lib/api";
 import { NumberInput } from "../../components/forms";
+import { BranchPicker } from "../../components/BranchPicker";
 
 interface InventoryRow {
-  id: string; date: string; total_units: number; publicly_visible_units: number; blocked_units: number;
+  branch_id?: string; id: string; date: string; total_units: number; publicly_visible_units: number; blocked_units: number;
   category?: { name_ar: string };
 }
 const NO_ROWS: InventoryRow[] = [];
 
 export default function AdminAvailability() {
-  const { branches, setBranchId } = useBranch();
+  const { branches, allBranches, setBranchId } = useBranch(); // «جميع الفروع» (owner): read-only; stock is changed inside one branch
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   // 0055 (SETUP-01): what happened to each row's last change — «حُفظ» or the reason it was refused
@@ -22,14 +23,16 @@ export default function AdminAvailability() {
   const [startDate, setStartDate] = useState(todayISO());
 
   // G24 (decision 40): the active branch's rows only; a failed load shows an error, never an empty table
-  const q = useBranchQuery<InventoryRow[]>(async (branchId) => must(await supabase
+  const q = useBranchQuery<InventoryRow[]>(async (branchId) => (must(await supabase
       .from("inventory_periods")
       .select("id, date, total_units, publicly_visible_units, blocked_units, category:room_categories(name_ar)")
       .eq("branch_id", branchId)
       .gte("date", startDate)
       .order("date", { ascending: true })
-      .limit(60)) as unknown as InventoryRow[], [startDate], NO_ROWS);
-  const rows = q.data; const branchId = q.branchId; const load = q.reload;
+      .limit(60)) as unknown as InventoryRow[]).map((x) => ({ ...x, branch_id: branchId })), [startDate], NO_ROWS,
+    { merge: (parts) => parts.flat().sort((a, b) => a.date.localeCompare(b.date) || (a.branch_id ?? "").localeCompare(b.branch_id ?? "")) });
+  const rows = q.data; const load = q.reload;
+  const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
 
   // 0055 (SETUP-01): through fn_admin_set_inventory — 0 ≤ blocked ≤ total ≤ the type's units, public ≤ total − blocked
   const saveLock = useRef(false);
@@ -53,19 +56,19 @@ export default function AdminAvailability() {
     <div>
       <SectionTitle title="التحكم بالتوفر" subtitle="إدارة الرصيد اليومي لكل تصنيف" action={
         <div className="flex flex-wrap items-center gap-2">
-          <select className="input w-auto" value={branchId ?? ""} onChange={(e) => setBranchId(e.target.value)} aria-label="الفرع">
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
-          </select>
+          <BranchPicker allowAll />
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input w-auto" aria-label="بداية العرض" />
         </div>
       } />
       {(error || (q.error && rows.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
+      {allBranches && !q.error && branches.filter((b) => !rows.some((r) => r.branch_id === b.id)).map((b) => <p key={b.id} data-testid="avail-branch-empty" className="mb-2 rounded-xl border-2 border-dashed px-3 py-2 text-sm">{b.name_ar}: لا توجد سجلات توفر لهذه الفترة.</p>)}
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-ink-100 text-xs text-ink-400">
               <th className="py-2 text-right font-medium">التاريخ</th>
               <th className="py-2 text-right font-medium">التصنيف</th>
+              {allBranches && <th className="py-2 text-right font-medium">الفرع</th>}
               <th className="py-2 text-center font-medium">الإجمالي</th>
               <th className="py-2 text-center font-medium">المعروض للعامة</th>
               <th className="py-2 text-center font-medium">المحجوب</th>
@@ -77,14 +80,15 @@ export default function AdminAvailability() {
               <tr key={r.id} className="border-b border-ink-50">
                 <td className="py-2.5 text-ink-700">{r.date}</td>
                 <td className="py-2.5 text-ink-600">{r.category?.name_ar}</td>
+                {allBranches && <td className="py-2.5"><Badge testId="admin-row-branch">{branchName(r.branch_id)}</Badge> <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="admin-row-open-branch" onClick={() => setBranchId(r.branch_id!)} aria-label={`فتح فرع ${branchName(r.branch_id)} لتعديل التوفر ${r.date}`}>فتح الفرع للتعديل</button></td>}
                 <td className="py-2.5 text-center">
-                  <NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting !== null} />
+                  {allBranches ? <span data-testid="avail-value">{r.total_units}</span> : <NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting !== null} />}
                 </td>
                 <td className="py-2.5 text-center">
-                  <NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting !== null} />
+                  {allBranches ? <span data-testid="avail-value">{r.publicly_visible_units}</span> : <NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting !== null} />}
                 </td>
                 <td className="py-2.5 text-center">
-                  <NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting !== null} />
+                  {allBranches ? <span data-testid="avail-value">{r.blocked_units}</span> : <NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting !== null} />}
                 </td>
                 <td className="py-2.5 text-xs" aria-live="polite">{rowState[r.id] && <span className={rowState[r.id].ok ? "text-success-600" : "text-danger-600"}>{rowState[r.id].text}</span>}</td>
               </tr>

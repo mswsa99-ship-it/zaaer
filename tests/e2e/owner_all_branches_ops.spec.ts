@@ -332,3 +332,17 @@ test("AB-S2 structure: the owner's all-branches view tags each block with its br
   await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /بلوك جديد/ })).toBeVisible();
 });
+
+test("AB-V1 availability: the owner's all-branches view lists both branches' stock as read-only numbers with a branch tag, and a row opens its branch", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/availability", { waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("admin-row-branch").first().waitFor();
+  const tags = await page.getByTestId("admin-row-branch").allInnerTexts();
+  // a branch with no stock rows is named in a note, never silently left out
+  expect(new Set(tags).size + (await page.getByTestId("avail-branch-empty").count())).toBe(2);
+  await expect(page.locator("input[type=number], input[inputmode=numeric]")).toHaveCount(0);
+  await page.getByTestId("admin-row-open-branch").first().click();
+  await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
+  await expect(page.getByTestId("avail-value")).toHaveCount(0);
+});
