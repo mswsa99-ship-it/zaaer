@@ -56,7 +56,7 @@ export default function Terms() {
               </ul>
               {own.map((p, i) => (
                 <div key={i}>
-                  <h3 className="mt-4 text-base font-semibold text-rai-ink">{p.title}<span className="mr-2 text-xs font-normal text-rai-ink-muted">{policyTopic(p)}</span></h3>
+                  <h3 className="mt-4 text-base font-semibold text-rai-ink">{p.title}{policyTopic(p) !== p.title && <span className="mr-2 text-xs font-normal text-rai-ink-muted">{policyTopic(p)}</span>}</h3>
                   <p className="mt-1 whitespace-pre-line">{p.content_ar}</p>
                 </div>
               ))}

@@ -15,7 +15,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, { error
     if (isChunkError(error)) {
       let again = false;
       try { again = sessionStorage.getItem(RELOADED) === "1"; sessionStorage.setItem(RELOADED, "1"); } catch { /* storage off */ }
-      if (!again) window.location.reload();
+      if (!again && navigator.onLine !== false) window.location.reload();   // offline: a reload only lands on the browser's own error page; keep the app's message and button
     }
   }
   render() {

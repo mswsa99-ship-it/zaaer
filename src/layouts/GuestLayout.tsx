@@ -44,7 +44,7 @@ function GuestShell({ bilingual }: { bilingual: boolean }) {
             </div>
           </Link>
           <div className="flex items-center gap-3 text-xs text-rai-ink-muted">
-            <span className="hidden items-center gap-1 sm:inline-flex"><ShieldCheck className="h-4 w-4 text-rai-spark-text" /> {t("اتصال آمن", "Secure connection")}</span>
+            {typeof window !== "undefined" && window.location.protocol === "https:" && <span className="hidden items-center gap-1 sm:inline-flex"><ShieldCheck className="h-4 w-4 text-rai-spark-text" /> {t("اتصال آمن", "Secure connection")}</span>}
             {bilingual && (
               <button type="button" onClick={() => setLang(en ? "ar" : "en")} data-testid="guest-lang"
                 className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-rai-line bg-rai-shell px-3 text-sm font-medium text-rai-ink hover:border-rai-line"

@@ -92,7 +92,7 @@ export default function Registration() {
             {g.verification_status === "verified" ? (
               <span className="badge bg-rai-success-tint text-rai-success"><CheckCircle2 className="h-3 w-3" /> {t("معتمد", "Verified")}</span>
             ) : g.data_submitted ? (
-              <button onClick={() => setEditing({ guest: g, open: true })} className="btn-ghost min-h-[44px] text-xs text-rai-action-ink">{t("تعديل", "Edit")}</button>
+              <button onClick={() => setEditing({ guest: g, open: true })} className="btn-ghost min-h-[44px] shrink-0 whitespace-nowrap text-xs text-rai-action-ink">{t("تعديل", "Edit")}</button>
             ) : (
               <button onClick={() => setEditing({ guest: g, open: true })} className="btn-outline text-xs"><UserPlus className="h-3.5 w-3.5" /> {t("استكمال البيانات", "Add details")}</button>
             )}
@@ -327,7 +327,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder="05XXXXXXXX" />
         </Field>
 
-        {formError && <ErrorBanner message={formError} />}
+        {formError && <div ref={(el) => el?.scrollIntoView({ block: "center", behavior: "smooth" })} className="scroll-mb-24"><ErrorBanner message={formError} /></div>}
 
         <label className="flex items-start gap-2 text-xs text-rai-ink-muted">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4" />
