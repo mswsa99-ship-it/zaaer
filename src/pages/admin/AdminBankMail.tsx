@@ -76,7 +76,7 @@ export default function AdminBankMail() {
           <div className="flex items-center gap-2"><Mail className="h-5 w-5 text-ink-500" /><span className="font-semibold">صندوق البريد</span>
             <Badge className={stateTone} testId="bank-mail-state">{stateLabel}</Badge></div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-secondary min-h-[44px]" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> تعديل</button>
+            <button type="button" className="btn-secondary min-h-[44px] min-w-[44px]" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> تعديل</button>
             <button type="button" className="btn-secondary min-h-[44px]" disabled={busy || s.state === "not_configured"} aria-describedby={s.state === "not_configured" ? "dr-bankmail-poll" : undefined} onClick={pollNow}><RefreshCw className="h-4 w-4" /> اقرأ البريد الآن</button><DisabledReason id="dr-bankmail-poll" show={s.state === "not_configured"} text="اضبط قراءة البريد أولًا" />
           </div>
         </div>
@@ -111,7 +111,7 @@ export default function AdminBankMail() {
           <li>للإشعارات: يُقبل التطبيق باسم حزمته (مثل com.…). إن ظهر اسمه في التطبيق تحت «لم تُسمح» فأضفه إلى «المرسلون المسموحون» هنا ثم انسخ نص الإعداد من جديد.</li>
         </ol>
         {setupProblem(s) && <p id="dr-bankmail-setup" className="mt-2 text-sm text-warning-700">{setupProblem(s) === "mailbox" ? "حدّد البريد المخصّص أولًا." : "حدّد قاعدة رقم الحساب لفرع واحد على الأقل أولًا."}</p>}
-        <a href="https://github.com/mswsa99-ship-it/zaaer/actions/workflows/android.yml" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-brand-700 underline">ملف التثبيت (APK): آخر تشغيل ناجح في GitHub ← «fivehours-relay-apk»</a>
+        <a href="https://github.com/mswsa99-ship-it/zaaer/actions/workflows/android.yml" target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-[44px] items-center text-sm text-brand-700 underline">ملف التثبيت (APK): آخر تشغيل ناجح في GitHub ← «fivehours-relay-apk»</a>
       </Card>
 
       <Card className="mb-4">
@@ -122,7 +122,7 @@ export default function AdminBankMail() {
               <span dir="ltr" className="font-mono">{a.prefix && a.suffix ? `${a.prefix}…${a.suffix}` : <span className="text-warning-700" dir="rtl">لم تُحدَّد</span>}</span></li>
           ))}
         </ul>
-        <Link to="/admin/cash-accounts" className="mt-2 inline-block text-sm text-brand-700 underline">تعديلها من «الصناديق والحسابات»</Link>
+        <Link to="/admin/cash-accounts" className="mt-2 inline-flex min-h-[44px] items-center text-sm text-brand-700 underline">تعديلها من «الصناديق والحسابات»</Link>
       </Card>
 
       <Card>

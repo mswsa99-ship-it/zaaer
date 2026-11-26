@@ -69,7 +69,7 @@ export default function ProductOrders() {
     <div>
       <SectionTitle title="طلبات المنتجات" subtitle="ما يطلبه النزيل المقيم من واتساب أو يطلبه له الاستقبال: الدفع لدى الاستقبال، ثم السند ومهمة التسليم معًا" action={
         <div className="flex min-w-0 flex-wrap items-center gap-2"><BranchPicker allowAll />
-          {can("voucher.receipt") && <button type="button" className="btn-primary text-sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> طلب لنزيل</button>}
+          {can("voucher.receipt") && <button type="button" className="btn-primary min-h-[44px] text-sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> طلب لنزيل</button>}
         </div>} />
       <Card className="mb-4">
         <AmountGrid testId="order-totals">

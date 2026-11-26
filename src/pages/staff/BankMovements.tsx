@@ -92,7 +92,7 @@ function Movements({ branch, from, to, unassignedOnly, assignedOnly }: { branch:
         <AmountBox label="الداخل" value={sar(tin)} tone="text-success-600" /><AmountBox label="الخارج" value={sar(tout)} tone="text-danger-600" /><AmountBox label="بانتظار المطابقة" value={<span data-testid="bank-waiting">{waiting}</span>} tone={waiting ? "text-warning-700" : "text-success-600"} />
       </AmountGrid>
         {waiting > 0 && <p className="mt-3 text-sm text-ink-600" data-testid="bank-waiting-money">غير المطابَق: داخل <span dir="ltr" className="tabular-nums">{sar(win)}</span> · خارج <span dir="ltr" className="tabular-nums">{sar(wout)}</span>. ما يحتاج مطابقة مع سنداته أو تحويلًا لسند؛ لا يُقيَّد شيء منه في الدفاتر قبل ذلك.</p>}
-        <label className="mt-3 flex min-h-[44px] items-center gap-2 text-sm text-ink-700"><input type="checkbox" checked={waitingOnly} onChange={(e) => setWaitingOnly(e.target.checked)} /> بانتظار المطابقة فقط</label>
+        <label className="mt-3 flex min-h-[44px] items-center gap-2 text-sm text-ink-700"><input type="checkbox" className="h-5 w-5 shrink-0" checked={waitingOnly} onChange={(e) => setWaitingOnly(e.target.checked)} /> بانتظار المطابقة فقط</label>
       </Card>}
       {unassignedOnly && <p className="mb-3 text-sm text-ink-600">أرقام الحساب في هذه الرسائل لا تطابق حسابًا واحدًا من حسابات الفروع (مثل نهاية يشترك فيها حسابان)، فلا تُنسب تلقائيًا ولا تُدمج. انسب كل حركة لحساب فرعها بسبب. ولتقليل ذلك راجع قاعدة رقم الحساب في <Link to="/admin/cash-accounts" className="text-brand-700 underline">الصناديق والحسابات</Link>.</p>}
       {shown.length === 0 ? <EmptyState icon={<Landmark className="h-10 w-10" />} title={unassignedOnly ? "لا حركات تنتظر النسبة" : "لا حركات في هذه الفترة"} /> : (
@@ -183,7 +183,7 @@ function MatchForm({ m, onDone, onCancel }: { m: BankMovement; onDone: () => voi
           <ul className="max-h-64 space-y-1 overflow-y-auto" data-testid="bank-candidates">
             {records.map((c) => { const k = candidateKey(c); return (
               <li key={k}><label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-ink-100 p-2 text-sm">
-                <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} />
+                <input type="checkbox" className="h-5 w-5 shrink-0" checked={picked.has(k)} onChange={() => toggle(k)} />
                 <span className="min-w-0 flex-1">{c.label} <span className="font-mono text-xs text-ink-400" dir="ltr">{c.number}</span><span className="block text-xs text-ink-500">{formatDateTime(c.at)}</span></span>
                 <span dir="ltr" className={`tabular-nums ${c.exact ? "font-semibold text-success-600" : "text-ink-700"}`}>{signed(c.signed_halalas)}</span>
               </label></li>
