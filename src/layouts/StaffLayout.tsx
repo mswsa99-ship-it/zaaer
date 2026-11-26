@@ -139,7 +139,7 @@ export default function StaffLayout() {
               <nav key={location.pathname} aria-label="تبويبات المركز" data-testid="hub-tabs" ref={centerActiveTab} className="mb-4 flex gap-1 overflow-x-auto border-b border-ink-100">
                 {tabsOf.map((t) => (
                   <NavLink key={t.path} to={t.path} className={({ isActive }) => cn("flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium", isActive ? "border-brand-600 text-brand-700" : "border-transparent text-ink-600 hover:text-ink-800")}>
-                    {t.label}
+                    {t.tabLabel ?? t.label}
                     {t.path === "/staff/journey" && !!journeyAlerts && <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-500 px-1.5 text-[11px] font-semibold leading-5 text-white" aria-label={`${journeyAlerts} تنبيهات مفتوحة`}>{journeyAlerts}</span>}
                   </NavLink>
                 ))}

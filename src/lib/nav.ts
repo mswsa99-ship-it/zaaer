@@ -38,6 +38,8 @@ export interface NavPage {
   /** react-router pattern, e.g. "/staff/reservations/:id" */
   path: string;
   label: string;
+  /** The label in the centre's own tab strip when the page label would repeat the centre's name (the strip sits under the menu entry of that name). */
+  tabLabel?: string;
   icon: LucideIcon;
   area: "staff" | "admin";
   /** Who may open the route. */
@@ -105,7 +107,7 @@ export const PAGES: readonly NavPage[] = [
   // decision 4: today's and tomorrow's platform arrivals, matched against the platform (the supervisor's daily list)
   { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, hub: "finance", area: "staff", roles: ["owner", "manager", "supervisor"] },
   { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
-  { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, hub: "service", area: "staff", roles: ALL_STAFF },
+  { path: "/staff/housekeeping", label: "خدمة الغرف", tabLabel: "المهام والتنظيف", icon: Sparkles, hub: "service", area: "staff", roles: ALL_STAFF },
   { path: "/staff/codes", label: "الرموز", icon: KeyRound, hub: "service", area: "staff", roles: CODES_ROLES, cap: ["keybox.code"] },
   { path: "/staff/tickets", label: "البلاغات", icon: Wrench, hub: "service", area: "staff", roles: ALL_STAFF },
   { path: "/staff/inbox", label: "الوارد", icon: Inbox, hub: "guest", area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
