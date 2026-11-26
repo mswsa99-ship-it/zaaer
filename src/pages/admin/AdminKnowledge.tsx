@@ -4,7 +4,7 @@
  * (3) branch settings (times/address/phone — /admin/branches). Questions the assistant could not
  * answer land in the "بلا إجابة" tab; answering one from there creates the entry and closes it.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toArabicError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -15,6 +15,9 @@ import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge , 
 import { BranchPicker } from "../../components/BranchPicker";
 import { useBranch } from "../../lib/branch";
 import { formatDateTime, COUNT } from "../../lib/utils";
+import { inheritanceApi, type KnowledgePreview, type KnowledgeEdit } from "../../lib/inheritance";
+import { InheritancePreviewDialog } from "../../components/InheritancePreviewDialog";
+import { knowledgePlanRows, hiddenBranchesNote, classifyError, type PlanRow } from "../../lib/inheritanceView";
 import { BookOpen, Plus, Pencil, Search, MessageCircleQuestion, Archive, RotateCcw, FileText, Building2, Globe, Lock, Sparkles } from "lucide-react";
 
 type Tab = "entries" | "unanswered";
@@ -38,6 +41,12 @@ export default function AdminKnowledge() {
   const [kwInput, setKwInput] = useState("");
   const [lifecycle, setLifecycle] = useState<{ row: KnowledgeRow; reason: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // lane 7 (0149): where each answer comes from in the active branch, and the server preview of a hotel-level change
+  const [origins, setOrigins] = useState<Map<string, string>>(new Map());
+  const [originsError, setOriginsError] = useState<string | null>(null);
+  // which branch and which rows list the origins were computed for: stale origins never hide a row (see `filtered`)
+  const [originsFor, setOriginsFor] = useState<{ branch: string; rows: unknown } | null>(null);
+  const [hotelPlan, setHotelPlan] = useState<{ id: string; edit: KnowledgeEdit; preview: KnowledgePreview; rows: PlanRow[] } | null>(null);
 
   // G24 (decision 40): the active branch's answers (and the organisation-wide ones) only
   const q = useBranchQuery<KbData>(async (branchId) => {
@@ -50,12 +59,30 @@ export default function AdminKnowledge() {
   } });
   const branchName = (id: string | null) => branches.find((b) => b.id === id)?.name_ar ?? "";
   const { rows, open } = q.data; const branchId = q.branchId; const load = q.reload;
+  // best effort: without it the page behaves exactly as before (no badges, hotel-level edits are refused by the server)
+  useEffect(() => {
+    let live = true;
+    setOriginsFor(null);
+    if (allBranches || !branchId) { setOrigins(new Map()); setOriginsError(null); return; }
+    (async () => {
+      try {
+        const l = await inheritanceApi.knowledgeEffective(branchId);
+        if (!Array.isArray(l)) throw new Error("bad inheritance response");
+        if (live) { setOrigins(new Map(l.map((x) => [x.id, x.origin]))); setOriginsError(null); setOriginsFor({ branch: branchId, rows }); }
+      } catch (e) { if (live) { setOrigins(new Map()); setOriginsError(classifyError(e) === "denied" ? null : toArabicError(e)); } }
+    })();
+    return () => { live = false; };
+  }, [allBranches, branchId, rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim();
-    if (!q) return rows;
-    return rows.filter((r) => r.question.includes(q) || r.answer.includes(q) || r.keywords.some((k) => k.includes(q)));
-  }, [rows, search]);
+    // a shared answer the branch overrode (or switched off with an inactive override) must not show next to the branch's own:
+    // the server's effective list is the truth for what this branch actually says (archived view is left as is)
+    const originsLoaded = !!originsFor && originsFor.branch === branchId && originsFor.rows === rows;
+    const base = originsLoaded && !showArchived && !allBranches ? rows.filter((r) => r.branch_id !== null || origins.has(r.id)) : rows;
+    if (!q) return base;
+    return base.filter((r) => r.question.includes(q) || r.answer.includes(q) || r.keywords.some((k) => k.includes(q)));
+  }, [rows, search, origins, originsFor, branchId, showArchived, allBranches]);
 
   // 0055 (SETUP-13, the owner's decision): a contradicting answer is refused; the existing entry opens for editing instead
   const [conflict, setConflict] = useState<KnowledgeRow | null>(null);
@@ -105,6 +132,7 @@ export default function AdminKnowledge() {
       </div>
 
       {allBranches && <div className="mb-3 rounded-xl border-2 border-dashed px-3 py-2 text-sm" role="note" data-testid="kb-readonly-note"><b>عرض جميع الفروع للقراءة فقط.</b> لتعديل إجابة خاصة بفرع اضغط «فتح الفرع للتعديل». الإجابات المعلّمة «كل الفروع» تُعدَّل من أي فرع.</div>}
+      {originsError && <div className="mb-4 rounded-xl bg-rai-warning-tint p-3 text-sm text-rai-warning" role="alert" data-testid="origins-error">تعذّر تحميل حالة وراثة الإجابات من الفندق: {originsError}. الإجابات أدناه قابلة للتعديل كالمعتاد، لكن علامة «مخصص» غير ظاهرة.</div>}
       {(error || (q.error && rows.length + open.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -133,6 +161,7 @@ export default function AdminKnowledge() {
                   <p className="mt-1.5 whitespace-pre-line text-sm text-ink-600">{r.answer}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Badge className="bg-brand-50 text-brand-700">{KNOWLEDGE_CATEGORY_LABELS[r.category] ?? r.category}</Badge>
+                    {origins.get(r.id) === "branch_override" && <Badge className="bg-rai-spark-tint text-rai-spark-text" testId="kb-override-badge">مخصص لهذا الفرع</Badge>}
                     <Badge className="bg-ink-50 text-ink-500" testId="admin-row-branch">{r.branch_id ? (allBranches ? branchName(r.branch_id) : "هذا الفرع") : "كل الفروع"}</Badge>
                     {allBranches && r.branch_id && <button type="button" onClick={() => setBranchId(r.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع ${branchName(r.branch_id)} لتعديل الإجابة`}>فتح الفرع للتعديل</button>}
                     {r.keywords.map((k) => <span key={k} className="rounded-md border border-ink-100 px-1.5 py-0.5 text-[11px] text-ink-500">{k}</span>)}
@@ -141,6 +170,8 @@ export default function AdminKnowledge() {
                 </div>
                 {canEdit && (
                   <div className="flex shrink-0 flex-col gap-1">
+                    {!r.archived_at && !r.branch_id && branchId && <button disabled={busyId === r.id} onClick={() => act(r.id, () => inheritanceApi.knowledgeOverride(r.id, branchId))} className="btn-outline min-h-[44px] text-xs" data-testid="kb-override">تخصيص لهذا الفرع</button>}
+                    {!r.archived_at && origins.get(r.id) === "branch_override" && <button disabled={busyId === r.id} onClick={() => act(r.id, () => inheritanceApi.knowledgeRevert(r.id))} className="btn-ghost min-h-[44px] text-xs" data-testid="kb-revert"><RotateCcw className="h-4 w-4" /> إعادة لإجابة الفندق</button>}
                     {!r.archived_at && <button onClick={() => startEdit(r)} className="btn-ghost p-2.5" title="تعديل" aria-label={`تعديل: ${r.question}`}><Pencil className="h-4 w-4" /></button>}
                     {!r.archived_at && <button onClick={() => setLifecycle({ row: r, reason: "" })} className="btn-ghost p-2.5 text-ink-400" title="أرشفة" aria-label={`أرشفة: ${r.question}`}><Archive className="h-4 w-4" /></button>}
                     {r.archived_at && <button disabled={busyId === r.id} onClick={() => act(r.id, () => knowledgeApi.archive(r.id, "استعادة", false))} className="btn-ghost p-1.5" title="استعادة">{busyId === r.id ? <Spinner className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}</button>}
@@ -182,6 +213,12 @@ export default function AdminKnowledge() {
             const pending = kwInput.trim() ? [...new Set([...draft.keywords, ...kwInput.split(/[,،\n]/).map((s) => s.trim()).filter(Boolean)])] : draft.keywords;
             if (!draft.question.trim() || draft.question.trim().length < 3) throw new Error("VALIDATION: question");
             if (!draft.answer.trim()) throw new Error("VALIDATION: answer");
+            if (draft.id && !draft.branch_id) {   // a hotel-level answer: the server previews the effect on every branch first
+              const edit: KnowledgeEdit = { question: draft.question.trim(), answer: draft.answer.trim(), answer_en: draft.answer_en ?? null, keywords: pending, category: draft.category, is_public: draft.is_public, is_active: draft.is_active, priority: draft.priority, version: draft.version ?? 0, reason: draft.reason };
+              const preview = await inheritanceApi.knowledgePreview(draft.id, edit);
+              setHotelPlan({ id: draft.id, edit, preview, rows: knowledgePlanRows(preview) });
+              return;
+            }
             try {
               await knowledgeApi.upsert({ ...draft, keywords: pending, question: draft.question.trim(), answer: draft.answer.trim() });
             } catch (e) {
@@ -224,6 +261,13 @@ export default function AdminKnowledge() {
           </ActionForm>
         )}
       </Modal>
+
+      <InheritancePreviewDialog open={!!hotelPlan} title="تطبيق الإجابة على الفروع" rows={hotelPlan?.rows ?? []} hiddenNote={hotelPlan ? hiddenBranchesNote(hotelPlan.preview.hidden_branches) : null} onCancel={() => setHotelPlan(null)}
+        onConfirm={async (overwrite) => {
+          if (!hotelPlan) return;
+          try { await inheritanceApi.knowledgeApply(hotelPlan.id, hotelPlan.edit, hotelPlan.preview, overwrite); fd.clearSaved(); ed.clearSaved(); setHotelPlan(null); setDraft(null); load(); }
+          catch (e) { setHotelPlan(null); setError(toArabicError(e)); }
+        }} />
 
       {/* ---------- archive (two-step, in-page) ---------- */}
       <Modal open={!!lifecycle} title="أرشفة الإجابة" onClose={() => setLifecycle(null)}>
