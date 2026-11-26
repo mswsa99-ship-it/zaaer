@@ -106,6 +106,7 @@ export default function StaffReservations() {
   const moneyRole = permissions.seesMoney;
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);   // phones: the secondary controls open on demand, the results come first
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [columns, setColumns] = useState<string[]>(() => { try { const s = localStorage.getItem(COLUMNS_KEY); const a = s ? (JSON.parse(s) as string[]) : null; return Array.isArray(a) && a.length ? a : DEFAULT_COLUMNS; } catch { return DEFAULT_COLUMNS; } });
@@ -206,19 +207,21 @@ export default function StaffReservations() {
     <div className="reservations-contrast">
       <SectionTitle title="الحجوزات" subtitle={`${data.total ? `الحجوزات المطابقة: ${data.total}` : list.error ? "تعذّر تحميل القائمة" : "لا حجوزات مطابقة"}${words.length ? ` · ${words.join(" · ")}` : ""}`} action={
         <div className="flex flex-wrap items-center gap-2">
-          <BranchPicker allowAll />
-          <Link to="/staff/rooms?view=calendar" className="btn-outline text-sm" data-testid="open-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</Link>
-          <ExportMenu source={{ statement, table, pageCount: data.rows.length, total: data.total }} disabled={!branchId} />
-          {can("res.create") && <Link to="/staff/reservations/new" className="btn-primary text-sm"><Plus className="h-4 w-4" /> حجز جديد</Link>}
+          <div className="max-sm:order-1 max-sm:basis-full"><BranchPicker allowAll /></div>
+          <Link to="/staff/rooms?view=calendar" className="btn-outline text-sm max-sm:order-3" data-testid="open-calendar" aria-label="تقويم الحجوزات"><CalendarRange className="h-4 w-4" /> <span className="max-sm:hidden">تقويم الحجوزات</span></Link>
+          <div className="max-sm:order-4"><ExportMenu source={{ statement, table, pageCount: data.rows.length, total: data.total }} disabled={!branchId} /></div>
+          {can("res.create") && <Link to="/staff/reservations/new" className="btn-primary text-sm max-sm:order-2 max-sm:flex-1"><Plus className="h-4 w-4" /> حجز جديد</Link>}
         </div>} />
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
 
       <div className="card mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative max-w-full"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 max-w-full pr-9" placeholder="مرجع / نزيل / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
-          <select className="input w-auto" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); set("open_only", !e.target.value); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+          <div className="relative max-w-full max-sm:basis-full"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 max-w-full pr-9 max-sm:w-full" placeholder="مرجع / نزيل / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
+          <select className="input w-auto max-sm:min-w-0 max-sm:flex-1" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); set("open_only", !e.target.value); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.open_only)} onChange={(e) => set("open_only", e.target.checked)} /> المفتوحة فقط</label>
           {moneyRole && <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.has_balance)} onChange={(e) => set("has_balance", e.target.checked)} /> عليها متبقٍ</label>}
+          <button type="button" onClick={() => setMoreOpen(!moreOpen)} className="btn-ghost text-sm sm:hidden" data-testid="toggle-more" aria-expanded={moreOpen} aria-controls="res-more"><SlidersHorizontal className="h-4 w-4" /> خيارات العرض{activeCount ? ` (${activeCount})` : ""}</button>
+          <div id="res-more" className={`${moreOpen ? "flex" : "hidden"} w-full flex-wrap items-center gap-2 sm:contents`}>
           <button type="button" onClick={() => setAdvanced(!advanced)} className={`btn-ghost text-sm ${advanced ? "text-brand-700" : ""}`} data-testid="toggle-advanced" aria-expanded={advanced}><SlidersHorizontal className="h-4 w-4" /> مرشحات إضافية{activeCount ? ` (${activeCount})` : ""}</button>
           <div className="relative">
             <button type="button" onClick={() => setPickerOpen(!pickerOpen)} className="btn-ghost text-sm" data-testid="column-picker" aria-expanded={pickerOpen}><Columns3 className="h-4 w-4" /> الأعمدة ({visibleColumns.length})</button>
@@ -241,6 +244,7 @@ export default function StaffReservations() {
             {viewId && <button type="button" className="btn-ghost min-h-[44px] px-2 py-1 text-xs text-danger-600" onClick={() => removeView(viewId)} onBlur={() => setConfirmRemove(false)} aria-label={confirmRemove ? "اضغط مرة أخرى لتأكيد حذف العرض" : "حذف العرض المحفوظ"} title="إزالة العرض (يُؤرشف)"><Trash2 className="h-3.5 w-3.5" />{confirmRemove && " تأكيد الحذف"}</button>}
           </div>
           {activeCount > 0 && <button type="button" onClick={clearFilters} className="btn-ghost text-xs text-ink-500" data-testid="clear-filters"><X className="h-3.5 w-3.5" /> مسح المرشحات</button>}
+          </div>
         </div>
         {viewsError && <p className="mt-2 text-xs text-danger-600">{viewsError}</p>}
         {advanced && (

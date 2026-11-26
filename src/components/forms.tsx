@@ -91,7 +91,7 @@ function insertedChar(before: string, after: string): string {
   return after[i] ?? "";
 }
 
-export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placeholder, label }: { valueHalalas: number | null; onChange: (h: number | null) => void; min?: number; disabled?: boolean; placeholder?: string; label?: string }) {
+export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placeholder, label, invalid }: { valueHalalas: number | null; onChange: (h: number | null) => void; min?: number; disabled?: boolean; placeholder?: string; label?: string; invalid?: boolean }) {
   const [text, setText] = useState(formatMoneyInput(valueHalalas));
   // the last value this field sent up: a different value arriving is set from outside (a suggestion, a reset) and shows
   // at once, even while the field has the focus; the field's own value never rewrites what the user is typing
@@ -102,7 +102,7 @@ export function MoneyInput({ valueHalalas, onChange, min = 0, disabled, placehol
     <div className="relative">
       <input type="text" inputMode="decimal" autoComplete="off" data-money="" value={text} disabled={disabled} placeholder={placeholder ?? "0"} aria-label={label}
         onBlur={() => { if (refused) return; setText(formatMoneyInput(moneyTextToHalalas(text))); }}
-        aria-invalid={refused || undefined}
+        aria-invalid={refused || invalid || undefined}
         onChange={(e) => { const t = sanitizeMoneyText(e.target.value, min < 0); if (t == null && e.target.value.length === text.length + 1 && /^\d$/.test(insertedChar(text, e.target.value))) return;   // one extra DIGIT (a third decimal): not taken, the field keeps what it had; a letter, a minus or an exponent is refused out loud, never dropped silently (finance review: «-100» became «100», «1e3» became «13»)
           if (t == null) { setRefused(true); setText(e.target.value); sent.current = null; onChange(null); return; } setRefused(false); setText(t); const h = moneyTextToHalalas(t); sent.current = h; onChange(h); }}
         className="input pl-12 tabular-nums" dir="ltr" />

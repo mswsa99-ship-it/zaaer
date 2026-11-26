@@ -66,6 +66,7 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [fieldErrs, setFieldErrs] = useState<Record<string, { entered?: string; reason?: string }>>({});
   // an error from the buttons far below the boxes is brought into view once, when it appears
   useEffect(() => { if (actionError) document.querySelector('[data-testid="closing-action-error"]')?.scrollIntoView({ block: "center" }); }, [actionError]);
   const [review, setReview] = useState<ClosingReview | null>(null);
@@ -91,14 +92,19 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
   const pending = day.requests.find((r) => r.status === "pending");
   const badge = STATE_BADGE[day.state];
 
-  async function run(fn: () => Promise<void>) { setBusy(true); setActionError(null); setNotice(null); try { await fn(); } catch (e) { setActionError(toArabicError(e)); } finally { setBusy(false); } }
+  async function run(fn: () => Promise<void>) { setBusy(true); setActionError(null); setNotice(null); setFieldErrs({}); try { await fn(); } catch (e) { setActionError(toArabicError(e)); } finally { setBusy(false); } }
   const saveDraft = () => run(async () => {
     await closingApi.save({ branch_id: branchId, business_date: date, version: day.closing?.version, note: note.trim() || null, lines: linesOf(draft) });
     setNotice("حُفظت المسودة."); setLocal((t) => t + 1); onChanged();
   });
   const openReview = () => run(async () => {
     const saved = await closingApi.save({ branch_id: branchId, business_date: date, version: day.closing?.version, note: note.trim() || null, lines: linesOf(draft) });
-    setReview(await closingApi.review(saved.id)); setLocal((t) => t + 1);
+    const r = await closingApi.review(saved.id);
+    // the server's review names the boxes that block the send: the same boxes are marked at their own fields on the page
+    const m: Record<string, { entered?: string; reason?: string }> = {};
+    for (const k of r.missing) m[k] = { ...m[k], entered: "أدخل المبلغ المعدود (صفر إن لم يوجد)." };
+    for (const k of r.unexplained) m[k] = { ...m[k], reason: "اكتب سبب الفرق." };
+    setFieldErrs(m); setReview(r); setLocal((t) => t + 1);
   });
   const saveAmend = (reason: string) => run(async () => {
     if (!day.closing) return;
@@ -135,7 +141,7 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
           ? "عدّ ما في كل صندوق فعلًا وأدخله قبل رؤية رقم النظام؛ يظهر رقم النظام والفرق وسببه في المراجعة قبل الإرسال."
           : "صافي اليوم في كل صندوق: المقبوض (إيجار وتأمين) ناقص المردود. أدخل ما عُددته فعلًا، واكتب سبب أي فرق."}</p>
         <div className="space-y-3" data-testid="closing-boxes">
-          {figures.boxes.map((b) => <BoxRow key={b.key} b={b} value={draft[b.key]} editable={editable} blind={blind} onChange={(v) => setDraft({ ...draft, [b.key]: v })} />)}
+          {figures.boxes.map((b) => <BoxRow key={b.key} b={b} errs={fieldErrs[b.key]} value={draft[b.key]} editable={editable} blind={blind} onChange={(v) => setDraft({ ...draft, [b.key]: v })} />)}
         </div>
         <Field label="ملاحظة على اليوم" className="mt-3"><textarea className="input" rows={2} value={note} disabled={!(canEdit && (day.state === "none" || day.state === "draft"))} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة على اليوم" /></Field>
         {actionError && <div className="mt-3" data-testid="closing-action-error"><ErrorBanner message={actionError} /></div>}
@@ -171,7 +177,7 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
         </Card>
       )}
 
-      <Modal open={!!review} title="مراجعة الإقفال قبل إرساله" onClose={() => setReview(null)} wide>
+      <Modal open={!!review} title="مراجعة الإقفال قبل إرساله" onClose={() => { setReview(null); window.setTimeout(() => document.querySelector<HTMLElement>('[data-testid="closing-boxes"] [aria-invalid="true"]')?.focus(), 250); }} wide>
         {review && <ReviewBody review={review} onSent={(msg) => { setReview(null); setNotice(msg); setLocal((t) => t + 1); onChanged(); }} />}
       </Modal>
       <Modal open={askEdit} title="طلب تعديل الإقفال" onClose={() => setAskEdit(false)}>
@@ -181,7 +187,7 @@ function DayPanel({ branchId, date, setDate, tick, onChanged, canEdit }: { branc
   );
 }
 
-function BoxRow({ b, value, editable, blind, onChange }: { b: ClosingBox; value: { entered: number | null; reason: string } | undefined; editable: boolean; blind: boolean; onChange: (v: { entered: number | null; reason: string }) => void }) {
+function BoxRow({ b, value, editable, blind, onChange, errs }: { errs?: { entered?: string; reason?: string }; b: ClosingBox; value: { entered: number | null; reason: string } | undefined; editable: boolean; blind: boolean; onChange: (v: { entered: number | null; reason: string }) => void }) {
   const v = value ?? { entered: null, reason: "" };
   const diff = v.entered == null ? null : v.entered - b.system_halalas;
   return (
@@ -191,11 +197,11 @@ function BoxRow({ b, value, editable, blind, onChange }: { b: ClosingBox; value:
         {!blind && <span className="text-sm text-ink-500">سجّل النظام <span dir="ltr" className="font-semibold text-ink-800 tabular-nums">{sar(b.system_halalas)}</span></span>}
       </div>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <Field label={b.box === "pos" ? "إجمالي جهاز الشبكة" : b.box === "cash" ? "عدّ النقد" : "المؤكَّد"}>
-          <MoneyInput valueHalalas={v.entered} onChange={(h) => onChange({ ...v, entered: h })} min={-100000000} disabled={!editable} label={`${b.label}: المُدخل`} />
+        <Field error={errs?.entered} label={b.box === "pos" ? "إجمالي جهاز الشبكة" : b.box === "cash" ? "عدّ النقد" : "المؤكَّد"}>
+          <MoneyInput invalid={!!errs?.entered} valueHalalas={v.entered} onChange={(h) => onChange({ ...v, entered: h })} min={-100000000} disabled={!editable} label={`${b.label}: المُدخل`} />
         </Field>
-        <Field label={diff && !blind ? "سبب الفرق (إلزامي)" : "السبب"}>
-          <input className="input" value={v.reason} disabled={!editable} onChange={(e) => onChange({ ...v, reason: e.target.value })} aria-label={`${b.label}: سبب الفرق`} />
+        <Field error={errs?.reason} label={diff && !blind ? "سبب الفرق (إلزامي)" : "السبب"}>
+          <input className="input" aria-invalid={errs?.reason ? true : undefined} value={v.reason} disabled={!editable} onChange={(e) => onChange({ ...v, reason: e.target.value })} aria-label={`${b.label}: سبب الفرق`} />
         </Field>
       </div>
       {!blind && diff != null && <p className={`mt-1 text-sm ${diff === 0 ? "text-success-600" : "text-danger-600"}`} data-testid={`closing-diff-${b.box}`}>{diff === 0 ? "مطابق." : <>الفرق <span dir="ltr">{sar(diff)}</span> {diff > 0 ? "(المعدود أكثر)" : "(المعدود أقل)"}</>}</p>}

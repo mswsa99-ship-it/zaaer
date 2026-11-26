@@ -51,3 +51,18 @@ test("BATCHA3 pill tab strips carry the sideways edge cue in dark and light on a
     if (scheme === "dark") expect(img).not.toContain("rgb(255, 255, 255)");
   }
 });
+
+test("BATCHA4 day close: when the review says what blocks the send, that box's own field is marked", async ({ page, loginAs, go }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await loginAs("supervisor"); await go("/staff/day-close");
+  const cash = page.getByTestId("closing-box-cash"); const pos = page.getByTestId("closing-box-pos");
+  await cash.getByLabel("النقد: المُدخل").fill("1");
+  await page.getByRole("button", { name: "مراجعة وإرسال" }).click();
+  const dlg = page.getByRole("dialog");
+  await expect(dlg.getByText(/ناقص قبل الإرسال/)).toBeVisible();
+  await dlg.getByRole("button", { name: "إغلاق" }).first().click();
+  await expect(pos.getByText("أدخل المبلغ المعدود (صفر إن لم يوجد).")).toBeVisible();
+  await expect(pos.getByLabel("الشبكة: المُدخل")).toHaveAttribute("aria-invalid", "true");
+  await expect(pos.getByLabel("الشبكة: المُدخل")).toBeFocused();
+  await expect(cash.getByText("اكتب سبب الفرق.")).toBeVisible();
+  await expect(cash.getByLabel("النقد: سبب الفرق")).toHaveAttribute("aria-invalid", "true");
+});
