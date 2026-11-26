@@ -191,4 +191,10 @@ describe("the fallback for a role without money", () => {
     // a role with money and a truly empty list still gets the plain answer
     expect(fallbackOpsReply("من عليه متبقي؟", { ...ctx, in_house_with_balance: [], checked_out_with_deposit: [] })).toContain("لا مديونيات");
   });
+  it("OPSNOMONEY2 arrivals and departures without money fields say nothing about money, not «0.00»", () => {
+    const strip = (rows: any[]) => rows.map((e) => { const x = { ...e }; delete x.balance_due; delete x.deposit_balance; return x; });
+    const c = { ...ctx, arrivals: strip(ctx.arrivals), departures: strip(ctx.departures) };
+    for (const q of ["من يصل اليوم؟", "من يغادر اليوم؟"]) { const r = fallbackOpsReply(q, c); expect(r).not.toContain("0.00"); expect(r).not.toContain("متبقٍ"); expect(r).not.toContain("تأمين"); }
+    expect(fallbackOpsReply("من يغادر اليوم؟", ctx)).toContain("متبقٍ");
+  });
 });
