@@ -24,3 +24,12 @@ test("PS2 each reservation row keeps both links, and the «فتح» link names i
   for (const r of rows) { expect(r.stops).toBe(2); expect(r.label).toBe(`فتح الحجز ${r.ref}`); }
   expect(new Set(rows.map((r) => r.label)).size).toBe(rows.length);
 });
+test("PS3 on a phone the finance vouchers' reservation links and pager buttons are at least 44px tall (demo build, not live)", async ({ page, loginAs }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginAs("owner"); await page.goto("/#/admin/finance", { waitUntil: "networkidle" }); await page.waitForTimeout(800);
+  const m = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('main a[href*="/staff/reservations/"], main button')).filter((e) => e.offsetParent && /^R-|السابق|التالي/.test((e.innerText || "").trim())).map((e) => Math.round(e.getBoundingClientRect().height)));
+  expect(m.length).toBeGreaterThan(0);
+  for (const h of m) expect(h).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "/tmp/proof/ps3-finance-390.png" });
+});

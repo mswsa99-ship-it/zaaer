@@ -105,7 +105,7 @@ export default function AdminFinance() {
                 <tr key={r.id} className={`border-t border-ink-50 ${r.status === "cancelled" ? "opacity-60" : ""}`} data-testid="voucher-row">
                   <td data-label="السند" className="px-3 py-2 font-mono text-xs">{r.number}{r.original_number && <div className="text-[10px] text-ink-400">بدل {r.original_number}</div>}</td>
                   <td data-label="النوع" className="px-3 py-2">{VOUCHER_KIND_LABELS[r.kind as VoucherKind] ?? r.kind}</td>
-                  <td data-label="الحجز" className="px-3 py-2 font-mono text-xs">{r.reservation ? <Link className="hover:underline" to={`/staff/reservations/${r.reservation.id}`}>{r.reservation.internal_ref}</Link> : "—"}</td>
+                  <td data-label="الحجز" className="px-3 py-2 font-mono text-xs">{r.reservation ? <Link className="hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center" to={`/staff/reservations/${r.reservation.id}`}>{r.reservation.internal_ref}</Link> : "—"}</td>
                   <td data-label="المبلغ" className={`whitespace-nowrap px-3 py-2 ${r.status === "cancelled" ? "line-through" : ""}`} dir="ltr">{sar(r.amount_halalas)}</td>
                   <td data-label="الطريقة" className="px-3 py-2 text-ink-600">{PAYMENT_METHOD_LABELS[r.method as PaymentMethod] ?? r.method}</td>
                   <td data-label="الصندوق أو الحساب" className="px-3 py-2 text-xs text-ink-500">{accountText(r)}</td>
@@ -119,7 +119,7 @@ export default function AdminFinance() {
           </table>
           <div className="flex items-center justify-between border-t border-ink-50 px-3 py-2 text-xs text-ink-500">
             <span>صفحة {page + 1} من {pages} · {COUNT.voucher(total)}{ledger.refreshing && <Spinner className="mr-2 inline h-3 w-3" />}</span>
-            <div className="flex flex-wrap items-center gap-2"><button disabled={page === 0} aria-describedby={page === 0 ? "dr-adminfinance-10" : undefined} title={page === 0 ? "أنت في الصفحة الأولى" : undefined} onClick={() => setPage(page - 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">السابق</button><DisabledReason id="dr-adminfinance-10" show={page === 0} text="أنت في الصفحة الأولى" /><button disabled={page + 1 >= pages} aria-describedby={page + 1 >= pages ? "dr-adminfinance-9" : undefined} title={page + 1 >= pages ? "هذه آخر صفحة" : undefined} onClick={() => setPage(page + 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs">التالي</button><DisabledReason id="dr-adminfinance-9" show={page + 1 >= pages} text="هذه آخر صفحة" /></div>
+            <div className="flex flex-wrap items-center gap-2"><button disabled={page === 0} aria-describedby={page === 0 ? "dr-adminfinance-10" : undefined} title={page === 0 ? "أنت في الصفحة الأولى" : undefined} onClick={() => setPage(page - 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs max-sm:min-h-11">السابق</button><DisabledReason id="dr-adminfinance-10" show={page === 0} text="أنت في الصفحة الأولى" /><button disabled={page + 1 >= pages} aria-describedby={page + 1 >= pages ? "dr-adminfinance-9" : undefined} title={page + 1 >= pages ? "هذه آخر صفحة" : undefined} onClick={() => setPage(page + 1)} className="btn-ghost whitespace-nowrap px-2 py-1 text-xs max-sm:min-h-11">التالي</button><DisabledReason id="dr-adminfinance-9" show={page + 1 >= pages} text="هذه آخر صفحة" /></div>
           </div>
         </Card>
       </DataState>
