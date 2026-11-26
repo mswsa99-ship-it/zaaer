@@ -16,7 +16,7 @@ insert into tn_hotel_tables values
  ('staff_permission_drafts'),
  ('accounting_periods'),('ai_settings'),('ai_usage_daily'),('alert_rules'),('bank_mail_settings'),('bank_match_items'),('bank_matches'),
  ('bank_messages'),('bank_parse_rules'),('booking_sources'),('branches'),('client_errors'),('document_sequences'),('expense_categories'),
- ('finance_control_settings'),('guest_bans'),('guest_phone_optouts'),('guest_profiles'),('hotel_exit_archives'),('hotel_exit_rows'),('integration_events'),('product_categories'),('product_order_lines'),('products'),('role_permissions'),
+ ('finance_control_settings'),('guest_bans'),('guest_phone_optouts'),('guest_profiles'),('hotel_exit_archives'),('hotel_exit_rows'),('integration_events'),('policy_masters'),('product_categories'),('product_order_lines'),('products'),('role_permissions'),
  ('staff_profiles'),('staff_saved_views'),('system_settings');
 create temp table tn_children(t text, parent text, link text);
 insert into tn_children values

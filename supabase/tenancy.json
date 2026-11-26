@@ -242,6 +242,9 @@
     "product_branches": {
       "scope": "branch"
     },
+    "policy_masters": {
+      "scope": "hotel"
+    },
     "product_categories": {
       "scope": "hotel"
     },

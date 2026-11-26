@@ -29,6 +29,8 @@ echo "== running core acceptance tests"
 run_tests tests/sql/core_tests.sql
 echo "== running knowledge-base tests"
 run_tests tests/sql/knowledge_tests.sql
+echo "== running policy/knowledge inheritance tests"
+run_tests tests/sql/inheritance_0149_tests.sql
 echo "== running reservation-parity tests"
 run_tests tests/sql/parity_tests.sql
 echo "== running external-review fix tests"
