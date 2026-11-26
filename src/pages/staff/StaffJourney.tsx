@@ -17,7 +17,7 @@ import { useAuth } from "../../lib/auth";
 import { SectionTitle, Card, Badge, Spinner, LoadErrorCard, EmptyState, AmountBox, AmountGrid } from "../../components/ui";
 import { Modal, ActionForm, Submit, ReasonInput, Field } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
-import { formatCurrency, formatDateTime } from "../../lib/utils";
+import { formatCurrency, formatDateTime, formatClock } from "../../lib/utils";
 
 const sar = (h: number) => formatCurrency(h / 100);
 const clock = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit" }) : "—");
@@ -126,8 +126,8 @@ export default function StaffJourney() {
           {!b.settings.journey_enabled && <p className="mb-3 rounded-xl bg-ink-50 px-3 py-2 text-sm text-ink-600" role="status">رسائل الرحلة متوقفة لهذا الفرع من الإعدادات؛ التنبيهات تعمل.</p>}
           <Card className="mb-4">
             <AmountGrid testId="journey-totals">
-              {!allBranches && <AmountBox label="رسالة صباح المغادرة" value={b.settings.checkout_message_time} />}   {/* per-branch settings: not merged */}
-              {!allBranches && <AmountBox label="الخروج بلا رسوم حتى" value={b.settings.free_until} />}
+              {!allBranches && <AmountBox label="رسالة صباح المغادرة" value={formatClock(b.settings.checkout_message_time)} />}   {/* per-branch settings: not merged */}
+              {!allBranches && <AmountBox label="الخروج بلا رسوم حتى" value={formatClock(b.settings.free_until)} />}
               <AmountBox label="بانتظار التحقق" value={<span data-testid="journey-awaiting-count">{b.awaiting_check.length}</span>} tone={b.awaiting_check.length ? "text-warning-700" : "text-ink-900"} />
               <AmountBox label={allBranches ? "رد التأمين" : `رد التأمين خلال ${hoursAr(b.settings.refund_hours)}`} value={overdueDeposits ? `${overdueDeposits} متأخر` : `${b.deposits.length}`} tone={overdueDeposits ? "text-danger-600" : "text-ink-900"} />
               <AmountBox label="تنبيهات مفتوحة" value={<span data-testid="journey-alerts-count">{b.alerts.length}</span>} tone={b.alerts.length ? "text-danger-600" : "text-ink-900"} />
@@ -140,7 +140,7 @@ export default function StaffJourney() {
                 {perBranch.map((x) => (
                   <div key={x.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                     <span className="font-medium">{x.name}</span>
-                    <span className="text-xs opacity-70">رسالة الصباح {x.settings.checkout_message_time} · الخروج بلا رسوم حتى {x.settings.free_until} · رد التأمين خلال {hoursAr(x.settings.refund_hours)}{x.settings.journey_enabled ? "" : " · الرحلة متوقفة"}</span>
+                    <span className="text-xs opacity-70">رسالة الصباح {formatClock(x.settings.checkout_message_time)} · الخروج بلا رسوم حتى {formatClock(x.settings.free_until)} · رد التأمين خلال {hoursAr(x.settings.refund_hours)}{x.settings.journey_enabled ? "" : " · الرحلة متوقفة"}</span>
                     <button type="button" className="btn-outline text-sm" onClick={() => setBranchId(x.id)} data-testid="journey-open-branch">افتح {x.name}</button>
                   </div>
                 ))}
@@ -157,7 +157,7 @@ export default function StaffJourney() {
           </div>
 
           {tab === "departing" && (b.departing.length === 0
-            ? <EmptyState icon={<LogOut className="h-10 w-10" />} title="لا مغادرين اليوم" description={`في ${b.settings.checkout_message_time} تصل كل نزيل يغادر اليوم خياراته على واتساب: الخروج في موعده، أو ليلة إضافية، أو ساعات بعد ${b.settings.free_until}.`} />
+            ? <EmptyState icon={<LogOut className="h-10 w-10" />} title="لا مغادرين اليوم" description={`في ${formatClock(b.settings.checkout_message_time)} تصل كل نزيل يغادر اليوم خياراته على واتساب: الخروج في موعده، أو ليلة إضافية، أو ساعات بعد ${formatClock(b.settings.free_until)}.`} />
             : <div className="grid gap-3 lg:grid-cols-2" data-testid="journey-departing">{b.departing.map((d) => (
               <Card key={d.reservation_id} data-testid="journey-departing-row">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -170,7 +170,7 @@ export default function StaffJourney() {
                     : d.choice === "on_time" ? <Badge className="bg-brand-50 text-brand-700">سيخرج في الموعد</Badge>
                     : <Badge className="bg-ink-100 text-ink-600">لم يختر بعد</Badge>}
                 </div>
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500"><MessageCircle className="h-3.5 w-3.5" /> {d.message ? MESSAGE_AR[d.message] ?? d.message : `تُرسل الخيارات في ${b.settings.checkout_message_time}`}</p>
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500"><MessageCircle className="h-3.5 w-3.5" /> {d.message ? MESSAGE_AR[d.message] ?? d.message : `تُرسل الخيارات في ${formatClock(b.settings.checkout_message_time)}`}</p>
               </Card>))}</div>)}
 
           {tab === "requests" && (b.requests.length === 0

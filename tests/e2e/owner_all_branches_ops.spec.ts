@@ -74,8 +74,8 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     expect(names.size).toBeGreaterThanOrEqual(2);
     await expect(page.getByTestId("journey-branch-settings")).toContainText("جدة");   // per-branch settings stay reachable, not merged away
     const rows = await page.getByTestId("journey-branch-settings").innerText();
-    expect(rows).toContain("10:00");  expect(rows).toContain("11:00");                    // Riyadh and Jeddah keep their own morning-message times
-    expect(rows).toContain("13:00");  expect(rows).toContain("14:00");
+    expect(rows).toContain("10:00 صباحًا");  expect(rows).toContain("11:00 صباحًا");      // Riyadh and Jeddah keep their own morning-message times, said as the admin settings say them (12-hour, Arabic)
+    expect(rows).toContain("1:00 عصرًا");  expect(rows).toContain("2:00 عصرًا");
     await page.getByTestId("journey-tab-reviews").click();                                // each branch's own rating and count stay visible beside the merged mark
     await expect(page.getByTestId("journey-reviews-branches")).toContainText("جدة");
     await expect(page.getByTestId("journey-reviews-approx")).toHaveCount(0);               // raw rows complete: exact, not labelled approximate
