@@ -3,6 +3,7 @@
  * charges · receipts/deposits · refunds · invoices · extend/shorten · switch room · cancel / no-show · allocation history.
  * Every button explains its effect before executing; nothing here writes to tables directly.
  */
+import { Notice } from "./roomai";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { auditActionLabel } from "../lib/auditLabels";
@@ -581,6 +582,7 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
       <ActionForm onSubmit={async () => { if (!room) throw new Error("ROOM_NOT_FOUND"); await opsApi.switchRoom(r.id, room, effective, reason.trim(), r.version); await onDone(); }}>
         <div className="space-y-3">
           <p className="text-sm text-ink-600">الوحدة الحالية: <b>{d.room?.room_number ?? "—"}</b></p>
+          {effective >= r.check_out && <Notice kind="warning" testId="switch-outside-period">تاريخ السريان يجب أن يسبق تاريخ المغادرة؛ لا يمكن تبديل الوحدة في آخر يوم، اختر تاريخًا أبكر.</Notice>}
           <Field label="تاريخ السريان"><input type="date" className="input" dir="ltr" min={r.check_in} max={r.check_out} value={effective} onChange={(e) => setEffective(e.target.value)} /></Field>
           <Field label="الوحدة الجديدة (متاحة لبقية الفترة)"><select className="input" value={room} onChange={(e) => setRoom(e.target.value)}><option value="">اختر</option>{rooms.map((x) => <option key={x.room_id} value={x.room_id}>{x.room_number} · {x.category_name} · {CLEANLINESS_LABELS[x.cleanliness]}</option>)}</select></Field>
           <ReasonInput value={reason} onChange={setReason} />
@@ -596,7 +598,7 @@ function SwitchDialog({ open, d, onClose, onDone }: { open: boolean; d: Reservat
               )}
             </div>
           )}
-          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">يُغلق تخصيص الوحدة القديمة عند تاريخ السريان ويُفتح تخصيص جديد (التاريخ محفوظ). أثناء الإقامة: تتحول القديمة إلى «تحتاج تنظيفًا» ويتغير رمزها، ويُسلَّم رمز الجديدة خطوةً مستقلة إن كان لها صندوق، أو مفتاحها في الاستقبال، وفرق السعر عند تغيير النوع يُضاف كتسوية منفصلة.</div>
+          <div className="rounded-xl bg-ink-50 p-3 text-xs text-ink-600">يُغلق تخصيص الوحدة القديمة عند تاريخ السريان ويُفتح تخصيص جديد (التاريخ محفوظ). أثناء الإقامة: تتحول القديمة إلى «تحتاج تنظيفًا» ويتغير رمزها، ويُسلَّم رمز الجديدة خطوةً مستقلة إن كان لها صندوق، أو مفتاحها في الاستقبال، وعند تغيير النوع قبل الوصول يُعاد تسعير الليالي من تاريخ السريان ويظهر الفرق في بنود الحجز.</div>
         </div>
         <Submit label="تبديل" onCancel={onClose} />
       </ActionForm>

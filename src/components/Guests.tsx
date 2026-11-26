@@ -18,7 +18,7 @@ import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import { Card, Badge, ErrorBanner, Spinner } from "./ui";
 import { Modal, Field, ActionForm, Submit, ReasonInput, Toggle } from "./forms";
-import { IDENTITY_TYPE_LABELS, type IdentityType } from "../lib/types";
+import { IDENTITY_TYPE_LABELS, RESERVATION_STATUS_LABELS, type IdentityType, type ReservationStatus } from "../lib/types";
 import { formatCurrency, formatDateTime, todayISO, maskId, COUNT } from "../lib/utils";
 import { hasSaudiIdentityChecksumWarning } from "../lib/identityChecks";
 import { printableDocument, staySummaryHtml } from "../lib/printTemplates";
@@ -312,7 +312,7 @@ export function GroupPanel({ current, group }: { current: string; group: GroupSu
               <tr key={u.id} className={`border-b border-ink-50 ${u.id === current ? "bg-brand-50/50" : ""}`}>
                 <td className="py-1.5 font-mono text-xs">{u.id === current ? u.internal_ref : <Link to={`/staff/reservations/${u.id}`} className="text-brand-700 hover:underline">{u.internal_ref}</Link>}</td>
                 <td className="py-1.5">{u.room_number ?? u.category_name ?? "—"}</td>
-                <td className="py-1.5 text-xs text-ink-500">{u.status}</td>
+                <td className="py-1.5 text-xs text-ink-500">{RESERVATION_STATUS_LABELS[u.status as ReservationStatus] ?? u.status}</td>
                 <td className="py-1.5 text-xs">{u.adults + u.companions}</td>
                 {t.total_halalas != null && <><td className="py-1.5" dir="ltr">{sar(u.total_halalas)}</td><td className="py-1.5 text-success-600" dir="ltr">{sar(u.paid_halalas)}</td><td className="py-1.5 text-warning-700" dir="ltr">{sar(u.balance_due_halalas)}</td><td className="py-1.5" dir="ltr">{sar(u.deposit_balance_halalas)}</td></>}
               </tr>
