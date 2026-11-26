@@ -3,7 +3,7 @@ import { test, expect } from "./fixtures";
 
 test("BATCHA1 maintenance form: the error sits at the field, the field is marked invalid, nothing is created", async ({ page, loginAs, go }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await loginAs("owner"); await go("/staff/tickets");
-  await page.getByRole("button", { name: /بلاغ/ }).first().click();
+  await page.getByRole("button", { name: "بلاغ جديد" }).click();
   const form = page.locator("[data-ticket-form]");
   await expect(form).toBeVisible();
   await form.getByRole("button", { name: "إنشاء البلاغ" }).click();
@@ -20,7 +20,7 @@ test("BATCHA1 maintenance form: the error sits at the field, the field is marked
 
 test("BATCHA2 an open report on the chosen unit is named; it does not block", async ({ page, loginAs, go }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await loginAs("owner"); await go("/staff/tickets");
-  await page.getByRole("button", { name: /بلاغ/ }).first().click();
+  await page.getByRole("button", { name: "بلاغ جديد" }).click();
   const form = page.locator("[data-ticket-form]");
   const opts = await form.locator("select option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter(Boolean));
   let found = false;
@@ -32,7 +32,7 @@ test("BATCHA2 an open report on the chosen unit is named; it does not block", as
     // no seeded open report: create one, then the same unit must show the note
     await form.locator("select").selectOption(opts[0]); await form.locator("input").first().fill("تسريب اختبار");
     await form.getByRole("button", { name: "إنشاء البلاغ" }).click();
-    await page.getByRole("button", { name: /بلاغ/ }).first().click();
+    await page.getByRole("button", { name: "بلاغ جديد" }).click();
     await form.locator("select").selectOption(opts[0]);
   }
   await expect(page.getByTestId("ticket-dup-note")).toBeVisible();
