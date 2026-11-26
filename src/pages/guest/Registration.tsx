@@ -202,6 +202,11 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
   const [consent, setConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [errTick, setErrTick] = useState(0);   // every refused save counts, so a second refusal with the same text scrolls to it again
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const fail = (m: string) => { setFormError(m); setErrTick((n) => n + 1); };
+  // one scroll per refused save (never while typing): the banner sits above the sticky save bar
+  useEffect(() => { if (formError) bannerRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [formError, errTick]);
   const isPrimary = !!guest?.is_primary;
   const { en, t } = useGuestLang();
   const MSG = validationMessages(en, VALIDATION_AR);
@@ -245,8 +250,8 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!identityNumber.trim()) { setFormError(t("رقم الوثيقة مطلوب.", "The document number is required.")); return; }
-    if (!birthDate) { setFormError(hijriErr ?? t("تاريخ الميلاد مطلوب.", "The date of birth is required.")); return; }
+    if (!identityNumber.trim()) { fail(t("رقم الوثيقة مطلوب.", "The document number is required.")); return; }
+    if (!birthDate) { fail(hijriErr ?? t("تاريخ الميلاد مطلوب.", "The date of birth is required.")); return; }
     // 0047 / 0058: the name's parts for the document, letters only, the number's shape, the phone's shape, 15 or older
     const ruleError = fieldError(() => {
       checkNameParts(fullName, identityType);
@@ -255,9 +260,9 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
       checkPhone(phone, false);
       checkMinAge(birthDate, todayISO());
     }, MSG);
-    if (ruleError) { setFormError(ruleError); return; }
-    if (!consent) { setFormError(t("يجب الإقرار بصحة البيانات.", "Please confirm the details are correct.")); return; }
-    if (needsAck && !ack) { setFormError(t("يجب الإقرار بملخص الإقامة.", "Please accept the stay summary.")); return; }
+    if (ruleError) { fail(ruleError); return; }
+    if (!consent) { fail(t("يجب الإقرار بصحة البيانات.", "Please confirm the details are correct.")); return; }
+    if (needsAck && !ack) { fail(t("يجب الإقرار بملخص الإقامة.", "Please accept the stay summary.")); return; }
     setSaving(true);
     try {
       await guestApi.submit(token, guest?.id ?? null, {
@@ -267,7 +272,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
       });
       onSaved();
     } catch (err) {
-      setFormError(guestError(err, en));
+      fail(guestError(err, en));
     }
     setSaving(false);
   }
@@ -327,7 +332,7 @@ function GuestForm({ token, open, guest, onClose, onSaved }: { token: string; op
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" dir="ltr" inputMode="tel" placeholder="05XXXXXXXX" />
         </Field>
 
-        {formError && <div ref={(el) => el?.scrollIntoView({ block: "center", behavior: "smooth" })} className="scroll-mb-24"><ErrorBanner message={formError} /></div>}
+        {formError && <div ref={bannerRef} className="scroll-mb-24"><ErrorBanner message={formError} /></div>}
 
         <label className="flex items-start gap-2 text-xs text-rai-ink-muted">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4" />
