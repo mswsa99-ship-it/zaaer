@@ -47,8 +47,8 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
       </button>
       {open && (
         <>
-          <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div ref={dlg} role="dialog" aria-label={label} className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-rai-line bg-rai-surface p-3 shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:mt-1 sm:w-80">
+          <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-40 cursor-default bg-[var(--scrim)] sm:bg-transparent" onClick={() => setOpen(false)} />
+          <div ref={dlg} role="dialog" aria-label={label} className="fixed inset-x-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-2xl border border-rai-line bg-rai-surface p-3 shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:mt-1 sm:w-80">
             <div className="mb-2 flex items-center justify-between">
               <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] px-2" aria-label="الشهر السابق" onClick={() => move(-1)}><ChevronRight className="h-5 w-5" /></button>
               <span className="text-sm font-semibold text-rai-ink">{MONTHS[view.m]} <bdi dir="ltr">{view.y}</bdi></span>
