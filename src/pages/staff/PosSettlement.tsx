@@ -102,7 +102,7 @@ function RangeOverview({ branchId, accountId, from, to, tick, onPick }: { branch
   const open = r.days.filter((d) => !d.settlement && d.voucher_count > 0).length;
   return (
     <Card data-testid="pos-range">
-      <h2 className="text-sm font-semibold text-rai-ink">نظرة على الفترة <bdi dir="ltr">{from} → {to}</bdi></h2>
+      <h2 className="text-sm font-semibold text-rai-ink">نظرة على الفترة: من <bdi dir="ltr">{from}</bdi> إلى <bdi dir="ltr">{to}</bdi></h2>
       <p className="mb-3 mt-1 text-xs text-rai-ink-muted">عرض للقراءة فقط. تُحفظ التسوية ليوم واحد في كل مرة: اختر «تسوية هذا اليوم» ليوم من القائمة.</p>
       <p className="mb-2 text-sm" data-testid="pos-range-total">مجموع الفترة حسب النظام: <span dir="ltr" className="font-medium">{sar(total)}</span>{open > 0 && <span className="ms-2 text-rai-warning">{open} يوم بسندات بلا تسوية</span>}</p>
       <div className="divide-y divide-rai-line text-sm">
