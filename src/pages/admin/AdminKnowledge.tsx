@@ -132,7 +132,7 @@ export default function AdminKnowledge() {
       </div>
 
       {allBranches && <div className="mb-3 rounded-xl border-2 border-dashed px-3 py-2 text-sm" role="note" data-testid="kb-readonly-note"><b>عرض جميع الفروع للقراءة فقط.</b> لتعديل إجابة خاصة بفرع اضغط «فتح الفرع للتعديل». الإجابات المعلّمة «كل الفروع» تُعدَّل من أي فرع.</div>}
-      {originsError && <div className="mb-4 rounded-xl bg-rai-warning-tint p-3 text-sm text-rai-warning" role="alert" data-testid="origins-error">تعذّر تحميل حالة وراثة الإجابات من الفندق: {originsError}. الإجابات أدناه قابلة للتعديل كالمعتاد، لكن علامة «مخصص» غير ظاهرة.</div>}
+      {originsError && !q.error && <div className="mb-4 rounded-xl bg-rai-warning-tint p-3 text-sm text-rai-warning" role="alert" data-testid="origins-error">تعذّر تحميل حالة وراثة الإجابات من الفندق: {originsError}. الإجابات أدناه قابلة للتعديل كالمعتاد، لكن علامة «مخصص» غير ظاهرة.</div>}
       {(error || (q.error && rows.length + open.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

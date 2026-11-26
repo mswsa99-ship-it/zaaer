@@ -113,7 +113,7 @@ export default function AdminPolicies() {
         <Bot className="mt-0.5 h-4 w-4 shrink-0" />
         <p>السياسات المعلّمة «عامة» هي <strong>المصدر الوحيد</strong> لما يذكره المساعد الذكي عن المنشأة، وتظهر للنزيل في الشروط. أي سؤال لا تغطيه يُحوَّل إلى مشرف.</p>
       </div>
-      {mastersError && (
+      {mastersError && !q.error && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-rai-warning-tint p-3 text-sm text-rai-warning" role="alert" data-testid="masters-error">
           <p className="min-w-0 flex-1">تعذّر تحميل سياسات الفندق وحالة وراثتها: {mastersError}. سياسات الفرع أدناه سليمة وقابلة للتعديل.</p>
           <button type="button" className="btn-outline min-h-[44px] text-xs" onClick={loadMasters}>إعادة المحاولة</button>
@@ -147,7 +147,7 @@ export default function AdminPolicies() {
         <button role="tab" aria-selected={showArchived} className={showArchived ? "btn-primary text-xs" : "btn-outline text-xs"} onClick={() => setShowArchived(true)}>المؤرشفة ({archived.length})</button>
       </div>
 
-      {q.error && all.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : rows.length === 0 ? (
+      {q.error && all.length === 0 ? <LoadErrorCard message={q.error} onRetry={() => { load(); loadMasters(); }} /> : rows.length === 0 ? (
         showArchived ? <EmptyState icon={<Archive className="h-10 w-10" />} title="لا توجد سياسات مؤرشفة" />
           : <EmptyState icon={<FileText className="h-10 w-10" />} title="لا توجد سياسات لهذا الفرع" description="أضف سياسات الوصول والإلغاء والإنترنت وغيرها ليقرأها النزيل ويجيب عنها المساعد." action={canEdit ? <button className="btn-primary text-sm" onClick={() => setDraft({ ...EMPTY, sort_order: 1 })}><Plus className="h-4 w-4" /> سياسة جديدة</button> : undefined} />
       ) : (
