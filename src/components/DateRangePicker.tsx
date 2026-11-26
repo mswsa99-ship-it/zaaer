@@ -21,11 +21,18 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
   const [view, setView] = useState({ y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) - 1 });
   const [fresh, setFresh] = useState(true); // the first tap after opening always starts a new selection
   const btn = useRef<HTMLButtonElement>(null);
+  const dlg = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); btn.current?.focus(); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  // keyboard and screen reader: opening moves focus into the dialog (the chosen day, else today, else the first day you may pick)
+  useEffect(() => {
+    if (!open) return;
+    const root = dlg.current; if (!root) return;
+    (root.querySelector<HTMLElement>('[data-day][aria-pressed="true"]:not([disabled])') ?? root.querySelector<HTMLElement>(`[data-day="${todayISO()}"]:not([disabled])`) ?? root.querySelector<HTMLElement>("[data-day]:not([disabled])"))?.focus();
   }, [open]);
   const openIt = () => { setPick({ a: from || null, b: !from || from === to ? null : to }); setView({ y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) - 1 }); setFresh(true); setOpen(true); };
   const move = (d: number) => setView((v) => { const t = v.y * 12 + v.m + d; return { y: Math.floor(t / 12), m: t % 12 }; });
@@ -41,7 +48,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
       {open && (
         <>
           <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div role="dialog" aria-label={label} className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-rai-line bg-rai-surface p-3 shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:mt-1 sm:w-80">
+          <div ref={dlg} role="dialog" aria-label={label} className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-rai-line bg-rai-surface p-3 shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:mt-1 sm:w-80">
             <div className="mb-2 flex items-center justify-between">
               <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] px-2" aria-label="الشهر السابق" onClick={() => move(-1)}><ChevronRight className="h-5 w-5" /></button>
               <span className="text-sm font-semibold text-rai-ink">{MONTHS[view.m]} <bdi dir="ltr">{view.y}</bdi></span>
@@ -59,7 +66,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
             <div className="mt-2 flex gap-2">
               <button type="button" className="btn-primary min-h-[44px] flex-1" disabled={!confirmed} onClick={done}>موافق</button>
               {clearable && from && <button type="button" className="btn-outline min-h-[44px]" onClick={() => { onChange("", ""); setOpen(false); }}>كل التواريخ</button>}
-              <button type="button" className="btn-outline min-h-[44px]" onClick={() => setOpen(false)}>إلغاء</button>
+              <button type="button" className="btn-outline min-h-[44px]" onClick={() => { setOpen(false); btn.current?.focus(); }}>إلغاء</button>
             </div>
           </div>
         </>

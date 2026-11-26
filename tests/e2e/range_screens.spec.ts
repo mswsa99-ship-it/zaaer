@@ -101,3 +101,25 @@ test.describe("grouped navigation (Review in Finance, Codes and Reports in Room 
     expect(names).not.toContain("الحسابات"); expect(names).not.toContain("الحركات البنكية");
   });
 });
+
+test.describe("date picker keyboard", () => {
+  test("RNG10 opening puts focus inside the dialog; Escape closes without applying and returns focus to the field; Cancel too", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/day-summary", { waitUntil: "networkidle" });
+    const trigger = page.getByRole("button", { name: /اليوم أو الفترة/ }).first();
+    const before = await page.getByTestId("date-range-value").first().innerText();
+    await trigger.click();
+    const dialog = page.getByRole("dialog").first();
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press("ArrowRight").catch(() => {});
+    await page.keyboard.press("Tab"); await page.keyboard.press("Enter");   // a day by keyboard, not applied until OK
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    expect(await page.getByTestId("date-range-value").first().innerText()).toBe(before);
+    await trigger.click();
+    await page.getByRole("button", { name: "إلغاء" }).click();
+    await expect(trigger).toBeFocused();
+  });
+});
