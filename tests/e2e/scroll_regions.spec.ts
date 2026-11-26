@@ -54,6 +54,8 @@ test.describe("scroll regions and tickets jump row", () => {
   test("SCR3 no mutation loop: attributes settle and the page stays idle; leaving the page cleans up the observer", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/staff/accounts", { waitUntil: "networkidle" });
+    // readiness: the page file (lazy) has rendered and the hook has marked its region; only then does the 800 ms "settled" window start
+    await expect(page.locator('main [data-scroll-region="1"]')).toHaveCount(1);
     // count the hook's own attribute writes over 800 ms after it settled: it must not keep writing
     const mutations = await page.evaluate(() => new Promise<number>((resolve) => {
       let n = 0;
