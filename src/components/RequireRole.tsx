@@ -6,7 +6,7 @@
  * The allow-list lives in src/lib/nav.ts (the same table drives both layouts' navigation).
  * The server keeps enforcing every rule; this is UX and defence in depth.
  */
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { ShieldAlert, Building2, UserX, RefreshCw } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -14,6 +14,7 @@ import { useBranch, NO_BRANCH_MESSAGE } from "../lib/branch";
 import { pageFor, pageAllowed } from "../lib/nav";
 import { ROLE_LABELS } from "../lib/types";
 import { Card, LoadingScreen } from "./ui";
+import { PRODUCT_NAME } from "../lib/designTokens";
 
 export function RequireRole({ children }: { children?: ReactNode }) {
   const { profile, loading, can, canFull, permissions, identityError } = useAuth();
@@ -68,11 +69,12 @@ export function RequireRole({ children }: { children?: ReactNode }) {
 }
 
 function GuardCard({ icon, title, description, detail, action }: { icon: ReactNode; title: string; description: string; detail?: string; action?: ReactNode }) {
+  useEffect(() => { if (title) document.title = `${title} — ${PRODUCT_NAME}`; }, [title]);   // the tab names the refusal, not the page it replaced
   return (
     <div className="mx-auto max-w-xl py-10" role="alert">
       <Card className="flex flex-col items-center gap-3 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning-500/10 text-warning-700">{icon}</div>
-        <h2 className="text-lg font-semibold text-ink-800">{title}</h2>
+        <h1 className="text-lg font-semibold text-ink-800">{title}</h1>
         <p className="max-w-md text-sm text-ink-500">{description}</p>
         {detail && <p className="max-w-md text-xs text-danger-600">{detail}</p>}
         {action && <div className="mt-2">{action}</div>}
