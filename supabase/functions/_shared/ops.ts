@@ -365,28 +365,29 @@ export function fitOpsContext(ctx: unknown, limit = 12000): FitOpsContext {
   if (full.length <= limit) return { text: full, omitted, droppedKeys: [], mode: "full" };
   const root = JSON.parse(full) as unknown;   // a deep copy: the caller's object is never touched
   const envelope = (): FitOpsContext => {
-    const dropped: string[] = []; const out: Record<string, unknown> = {};
+    const dropped: string[] = []; const out: Record<string, unknown> = {}; const kept: string[] = [];
     const room = Math.max(limit - OPS_FIT_RESERVE, 0);
     let used = 2;
     if (root !== null && typeof root === "object" && !Array.isArray(root)) {
       for (const [k, v] of Object.entries(root as Record<string, unknown>)) {
         const cost = JSON.stringify(k).length + JSON.stringify(v).length + 2;
-        if (used + cost <= room) { out[k] = v; used += cost; } else dropped.push(k);
+        if (used + cost <= room) { out[k] = v; kept.push(k); used += cost; } else dropped.push(k);
       }
     } else dropped.push("(root)");
-    const mk = (kept: Record<string, unknown>, keys: string[]) => JSON.stringify({ ...kept, _context_cut: true, _dropped_count: dropped.length, _dropped_keys_listed: keys.length, _dropped_keys: keys });
-    const whole = mk(out, dropped);
+    const mk = (vals: Record<string, unknown>, keys: string[], gone: string[]) => JSON.stringify({ ...vals, _context_cut: true, _dropped_count: gone.length, _dropped_keys_listed: keys.length, _dropped_keys: keys });
+    const whole = mk(out, dropped, dropped);
     if (whole.length <= limit) return { text: whole, omitted: {}, droppedKeys: dropped, mode: "envelope" };
-    // the kept values or the key list do not fit: first try the key list alone (long keys shortened), then the minimal floor, which is always valid JSON
+    // the kept values or the key list do not fit: drop the values too (so every key is now dropped and counted), list as many shortened names as fit, then the minimal floor (always valid JSON)
+    const all = [...kept, ...dropped];
     const listed: string[] = [];
-    for (const k of dropped) {
+    for (const k of all) {
       const short = Array.from(k).length > 60 ? Array.from(k).slice(0, 60).join("") + "…" : k;
-      if (mk({}, [...listed, short]).length > limit) break;
+      if (mk({}, [...listed, short], all).length > limit) break;
       listed.push(short);
     }
-    const alone = mk({}, listed);
-    if (alone.length <= limit) return { text: alone, omitted: {}, droppedKeys: dropped, mode: "envelope" };
-    return { text: JSON.stringify({ _context_cut: true, _dropped_count: dropped.length }), omitted: {}, droppedKeys: dropped, mode: "envelope" };   // with under ~60 characters of room nothing smaller is meaningful; still valid JSON
+    const alone = mk({}, listed, all);
+    if (alone.length <= limit) return { text: alone, omitted: {}, droppedKeys: all, mode: "envelope" };
+    return { text: JSON.stringify({ _context_cut: true, _dropped_count: all.length }), omitted: {}, droppedKeys: all, mode: "envelope" };   // with under ~60 characters of room nothing smaller is meaningful; still valid JSON
   };
   if (root === null || typeof root !== "object" || Array.isArray(root)) return envelope();
   type L = { path: string; arr: unknown[]; sizes: number[]; total: number };
