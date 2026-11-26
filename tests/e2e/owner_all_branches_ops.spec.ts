@@ -390,3 +390,24 @@ test("AB-W2 platform deposits: both branches keep their own source/month groups 
   await expect(page.getByTestId("payout-branch-empty")).toContainText("فرع فارغ للمنصات");
   await expect(page.getByTestId("payout-branch-empty")).toHaveCount(1);
 });
+
+test("AB-W3 platform deposits on a phone: each matched deposit is a labelled card with its amounts, branch and whole reference inside the screen, and no pending date is split", async ({ page, loginAs }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginAs("owner");
+  await page.goto("/#/admin/platform-payouts", { waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  const card = page.getByTestId("payout-cards").locator("> *").first();
+  await card.waitFor();
+  for (const label of ["التاريخ", "الإجمالي", "العمولة", "المستلم", "الفرق", "المرجع"]) await expect(card.getByText(label, { exact: true })).toBeVisible();
+  await expect(card.getByTestId("payout-branch")).toContainText("جدة");
+  const ref = card.getByTestId("payout-ref-phone");
+  await expect(ref).toContainText("JED-DEP-0001");
+  const box = (await ref.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  expect(await page.locator('[data-testid="payout-cards"] [dir="ltr"]').evaluateAll((els) => els.every((e) => e.getBoundingClientRect().right <= 390))).toBe(true);
+  // a pending row's arrival date stays in one piece
+  const d = page.getByTestId("platform-payment").first().locator('span[dir="ltr"].whitespace-nowrap');
+  expect((await d.boundingBox())!.height).toBeLessThan(30);
+});

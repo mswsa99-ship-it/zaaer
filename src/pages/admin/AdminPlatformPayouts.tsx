@@ -102,10 +102,10 @@ export default function AdminPlatformPayouts() {
                 </div>
                 <div className="divide-y divide-ink-50 text-sm">
                   {g.items.map((x) => (
-                    <label key={x.id} className={`flex items-center gap-3 py-1.5 ${allBranches ? "" : "cursor-pointer"}`} data-testid="platform-payment">
+                    <label key={x.id} className={`flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 sm:flex-nowrap ${allBranches ? "" : "cursor-pointer"}`} data-testid="platform-payment">
                       {!allBranches && <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id)} />}
                       <span className="font-mono text-xs">{x.number}</span>
-                      <span className="min-w-0 flex-1 break-words text-ink-600 sm:truncate">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr">{x.check_in}</span></span>
+                      <span className="order-last min-w-0 basis-full break-words text-ink-600 sm:order-none sm:flex-1 sm:basis-auto sm:truncate">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr" className="whitespace-nowrap">{x.check_in}</span></span>
                       <span dir="ltr" className={x.kind === "refund" ? "text-danger-600" : "text-ink-800"}>{sar(x.signed_halalas)}</span>
                     </label>
                   ))}
@@ -124,22 +124,45 @@ export default function AdminPlatformPayouts() {
 
       <h3 className="mb-2 mt-8 text-sm font-semibold text-ink-700">إيداعات مطابقة</h3>
       {payouts.length === 0 ? <p className="text-sm text-ink-400">لا إيداعات بعد.</p> : (
-        <Card className="overflow-x-auto">
+        <>
+        <div className="space-y-3 sm:hidden" data-testid="payout-cards">
+          {payouts.map((p) => (
+            <Card key={`${p.branch_id}:${p.id}`} className={p.status === "cancelled" ? "opacity-60" : ""}>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">{sourceName(p.source_id)}</p>
+                {allBranches && <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge>}
+                {p.status === "cancelled" && <Badge className="opacity-70">ملغاة</Badge>}
+              </div>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                <dt className="opacity-70">التاريخ</dt><dd dir="ltr" className="text-left">{p.received_on}</dd>
+                <dt className="opacity-70">الحساب</dt><dd>{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</dd>
+                <dt className="opacity-70">الإجمالي</dt><dd dir="ltr" className="text-left">{sar(p.expected_halalas)}</dd>
+                <dt className="opacity-70">العمولة</dt><dd dir="ltr" className="text-left">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] opacity-70">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</dd>
+                <dt className="opacity-70">المستلم</dt><dd dir="ltr" className="text-left">{sar(p.received_halalas)}</dd>
+                <dt className="opacity-70">الفرق</dt><dd dir="ltr" className={`text-left ${p.difference_halalas === 0 ? "" : "font-semibold"}`}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] opacity-70" dir="rtl">{p.note}</span>}</dd>
+                <dt className="opacity-70">المرجع</dt><dd className="break-all font-mono text-xs" dir="ltr" data-testid="payout-ref-phone">{p.reference}</dd>
+              </dl>
+              {p.status !== "cancelled" && canCancel && <button className="btn-ghost mt-2 text-xs" onClick={() => { setReason(""); setCancelFor(p); }}><Ban className="h-3.5 w-3.5" /> إلغاء</button>}
+            </Card>
+          ))}
+        </div>
+        <Card className="hidden overflow-x-auto sm:block">
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">الإجمالي</th><th className="text-right font-medium">العمولة</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="hidden sm:table-cell text-right font-medium">المرجع</th><th></th></tr></thead>
+            <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">الإجمالي</th><th className="text-right font-medium">العمولة</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="text-right font-medium">المرجع</th><th></th></tr></thead>
             <tbody>
               {payouts.map((p) => (
                 <tr key={`${p.branch_id}:${p.id}`} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
-                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span><span className="block break-all font-mono text-[11px] opacity-70 no-underline sm:hidden" data-testid="payout-ref-phone">{p.reference}</span></td>
+                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
                   <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] text-ink-400">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</td><td dir="ltr">{sar(p.received_halalas)}</td>
                   <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
-                  <td className="hidden break-all font-mono text-xs sm:table-cell">{p.reference}</td>
+                  <td className="break-all font-mono text-xs">{p.reference}</td>
                   <td className="text-left">{p.status === "cancelled" ? <Badge className="bg-ink-100 text-ink-500" >ملغاة</Badge> : canCancel ? <button className="btn-ghost text-xs text-danger-600" onClick={() => { setReason(""); setCancelFor(p); }}><Ban className="h-3.5 w-3.5" /> إلغاء</button> : null}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </Card>
+        </>
       )}
 
       <Modal open={confirming} title="تأكيد إيداع المنصة" onClose={() => setConfirming(false)}>
