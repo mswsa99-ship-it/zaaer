@@ -8,7 +8,7 @@ import { Outlet, NavLink, useNavigate, Link, useLocation, useNavigationType } fr
 import { useAuth } from "../lib/auth";
 import { ROLE_LABELS } from "../lib/types";
 import { cn } from "../lib/utils";
-import { groupedMenu, hubTabs, pageFor } from "../lib/nav";
+import { groupedMenu, hubTabs, pageFor, bottomTabPrefs, orderTopForRole } from "../lib/nav";
 import { clearAllDrafts } from "../components/forms";
 import { AdminMenuGroups } from "../components/AdminMenuGroups";
 import { LogOut, X, UserCog, BellRing } from "lucide-react";
@@ -36,13 +36,13 @@ export default function StaffLayout() {
   const navigate = useNavigate();
   // Links come from the role table in lib/nav.ts (the route guard uses the same table): a role never sees a link it cannot open.
   const grouped = groupedMenu(profile?.role, allows);   // one app: staff entries + one «الإدارة» entry that holds the admin groups
-  const nav = grouped.top.map((p) => ({ to: p.path, label: p.label, icon: p.icon, members: p.members }));   // 6.2: centres with tabs, at most 9 links
+  const nav = orderTopForRole(profile?.role, grouped.top).map((p) => ({ to: p.path, label: p.label, icon: p.icon, members: p.members }));   // 6.2: centres with tabs, at most 9 links
   // «الرموز»: units whose key-box code must still change after a guest left — red on every page until changed
   const codeAlerts = useKeyboxAlerts();
   // «رحلة الضيف»: the open alerts of the journey (its clock runs from here every minute)
   const journeyAlerts = useJourneyAlerts();
   // U3: on a phone, four pages in the bottom bar and the whole menu behind «المزيد»
-  const tabs = pickTabs(nav, ["/staff/rooms", "/staff/access-approvals", "/staff/reservations", "/staff/payments"]);
+  const tabs = pickTabs(nav, bottomTabPrefs(profile?.role));
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   useMainFocusOnRoute(location.pathname);

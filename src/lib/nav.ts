@@ -283,3 +283,24 @@ export function groupedMenu(role: string | null | undefined, allows?: Allows): {
 }
 /** Top-level entries a person sees in the grouped menu. */
 export const topLevelCount = (m: { top: unknown[]; adminGroups: unknown[] }) => m.top.length + (m.adminGroups.length ? 1 : 0);
+
+/**
+ * Role journeys (batch 3): which pages a role's phone bar prefers, in order. Presentation only: `pickTabs` keeps only pages
+ * the role's own menu has, so nothing here opens a page or widens a permission.
+ */
+export function bottomTabPrefs(role: string | null | undefined): string[] {
+  switch (role) {
+    case "housekeeping": return ["/staff/housekeeping", "/staff/rooms", "/staff/dashboard"];
+    case "finance": return ["/staff/payments", "/staff/reservations", "/staff/rooms"];
+    default: return ["/staff/rooms", "/staff/access-approvals", "/staff/reservations", "/staff/payments"];
+  }
+}
+
+/** Roles whose daily work is one centre: that centre leads the menu (the owner's order is pinned by tests and unchanged). */
+const LEAD_CENTRE: Partial<Record<StaffRole, HubId>> = { housekeeping: "service", finance: "finance" };
+export function orderTopForRole<T extends { path: string; label: string; members?: string[] }>(role: string | null | undefined, top: T[]): T[] {
+  const hub = role ? LEAD_CENTRE[role as StaffRole] : undefined;
+  if (!hub) return top;
+  const lead = top.find((t) => t.label === HUBS[hub].label);
+  return lead ? [lead, ...top.filter((t) => t !== lead)] : top;
+}
