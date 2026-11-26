@@ -116,7 +116,7 @@ describe("deterministic briefing", () => {
   it("calm day headline when nothing is pending", () => {
     const quiet = { ...ctx, overstays: [], units_needing_attention: [], departures: [], arrivals: [], in_house_with_balance: [], checked_out_with_deposit: [],
       summary: { ...ctx.summary, units: { ...ctx.summary.units, dirty: 0, maintenance: 0 }, arrivals: { expected: 0 }, departures: { expected: 0 }, finance: { received_today: 0, deposits_held: 0, outstanding_in_house: 0, deposit_to_settle_after_checkout: 0 }, tickets_open: 0 } };
-    expect(buildBriefing(quiet).headline).toMatch(/هادئ/);
+    expect(buildBriefing(quiet, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh").headline).toMatch(/هادئ/);
   });
 });
 
@@ -219,7 +219,7 @@ describe("home alerts: the coordination cross-check (read only)", () => {
 describe("home alerts: current risk, upcoming risk, information, unavailable (deterministic, read only)", () => {
   const D = "2026-10-22";
   const quiet = { summary: { date: D, units: { active: 10, occupied: 3, ready: 7 }, occupancy_pct: 30, arrivals: {}, departures: {}, housekeeping: {}, finance: { outstanding_in_house: 0 }, tickets_open: 0 }, overstays: [], overdue_arrivals: [], units_needing_attention: [] };
-  const lvl = (c: any, now?: number) => buildBriefing(c, now).items;
+  const lvl = (c: any, now: number = Date.parse(D + "T09:00:00Z")) => buildBriefing(c, now, "Asia/Riyadh").items;
   const hot = (c: any) => lvl(c).filter((i) => i.level !== "info");
   it("POS1 maintenance + arrival today is a critical NOW alert with evidence", () => {
     const x = lvl({ ...quiet, units_needing_attention: [{ room: "5", status: "maintenance", next_arrival: D }] }).find((i) => i.area === "coordination")!;
@@ -236,10 +236,13 @@ describe("home alerts: current risk, upcoming risk, information, unavailable (de
     const c = { ...quiet, summary: { ...quiet.summary, units: { ...quiet.summary.units, maintenance: 2 }, finance: { outstanding_in_house: 50000, deposit_to_settle_after_checkout: 20000 } } };
     expect(hot(c)).toHaveLength(0); expect(lvl(c).filter((i) => i.horizon === "info").length).toBeGreaterThanOrEqual(3);
   });
-  it("POS2 cleaning becomes an alert only when work is unassigned (a blocked step); otherwise information", () => {
-    const base = { ...quiet.summary, units: { ...quiet.summary.units, dirty: 2 } };
-    expect(hot({ ...quiet, summary: { ...base, housekeeping: { unassigned: 0, in_progress: 2 } } })).toHaveLength(0);
-    expect(hot({ ...quiet, summary: { ...base, housekeeping: { unassigned: 1 } } })).toHaveLength(1);
+  it("NEG2 dirty units with unassigned tasks and NO arrival need are information; the same unit with an arrival today is the one critical 'not ready' alert", () => {
+    const base = { ...quiet.summary, units: { ...quiet.summary.units, dirty: 2 }, housekeeping: { unassigned: 2 } };
+    expect(hot({ ...quiet, summary: base, units_needing_attention: [{ room: "9", status: "cleaning", next_arrival: null }] })).toHaveLength(0);
+    const x = hot({ ...quiet, summary: base, units_needing_attention: [{ room: "9", status: "cleaning", next_arrival: D }] }); expect(x).toHaveLength(1); expect(x[0].level).toBe("critical");
+  });
+  it("BOUNDARY3 zero units / empty lists / missing arrays never throw and never alert", () => {
+    expect(hot({ summary: { date: D, units: {}, arrivals: {}, departures: {}, housekeeping: {}, finance: {} }, overstays: [], overdue_arrivals: [], units_needing_attention: [] })).toHaveLength(0);
   });
   it("POS3 a departure today with a balance (deadline today) stays a warning", () => {
     expect(hot({ ...quiet, summary: { ...quiet.summary, departures: { expected: 1, done: 0, with_balance: 1 } } }).length).toBe(1);
@@ -251,11 +254,15 @@ describe("home alerts: current risk, upcoming risk, information, unavailable (de
     const { units_needing_attention: _u, ...c } = quiet as any; const b = buildBriefing(c);
     expect(b.items.some((i) => i.key === "units_unavailable")).toBe(true); expect(b.headline).not.toContain("هادئ");
   });
-  it("UNAVAIL3 a reading over 24 h old, or stamped in the future, is flagged; a few hours old is not (its time shows in the footer)", () => {
-    const now = Date.parse("2026-10-22T12:00:00Z"); const f = (g: string) => lvl({ ...quiet, generated_at: g }, now).some((i) => i.key === "stale_reading");
-    expect(f("2026-10-21T10:00:00Z")).toBe(true); expect(f("2026-10-22T13:00:00Z")).toBe(true); expect(f("2026-10-22T07:00:00Z")).toBe(false);
+  it("UNAVAIL3 freshness follows the BRANCH day: yesterday 23:00 read, viewed at 00:30 today, is flagged; a 05:00 read of today is not; a future stamp is flagged", () => {
+    const tz = "Asia/Riyadh"; const f = (summaryDate: string, g: string, now: string) => buildBriefing({ ...quiet, summary: { ...quiet.summary, date: summaryDate }, generated_at: g }, Date.parse(now), tz).items.some((i) => i.key === "stale_reading");
+    expect(f("2026-10-22", "2026-10-22T20:00:00Z", "2026-10-22T21:30:00Z")).toBe(true);   // read 23:00 Riyadh on the 22nd, now 00:30 on the 23rd, briefing still dated the 22nd
+    expect(f("2026-10-23", "2026-10-22T20:00:00Z", "2026-10-22T21:30:00Z")).toBe(true);   // briefing is today but the reading was taken yesterday
+    expect(f("2026-10-23", "2026-10-23T02:00:00Z", "2026-10-23T09:00:00Z")).toBe(false);  // 05:00 on the 23rd, viewed at noon: same branch day
+    expect(f("2026-10-22", "2026-10-22T13:00:00Z", "2026-10-22T09:00:00Z")).toBe(true);   // stamped in the future
+    expect(buildBriefing({ ...quiet, summary: { ...quiet.summary, date: "2026-10-22" } }, Date.parse("2026-10-22T09:00:00Z"), tz).items.some((i) => i.key === "stale_reading")).toBe(false); // no stamp: no claim
   });
-  it("CALM1 a fully delivered, empty day says calm", () => { expect(buildBriefing(quiet).headline).toContain("هادئ"); });
+  it("CALM1 a fully delivered, empty day says calm", () => { expect(buildBriefing(quiet, Date.parse(D + "T09:00:00Z"), "Asia/Riyadh").headline).toContain("هادئ"); });
   it("NOMONEY1 a role without money gets no money figure or false zero", () => {
     expect(lvl({ ...ctx, summary: { ...ctx.summary, finance: undefined } }).map((i) => i.text).join(" ")).not.toMatch(/ر\.س|متبقٍ/);
   });

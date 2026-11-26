@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
 
   // =========================== BRIEFING ===========================
   if (mode === "briefing") {
-    const b = buildBriefing(ctxData);
+    const b = buildBriefing(ctxData, Date.now(), branch.timezone);
     let insights: string | null = null; let aiStatus = provider ? "ok" : (s.enabled ? "awaiting_credentials" : "disabled");
     const briefingUsage = await admin.from("ai_usage_daily").select("*").eq("organization_id", staff.organization_id).eq("day", dayKey).maybeSingle();
     if (provider && !budgetReadAvailable(s, briefingUsage, true)) aiStatus = "budget_exhausted";

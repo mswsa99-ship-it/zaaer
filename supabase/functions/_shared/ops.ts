@@ -154,7 +154,8 @@ export async function executeOpsTool(name: string, args: Record<string, unknown>
 }
 
 /** Branch-local calendar day (moved to dates.ts, shared with ai-reception). */
-export { localDay } from "./dates.ts";
+import { localDay } from "./dates.ts";
+export { localDay };
 
 /** Model-supplied arguments are logged for audit, but never with guest names / references in clear text. */
 const SAFE_ARG_KEYS = new Set(["action", "state", "priority", "pricing_mode", "method", "kind", "date", "from", "to", "effective", "new_check_out", "quantity", "amount_halalas"]);
@@ -229,7 +230,7 @@ const UNITS: [string, string, string, string] = ["وحدة واحدة", "وحد�
 
 export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination"; why?: string; horizon?: "now" | "upcoming" | "info" | "unavailable"; key?: string }
 
-export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now()): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
+export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now(), tz?: string | null): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
   const s = ctx?.summary ?? {}; const u = s.units ?? {}; const av = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
   const money = !!s.finance;   // PERM-08: a role without money gets no money sentence (not a false zero)
   const items: BriefingItem[] = [];
@@ -248,7 +249,7 @@ export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now
   // upcoming risk: a unit in maintenance with a LATER arrival. Not an alert today (no deadline yet), but listed with the date so the lead time is visible. The cut-off is the user's/ops' call, so none is invented here.
   const maintLater = unitsAttn.filter((x) => x.status === "maintenance" && x.next_arrival && x.next_arrival > s.date).sort((a, b) => String(a.next_arrival).localeCompare(String(b.next_arrival)));
   if (maintLater.length) items.push({ level: "info", horizon: "upcoming", key: "maint_later:" + maintLater.map((x) => x.room + "@" + x.next_arrival).join(","), area: "coordination", text: `قادم: ${maintLater.slice(0, 5).map((x) => `وحدة ${x.room} في الصيانة ووصولها ${x.next_arrival}`).join("، ")}`, why: "الدليل: حالة الوحدة «صيانة» ولها وصول مؤكد بعد اليوم؛ تُراجع مدة الإصلاح قبل ذلك الموعد", link: "/staff/tickets" });
-  if (n(u.dirty)) items.push({ level: n(hk.unassigned) > 0 ? "warning" : "info", why: "الدليل: وحدات غير نظيفة ومهام تنظيف غير مسندة لأحد", horizon: n(hk.unassigned) > 0 ? "now" : "info", key: "dirty_units", text: `تحتاج تنظيفًا: ${ar(n(u.dirty), UNITS)} — مهام غير مسندة ${n(hk.unassigned)}، قيد التنفيذ ${n(hk.in_progress)}، أُنجزت اليوم ${n(hk.completed_today)}`, link: "/staff/housekeeping" });
+  if (n(u.dirty)) items.push({ level: "info", why: "الدليل: عدد الوحدات غير النظيفة ومهام التنظيف؛ يصبح عاجلًا فقط إن كان على الوحدة وصول اليوم (بند منفصل)", horizon: "info", key: "dirty_units", text: `تحتاج تنظيفًا: ${ar(n(u.dirty), UNITS)} — مهام غير مسندة ${n(hk.unassigned)}، قيد التنفيذ ${n(hk.in_progress)}، أُنجزت اليوم ${n(hk.completed_today)}`, link: "/staff/housekeeping" });
   if (n(u.maintenance)) items.push({ level: "info", horizon: "info", key: "maintenance_units", text: `في الصيانة: ${ar(n(u.maintenance), UNITS)}`, link: "/staff/tickets" });
   if (n(f.outstanding_in_house)) items.push({ level: "info", horizon: "info", key: "in_house_balance", text: `متبقٍ على النزلاء المقيمين: ${sar(f.outstanding_in_house)}`, link: "/staff/payments" });
   // 0033: a stay's deposit goes back after the departure's inspection; «متابعة الإقامات» lists the departures not closed
@@ -257,9 +258,10 @@ export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now
   items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — مؤجرة ${n(u.occupied)} من ${n(u.active)} عاملة، جاهزة للتسليم ${n(u.ready)}، محجوزة ${n(u.reserved)}، خارج الخدمة ${n(u.out_of_service)}.${money ? ` تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` : ""}` });
   // uncertainty: no summary means we could not read today's data. That is never "a quiet day".
   if (!ctx?.summary) items.push({ level: "warning", horizon: "unavailable", key: "no_summary", text: "تعذّر قراءة بيانات اليوم، فلا يمكن القول إن اليوم هادئ. أعد التحديث أو راجع الصفحات مباشرة", why: "الدليل: لم تصل بيانات الملخص" });
-  // freshness: no invented hour limit. A reading that cannot be today's (over 24 h old, or stamped in the future) is data-unavailable, not current.
+  // freshness, by the BRANCH day (not an hour count): the reading must have been taken on the briefing's day, and the briefing's day must be today there; a future stamp is not valid either. The reading time stays in the footer.
   const gen = Date.parse(String(ctx?.generated_at ?? ""));
-  if (ctx?.summary && Number.isFinite(gen) && (nowMs - gen > 24 * 3600 * 1000 || gen - nowMs > 5 * 60 * 1000)) items.push({ level: "info", horizon: "unavailable", key: "stale_reading", text: "وقت هذه القراءة لا يطابق اليوم؛ حدّث الإحاطة قبل الاعتماد عليها", why: "الدليل: وقت القراءة المسجل" });
+  const genDay = Number.isFinite(gen) ? localDay(tz, new Date(gen)) : null;
+  if (ctx?.summary && ((genDay && genDay !== ctx.summary.date) || ctx.summary.date !== localDay(tz, new Date(nowMs)) || (Number.isFinite(gen) && gen - nowMs > 5 * 60 * 1000))) items.push({ level: "info", horizon: "unavailable", key: "stale_reading", text: "هذه القراءة ليست لليوم الحالي في توقيت الفرع؛ حدّث الإحاطة قبل الاعتماد عليها", why: "الدليل: يوم القراءة أو يوم الإحاطة يختلف عن اليوم الحالي للفرع" });
   // scope unknown: a check whose input was not delivered is reported as unavailable, never as "nothing found"
   if (ctx?.summary && ctx.units_needing_attention === undefined) items.push({ level: "info", horizon: "unavailable", key: "units_unavailable", text: "فحص الوحدات المتأثرة بالوصول غير متاح الآن، فغياب التنبيه عنها لا يعني سلامتها", why: "الدليل: قائمة الوحدات لم تصل" });
   if (ctx?.summary && ctx.overstays === undefined) items.push({ level: "info", horizon: "unavailable", key: "overstays_unavailable", text: "فحص تجاوز موعد المغادرة غير متاح الآن", why: "الدليل: قائمة التجاوزات لم تصل" });
