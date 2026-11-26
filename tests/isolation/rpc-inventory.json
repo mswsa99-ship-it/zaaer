@@ -1,10 +1,10 @@
 {
   "generated_from": "source1446+tranche3+rpc-fixtures",
   "engine": "PGlite (Postgres WASM), not standalone PG16",
-  "total": 339,
+  "total": 340,
   "counts": {
     "control-valid": 103,
-    "unexecuted-no-adapter": 190,
+    "unexecuted-no-adapter": 191,
     "control-valid-weak-oracle": 33,
     "control-invalid-needs-fixture": 4,
     "skipped-no-coverage-credit": 9
@@ -2918,6 +2918,12 @@
     {
       "signature": "fn_staff_day_summary_range(p_branch uuid, p_from date, p_to date)",
       "family": "reservation",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_pos_settlement_range(p_branch uuid, p_account uuid, p_from date, p_to date)",
+      "family": "other",
       "status": "unexecuted-no-adapter",
       "coverage": "unexecuted"
     }
