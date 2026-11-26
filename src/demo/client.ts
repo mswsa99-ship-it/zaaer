@@ -1056,8 +1056,11 @@ const rpcsMore: Record<string, (a: any) => any> = {
   // 0148: read-only overview of each day from..to (both included) for one bank account; the settlement itself stays one day
   fn_pos_settlement_range: ({ p_branch, p_account, p_from, p_to }) => { requireCap("pos.settle"); requireBranch(p_branch); if (!p_from || !p_to) throw new Error("VALIDATION: business_date"); if (p_from > p_to) throw new Error("VALIDATION: date_range");
     const a = byId("cash_accounts", p_account); if (!a || a.branch_id !== p_branch || a.kind !== "bank_account") throw new Error("BRANCH_MISMATCH: account");
-    const days: Row[] = []; for (let d = p_from as string; d <= p_to; d = addDaysISO(d, 1)) { const t = posDayTotal(p_branch, p_account, d); const st = T("pos_settlements").find((x) => x.account_id === p_account && x.business_date === d);
-      days.push({ business_date: d, system_total_halalas: t.system_total_halalas, voucher_count: t.voucher_count, settlement: st ? { status: st.status, terminal_total_halalas: st.terminal_total_halalas, difference_halalas: st.difference_halalas, version: st.version } : null }); }
+    // sparse like the SQL: a day with POS vouchers, or with a saved settlement; a day with vouchers and no settlement is listed (settlement null)
+    const set = new Set<string>(); for (const st of T("pos_settlements")) if (st.account_id === p_account && st.business_date >= p_from && st.business_date <= p_to) set.add(st.business_date);
+    for (let d = p_from as string; d <= p_to; d = addDaysISO(d, 1)) if (posDayTotal(p_branch, p_account, d).voucher_count > 0) set.add(d);
+    const days: Row[] = [...set].sort().map((d) => { const t = posDayTotal(p_branch, p_account, d); const st = T("pos_settlements").find((x) => x.account_id === p_account && x.business_date === d);
+      return { business_date: d, system_total_halalas: t.system_total_halalas, voucher_count: t.voucher_count, settlement: st ? { status: st.status, terminal_total_halalas: st.terminal_total_halalas, difference_halalas: st.difference_halalas, version: st.version } : null }; });
     return { from: p_from, to: p_to, days }; },
   fn_pos_settle: ({ p }) => { requireCap("pos.settle"); requireBranch(p.branch_id); const a = byId("cash_accounts", p.account_id); if (!a || a.branch_id !== p.branch_id || a.kind !== "bank_account") throw new Error("BRANCH_MISMATCH: account");
     if (!p.business_date || p.business_date > todayISO()) throw new Error("VALIDATION: business_date"); if (!/^-?[0-9]{1,15}$/.test(String(p.terminal_total_halalas ?? ""))) throw new Error("VALIDATION: amount");

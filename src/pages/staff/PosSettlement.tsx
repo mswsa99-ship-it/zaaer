@@ -103,9 +103,10 @@ function RangeOverview({ branchId, accountId, from, to, tick, onPick }: { branch
   return (
     <Card data-testid="pos-range">
       <h2 className="text-sm font-semibold text-rai-ink">نظرة على الفترة: من <bdi dir="ltr">{from}</bdi> إلى <bdi dir="ltr">{to}</bdi></h2>
-      <p className="mb-3 mt-1 text-xs text-rai-ink-muted">عرض للقراءة فقط. تُحفظ التسوية ليوم واحد في كل مرة: اختر «تسوية هذا اليوم» ليوم من القائمة.</p>
+      <p className="mb-3 mt-1 text-xs text-rai-ink-muted">عرض للقراءة فقط للأيام التي فيها سندات شبكة أو تسوية محفوظة. تُحفظ التسوية ليوم واحد في كل مرة: اختر «تسوية هذا اليوم».</p>
       <p className="mb-2 text-sm" data-testid="pos-range-total">مجموع الفترة حسب النظام: <span dir="ltr" className="font-medium">{sar(total)}</span>{open > 0 && <span className="ms-2 text-rai-warning">{open} يوم بسندات بلا تسوية</span>}</p>
       <div className="divide-y divide-rai-line text-sm">
+        {r.days.length === 0 && <p className="py-2 text-xs text-rai-ink-muted" data-testid="pos-range-empty">لا سندات شبكة ولا تسويات محفوظة في هذه الفترة.</p>}
         {r.days.map((d) => (
           <div key={d.business_date} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="pos-range-day">
             <span dir="ltr" className="font-medium text-rai-ink">{d.business_date}</span>
