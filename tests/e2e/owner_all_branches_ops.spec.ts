@@ -411,7 +411,7 @@ test("AB-W3 platform deposits on a phone: each matched deposit is a labelled car
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   expect(await page.locator('[data-testid="payout-cards"] [dir="ltr"]').evaluateAll((els) => els.every((e) => e.getBoundingClientRect().right <= 390))).toBe(true);
   // a pending row's arrival date stays in one piece
-  const d = page.getByTestId("platform-payment").first().locator('span[dir="ltr"].whitespace-nowrap');
+  const d = page.getByTestId("platform-payment").first().locator('span[dir="ltr"].whitespace-nowrap').first();
   expect((await d.boundingBox())!.height).toBeLessThan(30);
 });
 

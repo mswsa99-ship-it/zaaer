@@ -106,7 +106,7 @@ export default function AdminPlatformPayouts() {
                       {!allBranches && <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id)} />}
                       <span className="font-mono text-xs">{x.number}</span>
                       <span className="order-last min-w-0 basis-full break-words text-ink-600 sm:order-none sm:flex-1 sm:basis-auto sm:truncate">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr" className="whitespace-nowrap">{x.check_in}</span></span>
-                      <span dir="ltr" className={x.kind === "refund" ? "text-danger-600" : "text-ink-800"}>{sar(x.signed_halalas)}</span>
+                      <span dir="ltr" className={`shrink-0 whitespace-nowrap ${x.kind === "refund" ? "text-danger-600" : "text-ink-800"}`}>{sar(x.signed_halalas)}</span>
                     </label>
                   ))}
                 </div>
@@ -116,7 +116,7 @@ export default function AdminPlatformPayouts() {
         </div>
       )}
       {chosen.length > 0 && (
-        <div className="sticky bottom-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white p-3 shadow-lg">
+        <div className="mt-4 flex lg:sticky lg:bottom-4 flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white p-3 shadow-lg">
           <span className="text-sm text-ink-700">{COUNT.payment(chosen.length)} · المتوقع <span dir="ltr" className="font-semibold">{sar(net)}</span>{bp > 0 && <span className="text-ink-500"> (بعد عمولة <span dir="ltr">{bpToPercent(bp)}%</span>)</span>}{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
           <button type="button" className="btn-primary text-sm" disabled={chosenSources.length !== 1} onClick={() => { setForm({ received: net, on: todayISO(), account: activeAccounts.find((a) => a.is_default)?.id ?? activeAccounts[0]?.id ?? "", reference: "", note: "" }); setConfirming(true); }}>تأكيد إيداع المنصة</button>
         </div>
