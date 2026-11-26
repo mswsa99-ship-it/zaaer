@@ -270,11 +270,11 @@ body, #root {background:var(--paper);color:var(--ink);}
 @media (max-width: 639px) {
   :root .card.overflow-x-auto {
     background:
-      linear-gradient(to right, #fff 30%, rgba(255,255,255,0)) left center / 32px 100% no-repeat local,
-      linear-gradient(to left, #fff 30%, rgba(255,255,255,0)) right center / 32px 100% no-repeat local,
+      linear-gradient(to right, var(--card) 30%, transparent) left center / 32px 100% no-repeat local,
+      linear-gradient(to left, var(--card) 30%, transparent) right center / 32px 100% no-repeat local,
       radial-gradient(farthest-side at 0 50%, rgba(15,23,42,.22), rgba(15,23,42,0)) left center / 12px 100% no-repeat scroll,
       radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.22), rgba(15,23,42,0)) right center / 12px 100% no-repeat scroll,
-      #fff;
+      var(--card);
   }
 }
 
