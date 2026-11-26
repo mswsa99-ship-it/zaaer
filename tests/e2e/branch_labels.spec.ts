@@ -29,11 +29,12 @@ test.describe("branch labels and filter targets (390px)", () => {
     await rows.filter({ hasText: /جدة/ }).first().scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/proof/bl2-followups-390.png" });
   });
-  for (const [name, path] of [["reservations", "/staff/reservations"], ["reports", "/admin/reports"]] as const) {
+  for (const [name, path] of [["reservations", "/staff/reservations"], ["reports", "/admin/reports"], ["admin rooms", "/admin/rooms"], ["admin services", "/admin/services"]] as const) {
     test(`BL3 ${name}: filter checkbox labels are 44px tall`, async ({ page, loginAs, go }) => {
       await loginAs("owner"); await go(path); await page.waitForTimeout(1000);
       const hs = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLInputElement>("input[type=checkbox]")).map((c) => Math.round((c.closest("label") ?? c).getBoundingClientRect().height)));
       expect(hs.length).toBeGreaterThan(0);
+      await page.locator("input[type=checkbox]").first().scrollIntoViewIfNeeded(); await page.screenshot({ path: `/tmp/proof/bl3-${name.replace(" ", "-")}-390.png` });
       for (const h of hs) expect(h).toBeGreaterThanOrEqual(44);
     });
   }

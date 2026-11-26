@@ -355,7 +355,7 @@ export function ArchivedBadge({ archivedAt }: { archivedAt: string | null }) {
 
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
+    <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700 max-sm:min-h-11">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded border-ink-300 text-brand-600" />
       {label}
     </label>
