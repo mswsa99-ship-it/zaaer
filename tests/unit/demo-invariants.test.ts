@@ -2259,7 +2259,7 @@ describe("Phase 6 — lists, log, ledger, staff and usage in the demo (0040)", (
     expect(await rpc<string[]>("fn_user_branch_ids", {})).toEqual([B]);
     expect(await fails(rpc("fn_reservation_calendar", { p_branch: A, p_from: day(0), p_to: day(7) }))).toBe("FORBIDDEN: branch not permitted");
     expect(await rpc<any>("fn_reservation_list", { p_branch: A, p_filters: {}, p_limit: 5, p_offset: 0 })).toEqual({ total: 0, rows: [] });
-    { const lb = await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 5, p_offset: 0 }); expect(lb.total).toBe(2); expect((lb.rows as any[]).every((r) => r.branch_id === B || r.branch_id === undefined)).toBe(true); }   // the two seeded Jeddah stays, and only that branch's
+    { const lb = await rpc<any>("fn_reservation_list", { p_branch: B, p_filters: {}, p_limit: 5, p_offset: 0 }); expect(lb.total).toBe(4); expect((lb.rows as any[]).every((r) => r.branch_id === B || r.branch_id === undefined)).toBe(true); }   // the four seeded Jeddah stays (two in house, two platform-paid for the deposits page), and only that branch's
     await login("owner@demo.sa");
     expect(await up({ staff_id: SUP, branch_ids: [B, A] })).toEqual({ ok: true, changed: ["branches"] });
     const back = await memberships(); expect(back).toHaveLength(2); expect(back[0]).toMatchObject({ id: before[0].id, branch_id: A, removed_at: null, removed_by: null });
