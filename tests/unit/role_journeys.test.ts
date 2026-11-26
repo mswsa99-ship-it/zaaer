@@ -44,8 +44,8 @@ describe("duplicate admin reservations link", () => {
       expect(paths(role)).not.toContain("/admin/reservations");
       expect(groupedMenu(role).top.some((t) => t.path === "/staff/reservations")).toBe(true);
       expect(canOpen(role, "/admin/reservations")).toBe(true);
-      // only that one link left the admin list
-      expect(adminNav(role).flatMap((g) => g.items).length - 1).toBe(paths(role).length);
+      // only that link (and the property tabs, which moved into their own centre) left the admin list
+      expect(adminNav(role).flatMap((g) => g.items).length - 1 - hubTabs("property", role).length).toBe(paths(role).length);
     });
   }
   it("a person whose staff entry is not listed keeps the admin link (individual mode, admin page only)", () => {
@@ -53,4 +53,32 @@ describe("duplicate admin reservations link", () => {
     expect(adminNav("manager", allows).flatMap((g) => g.items.map((i) => i.path))).toContain("/admin/reservations");
     expect(paths("manager", allows)).toContain("/admin/reservations");
   });
+});
+
+import { hubTabs, pageAllowed } from "../../src/lib/nav";
+describe("property data centre (three existing pages as tabs)", () => {
+  const OLD = ["/admin/branches", "/admin/policies", "/admin/knowledge"];
+  const oldListed = (role: string, allows?: Allows) => adminNav(role, allows).flatMap((g) => g.items.map((i) => i.path)).filter((p) => OLD.includes(p)).sort();
+  const modes: Array<[string, Allows | undefined]> = [
+    ["no matrix", undefined],
+    ["all caps", { can: () => true, canFull: () => true }],
+    ["no caps", { can: () => false, canFull: () => false }],
+    ["knowledge only", { can: (c) => c === "knowledge", canFull: () => false }],
+    ["branch.settings only", { can: (c) => c === "branch.settings", canFull: () => false }],
+    ["individual: policies view only", { can: () => false, canFull: () => false, pageAccess: { mode: "individual", pages: { "/admin/policies": { view: true } } } as never }],
+  ];
+  for (const role of ALL_STAFF) for (const [name, allows] of modes) {
+    it(`${role}, ${name}: tabs are exactly the pages listed before, each openable, none new`, () => {
+      const tabs = hubTabs("property", role, allows).map((t) => t.path).sort();
+      expect(tabs).toEqual(oldListed(role, allows));
+      for (const t of tabs) expect(pageAllowed(PAGES.find((p) => p.path === t)!, role, allows)).toBe(true);
+      const g = groupedMenu(role, allows);
+      const entry = g.top.find((t) => t.label === "بيانات المنشأة");
+      expect(!!entry).toBe(tabs.length > 0);
+      // no property page is listed a second time in the admin groups
+      for (const p of OLD) expect(g.adminGroups.flatMap((x) => x.items.map((i) => i.path))).not.toContain(p);
+      // the entry leads to the first tab the person may open
+      if (entry) expect(entry.path).toBe(hubTabs("property", role, allows)[0].path);
+    });
+  }
 });

@@ -11,7 +11,8 @@ it.each(ROLES)("NV91 grouping keeps every page of the flat menu reachable and ad
   const allows = allowsFor(role);
   const flat = unifiedMenu(role, allows).map((p) => p.path).sort();
   const g = groupedMenu(role, allows);
-  const grouped = [...g.top.map((p) => p.path), ...g.adminGroups.flatMap((x) => x.items.map((p) => p.path))].sort();
+  // the property centre holds three admin pages as tabs: its members count as reachable, once
+  const grouped = [...new Set([...g.top.flatMap((p) => [p.path, ...(p.label === "بيانات المنشأة" ? p.members ?? [] : [])]), ...g.adminGroups.flatMap((x) => x.items.map((p) => p.path))])].sort();
   // /admin/reservations is the same screen as the staff «الحجوزات» entry and is not listed twice (role_journeys.test.ts)
   expect(grouped).toEqual(flat.filter((p) => p !== "/admin/reservations"));
 });

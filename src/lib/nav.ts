@@ -64,11 +64,13 @@ export interface NavPage {
 }
 
 /** 6.2 (U11): three centres with tabs replace 13 separate menu links — the staff menu goes from 22 items to 9 at most. */
-export type HubId = "guest" | "finance" | "service";
+export type HubId = "guest" | "finance" | "service" | "property";
 export const HUBS: Record<HubId, { label: string; icon: LucideIcon }> = {
   guest: { label: "النزيل", icon: UserCheck },
   finance: { label: "المالية", icon: Wallet },
   service: { label: "خدمة الغرف", icon: Sparkles },
+  // batch 3: the three existing pages that hold the property's own data; each keeps its own route and its own guard
+  property: { label: "بيانات المنشأة", icon: Building2 },
 };
 
 export const PAGES: readonly NavPage[] = [
@@ -116,7 +118,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/dashboard", label: "لوحة الإدارة", icon: LayoutDashboard, area: "admin", group: "نظرة عامة", roles: ADMIN_ROLES },
 
   { path: "/admin/organization", label: "المنشأة", icon: Building, area: "admin", group: "المنشآت", roles: ["owner"], scope: "org" },
-  { path: "/admin/branches", label: "الفروع", icon: Building2, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, scope: "org", cap: ["branch.settings"] },
+  { path: "/admin/branches", label: "الفروع", icon: Building2, area: "admin", hub: "property", group: "المنشآت", roles: ADMIN_ROLES, scope: "org", cap: ["branch.settings"] },
   { path: "/admin/structure", label: "البلوكات والطوابق", icon: Layers, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
   { path: "/admin/room-categories", label: "أنواع الوحدات", icon: BedDouble, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
   { path: "/admin/rooms", label: "الوحدات", icon: DoorClosed, area: "admin", group: "المنشآت", roles: ADMIN_ROLES, cap: ["definitions"] },
@@ -157,8 +159,8 @@ export const PAGES: readonly NavPage[] = [
   { path: "/admin/payment-providers", label: "مزودو الدفع", icon: CreditCard, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
   { path: "/admin/integrations", label: "التكاملات", icon: Plug, area: "admin", group: "التكاملات", roles: ADMIN_ROLES, scope: "org" },
 
-  { path: "/admin/knowledge", label: "قاعدة المعرفة", icon: BookOpen, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"], cap: ["knowledge"] },
-  { path: "/admin/policies", label: "السياسات", icon: FileText, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"] },
+  { path: "/admin/knowledge", label: "قاعدة المعرفة", icon: BookOpen, area: "admin", hub: "property", group: "الحوكمة", roles: ["owner", "manager", "supervisor"], cap: ["knowledge"] },
+  { path: "/admin/policies", label: "السياسات", icon: FileText, area: "admin", hub: "property", group: "الحوكمة", roles: ["owner", "manager", "supervisor"] },
   { path: "/admin/reports", label: "التقارير", icon: BarChart3, area: "admin", group: "الحوكمة", roles: ADMIN_FINANCE, cap: ["reports.finance"], capFull: true },
   // decision 14 (10.3): the log is read through fn_audit_list — the owner, the manager and the supervisor (security rows for the owner alone)
   { path: "/admin/audit-logs", label: "سجل الإجراءات", icon: ScrollText, area: "admin", group: "الحوكمة", roles: ["owner", "manager", "supervisor"], cap: ["audit.log"] },
@@ -216,10 +218,12 @@ const HUB_ORDER: Record<HubId, string[]> = {
   guest: ["/staff/access-approvals", "/staff/arrivals", "/staff/identity-verification", "/staff/journey", "/staff/followups", "/staff/inbox"],
   finance: ["/staff/payments", "/staff/orders", "/staff/expenses", "/staff/ledger", "/staff/accounts", "/staff/bank", "/staff/pos-settlement", "/staff/day-summary", "/staff/day-close", "/staff/platforms"],
   service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"],
+  property: ["/admin/branches", "/admin/policies", "/admin/knowledge"],
 };
 /** The tabs of a centre for a role, in order (only pages the role sees). */
 export function hubTabs(hub: HubId, role: string | null | undefined, allows?: Allows): NavPage[] {
-  const pages = staffNav(role, allows).filter((p) => p.hub === hub);
+  // the property centre holds admin pages; every centre lists a page by the same pageListed rule as its menu link
+  const pages = (hub === "property" ? PAGES.filter((p) => !p.hidden && pageListed(p, role, allows)) : staffNav(role, allows)).filter((p) => p.hub === hub);
   return HUB_ORDER[hub].map((path) => pages.find((p) => p.path === path)).filter((p): p is NavPage => !!p);
 }
 /** The staff menu (6.2): pages outside the centres, in table order, and one entry per centre the role has any tab of. */
@@ -283,9 +287,12 @@ export function groupedMenu(role: string | null | undefined, allows?: Allows): {
   // An admin link that opens the very same screen as a staff entry the person already sees is not listed twice.
   // Only presentation: the route stays open, and a person without the staff entry keeps the admin one.
   const shown = new Set(top.flatMap((t) => [t.path, ...(t.members ?? [])]));
+  const propertyTabs = hubTabs("property", role, allows);
   const adminGroups = adminNav(role, allows)
-    .map((g) => ({ ...g, items: g.items.filter((p) => !(SAME_SCREEN[p.path] && shown.has(SAME_SCREEN[p.path]))) }))
+    .map((g) => ({ ...g, items: g.items.filter((p) => p.hub !== "property" && !(SAME_SCREEN[p.path] && shown.has(SAME_SCREEN[p.path]))) }))
     .filter((g) => g.items.length > 0);
+  // «بيانات المنشأة»: one entry (when the person lists any of its tabs) in place of three links in two admin groups
+  if (propertyTabs.length) top.push({ ...propertyTabs[0], label: HUBS.property.label, icon: HUBS.property.icon, members: propertyTabs.map((t) => t.path) });
   return { top, adminGroups };
 }
 /** Top-level entries a person sees in the grouped menu. */
