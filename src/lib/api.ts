@@ -753,6 +753,7 @@ export interface PosDay {
   vouchers: Array<{ id: string; number: string; kind: string; amount_halalas: number; reference: string | null; occurred_at: string }>;
   settlement: PosSettlement | null;
 }
+export interface PosRange { from: string; to: string; days: Array<{ business_date: string; system_total_halalas: number; voucher_count: number; settlement: { status: string; terminal_total_halalas: number; difference_halalas: number; version: number } | null }> }
 export interface PosSettlement { id: string; account_id: string; business_date: string; terminal_total_halalas: number; system_total_halalas: number; difference_halalas: number; voucher_count: number; status: "matched" | "difference"; note: string | null; version: number; updated_at: string }
 export interface PlatformPayment { id: string; number: string; kind: "receipt" | "refund"; amount_halalas: number; signed_halalas: number; occurred_at: string; reservation_id: string; internal_ref: string; external_ref: string | null; check_in: string; source_id: string; source_name: string | null; commission_bp?: number }
 /** The closing of a branch-local day (0063: A2 and A3) */
@@ -861,6 +862,8 @@ export const bankApi = {
 export const moneyApi = {
   upsertAccount: (p: Partial<CashAccount> & { name: string }) => rpc<{ ok: boolean; id: string; version: number }>("fn_admin_upsert_cash_account", { p }),
   archiveAccount: (id: string, archive: boolean, reason: string) => rpc<{ ok: boolean; used_by_vouchers?: number; default_missing?: boolean; unchanged?: boolean }>("fn_admin_archive_cash_account", { p_id: id, p_archive: archive, p_reason: reason }),
+  /** read-only overview of every day from..to for one bank account (0148); settling stays one day */
+  posRange: (branchId: string, accountId: string, from: string, to: string) => rpc<PosRange>("fn_pos_settlement_range", { p_branch: branchId, p_account: accountId, p_from: from, p_to: to }),
   posDay: (branchId: string, accountId: string, date: string) => rpc<PosDay>("fn_pos_settlement_preview", { p_branch: branchId, p_account: accountId, p_date: date }),
   posSettle: (p: { branch_id: string; account_id: string; business_date: string; terminal_total_halalas: number; note?: string; version?: number }) => rpc<{ ok: boolean; settlement: PosSettlement }>("fn_pos_settle", { p }),
   platformUnsettled: (branchId: string) => rpc<PlatformPayment[]>("fn_platform_unsettled", { p_branch: branchId }),

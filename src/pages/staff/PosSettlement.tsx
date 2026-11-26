@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { CreditCard, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
-import { moneyApi, toArabicError, type CashAccount, type PosDay, type PosSettlement as Settlement } from "../../lib/api";
+import { moneyApi, toArabicError, type CashAccount, type PosDay, type PosRange, type PosSettlement as Settlement } from "../../lib/api";
 import { accountLabel } from "../../lib/useCashAccounts";
 import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, Spinner, EmptyState, AmountBox, AmountGrid } from "../../components/ui";
 import { Field, MoneyInput } from "../../components/forms";
@@ -16,7 +16,7 @@ import { BranchPicker } from "../../components/BranchPicker";
 import { DateRangePicker } from "../../components/DateRangePicker";
 import { useBranch } from "../../lib/branch";
 import { VOUCHER_KIND_LABELS, type VoucherKind } from "../../lib/types";
-import { formatCurrency, formatDateTime, todayISO, addDaysISO } from "../../lib/utils";
+import { formatCurrency, formatDateTime, todayISO, addDaysISO, COUNT } from "../../lib/utils";
 import { DisabledReason } from "../../components/DisabledReason";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
@@ -25,7 +25,8 @@ interface Data { accounts: CashAccount[]; history: Hist[] }
 const NO_DATA: Data = { accounts: [], history: [] };
 
 export default function PosSettlement() {
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(todayISO());   // the ONE day a settlement is saved for
+  const [rangeTo, setRangeTo] = useState(todayISO());   // overview: date..rangeTo (read only)
   const [accountId, setAccountId] = useState("");
   const [tick, setTick] = useState(0);
 
@@ -58,12 +59,13 @@ export default function PosSettlement() {
           <div className="space-y-4 lg:col-span-2">
             <Card>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="اليوم"><DateRangePicker single label="اليوم" from={date} to={date} max={todayISO()} onChange={(a) => setDate(a)} /></Field>
+                <Field label="اليوم أو الفترة"><DateRangePicker label="اليوم أو الفترة: يوم أو من تاريخ إلى تاريخ" from={date} to={rangeTo} max={todayISO()} onChange={(a, b) => { setDate(a || todayISO()); setRangeTo(b || a || todayISO()); }} /></Field>
                 {!q.all && <Field label="الحساب البنكي (جهاز الشبكة)"><select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="الحساب البنكي">{accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}{a.is_default ? " (الافتراضي)" : ""}</option>)}</select></Field>}
               </div>
             </Card>
             {q.all && <Card data-testid="pos-all-branches"><h2 className="mb-2 text-sm font-semibold text-rai-ink">تسويات اليوم المختار في جميع الفروع</h2><p className="mb-2 text-xs text-rai-ink-muted">عرض للقراءة فقط. لإدخال تسوية اختر فرعًا واحدًا.</p>{history.filter((x) => x.business_date === date).length === 0 ? <p className="text-xs text-rai-ink-muted">لا تسويات مسجلة في هذا اليوم.</p> : <div className="divide-y divide-ink-50 text-sm">{history.filter((x) => x.business_date === date).map((x) => <div key={x.id} className="flex items-center justify-between gap-2 py-2"><span>{branchName(x.branch_id)}<span className="block text-[11px] text-rai-ink-muted">{nameOf(x.account_id)}</span></span>{x.status === "matched" ? <Badge className="bg-rai-success-tint text-rai-success">مطابقة</Badge> : <Badge className="bg-rai-danger-tint text-rai-danger">فرق <span dir="ltr">{sar(x.difference_halalas)}</span></Badge>}</div>)}</div>}</Card>}
-            {!q.all && branchId && accountId && <DayCard branchId={branchId} accountId={accountId} date={date} onSaved={() => setTick((t) => t + 1)} />}
+            {!q.all && branchId && accountId && rangeTo > date && <RangeOverview branchId={branchId} accountId={accountId} from={date} to={rangeTo} tick={tick} onPick={(d) => { setDate(d); setRangeTo(d); }} />}
+            {!q.all && branchId && accountId && rangeTo <= date && <DayCard branchId={branchId} accountId={accountId} date={date} onSaved={() => setTick((t) => t + 1)} />}
           </div>
           <Card>
             <h2 className="mb-2 text-sm font-semibold text-ink-700">آخر أسبوعين</h2>
@@ -81,6 +83,39 @@ export default function PosSettlement() {
         </div>
       )}
     </div>
+  );
+}
+
+/** read-only: each day of the chosen period for this account. A settlement is saved for one day at a time, from «تسوية هذا اليوم». */
+function RangeOverview({ branchId, accountId, from, to, tick, onPick }: { branchId: string; accountId: string; from: string; to: string; tick: number; onPick: (d: string) => void }) {
+  const [r, setR] = useState<PosRange | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    let alive = true; setR(null); setError(null);
+    moneyApi.posRange(branchId, accountId, from, to).then((d) => { if (alive) setR(d); }, (e) => { if (alive) setError(toArabicError(e)); });
+    return () => { alive = false; };
+  }, [branchId, accountId, from, to, tick, n]);
+  if (error) return <LoadErrorCard message={error} onRetry={() => setN((x) => x + 1)} />;
+  if (!r) return <div className="py-6 text-center"><Spinner /></div>;
+  const total = r.days.reduce((a, d) => a + d.system_total_halalas, 0);
+  const open = r.days.filter((d) => !d.settlement && d.voucher_count > 0).length;
+  return (
+    <Card data-testid="pos-range">
+      <h2 className="text-sm font-semibold text-rai-ink">نظرة على الفترة <bdi dir="ltr">{from} → {to}</bdi></h2>
+      <p className="mb-3 mt-1 text-xs text-rai-ink-muted">عرض للقراءة فقط. تُحفظ التسوية ليوم واحد في كل مرة: اختر «تسوية هذا اليوم» ليوم من القائمة.</p>
+      <p className="mb-2 text-sm" data-testid="pos-range-total">مجموع الفترة حسب النظام: <span dir="ltr" className="font-medium">{sar(total)}</span>{open > 0 && <span className="ms-2 text-rai-warning">{open} يوم بسندات بلا تسوية</span>}</p>
+      <div className="divide-y divide-rai-line text-sm">
+        {r.days.map((d) => (
+          <div key={d.business_date} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="pos-range-day">
+            <span dir="ltr" className="font-medium text-rai-ink">{d.business_date}</span>
+            <span className="text-xs text-rai-ink-muted">{COUNT.voucher(d.voucher_count)} · <span dir="ltr">{sar(d.system_total_halalas)}</span></span>
+            <span>{d.settlement ? (d.settlement.status === "matched" ? <Badge className="bg-rai-success-tint text-rai-success">مطابقة</Badge> : <Badge className="bg-rai-danger-tint text-rai-danger">فرق <span dir="ltr">{sar(d.settlement.difference_halalas)}</span></Badge>) : <span className="text-xs text-rai-ink-muted">{d.voucher_count > 0 ? "لم تُسوَّ" : "لا سندات"}</span>}</span>
+            <button type="button" className="btn-outline min-h-[44px]" onClick={() => onPick(d.business_date)}>تسوية هذا اليوم</button>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
