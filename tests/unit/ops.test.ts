@@ -191,10 +191,18 @@ describe("the fallback for a role without money", () => {
     // a role with money and a truly empty list still gets the plain answer
     expect(fallbackOpsReply("من عليه متبقي؟", { ...ctx, in_house_with_balance: [], checked_out_with_deposit: [] })).toContain("لا مديونيات");
   });
-  it("OPSNOMONEY2 arrivals and departures without money fields say nothing about money, not «0.00»", () => {
-    const strip = (rows: any[]) => rows.map((e) => { const x = { ...e }; delete x.balance_due; delete x.deposit_balance; return x; });
-    const c = { ...ctx, arrivals: strip(ctx.arrivals), departures: strip(ctx.departures) };
-    for (const q of ["من يصل اليوم؟", "من يغادر اليوم؟"]) { const r = fallbackOpsReply(q, c); expect(r).not.toContain("0.00"); expect(r).not.toContain("متبقٍ"); expect(r).not.toContain("تأمين"); }
+  it("OPSNOMONEY2 a context without money (as the server sends it to a role without money) says nothing about money, for the natural phrasings too", () => {
+    const strip = (rows: any[]) => rows.map((e) => { const x = { ...e }; delete x.balance_due; delete x.deposit_balance; delete x.payment_status; return x; });
+    const { finance: _f, ...summaryNoFinance } = ctx.summary as any;
+    const c: Record<string, any> = { ...ctx, summary: summaryNoFinance, arrivals: strip(ctx.arrivals), departures: strip(ctx.departures), overstays: strip(ctx.overstays) };
+    delete c.in_house_with_balance; delete c.checked_out_with_deposit;
+    // «من يوصل / من يصل»: the second wording is not matched by the arrivals pattern and gets the briefing; neither may carry money
+    for (const q of ["من يوصل اليوم؟", "من يصل اليوم؟", "من يغادر اليوم؟", "ما وضع اليوم؟"]) {
+      const r = fallbackOpsReply(q, c);
+      expect(r, q).not.toMatch(/\d+\.\d{2}\s*ر\.س/); expect(r, q).not.toContain("تحصيل اليوم"); expect(r, q).not.toContain("تأمينات محتجزة");
+      expect(r, q).not.toContain("متبقٍ ") ; expect(r, q).not.toContain("تأمين ");
+    }
+    // a role with money still sees money on the departure list
     expect(fallbackOpsReply("من يغادر اليوم؟", ctx)).toContain("متبقٍ");
   });
 });
