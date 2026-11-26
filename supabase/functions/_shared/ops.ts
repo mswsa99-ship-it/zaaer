@@ -348,31 +348,65 @@ export function diffBriefing(prev: BriefingItem[], cur: BriefingItem[]): { key: 
 
 /**
  * F5: the briefing sends the operational context to the model as JSON under a size limit. A plain character cut leaves
- * broken JSON and silently loses the tail. This keeps the JSON valid: it drops whole items from the longest list until the
- * text fits, and records how many were left out (`_omitted`, by path) so the model can say the list is partial.
- * Only if the lists are exhausted and the text is still too long does it fall back to a character cut (`cut: true`).
+ * broken JSON and silently loses the tail. This always returns VALID JSON of at most `limit` characters, and says how it got there:
+ *  - "full": it fit; the text is byte-identical to JSON.stringify(ctx).
+ *  - "trimmed": whole items were dropped from the largest lists (any depth up to 6, including lists in lists), from the tail,
+ *    until it fit. `omitted` counts the dropped items per path, and the JSON carries the same counts under `_omitted`.
+ *  - "envelope": the lists were not enough (a huge scalar, a deep object, a non-object root). The JSON is a small object that keeps
+ *    the top-level values that fit, in key order, and names every dropped top-level key under `_dropped_keys`, with `_context_cut: true`.
+ * It never mutates its input, and its work is bounded: item sizes are measured once, and one final stringify checks the result.
  */
-export function fitOpsContext(ctx: unknown, limit = 12000): { text: string; omitted: Record<string, number>; cut: boolean } {
+export type FitOpsContext = { text: string; omitted: Record<string, number>; droppedKeys: string[]; mode: "full" | "trimmed" | "envelope" };
+const OPS_FIT_RESERVE = 400;   // room for the markers (_omitted, _dropped_keys, _context_cut)
+export function fitOpsContext(ctx: unknown, limit = 12000): FitOpsContext {
   const omitted: Record<string, number> = {};
   const full = JSON.stringify(ctx) ?? "null";
-  if (full.length <= limit) return { text: full, omitted, cut: false };
-  const root = JSON.parse(full) as unknown;
-  if (root === null || typeof root !== "object" || Array.isArray(root)) return { text: full.slice(0, limit), omitted, cut: true };
-  const lists: Array<{ path: string; arr: unknown[] }> = [];
+  if (full.length <= limit) return { text: full, omitted, droppedKeys: [], mode: "full" };
+  const root = JSON.parse(full) as unknown;   // a deep copy: the caller's object is never touched
+  const envelope = (): FitOpsContext => {
+    const dropped: string[] = []; const out: Record<string, unknown> = {};
+    const room = Math.max(limit - OPS_FIT_RESERVE, 0);
+    let used = 2;
+    if (root !== null && typeof root === "object" && !Array.isArray(root)) {
+      for (const [k, v] of Object.entries(root as Record<string, unknown>)) {
+        const cost = JSON.stringify(k).length + JSON.stringify(v).length + 2;
+        if (used + cost <= room) { out[k] = v; used += cost; } else dropped.push(k);
+      }
+    } else dropped.push("(root)");
+    const text = JSON.stringify({ ...out, _context_cut: true, _dropped_keys: dropped });
+    return { text: text.length <= limit ? text : JSON.stringify({ _context_cut: true, _dropped_keys: dropped.slice(0, 20) }).slice(0, limit), omitted: {}, droppedKeys: dropped, mode: "envelope" };
+  };
+  if (root === null || typeof root !== "object" || Array.isArray(root)) return envelope();
+  type L = { path: string; arr: unknown[]; sizes: number[]; total: number };
+  const dead: string[] = [];   // paths of items already dropped: lists inside them are no longer part of the output
+  const lists: L[] = [];
   const walk = (v: unknown, path: string, depth: number) => {
-    if (Array.isArray(v)) { lists.push({ path, arr: v }); return; }
-    if (v && typeof v === "object" && depth < 3) for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, path ? `${path}.${k}` : k, depth + 1);
+    if (Array.isArray(v)) {
+      const sizes = v.map((x) => JSON.stringify(x).length + 1);
+      lists.push({ path: path || "(root)", arr: v, sizes, total: sizes.reduce((a, b) => a + b, 0) });
+      if (depth < 6) v.forEach((x, i) => walk(x, `${path}[${i}]`, depth + 1));
+      return;
+    }
+    if (v && typeof v === "object" && depth < 6) for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, path ? `${path}.${k}` : k, depth + 1);
   };
   walk(root, "", 0);
-  const render = () => JSON.stringify(Object.keys(omitted).length ? { ...(root as Record<string, unknown>), _omitted: omitted } : root);
-  let text = render();
-  while (text.length > limit) {
-    let big: { path: string; arr: unknown[] } | null = null;
-    for (const l of lists) if (l.arr.length > 0 && (!big || JSON.stringify(l.arr).length > JSON.stringify(big.arr).length)) big = l;
-    if (!big) return { text: text.slice(0, limit), omitted, cut: true };
-    big.arr.pop();
+  const budget = limit - OPS_FIT_RESERVE;
+  let size = full.length;
+  while (size > budget) {
+    let big: L | null = null;
+    for (const l of lists) if (l.arr.length > 0 && (!big || l.total > big.total) && !dead.some((d) => l.path.startsWith(d))) big = l;
+    if (!big) return envelope();
+    dead.push(`${big.path === "(root)" ? "" : big.path}[${big.arr.length - 1}]`);
+    const cut = big.sizes.pop() ?? 0; big.arr.pop(); big.total -= cut; size -= cut;
     omitted[big.path] = (omitted[big.path] ?? 0) + 1;
-    text = render();
   }
-  return { text, omitted, cut: false };
+  const text = JSON.stringify({ ...(root as Record<string, unknown>), _omitted: omitted });
+  return text.length <= limit ? { text, omitted, droppedKeys: [], mode: "trimmed" } : envelope();
+}
+
+/** The one line added to the briefing request when the context was not sent whole, so the model never presents partial lists as complete. */
+export function opsContextNote(fit: FitOpsContext): string {
+  if (fit.mode === "full") return "";
+  if (fit.mode === "trimmed") return "\n\nتنبيه: السياق أُرسل مختصرًا بسبب الحجم. الحقل _omitted يبيّن عدد البنود المحذوفة من كل قائمة؛ لا تذكر أن أي قائمة كاملة، وقل إنها جزئية عند الاستشهاد بها.";
+  return "\n\nتنبيه: السياق أُرسل مختصرًا جدًا بسبب الحجم. الحقل _dropped_keys يسرد المفاتيح المحذوفة؛ لا تستنتج شيئًا عنها ولا تذكر أن الصورة كاملة.";
 }

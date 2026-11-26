@@ -17,7 +17,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { budgetReadAvailable } from "../_shared/budget_reads.ts";
 import { projectKey } from "../_shared/keys.ts";
 import { createProvider, ProviderError, type ChatTurn, type ToolResult } from "../_shared/llm.ts";
-import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs, applyVerbatimNote, withAnomalyNotice, type AnomalySummary, opsModelOrder, fitOpsContext } from "../_shared/ops.ts";
+import { OPS_TOOL_DECLARATIONS, executeOpsTool, isOpsTool, validateOpsArgs, gateOpsOutput, buildOpsSystemPrompt, buildBriefing, fallbackOpsReply, localDay, redactArgs, applyVerbatimNote, withAnomalyNotice, type AnomalySummary, opsModelOrder, fitOpsContext, opsContextNote } from "../_shared/ops.ts";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hotel-slug, x-guest-token", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
@@ -94,9 +94,11 @@ Deno.serve(async (req) => {
     if (provider && !budgetReadAvailable(s, briefingUsage, true)) aiStatus = "budget_exhausted";
     if (provider && s.briefing_with_insights && budgetReadAvailable(s, briefingUsage, true)) {
       try {
+        const ctxFit = fitOpsContext(ctxData);
+        if (ctxFit.mode !== "full") console.warn("ai-ops briefing context " + ctxFit.mode, JSON.stringify(ctxFit.omitted), ctxFit.droppedKeys.join(","));
         const res = await provider.generate({
           system: buildOpsSystemPrompt({ propertyName: org?.name_ar ?? "المنشأة", branchName: branch.name_ar, staffName: staff.full_name, role: staff.role, today, access: pageAccess, extra: s.extra_instructions }) + "\nالمطلوب الآن: من السياق المعطى اكتب 3 توصيات تشغيلية مرتبة بالأولوية لبداية اليوم، كل توصية سطر واحد يبدأ بفعل. لا تكرر الأرقام الموجودة في الملخص، ركز على ما يجب فعله ولماذا.",
-          history: [{ role: "user", text: "السياق التشغيلي (JSON):\n" + fitOpsContext(ctxData).text }],
+          history: [{ role: "user", text: "السياق التشغيلي (JSON):\n" + ctxFit.text + opsContextNote(ctxFit) }],
           tools: [], temperature: 0.3, maxOutputTokens: 350, timeoutMs: Number(s.timeout_ms ?? 15000),
         });
         await noteFallback(res.model, res.fallbackFrom ?? []);
