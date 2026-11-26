@@ -35,3 +35,22 @@ describe("role journeys (batch 3)", () => {
     for (const role of ALL_STAFF) for (const p of bottomTabPrefs(role)) if (canOpen(role, p)) expect(canOpen(role, p)).toBe(true);
   });
 });
+
+import { adminNav, type Allows } from "../../src/lib/nav";
+describe("duplicate admin reservations link", () => {
+  const paths = (role: string, allows?: Allows) => groupedMenu(role, allows).adminGroups.flatMap((g) => g.items.map((i) => i.path));
+  for (const role of ["owner", "manager", "supervisor", "finance"] as const) {
+    it(`${role}: the admin copy is not listed twice, the staff entry is, and the route still opens`, () => {
+      expect(paths(role)).not.toContain("/admin/reservations");
+      expect(groupedMenu(role).top.some((t) => t.path === "/staff/reservations")).toBe(true);
+      expect(canOpen(role, "/admin/reservations")).toBe(true);
+      // only that one link left the admin list
+      expect(adminNav(role).flatMap((g) => g.items).length - 1).toBe(paths(role).length);
+    });
+  }
+  it("a person whose staff entry is not listed keeps the admin link (individual mode, admin page only)", () => {
+    const allows: Allows = { can: () => false, canFull: () => false, pageAccess: { mode: "individual", pages: { "/admin/reservations": { view: true } } } as never };
+    expect(adminNav("manager", allows).flatMap((g) => g.items.map((i) => i.path))).toContain("/admin/reservations");
+    expect(paths("manager", allows)).toContain("/admin/reservations");
+  });
+});

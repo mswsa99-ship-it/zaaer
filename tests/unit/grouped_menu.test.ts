@@ -12,7 +12,8 @@ it.each(ROLES)("NV91 grouping keeps every page of the flat menu reachable and ad
   const flat = unifiedMenu(role, allows).map((p) => p.path).sort();
   const g = groupedMenu(role, allows);
   const grouped = [...g.top.map((p) => p.path), ...g.adminGroups.flatMap((x) => x.items.map((p) => p.path))].sort();
-  expect(grouped).toEqual(flat);
+  // /admin/reservations is the same screen as the staff «الحجوزات» entry and is not listed twice (role_journeys.test.ts)
+  expect(grouped).toEqual(flat.filter((p) => p !== "/admin/reservations"));
 });
 it.each(ROLES)("NV92 at most 12 top-level entries (%s)", (role) => {
   expect(topLevelCount(groupedMenu(role, allowsFor(role)))).toBeLessThanOrEqual(12);

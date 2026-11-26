@@ -275,10 +275,17 @@ export function unifiedMenu(role: string | null | undefined, allows?: Allows): A
  * `pageListed` rule as `unifiedMenu` decides, so a page the person cannot open never appears.
  * Top-level count = staff entries + 1 (at most 10 for the owner; the limit is 12).
  */
+/** Admin pages that render exactly the same component as a staff page (src/pages/admin/AdminReservations.tsx wraps StaffReservations). */
+const SAME_SCREEN: Record<string, string> = { "/admin/reservations": "/staff/reservations" };
 export interface MenuGroup { title: string; items: NavPage[] }
 export function groupedMenu(role: string | null | undefined, allows?: Allows): { top: Array<NavPage & { members?: string[] }>; adminGroups: MenuGroup[] } {
   const top = staffMenu(role, allows);
-  const adminGroups = adminNav(role, allows);
+  // An admin link that opens the very same screen as a staff entry the person already sees is not listed twice.
+  // Only presentation: the route stays open, and a person without the staff entry keeps the admin one.
+  const shown = new Set(top.flatMap((t) => [t.path, ...(t.members ?? [])]));
+  const adminGroups = adminNav(role, allows)
+    .map((g) => ({ ...g, items: g.items.filter((p) => !(SAME_SCREEN[p.path] && shown.has(SAME_SCREEN[p.path]))) }))
+    .filter((g) => g.items.length > 0);
   return { top, adminGroups };
 }
 /** Top-level entries a person sees in the grouped menu. */
