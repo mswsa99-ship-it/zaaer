@@ -234,7 +234,7 @@ export default function Tickets() {
                   {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}{branchOf(r.branch_id) ? ` — ${branchOf(r.branch_id)}` : ""}</option>)}
                 </select>
               </Field>
-              {dupOpen.length > 0 && <p className="rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700" role="status" data-testid="ticket-dup-note">يوجد {dupOpen.length === 1 ? "بلاغ مفتوح" : `${dupOpen.length} بلاغات مفتوحة`} على هذه الوحدة: «{dupOpen[0].title}». يمكنك إنشاء بلاغ جديد إن كان العطل مختلفًا.</p>}
+              {dupOpen.length > 0 && <p className="rounded-xl bg-rai-warning-tint px-3 py-2 text-sm text-rai-warning" role="status" data-testid="ticket-dup-note">يوجد {dupOpen.length === 1 ? "بلاغ مفتوح" : `${dupOpen.length} بلاغات مفتوحة`} على هذه الوحدة: «{dupOpen[0].title}». يمكنك إنشاء بلاغ جديد إن كان العطل مختلفًا.</p>}
               <Field label="العنوان" error={fieldErr.title}><input value={newTitle} onChange={(e) => { setNewTitle(e.target.value); setFieldErr((f) => ({ ...f, title: undefined })); }} className="input" aria-invalid={fieldErr.title ? true : undefined} /></Field>
               <div><label className="label">الوصف</label><textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} className="input" rows={2} /></div>
               {formError && <ErrorBanner message={formError} />}
