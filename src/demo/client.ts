@@ -146,7 +146,7 @@ let requestHeaders: Record<string, string> | null = null;
 function demoLatency(target: string, detail: string[]): number {
   const f = (globalThis as { __demoLatency?: (t: string, d: string[]) => unknown }).__demoLatency;
   if (typeof f !== "function") return 0;
-  try { const n = Number(f(target, detail)); return Number.isFinite(n) && n > 0 ? Math.min(n, 10_000) : 0; } catch { return 0; }
+  try { const n = Number(f(target, detail)); return Number.isFinite(n) && n > 0 ? Math.min(n, 120_000) : 0; } catch { return 0; }
 }
 /** Test hook (end-to-end tests only): `window.__demoFail(target, detail)` returns an error message to make that read
  *  (target = table) or RPC (target = "rpc:<name>") or Edge Function call (target = "fn:<name>") fail, so a test can
