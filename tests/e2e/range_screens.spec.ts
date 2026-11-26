@@ -55,23 +55,23 @@ test.describe("centre tab strip", () => {
       const strip = page.getByTestId("hub-tabs");
       const tab = strip.locator('[aria-current="page"]');
       await expect(tab).toBeVisible();
-      const s = await strip.boundingBox(); const t = await tab.boundingBox();
-      expect(t!.x).toBeGreaterThanOrEqual(s!.x - 1);
-      expect(t!.x + t!.width).toBeLessThanOrEqual(s!.x + s!.width + 1);
+      // the strip centres the open tab after it renders: poll until it has, the bounds must still hold
+      await expect.poll(async () => { const s = await strip.boundingBox(); const t = await tab.boundingBox(); return !!s && !!t && t.x >= s.x - 1 && t.x + t.width <= s.x + s.width + 1; }).toBe(true);
     }
     await page.screenshot({ path: "/tmp/proof/rng4-tab-in-view.png" });
   });
 });
 
 test.describe("grouped navigation (Review in Finance, Codes and Reports in Room Service)", () => {
-  const tabNames = async (page: import("@playwright/test").Page) => (await page.getByTestId("hub-tabs").locator("a").allInnerTexts()).map((t) => t.trim());
+  // readiness: the (lazy) page has rendered its strip before the tab names are read
+  const tabNames = async (page: import("@playwright/test").Page) => { await expect(page.getByTestId("hub-tabs").locator("a").first()).toBeVisible(); return (await page.getByTestId("hub-tabs").locator("a").allInnerTexts()).map((t) => t.trim()); };
   test("RNG6 owner: Finance strip has Review tabs; old deep links still open; Room Service strip has Codes and Reports", async ({ page, loginAs }) => {
     await loginAs("owner");
     await page.goto("/#/staff/day-close", { waitUntil: "networkidle" });
     expect(await tabNames(page)).toEqual(expect.arrayContaining(["إقفال اليوم", "مطابقة المنصات", "المدفوعات"]));
     await expect(page.getByTestId("hub-tabs").locator('[aria-current="page"]')).toHaveText(/إقفال اليوم/);
     await page.goto("/#/staff/codes", { waitUntil: "networkidle" });
-    expect(await tabNames(page)).toEqual(expect.arrayContaining(["الرموز", "البلاغات"]));
+    await expect.poll(() => tabNames(page)).toEqual(expect.arrayContaining(["الرموز", "البلاغات"]));   // a hash change keeps the old strip until the lazy page arrives
     await page.goto("/#/staff/tickets", { waitUntil: "networkidle" });
     await expect(page.getByTestId("hub-tabs").locator('[aria-current="page"]')).toHaveText(/البلاغات/);
   });
@@ -91,6 +91,7 @@ test.describe("grouped navigation (Review in Finance, Codes and Reports in Room 
     expect(names).toEqual(expect.arrayContaining(["دفتر الحركة", "إقفال اليوم"]));
     expect(names).not.toContain("مطابقة المنصات");
     await page.goto("/#/staff/tickets", { waitUntil: "networkidle" });
+    await expect(page.getByTestId("hub-tabs").locator('[aria-current="page"]')).toHaveText(/البلاغات/);   // the tickets page is the one showing
     expect(await tabNames(page)).not.toContain("الرموز");
   });
   test("RNG9 supervisor: Finance strip shows only what the supervisor could open before", async ({ page, loginAs }) => {
