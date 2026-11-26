@@ -17,3 +17,25 @@ test("PS1 195px: after selecting, the confirm button is reachable (not under the
   for (const h of heights) expect(h).toBeLessThan(1.6);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(195);
 });
+
+test("PS2 one confirm summary, in the group of the last tap; the total is the whole selection and two platforms cannot be confirmed together", async ({ page, loginAs, go }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginAs("finance");
+  await go("/admin/platform-payouts");
+  const bars = page.getByTestId("payout-confirm-bar");
+  const groups = page.getByTestId("platform-payment");
+  await page.getByRole("button", { name: "تحديد الكل" }).first().click();
+  await expect(bars).toHaveCount(1);
+  const first = await bars.first().innerText();
+  await page.getByRole("button", { name: "تحديد الكل" }).first().click();   // the other platform's group
+  await expect(bars).toHaveCount(1);                                         // still one summary, never one per group
+  const both = await bars.first().innerText();
+  expect(both).toContain("من 2 مجموعات");
+  expect(both).toContain("اختر دفعات منصة واحدة");
+  await expect(page.getByRole("button", { name: "تأكيد إيداع المنصة" })).toBeDisabled();
+  expect(first).not.toContain("اختر دفعات منصة واحدة");
+  expect(await groups.count()).toBeGreaterThan(2);
+  await page.getByRole("button", { name: "إلغاء التحديد" }).first().click();    // clear the first group again
+  await expect(bars).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "تأكيد إيداع المنصة" })).toBeEnabled();
+});

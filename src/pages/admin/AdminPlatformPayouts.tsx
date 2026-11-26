@@ -33,6 +33,7 @@ export default function AdminPlatformPayouts() {
   const canCancel = canFull("platform.payouts") && !allBranches;
   const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<string | null>(null);   // the group of the last tap: the one confirm summary sits in it
   const [confirming, setConfirming] = useState(false);
   const [cancelFor, setCancelFor] = useState<Payout | null>(null);
   const [reason, setReason] = useState("");
@@ -67,6 +68,8 @@ export default function AdminPlatformPayouts() {
   }, [unsettled]);
   const chosen = unsettled.filter((x) => picked.has(x.id));
   const chosenSources = [...new Set(chosen.map((x) => x.source_id))];
+  const pickedGroupKeys = groups.filter((g) => g.items.some((x) => picked.has(x.id))).map((g) => `${g.branch_id}|${g.source_id}|${g.month}`);
+  const barKey = anchor && pickedGroupKeys.includes(anchor) ? anchor : pickedGroupKeys[0];   // one summary only, in the group of the last tap
   const expected = chosen.reduce((s, x) => s + x.signed_halalas, 0);
   // 0051: the platform keeps its commission; what should arrive is the gross less it (rounded to the halala, as the server)
   const bp = chosenSources.length === 1 ? (chosen[0]?.commission_bp ?? 0) : 0;
@@ -76,7 +79,7 @@ export default function AdminPlatformPayouts() {
   if (q.loading) return <LoadingScreen />;
   const sourceName = (id: string) => sources.find((s) => s.id === id)?.name ?? "—";
   const accountName = (id: string) => { const a = accounts.find((x) => x.id === id); return a ? accountLabel(a) : "—"; };
-  const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggle = (id: string, key?: string) => { if (key) setAnchor(key); setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); };
   const activeAccounts = accounts.filter((a) => !a.archived_at && a.is_active);
 
   return (
@@ -91,34 +94,35 @@ export default function AdminPlatformPayouts() {
           {groups.map((g) => {
             const total = g.items.reduce((s, x) => s + x.signed_halalas, 0);
             const allIn = g.items.every((x) => picked.has(x.id));
+            const gKey = `${g.branch_id}|${g.source_id}|${g.month}`;
             return (
               <Card key={`${g.branch_id}|${g.source_id}|${g.month}`}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-ink-800">{g.source} · {monthName(g.month)}</p>
                   {allBranches && <Badge className="max-w-full whitespace-normal" testId="payout-branch">{branchName(g.branch_id)}</Badge>}
                   {allBranches && g.branch_id && <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="payout-open-branch" onClick={() => setBranchId(g.branch_id!)} aria-label={`فتح فرع ${branchName(g.branch_id)} لمطابقة ${g.source}`}>فتح الفرع للمطابقة</button>}
-                  <div className="flex items-center gap-3 text-sm"><span className="text-ink-500">{COUNT.payment(g.items.length)} · <span dir="ltr">{sar(total)}</span></span>
-                    {!allBranches && <button type="button" className="btn-ghost text-xs" onClick={() => setPicked((s) => { const n = new Set(s); for (const x of g.items) { if (allIn) n.delete(x.id); else n.add(x.id); } return n; })}>{allIn ? "إلغاء التحديد" : "تحديد الكل"}</button>}</div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"><span className="text-ink-500">{COUNT.payment(g.items.length)} · <span dir="ltr" className="whitespace-nowrap">{sar(total)}</span></span>
+                    {!allBranches && <button type="button" className="btn-ghost text-xs" onClick={() => { setAnchor(gKey); setPicked((s) => { const n = new Set(s); for (const x of g.items) { if (allIn) n.delete(x.id); else n.add(x.id); } return n; }); }}>{allIn ? "إلغاء التحديد" : "تحديد الكل"}</button>}</div>
                 </div>
                 <div className="divide-y divide-ink-50 text-sm">
                   {g.items.map((x) => (
-                    <label key={x.id} className={`flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 sm:flex-nowrap ${allBranches ? "" : "cursor-pointer"}`} data-testid="platform-payment">
-                      {!allBranches && <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id)} />}
+                    <label key={x.id} className={`flex min-h-[44px] flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 sm:flex-nowrap ${allBranches ? "" : "cursor-pointer"}`} data-testid="platform-payment">
+                      {!allBranches && <input type="checkbox" className="h-5 w-5 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id, gKey)} />}
                       <span className="font-mono text-xs">{x.number}</span>
                       <span className="order-last min-w-0 basis-full break-words text-ink-600 sm:order-none sm:flex-1 sm:basis-auto sm:truncate">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr" className="whitespace-nowrap">{x.check_in}</span></span>
                       <span dir="ltr" className={`shrink-0 whitespace-nowrap ${x.kind === "refund" ? "text-danger-600" : "text-ink-800"}`}>{sar(x.signed_halalas)}</span>
                     </label>
                   ))}
                 </div>
+                {!allBranches && g.items.some((x) => picked.has(x.id)) && gKey === barKey && (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white p-3" data-testid="payout-confirm-bar">
+      <span className="text-sm text-ink-700">{COUNT.payment(chosen.length)}{pickedGroupKeys.length > 1 ? ` من ${pickedGroupKeys.length} مجموعات` : ""} · المتوقع <span dir="ltr" className="font-semibold">{sar(net)}</span>{bp > 0 && <span className="text-ink-500"> (بعد عمولة <span dir="ltr">{bpToPercent(bp)}%</span>)</span>}{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
+      <button type="button" className="btn-primary text-sm" disabled={chosenSources.length !== 1} onClick={() => { setForm({ received: net, on: todayISO(), account: activeAccounts.find((a) => a.is_default)?.id ?? activeAccounts[0]?.id ?? "", reference: "", note: "" }); setConfirming(true); }}>تأكيد إيداع المنصة</button>
+    </div>
+                )}
               </Card>
             );
           })}
-        </div>
-      )}
-      {chosen.length > 0 && (
-        <div className="mt-4 flex lg:sticky lg:bottom-4 flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white p-3 shadow-lg">
-          <span className="text-sm text-ink-700">{COUNT.payment(chosen.length)} · المتوقع <span dir="ltr" className="font-semibold">{sar(net)}</span>{bp > 0 && <span className="text-ink-500"> (بعد عمولة <span dir="ltr">{bpToPercent(bp)}%</span>)</span>}{chosenSources.length > 1 && <span className="mr-2 text-danger-600">— اختر دفعات منصة واحدة</span>}</span>
-          <button type="button" className="btn-primary text-sm" disabled={chosenSources.length !== 1} onClick={() => { setForm({ received: net, on: todayISO(), account: activeAccounts.find((a) => a.is_default)?.id ?? activeAccounts[0]?.id ?? "", reference: "", note: "" }); setConfirming(true); }}>تأكيد إيداع المنصة</button>
         </div>
       )}
 
