@@ -31,5 +31,30 @@ C=$(psql -d $DB -Atc "select count(*) from property_policies where topic='checki
 fail=0
 if [[ "$A" == "{"* && "$B" == *"ERROR"* ]]; then echo "PASS IC01 second concurrent apply of the same preview is refused ($B)"; else echo "FAIL IC01 A=$A B=$B"; fail=1; fi
 if [[ "$M" == 1 && "$C" == 2 ]]; then echo "PASS IC02 exactly one master ($M) and two linked branch rows ($C)"; else echo "FAIL IC02 masters=$M linked=$C"; fail=1; fi
+
+# ---- knowledge: IC03 same preview applied twice at once; IC04 two branch overrides of one entry at once ----
+psql -d $DB -q -v ON_ERROR_STOP=1 -c "insert into knowledge_entries(id, organization_id, branch_id, category, question, keywords, answer, is_public, is_active, priority) values ('ac400000-0000-4000-8000-000000000001','ac000000-0000-4000-8000-000000000001',null,'general','هل يوجد موقف؟',array['موقف'],'نعم مجانًا',true,true,1)" 2>&1 | grep -i error
+E=ac400000-0000-4000-8000-000000000001; BR1=ac010000-0000-4000-8000-000000000001
+KD='{"answer":"نعم بمقابل رمزي","version":1}'
+KV=$(psql -d $DB -At <<SQL | tail -1
+set role authenticated; select in_login('ac200000-0000-4000-8000-000000000001');
+select fn_knowledge_main_preview('$E', '$KD'::jsonb);
+SQL
+)
+KAPPLY="select fn_knowledge_main_apply('$E', '$KD'::jsonb || jsonb_build_object('token', '$(echo "$KV"|jq -r .token)'))"
+krun() { psql -d $DB -At 2>&1 <<SQL | grep -E "ERROR|^\{" | head -1
+set role authenticated; select in_login('ac200000-0000-4000-8000-000000000001');
+begin; $1; select pg_sleep($2); commit;
+SQL
+}
+krun "$KAPPLY" 3 > "$OUT" & sleep 1
+KB=$(krun "$KAPPLY" 0); wait; KA=$(cat "$OUT")
+KVER=$(psql -d $DB -Atc "select version from knowledge_entries where id='$E'")
+if [[ "$KA" == "{"* && "$KB" == *"PREVIEW_STALE"* ]]; then echo "PASS IC03 second concurrent knowledge apply of the same preview is refused ($KB), version now $KVER"; else echo "FAIL IC03 A=$KA B=$KB"; fail=1; fi
+OV="select fn_knowledge_branch_override('$E', '$BR1', '{\"answer\":\"نص الفرع\"}'::jsonb)"
+krun "$OV" 3 > "$OUT" & sleep 1
+OB=$(krun "$OV" 0); wait; OA=$(cat "$OUT")
+N=$(psql -d $DB -Atc "select count(*) from knowledge_entries where overrides_entry_id='$E' and branch_id='$BR1' and archived_at is null")
+if [[ "$N" == 1 && "$OA" == "{"* && "$OB" == "{"* ]]; then echo "PASS IC04 two concurrent overrides of one entry give exactly one branch row (second returned the existing one)"; else echo "FAIL IC04 rows=$N A=$OA B=$OB"; fail=1; fi
 psql -d postgres -qc "drop database $DB"
 exit $fail

@@ -7,6 +7,8 @@ import { supabase } from "./supabase";
 export interface KnowledgeRow {
   id: string;
   branch_id: string | null;
+  /** set on a branch's own version of a hotel-level entry (migration 0149) */
+  overrides_entry_id?: string | null;
   category: KnowledgeCategory;
   question: string;
   keywords: string[];
@@ -64,7 +66,7 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 export const knowledgeApi = {
   list: async (branchId: string, includeArchived = false) => {
     let q = supabase.from("knowledge_entries")
-      .select("id, branch_id, category, question, keywords, answer, answer_en, is_public, is_active, priority, used_count, last_used_at, version, archived_at, archive_reason, updated_at")
+      .select("id, branch_id, overrides_entry_id, category, question, keywords, answer, answer_en, is_public, is_active, priority, used_count, last_used_at, version, archived_at, archive_reason, updated_at")
       .or(`branch_id.eq.${branchId},branch_id.is.null`)
       .order("priority", { ascending: false }).order("used_count", { ascending: false }).order("updated_at", { ascending: false });
     if (!includeArchived) q = q.is("archived_at", null);
@@ -91,4 +93,12 @@ export const knowledgeApi = {
 export function suggestKeywords(question: string): string[] {
   const stop = new Set(["هل", "ما", "ماذا", "من", "في", "فيه", "على", "عن", "كيف", "متى", "أين", "وين", "يوجد", "توجد", "عندكم", "لديكم", "ممكن", "أبي", "أبغى", "أريد", "هو", "هي", "إلى", "أو", "كم", "هناك", "تقدمون", "توفرون", "يتوفر", "تتوفر", "لو", "سمحت", "is", "are", "there", "do", "you", "have", "the", "a", "an", "any", "can", "i", "we", "of", "to", "in", "at", "for", "what", "where", "when", "how"]);
   return [...new Set(question.split(/[^\p{L}\p{N}]+/u).map((w) => w.replace(/^(ال|وال|بال|لل)/, "")).filter((w) => w.length >= 3 && !stop.has(w)))].slice(0, 6);
+}
+
+/** Raw rows list both a hotel-level entry and a branch's own version of it. This keeps what answers guests for the branch:
+ *  the branch's own version replaces the hotel-level entry it overrides. For display of "what guests get". Editing screens
+ *  should keep the raw rows so the hotel-level entry stays reachable. */
+export function effectiveKnowledgeRows(rows: KnowledgeRow[]): KnowledgeRow[] {
+  const overridden = new Set(rows.filter((r) => r.overrides_entry_id && !r.archived_at).map((r) => r.overrides_entry_id as string));
+  return rows.filter((r) => !(r.branch_id === null && overridden.has(r.id)));
 }

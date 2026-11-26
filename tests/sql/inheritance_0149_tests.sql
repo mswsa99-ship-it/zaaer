@@ -219,6 +219,17 @@ do $$ declare mid uuid; pid uuid; begin
   perform set_config('app.policy_sync', '', true);
   perform in_rec('IN41 the marker is not left set after the RPCs', coalesce(current_setting('app.policy_sync', true), '') = '');
 end $$;
+
+-- another hotel's master id: refused cleanly at the preview, same as an unknown id
+reset role;
+create or replace function in_other_master() returns uuid language sql security definer as $$
+  with ins as (insert into policy_masters(id, organization_id, topic, title, content_ar) values (extensions.gen_random_uuid(), 'ac000000-0000-4000-8000-000000000002', 'wifi', 't', 't') returning id) select id from ins $$;
+set role authenticated; select in_login('ac200000-0000-4000-8000-000000000001');
+do $$ declare oid uuid := in_other_master(); begin
+  begin perform fn_policy_master_preview(jsonb_build_object('id', oid, 'topic', 'wifi', 'title', 'x', 'content_ar', 'y'));
+    perform in_rec('IN42 another hotel master id is refused at the preview', false);
+  exception when others then perform in_rec('IN42 another hotel master id is refused at the preview', sqlerrm like '%NOT_FOUND%', sqlerrm); end;
+end $$;
 reset role;
 select 'FAIL' as result, name, detail from test_results where not ok;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from test_results;

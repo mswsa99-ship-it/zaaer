@@ -151,6 +151,8 @@ begin
     select m into old from jsonb_array_elements(fn_policy_masters_of(p_org)) m where (m->>'id')::uuid = v_id;
     -- an id with no stored text and no version is the id the preview handed out for a new policy
     if old is null and (p->>'version') is not null then raise exception 'NOT_FOUND'; end if;
+    -- an id that belongs to another hotel is refused the same way as an unknown one (no hint that it exists)
+    if old is null and exists (select 1 from policy_masters where id = v_id) then raise exception 'NOT_FOUND'; end if;
   end if;
   v_topic := coalesce(old->>'topic', p->>'topic');
   if v_topic is null or v_topic not in ('checkin','cancellation','wifi','parking','location','children','contact','stay','privacy','other') then
@@ -544,6 +546,9 @@ end $$;
 revoke all on function fn_knowledge_main_apply(uuid, jsonb) from public, anon;
 grant execute on function fn_knowledge_main_apply(uuid, jsonb) to authenticated;
 
+-- one live override per branch and shared entry, whatever the callers do
+create unique index if not exists knowledge_one_override_per_branch on knowledge_entries(overrides_entry_id, branch_id) where overrides_entry_id is not null and archived_at is null;
+
 -- a branch makes its own version of a shared entry (a copy it may then edit through the normal upsert)
 create or replace function fn_knowledge_branch_override(p_entry uuid, p_branch uuid, p jsonb default '{}'::jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -551,6 +556,7 @@ declare v_org uuid := fn_user_org_id(); k knowledge_entries%rowtype; o knowledge
 begin
   perform fn_require_cap('knowledge');
   perform fn_require_branch(p_branch);
+  perform pg_advisory_xact_lock(hashtextextended('knowledge_entry:' || p_entry::text, 0));   -- same lock as the hotel-level apply
   select * into k from knowledge_entries where id = p_entry and organization_id = v_org and branch_id is null and archived_at is null;
   if not found then raise exception 'NOT_FOUND'; end if;
   if not exists (select 1 from branches where id = p_branch and organization_id = v_org and archived_at is null) then raise exception 'NOT_FOUND'; end if;
