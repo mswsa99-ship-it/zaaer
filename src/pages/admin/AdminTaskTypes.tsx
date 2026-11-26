@@ -2,12 +2,13 @@ import { useState } from "react";
 import { ListChecks, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
 import { opsApi } from "../../lib/api";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 
-interface TaskType { id: string; code: string | null; name: string; description: string | null; is_active: boolean; archived_at: string | null; version: number; used?: number }
+interface TaskType { branch_id?: string; id: string; code: string | null; name: string; description: string | null; is_active: boolean; archived_at: string | null; version: number; used?: number }
 
 const NO_ROWS: TaskType[] = [];
 
@@ -16,14 +17,15 @@ export default function AdminTaskTypes() {
   const [draft, setDraft] = useState<Partial<TaskType> | null>(null);
 
   // G24 (decision 40): the definitions of the active branch only
+  const { branches, allBranches, setBranchId } = useBranch();
   const q = useBranchQuery<TaskType[]>(async (branchId) => {
     const [t, u] = await Promise.all([
       supabase.from("task_types").select("id, code, name, description, is_active, archived_at, version").eq("branch_id", branchId).order("name"),
       supabase.from("housekeeping_tasks").select("task_type_id").eq("branch_id", branchId),
     ]);
     const used = new Map<string, number>(); for (const x of (u.data ?? []) as { task_type_id: string }[]) used.set(x.task_type_id, (used.get(x.task_type_id) ?? 0) + 1);
-    return (must(t) as TaskType[]).map((x) => ({ ...x, used: used.get(x.id) ?? 0 }));
-  }, [], NO_ROWS);
+    return (must(t) as TaskType[]).map((x) => ({ ...x, branch_id: branchId, used: used.get(x.id) ?? 0 }));
+  }, [], NO_ROWS, { merge: (parts) => parts.flat() });
   const rows = q.data; const load = q.reload; const branchId = q.branchId;
 
   if (q.loading) return <LoadingScreen />;
@@ -31,7 +33,7 @@ export default function AdminTaskTypes() {
   return (
     <div>
       <SectionTitle title="أنواع المهام" subtitle="تعريف قابل لإعادة الاستخدام؛ المهمة الفعلية تُنشأ من شاشة خدمة الغرف" action={
-        <div className="flex items-center gap-3"><BranchPicker /><button onClick={() => setDraft({ name: "", description: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> نوع جديد</button></div>} />
+        <div className="flex items-center gap-3"><BranchPicker allowAll />{!allBranches && <button onClick={() => setDraft({ name: "", description: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> نوع جديد</button>}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<ListChecks className="h-10 w-10" />} title="لا توجد أنواع مهام" /> : (
@@ -42,9 +44,10 @@ export default function AdminTaskTypes() {
                 <div>
                   <div className="flex items-center gap-2"><h3 className="font-semibold text-ink-800">{r.name}</h3>{r.code && <Badge className="bg-brand-50 text-brand-700">نظامي</Badge>}<ArchivedBadge archivedAt={r.archived_at} />{!r.is_active && !r.archived_at && <Badge className="bg-warning-500/10 text-warning-700">معطل</Badge>}</div>
                   <p className="text-xs text-ink-400">مهام مسجلة: {r.used}{r.code === "room_cleaning" ? " · يُستخدم تلقائيًا بعد المغادرة" : ""}</p>
+                  {allBranches && r.branch_id && <p className="mt-1"><Badge testId="admin-row-branch">{branches.find((x) => x.id === r.branch_id)?.name_ar}</Badge></p>}
                   {r.description && <p className="mt-1 text-sm text-ink-500">{r.description}</p>}
                 </div>
-                <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل نوع المهمة" title="تعديل"><Pencil className="h-4 w-4" /></button>
+                {allBranches ? <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع النوع ${r.name} للتعديل`}>فتح الفرع</button> : <button onClick={() => setDraft(r)} className="btn-ghost p-1.5" aria-label="تعديل نوع المهمة" title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
             </Card>
           ))}

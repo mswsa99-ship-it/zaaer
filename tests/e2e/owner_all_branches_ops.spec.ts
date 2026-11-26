@@ -102,7 +102,7 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     await expect(page.getByRole("button", { name: /^تعديل الوحدة J-1/ })).toBeVisible();   // edit is back, on that branch
   });
 
-  for (const [route, noAdd, editName, label] of [["/#/admin/services", /خدمة جديدة/, /^تعديل الخدمة$/, "services"], ["/#/admin/facilities", /مرفق جديد/, /^تعديل المرفق$/, "facilities"]] as const) {
+  for (const [route, noAdd, editName, label] of [["/#/admin/services", /خدمة جديدة/, /^تعديل الخدمة$/, "services"], ["/#/admin/facilities", /مرفق جديد/, /^تعديل المرفق$/, "facilities"], ["/#/admin/room-categories", /نوع جديد/, /^تعديل (?!فرع)/, "room categories"], ["/#/admin/task-types", /نوع جديد/, /^تعديل نوع المهمة$/, "task types"]] as const) {
     test(`AB-R2 admin ${label}: the owner's all-branches list merges both branches with a branch tag, offers no add or edit, and a row opens its own branch`, async ({ page, loginAs }) => {
       await loginAs("owner");
       await page.goto(route, { waitUntil: "networkidle" });
@@ -120,7 +120,7 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
 
   test("AB-N1 a supervisor keeps single-branch pages (no «جميع الفروع» anywhere on them)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
-    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey", "/#/admin/rooms", "/#/admin/services", "/#/admin/facilities"]) {
+    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey", "/#/admin/rooms", "/#/admin/services", "/#/admin/facilities", "/#/admin/room-categories", "/#/admin/task-types"]) {
       await page.goto(u, { waitUntil: "networkidle" });
       await expect(page.getByText("جميع الفروع")).toHaveCount(0);
     }
