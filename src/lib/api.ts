@@ -929,7 +929,7 @@ export interface Quote {
   discount_max?: number; supervisor_discount_max?: number; supervisor_max_discount_bp?: number;
 }
 export interface RateDay { night: string; price: number | null; platform_price: number | null; available: number }
-export interface RateCategory { id: string; name: string; base_price: number; weekly_price: number | null; monthly_price: number | null; min_nightly: number | null; price_mode: "unified" | "by_channel"; units: number; days: RateDay[] }
+export interface RateCategory { branch_id?: string; id: string; name: string; base_price: number; weekly_price: number | null; monthly_price: number | null; min_nightly: number | null; price_mode: "unified" | "by_channel"; units: number; days: RateDay[] }
 export interface RateCalendar { today: string; from: string; to: string; categories: RateCategory[] }
 export interface DiscountAllowance { rent: number; discounts: number; nights: number; after_arrival: boolean; max: number; percent_bp: number; min_nightly: number | null; unlimited: boolean }
 export interface StayNight { night: string; price: number; basis: PriceRun["basis"]; status: "active" | "removed"; removed_at: string | null; removed_reason: string | null }

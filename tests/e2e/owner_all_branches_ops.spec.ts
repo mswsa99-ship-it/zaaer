@@ -180,3 +180,19 @@ test("KB-R1 the rooms board never says «must change» for a unit that simply ha
   expect(text).toContain("الرمز غير جاهز");
   expect(text).not.toContain("يجب تغيير الرمز");
 });
+
+test("AB-R3 rates: the owner's all-branches calendar stacks both branches read-only with a branch tag, and a row opens its own branch for editing", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/rates", { waitUntil: "networkidle" });
+  const pick = page.locator(`select[aria-label="الفرع النشط"]`).first();
+  await pick.selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("rates-branch").first().waitFor();
+  const tags = await page.getByTestId("rates-branch").allInnerTexts();
+  expect(new Set(tags).size).toBe(2);
+  expect(await page.getByTestId("rates-cell").first().isDisabled()).toBe(true);
+  await expect(page.getByRole("button", { name: "تعديل المحدد" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /تعديل مجموعة/ })).toHaveCount(0);
+  await page.getByTestId("rates-open-branch").first().click();
+  await expect(page.getByTestId("rates-branch")).toHaveCount(0);
+  expect(await page.getByTestId("rates-cell").first().isDisabled()).toBe(false);
+});

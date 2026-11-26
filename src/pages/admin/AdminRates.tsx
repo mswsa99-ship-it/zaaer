@@ -9,8 +9,9 @@
 import { useMemo, useState } from "react";
 import { CalendarRange, ChevronRight, ChevronLeft, Layers, X } from "lucide-react";
 import { useBranchQuery } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
 import { ratesApi, toArabicError, type RateCalendar, type RateCategory } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard, EmptyState } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, ErrorBanner, LoadErrorCard, EmptyState, Badge } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
 import { formatCurrency, todayISO, addDaysISO } from "../../lib/utils";
@@ -36,8 +37,14 @@ export default function AdminRates() {
   const [notice, setNotice] = useState<string | null>(null);
 
   // G24 (decision 40): the active branch's calendar for a 4-week window
-  const q = useBranchQuery<RateCalendar>((branchId) => ratesApi.calendar(branchId, start, addDaysISO(start, WINDOW - 1)), [start, tick], NO_DATA);
+  // «جميع الفروع» (owner): every branch's calendar, stacked and read-only; a price is only ever edited inside one branch
+  const { branches, allBranches, setBranchId } = useBranch();
+  const q = useBranchQuery<RateCalendar>(
+    (branchId) => ratesApi.calendar(branchId, start, addDaysISO(start, WINDOW - 1)).then((c) => ({ ...c, categories: c.categories.map((x) => ({ ...x, branch_id: branchId })) })),
+    [start, tick], NO_DATA,
+    { merge: (parts) => ({ ...parts[0], categories: parts.flatMap((x) => x.categories) }) });
   const cal = q.data; const branchId = q.branchId;
+  const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
   const nights = useMemo(() => cal.categories[0]?.days.map((d) => d.night) ?? Array.from({ length: WINDOW }, (_, i) => addDaysISO(start, i)), [cal, start]);
 
   if (q.loading && !cal.categories.length) return <LoadingScreen />;
@@ -60,7 +67,7 @@ export default function AdminRates() {
 
   return (
     <div>
-      <SectionTitle title="تقويم الأسعار" subtitle="الأنواع في صفوف والليالي في أعمدة. الرمادي سعر النوع الأساسي (لا سعر في التقويم). تعديل الأسعار لا يمس حجزًا قائمًا." action={<BranchPicker />} />
+      <SectionTitle title="تقويم الأسعار" subtitle="الأنواع في صفوف والليالي في أعمدة. الرمادي سعر النوع الأساسي (لا سعر في التقويم). تعديل الأسعار لا يمس حجزًا قائمًا." action={<BranchPicker allowAll />} />
       {q.error && <div className="mb-4">{cal.categories.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
       {notice && <p className="mb-4 rounded-xl bg-success-500/10 px-3 py-2 text-sm text-success-600" role="status">{notice}</p>}
 
@@ -70,12 +77,12 @@ export default function AdminRates() {
         <button type="button" className="btn-outline px-2 text-sm" onClick={() => setStart(addDaysISO(start, 14))} aria-label="الأسبوعان التاليان"><ChevronLeft className="h-4 w-4" /></button>
         <input type="date" className="input w-auto py-1.5 text-sm" dir="ltr" value={start} onChange={(e) => e.target.value && setStart(e.target.value)} aria-label="بداية العرض" />
         <div className="flex-1" />
-        {selection.length > 0 && <>
+        {!allBranches && selection.length > 0 && <>
           <span className="text-sm text-ink-600">المحددة: {selection.length}</span>
           <button type="button" className="btn-ghost text-sm" onClick={() => setPicked(new Map())}><X className="h-4 w-4" /> إلغاء التحديد</button>
           <button type="button" className="btn-primary text-sm" onClick={() => setEditing(true)}>تعديل المحدد</button>
         </>}
-        <button type="button" className="btn-outline text-sm" onClick={() => setGrouping(true)} disabled={!cal.categories.length}><Layers className="h-4 w-4" /> تعديل مجموعة</button>
+        {!allBranches && <button type="button" className="btn-outline text-sm" onClick={() => setGrouping(true)} disabled={!cal.categories.length}><Layers className="h-4 w-4" /> تعديل مجموعة</button>}
       </div>
 
       {cal.categories.length === 0 ? (!q.error && <EmptyState icon={<CalendarRange className="h-10 w-10" />} title="لا توجد أنواع وحدات في هذا الفرع" description="أضف نوع وحدة أولًا من «أنواع الوحدات»." />) : (
@@ -92,12 +99,12 @@ export default function AdminRates() {
               </tr>
             </thead>
             <tbody>
-              {cal.categories.map((c) => <TypeRows key={c.id} c={c} past={isPast} picked={picked} onPick={toggle} />)}
+              {cal.categories.map((c) => <TypeRows key={c.branch_id ? `${c.branch_id}:${c.id}` : c.id} c={c} past={isPast} picked={picked} onPick={toggle} readOnly={allBranches} branchName={allBranches ? branchName(c.branch_id) : undefined} onOpen={c.branch_id ? () => setBranchId(c.branch_id!) : undefined} />)}
             </tbody>
           </table>
         </Card>
       )}
-      <p className="mt-3 text-[11px] text-ink-400">اضغط خانة لتحديدها، وShift مع الضغط لتحديد مدى في الصف نفسه. «المتوفر» للعرض: الوحدات الفعّالة ناقص الحجوزات المؤكدة والمقيمة تلك الليلة. الأسبوعي والشهري والحد الأدنى في «أنواع الوحدات»؛ التأمين في إعدادات الفرع.</p>
+      <p className="mt-3 text-[11px] text-ink-400">{allBranches && <b className="block">عرض جميع الفروع للقراءة فقط: لتعديل سعر افتح الفرع.</b>}اضغط خانة لتحديدها، وShift مع الضغط لتحديد مدى في الصف نفسه. «المتوفر» للعرض: الوحدات الفعّالة ناقص الحجوزات المؤكدة والمقيمة تلك الليلة. الأسبوعي والشهري والحد الأدنى في «أنواع الوحدات»؛ التأمين في إعدادات الفرع.</p>
 
       <Modal open={editing} title={`تعديل المحدد (${selection.length})`} onClose={() => setEditing(false)}>
         {editing && branchId && <EditSelection branchId={branchId} cells={selection} categories={cal.categories} onDone={(n) => { setEditing(false); setNotice(`حُدِّثت الخانات: ${n}.`); reload(); }} />}
@@ -109,7 +116,7 @@ export default function AdminRates() {
   );
 }
 
-function TypeRows({ c, past, picked, onPick }: { c: RateCategory; past: (night: string) => boolean; picked: Map<string, Cell>; onPick: (cell: Cell, range: boolean) => void }) {
+function TypeRows({ c, past, picked, onPick, readOnly = false, branchName, onOpen }: { c: RateCategory; past: (night: string) => boolean; picked: Map<string, Cell>; onPick: (cell: Cell, range: boolean) => void; readOnly?: boolean; branchName?: string; onOpen?: () => void }) {
   const rows: Row[] = c.price_mode === "by_channel" ? ["price", "platform"] : ["price"];
   const label = (r: Row) => (r === "platform" ? "سعر المنصات" : c.price_mode === "by_channel" ? "سعر النظام" : "السعر");
   return (
@@ -117,6 +124,7 @@ function TypeRows({ c, past, picked, onPick }: { c: RateCategory; past: (night: 
       <tr data-testid="rates-type" data-type={c.name}>
         <th scope="row" className="sticky right-0 z-10 border-l border-t border-ink-100 bg-white px-3 pb-1 pt-2 text-right align-top font-normal">
           <div className="font-semibold text-ink-800">{c.name}</div>
+          {readOnly && branchName && <div className="mt-0.5 flex flex-wrap items-center gap-1"><Badge testId="rates-branch">{branchName}</Badge>{onOpen && <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-[11px]" onClick={onOpen} data-testid="rates-open-branch" aria-label={`فتح فرع ${c.name} لتعديل الأسعار`}>فتح الفرع للتعديل</button>}</div>}
           <div className="mt-0.5 text-[10px] leading-4 text-ink-400">
             الأساسي {sar(c.base_price)}{c.min_nightly != null && <> · الأدنى {sar(c.min_nightly)}</>}
             {(c.weekly_price != null || c.monthly_price != null) && <div>{c.weekly_price != null && <>أسبوعي {sar(c.weekly_price)}</>}{c.weekly_price != null && c.monthly_price != null && " · "}{c.monthly_price != null && <>شهري {sar(c.monthly_price)}</>}</div>}
@@ -139,9 +147,9 @@ function TypeRows({ c, past, picked, onPick }: { c: RateCategory; past: (night: 
             const on = picked.has(keyOf(cell)); const isPast = past(d.night);
             return (
               <td key={d.night} className="px-0.5 py-0.5">
-                <button type="button" disabled={isPast} onClick={(e) => onPick(cell, e.shiftKey)}
+                <button type="button" disabled={isPast || readOnly} onClick={(e) => onPick(cell, e.shiftKey)}
                   aria-pressed={on} aria-label={`${c.name} ${label(r)} ${d.night}`} data-testid="rates-cell"
-                  className={`w-full rounded-lg px-1 py-1.5 text-center tabular-nums transition ${isPast ? "cursor-default bg-ink-50 text-ink-400" : on ? "bg-brand-600 font-semibold text-white" : v != null ? "bg-white font-semibold text-ink-800 ring-1 ring-inset ring-ink-100 hover:ring-brand-300" : "bg-ink-50/60 text-ink-400 hover:bg-ink-100"}`}>
+                  className={`w-full ${readOnly ? "cursor-default" : ""} rounded-lg px-1 py-1.5 text-center tabular-nums transition ${isPast ? "cursor-default bg-ink-50 text-ink-400" : on ? "bg-brand-600 font-semibold text-white" : v != null ? "bg-white font-semibold text-ink-800 ring-1 ring-inset ring-ink-100 hover:ring-brand-300" : "bg-ink-50/60 text-ink-400 hover:bg-ink-100"}`}>
                   {short(shown)}
                 </button>
               </td>
