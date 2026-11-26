@@ -345,3 +345,34 @@ export function diffBriefing(prev: BriefingItem[], cur: BriefingItem[]): { key: 
     return { key: i.key!, level: i.level, added, removed, state: !o ? "new" : rank[i.level] > rank[o.level] ? "escalated" : added.length || removed.length || o.text !== i.text ? "changed" : "persistent" } as const;
   });
 }
+
+/**
+ * F5: the briefing sends the operational context to the model as JSON under a size limit. A plain character cut leaves
+ * broken JSON and silently loses the tail. This keeps the JSON valid: it drops whole items from the longest list until the
+ * text fits, and records how many were left out (`_omitted`, by path) so the model can say the list is partial.
+ * Only if the lists are exhausted and the text is still too long does it fall back to a character cut (`cut: true`).
+ */
+export function fitOpsContext(ctx: unknown, limit = 12000): { text: string; omitted: Record<string, number>; cut: boolean } {
+  const omitted: Record<string, number> = {};
+  const full = JSON.stringify(ctx) ?? "null";
+  if (full.length <= limit) return { text: full, omitted, cut: false };
+  const root = JSON.parse(full) as unknown;
+  if (root === null || typeof root !== "object" || Array.isArray(root)) return { text: full.slice(0, limit), omitted, cut: true };
+  const lists: Array<{ path: string; arr: unknown[] }> = [];
+  const walk = (v: unknown, path: string, depth: number) => {
+    if (Array.isArray(v)) { lists.push({ path, arr: v }); return; }
+    if (v && typeof v === "object" && depth < 3) for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, path ? `${path}.${k}` : k, depth + 1);
+  };
+  walk(root, "", 0);
+  const render = () => JSON.stringify(Object.keys(omitted).length ? { ...(root as Record<string, unknown>), _omitted: omitted } : root);
+  let text = render();
+  while (text.length > limit) {
+    let big: { path: string; arr: unknown[] } | null = null;
+    for (const l of lists) if (l.arr.length > 0 && (!big || JSON.stringify(l.arr).length > JSON.stringify(big.arr).length)) big = l;
+    if (!big) return { text: text.slice(0, limit), omitted, cut: true };
+    big.arr.pop();
+    omitted[big.path] = (omitted[big.path] ?? 0) + 1;
+    text = render();
+  }
+  return { text, omitted, cut: false };
+}
