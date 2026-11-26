@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { validateOpsArgs, gateOpsOutput, buildBriefing, diffBriefing, fallbackOpsReply, isOpsTool, OPS_ACTIONS, OPS_READ_ONLY, OPS_TOOL_DECLARATIONS, executeOpsTool, localDay, redactArgs } from "../../supabase/functions/_shared/ops";
 
 const ctx = {
+  generated_at: "2026-10-22T08:00:00Z",
   summary: { date: "2026-10-22", units: { active: 10, occupied: 6, reserved: 1, ready: 2, dirty: 3, maintenance: 1, out_of_service: 0 }, occupancy_pct: 60,
     arrivals: { expected: 2, arrived: 1, pending_identity: 1, unpaid: 1, overdue: 0 }, departures: { expected: 1, done: 0, overstay: 1, with_balance: 1 },
     housekeeping: { open: 3, in_progress: 1, completed_today: 2, unassigned: 2 },
@@ -218,7 +219,7 @@ describe("home alerts: the coordination cross-check (read only)", () => {
 
 describe("home alerts: current risk, upcoming risk, information, unavailable (deterministic, read only)", () => {
   const D = "2026-10-22";
-  const quiet = { summary: { date: D, units: { active: 10, occupied: 3, ready: 7 }, occupancy_pct: 30, arrivals: {}, departures: {}, housekeeping: {}, finance: { outstanding_in_house: 0 }, tickets_open: 0 }, overstays: [], overdue_arrivals: [], units_needing_attention: [] };
+  const quiet = { generated_at: D + "T08:00:00Z", summary: { date: D, units: { active: 10, occupied: 3, ready: 7 }, occupancy_pct: 30, arrivals: {}, departures: {}, housekeeping: {}, finance: { outstanding_in_house: 0 }, tickets_open: 0 }, overstays: [], overdue_arrivals: [], units_needing_attention: [] };
   const lvl = (c: any, now: number = Date.parse(D + "T09:00:00Z")) => buildBriefing(c, now, "Asia/Riyadh").items;
   const hot = (c: any) => lvl(c).filter((i) => i.level !== "info");
   it("POS1 maintenance + arrival today is a critical NOW alert with evidence", () => {
@@ -232,14 +233,17 @@ describe("home alerts: current risk, upcoming risk, information, unavailable (de
   it("BOUNDARY2 an arrival dated earlier than today on a maintenance unit is a NOW alert (not future)", () => {
     expect(hot({ ...quiet, units_needing_attention: [{ room: "5", status: "maintenance", next_arrival: "2026-10-21" }] })).toHaveLength(1);
   });
-  it("NEG1 routine counts (units in maintenance, in-house balance, deposits awaiting inspection) are information, not alerts", () => {
+  it("NEG1 units in maintenance, in-house balances and deposits awaiting inspection keep their existing classification (warning), each with evidence", () => {
     const c = { ...quiet, summary: { ...quiet.summary, units: { ...quiet.summary.units, maintenance: 2 }, finance: { outstanding_in_house: 50000, deposit_to_settle_after_checkout: 20000 } } };
-    expect(hot(c)).toHaveLength(0); expect(lvl(c).filter((i) => i.horizon === "info").length).toBeGreaterThanOrEqual(3);
+    const w = hot(c).filter((i) => i.level === "warning");
+    expect(w.map((i) => i.key).sort()).toEqual(["deposit_to_settle", "in_house_balance", "maintenance_units"]);
+    for (const i of w) expect(i.why, i.text).toBeTruthy();
   });
-  it("NEG2 dirty units with unassigned tasks and NO arrival need are information; the same unit with an arrival today is the one critical 'not ready' alert", () => {
+  it("NEG2 dirty units with unassigned tasks and NO arrival need stay a warning; the same unit with an arrival today adds the one critical 'not ready' alert", () => {
     const base = { ...quiet.summary, units: { ...quiet.summary.units, dirty: 2 }, housekeeping: { unassigned: 2 } };
-    expect(hot({ ...quiet, summary: base, units_needing_attention: [{ room: "9", status: "cleaning", next_arrival: null }] })).toHaveLength(0);
-    const x = hot({ ...quiet, summary: base, units_needing_attention: [{ room: "9", status: "cleaning", next_arrival: D }] }); expect(x).toHaveLength(1); expect(x[0].level).toBe("critical");
+    const none = hot({ ...quiet, summary: base, units_needing_attention: [{ room: "9", status: "cleaning", next_arrival: null }] });
+    expect(none.map((i) => [i.key, i.level])).toEqual([["dirty_units", "warning"]]);
+    const x = hot({ ...quiet, summary: base, units_needing_attention: [{ room: "9", status: "cleaning", next_arrival: D }] }).filter((i) => i.level === "critical"); expect(x).toHaveLength(1);
   });
   it("BOUNDARY3 zero units / empty lists / missing arrays never throw and never alert", () => {
     expect(hot({ summary: { date: D, units: {}, arrivals: {}, departures: {}, housekeeping: {}, finance: {} }, overstays: [], overdue_arrivals: [], units_needing_attention: [] })).toHaveLength(0);
@@ -260,7 +264,14 @@ describe("home alerts: current risk, upcoming risk, information, unavailable (de
     expect(f("2026-10-23", "2026-10-22T20:00:00Z", "2026-10-22T21:30:00Z")).toBe(true);   // briefing is today but the reading was taken yesterday
     expect(f("2026-10-23", "2026-10-23T02:00:00Z", "2026-10-23T09:00:00Z")).toBe(false);  // 05:00 on the 23rd, viewed at noon: same branch day
     expect(f("2026-10-22", "2026-10-22T13:00:00Z", "2026-10-22T09:00:00Z")).toBe(true);   // stamped in the future
-    expect(buildBriefing({ ...quiet, summary: { ...quiet.summary, date: "2026-10-22" } }, Date.parse("2026-10-22T09:00:00Z"), tz).items.some((i) => i.key === "stale_reading")).toBe(false); // no stamp: no claim
+    expect(buildBriefing({ ...quiet, summary: { ...quiet.summary, date: "2026-10-22" } }, Date.parse("2026-10-22T09:00:00Z"), tz).items.some((i) => i.key === "stale_reading")).toBe(false); // no stamp: no claim of staleness, but the reading time is said to be unverified (TIME1)
+  });
+  it("TIME1 a summary with no valid generated_at is shown as time-unverified, not as fresh and calm; a valid stamp for today is not", () => {
+    const now = Date.parse(D + "T09:00:00Z"); const { generated_at: _g, ...noStamp } = quiet as any;
+    expect(lvl(noStamp, now).some((i) => i.key === "time_unverified" && i.level === "info")).toBe(true);
+    expect(lvl({ ...noStamp, generated_at: "not a date" }, now).some((i) => i.key === "time_unverified")).toBe(true);
+    expect(buildBriefing(noStamp, now, "Asia/Riyadh").headline).not.toMatch(/هادئ/);
+    expect(lvl(quiet, now).some((i) => i.key === "time_unverified")).toBe(false);
   });
   it("CALM1 a fully delivered, empty day says calm", () => { expect(buildBriefing(quiet, Date.parse(D + "T09:00:00Z"), "Asia/Riyadh").headline).toContain("هادئ"); });
   it("NOMONEY1 a role without money gets no money figure or false zero", () => {
