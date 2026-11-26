@@ -160,7 +160,7 @@ export default function AdminKnowledge() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-ink-800">{u.question}</p>
-                  {allBranches && <p className="text-[11px]"><Badge testId="admin-row-branch">{u.branch_id ? branchName(u.branch_id) : "كل الفروع"}</Badge></p>}
+                  {allBranches && <p className="flex items-center gap-1 text-[11px]"><Badge testId="admin-row-branch">{u.branch_id ? branchName(u.branch_id) : "كل الفروع"}</Badge>{u.branch_id && <button type="button" onClick={() => setBranchId(u.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع ${branchName(u.branch_id)} للإجابة على السؤال`}>فتح الفرع للتعديل</button>}</p>}
                   <p className="text-[11px] text-ink-400">سُئل {COUNT.times(u.asked_count)} · آخر مرة {formatDateTime(u.last_asked_at)}</p>
                 </div>
                 {canEdit && (

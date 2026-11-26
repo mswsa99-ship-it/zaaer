@@ -317,3 +317,18 @@ test("AB-K3 knowledge: an answer written for Jeddah only is tagged Jeddah, and a
   await expect(page.getByRole("heading", { level: 3, name: "سؤال كل الفروع؟" })).toHaveCount(1);
   await expect(page.locator("div.card, [class*=card]").filter({ has: page.getByRole("heading", { level: 3, name: "سؤال كل الفروع؟" }) }).first()).toContainText("كل الفروع");
 });
+
+test("AB-S2 structure: the owner's all-branches view tags each block with its branch, is read-only, and opens the block's own branch", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/structure", { waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("admin-row-branch").first().waitFor();
+  const tags = await page.getByTestId("admin-row-branch").allInnerTexts();
+  expect(new Set(tags).size).toBe(2);
+  await expect(page.getByRole("button", { name: /بلوك جديد/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^تعديل$|تعديل الطابق/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^طابق$/ })).toHaveCount(0);
+  await page.getByTestId("admin-row-open-branch").last().click();
+  await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /بلوك جديد/ })).toBeVisible();
+});

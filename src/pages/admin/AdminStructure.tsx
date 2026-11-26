@@ -4,12 +4,13 @@ import { Layers, Plus, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { opsApi } from "../../lib/api";
-import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, LoadErrorCard } from "../../components/ui";
+import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, LoadErrorCard, Badge } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, Toggle , NumberInput} from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
+import { useBranch } from "../../lib/branch";
 
 interface Floor { id: string; block_id: string; name: string; sort_order: number; is_active: boolean; archived_at: string | null; version: number; rooms: number; facilities: number }
-interface Block { id: string; name: string; description: string | null; sort_order: number; is_active: boolean; archived_at: string | null; version: number; floors: Floor[] }
+interface Block { branch_id?: string; id: string; name: string; description: string | null; sort_order: number; is_active: boolean; archived_at: string | null; version: number; floors: Floor[] }
 
 const NO_BLOCKS: Block[] = [];
 
@@ -18,6 +19,7 @@ export default function AdminStructure() {
   const [blockDraft, setBlockDraft] = useState<Partial<Block> | null>(null);
   const [floorDraft, setFloorDraft] = useState<(Partial<Floor> & { block_id: string }) | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const { branches, allBranches, setBranchId } = useBranch(); // «جميع الفروع» (owner): read-only; structure is changed inside one branch
 
   // G24 (decision 40): the structure of the active branch only
   const q = useBranchQuery<Block[]>(async (branchId) => {
@@ -30,8 +32,8 @@ export default function AdminStructure() {
     const roomCount = new Map<string, number>(); for (const x of (r.data ?? []) as { floor_id: string | null }[]) if (x.floor_id) roomCount.set(x.floor_id, (roomCount.get(x.floor_id) ?? 0) + 1);
     const facCount = new Map<string, number>(); for (const x of (fa.data ?? []) as { floor_id: string | null }[]) if (x.floor_id) facCount.set(x.floor_id, (facCount.get(x.floor_id) ?? 0) + 1);
     const floors = ((f.data ?? []) as Omit<Floor, "rooms" | "facilities">[]).map((x) => ({ ...x, rooms: roomCount.get(x.id) ?? 0, facilities: facCount.get(x.id) ?? 0 }));
-    return (must(b) as Omit<Block, "floors">[]).map((x) => ({ ...x, floors: floors.filter((y) => y.block_id === x.id) }));
-  }, [], NO_BLOCKS);
+    return (must(b) as Omit<Block, "floors">[]).map((x) => ({ ...x, branch_id: branchId, floors: floors.filter((y) => y.block_id === x.id) }));
+  }, [], NO_BLOCKS, { merge: (parts) => parts.flat() });
   const blocks = q.data; const load = q.reload; const branchId = q.branchId;
 
   const visible = blocks.filter((b) => showArchived || !b.archived_at);
@@ -41,8 +43,8 @@ export default function AdminStructure() {
     <div>
       <SectionTitle title="البلوكات والطوابق" subtitle="هيكل المنشأة: فرع ← بلوك ← طابق ← وحدة / مرفق" action={
         <div className="flex items-center gap-3">
-          <BranchPicker />
-          <button onClick={() => setBlockDraft({ name: "", description: "", sort_order: blocks.length + 1 })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلوك جديد</button>
+          <BranchPicker allowAll />
+          {!allBranches && <button onClick={() => setBlockDraft({ name: "", description: "", sort_order: blocks.length + 1 })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلوك جديد</button>}
         </div>
       } />
       {q.error && blocks.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
@@ -50,22 +52,23 @@ export default function AdminStructure() {
       {q.error && blocks.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : visible.length === 0 ? <EmptyState icon={<Layers className="h-10 w-10" />} title="لا توجد بلوكات" description="أضف بلوكًا ثم طوابقه، وبعدها اربط الوحدات والمرافق به." /> : (
         <div className="space-y-3">
           {visible.map((b) => (
-            <Card key={b.id} className={b.archived_at ? "opacity-70" : ""}>
+            <Card key={`${b.branch_id}:${b.id}`} className={b.archived_at ? "opacity-70" : ""}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-semibold text-ink-800">{b.name}</h3>
+                    {allBranches && <Badge testId="admin-row-branch">{branches.find((x) => x.id === b.branch_id)?.name_ar}</Badge>}
                     <ArchivedBadge archivedAt={b.archived_at} />
                     {!b.is_active && !b.archived_at && <span className="badge bg-warning-500/10 text-warning-700">معطل</span>}
                   </div>
                   {b.description && <p className="mt-0.5 text-sm text-ink-500">{b.description}</p>}
                   <p className="mt-1 text-xs text-ink-400">{COUNT.floor(b.floors.filter((f) => !f.archived_at).length)} · {COUNT.unit(b.floors.reduce((a, f) => a + f.rooms, 0))} · {COUNT.facility(b.floors.reduce((a, f) => a + f.facilities, 0))}</p>
                 </div>
-                <div className="flex gap-2">
+                {allBranches ? <button onClick={() => setBranchId(b.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1.5 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع ${b.name} لتعديل الهيكل`}>فتح الفرع للتعديل</button> : <div className="flex gap-2">
                   <button onClick={() => setBlockDraft(b)} className="btn-outline text-xs"><Pencil className="h-3.5 w-3.5" /> تعديل</button>
                   <button onClick={() => setFloorDraft({ block_id: b.id, name: "", sort_order: b.floors.length + 1 })} className="btn-outline text-xs"><Plus className="h-3.5 w-3.5" /> طابق</button>
                   <button onClick={() => setOpen((o) => ({ ...o, [b.id]: !o[b.id] }))} className="btn-ghost text-xs" aria-label={open[b.id] ? "طي الطوابق" : "عرض الطوابق"} aria-expanded={!!open[b.id]}>{open[b.id] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
-                </div>
+                </div>}
               </div>
               {b.floors.length > 0 && (
                 <div className="mt-3 overflow-x-auto">
@@ -76,14 +79,14 @@ export default function AdminStructure() {
                         <tr key={f.id} className="border-t border-ink-50">
                           <td className="py-2 font-medium text-ink-700">{f.name}</td><td>{f.sort_order}</td><td>{f.rooms}</td><td>{f.facilities}</td>
                           <td>{f.archived_at ? <ArchivedBadge archivedAt={f.archived_at} /> : f.is_active ? <span className="badge bg-success-500/10 text-success-600">فعال</span> : <span className="badge bg-warning-500/10 text-warning-700">معطل</span>}</td>
-                          <td className="text-left"><button onClick={() => setFloorDraft(f)} className="btn-ghost text-xs" aria-label="تعديل الطابق" title="تعديل"><Pencil className="h-3.5 w-3.5" /></button></td>
+                          <td className="text-left">{!allBranches && <button onClick={() => setFloorDraft(f)} className="btn-ghost text-xs" aria-label="تعديل الطابق" title="تعديل"><Pencil className="h-3.5 w-3.5" /></button>}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-              {open[b.id] && <DefinitionLifecycle entity="block" id={b.id} archived={!!b.archived_at} onDone={load} />}
+              {!allBranches && open[b.id] && <DefinitionLifecycle entity="block" id={b.id} archived={!!b.archived_at} onDone={load} />}
             </Card>
           ))}
         </div>
