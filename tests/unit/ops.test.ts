@@ -215,3 +215,35 @@ describe("home alerts: the coordination cross-check (read only)", () => {
     expect(buildBriefing({ ...ctx, units_needing_attention: [{ room: "105", status: "maintenance", cleanliness: "clean", next_arrival: null }] }).items.some((i) => i.area === "coordination")).toBe(false);
   });
 });
+
+describe("home alerts: when to speak and when to stay quiet (deterministic, read only)", () => {
+  const quiet = { summary: { date: "2026-10-22", units: { active: 10, occupied: 3, ready: 7 }, occupancy_pct: 30, arrivals: {}, departures: {}, housekeeping: {}, finance: { outstanding_in_house: 0 }, tickets_open: 0 }, overstays: [], overdue_arrivals: [], units_needing_attention: [] };
+  const hot = (c: any, now?: number) => buildBriefing(c, now).items.filter((i) => i.level !== "info");
+  it("QUIET1 a calm day has no attention item and says so; the occupancy line is information only", () => {
+    const b = buildBriefing(quiet); expect(hot(quiet)).toHaveLength(0); expect(b.headline).toContain("هادئ");
+  });
+  it("QUIET2 a unit in maintenance with an arrival TOMORROW is not an alert today", () => {
+    const c = { ...quiet, units_needing_attention: [{ room: "7", status: "maintenance", next_arrival: "2026-10-23" }] };
+    expect(buildBriefing(c).items.some((i) => i.area === "coordination")).toBe(false);
+  });
+  it("QUIET3 a role without money is never told a money figure or a false zero", () => {
+    const c = { ...ctx, summary: { ...ctx.summary, finance: undefined } };
+    expect(buildBriefing(c).items.map((i) => i.text).join(" ")).not.toMatch(/ر\.س|متبقٍ/);
+  });
+  it("ALERT1 the same unit is ONE alert: maintenance + arrival is the coordination item, not also a 'not ready' item", () => {
+    const c = { ...ctx, units_needing_attention: [{ room: "105", status: "maintenance", next_arrival: ctx.summary.date }] };
+    const it = buildBriefing(c).items;
+    expect(it.filter((i) => i.text.includes("105"))).toHaveLength(1); expect(it.find((i) => i.area === "coordination")?.why).toContain("الدليل");
+  });
+  it("ALERT2 every critical item carries its evidence line", () => {
+    for (const i of buildBriefing(ctx).items.filter((x) => x.level === "critical")) expect(i.why, i.text).toBeTruthy();
+  });
+  it("UNCERTAIN1 no summary is a warning to refresh, never 'a calm day'", () => {
+    const b = buildBriefing({}); expect(b.headline).not.toContain("هادئ"); expect(b.items.some((i) => i.level === "warning" && i.text.includes("تعذّر"))).toBe(true);
+  });
+  it("FRESH1 a reading older than an hour is labelled as old; a fresh one is not", () => {
+    const now = Date.parse("2026-10-22T12:00:00Z");
+    expect(buildBriefing({ ...quiet, generated_at: "2026-10-22T10:00:00Z" }, now).items.some((i) => i.text.includes("أقدم من ساعة"))).toBe(true);
+    expect(buildBriefing({ ...quiet, generated_at: "2026-10-22T11:50:00Z" }, now).items.some((i) => i.text.includes("أقدم من ساعة"))).toBe(false);
+  });
+});

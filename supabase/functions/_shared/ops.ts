@@ -227,24 +227,24 @@ function ar(k: number, [one, two, few, many]: [string, string, string, string]):
 const DAYS: [string, string, string, string] = ["يوم واحد", "يومان", "أيام", "يومًا"];
 const UNITS: [string, string, string, string] = ["وحدة واحدة", "وحدتان", "وحدات", "وحدة"];
 
-export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination" }
+export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination"; why?: string }
 
-export function buildBriefing(ctx: Record<string, any>): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
+export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now()): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
   const s = ctx?.summary ?? {}; const u = s.units ?? {}; const av = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
   const money = !!s.finance;   // PERM-08: a role without money gets no money sentence (not a false zero)
   const items: BriefingItem[] = [];
   const overstays = (ctx.overstays ?? []) as any[]; // deno-lint-ignore no-explicit-any
   const overdue = (ctx.overdue_arrivals ?? []) as any[]; // deno-lint-ignore no-explicit-any
-  if (overstays.length) items.push({ level: "critical", text: `${ar(overstays.length, ["إقامة واحدة تجاوزت", "إقامتان تجاوزتا", "إقامات تجاوزت", "إقامة تجاوزت"])} موعد المغادرة: ${overstays.slice(0, 5).map((o) => `${o.ref} (وحدة ${o.room ?? "—"}، ${ar(n(o.days_over), DAYS)})`).join("، ")}`, link: "/staff/reservations" });
-  if (overdue.length) items.push({ level: "warning", text: `وصول متأخر لم يُسجَّل ولم يُعلَن عدم حضوره (${overdue.length}): ${overdue.slice(0, 5).map((o) => o.ref).join("، ")}`, link: "/staff/arrivals" });
+  if (overstays.length) items.push({ level: "critical", text: `${ar(overstays.length, ["إقامة واحدة تجاوزت", "إقامتان تجاوزتا", "إقامات تجاوزت", "إقامة تجاوزت"])} موعد المغادرة: ${overstays.slice(0, 5).map((o) => `${o.ref} (وحدة ${o.room ?? "—"}، ${ar(n(o.days_over), DAYS)})`).join("، ")}`, link: "/staff/reservations", why: "الدليل: إقامات حالتها «مقيم» وتاريخ مغادرتها قبل اليوم، من قائمة التجاوزات" });
+  if (overdue.length) items.push({ level: "warning", text: `وصول متأخر لم يُسجَّل ولم يُعلَن عدم حضوره (${overdue.length}): ${overdue.slice(0, 5).map((o) => o.ref).join("، ")}`, link: "/staff/arrivals", why: "الدليل: حجوزات مؤكدة وقت وصولها فات ولم تُسجَّل ولم يُعلَن عدم حضورها" });
   if (n(av.expected)) items.push({ level: "info", text: `الوصول اليوم: المتوقع ${av.expected}، وصل ${av.arrived}، بانتظار مطابقة الهوية ${av.pending_identity}${money ? `، عليهم متبقٍ ${av.unpaid}` : ""}`, link: "/staff/arrivals" });
   if (n(dp.expected)) items.push({ level: money && n(dp.with_balance) ? "warning" : "info", text: `المغادرة اليوم: المتوقع ${dp.expected}، تمت ${dp.done}${money ? `، عليها رصيد متبقٍ ${dp.with_balance}` : ""}`, link: "/staff/reservations" });
   const unitsAttn = (ctx.units_needing_attention ?? []) as any[]; // deno-lint-ignore no-explicit-any
-  const arrivingDirty = unitsAttn.filter((x) => x.next_arrival && x.next_arrival <= s.date);
-  if (arrivingDirty.length) items.push({ level: "critical", text: `${ar(arrivingDirty.length, ["وحدة واحدة عليها", "وحدتان عليهما", "وحدات عليها", "وحدة عليها"])} وصول اليوم وليست جاهزة: ${arrivingDirty.map((x) => x.room).join("، ")}`, link: "/staff/housekeeping" });
+  const arrivingDirty = unitsAttn.filter((x) => x.next_arrival && x.next_arrival <= s.date && x.status !== "maintenance");   // a unit in maintenance is the coordination alert below, not a second "not ready" line
+  if (arrivingDirty.length) items.push({ level: "critical", text: `${ar(arrivingDirty.length, ["وحدة واحدة عليها", "وحدتان عليهما", "وحدات عليها", "وحدة عليها"])} وصول اليوم وليست جاهزة: ${arrivingDirty.map((x) => x.room).join("، ")}`, link: "/staff/housekeeping", why: "الدليل: وحدات في قائمة الانتباه (غير نظيفة أو مهام مفتوحة) وفيها وصول اليوم" });
   // coordination: a read-only cross-check between the front desk and the units — an arrival today on a unit that is under maintenance
   const maintArrival = unitsAttn.filter((x) => x.status === "maintenance" && x.next_arrival && x.next_arrival <= s.date);
-  if (maintArrival.length) items.push({ level: "critical", area: "coordination", text: `وصول اليوم على وحدة في الصيانة: ${maintArrival.slice(0, 5).map((x) => "وحدة " + x.room).join("، ")} — يحتاج استقبالًا وصيانة قرارًا مشتركًا`, link: "/staff/tickets" });
+  if (maintArrival.length) items.push({ level: "critical", area: "coordination", text: `وصول اليوم على وحدة في الصيانة: ${maintArrival.slice(0, 5).map((x) => "وحدة " + x.room).join("، ")} — يحتاج استقبالًا وصيانة قرارًا مشتركًا`, link: "/staff/tickets", why: "الدليل: حالة الوحدة «صيانة» ولها وصول مؤكد اليوم أو قبله، فلا يكفي قرار الاستقبال وحده" });
   if (n(u.dirty)) items.push({ level: "warning", text: `تحتاج تنظيفًا: ${ar(n(u.dirty), UNITS)} — مهام غير مسندة ${n(hk.unassigned)}، قيد التنفيذ ${n(hk.in_progress)}، أُنجزت اليوم ${n(hk.completed_today)}`, link: "/staff/housekeeping" });
   if (n(u.maintenance)) items.push({ level: "warning", text: `في الصيانة: ${ar(n(u.maintenance), UNITS)}`, link: "/staff/tickets" });
   if (n(f.outstanding_in_house)) items.push({ level: "warning", text: `متبقٍ على النزلاء المقيمين: ${sar(f.outstanding_in_house)}`, link: "/staff/payments" });
@@ -252,6 +252,11 @@ export function buildBriefing(ctx: Record<string, any>): { headline: string; ite
   if (n(f.deposit_to_settle_after_checkout)) items.push({ level: "warning", text: `تأمينات لم تُسوَّ بعد المغادرة: ${sar(f.deposit_to_settle_after_checkout)} — تحتاج فحص المغادرة ثم ردًا أو رسم ضرر بسبب`, link: "/staff/followups" });
   if (n(s.tickets_open)) items.push({ level: "warning", text: `طلبات تحويل لموظف مفتوحة من المساعد الذكي تحتاج مشرفًا: ${s.tickets_open}`, link: "/staff/tickets" });
   items.push({ level: "info", text: `الإشغال ${s.occupancy_pct ?? 0}% — مؤجرة ${n(u.occupied)} من ${n(u.active)} عاملة، جاهزة للتسليم ${n(u.ready)}، محجوزة ${n(u.reserved)}، خارج الخدمة ${n(u.out_of_service)}.${money ? ` تحصيل اليوم ${sar(f.received_today)}، تأمينات محتجزة ${sar(f.deposits_held)}.` : ""}` });
+  // uncertainty: no summary means we could not read today's data. That is never "a quiet day".
+  if (!ctx?.summary) items.push({ level: "warning", text: "تعذّر قراءة بيانات اليوم، فلا يمكن القول إن اليوم هادئ. أعد التحديث أو راجع الصفحات مباشرة", why: "الدليل: لم تصل بيانات الملخص" });
+  // freshness: a reading older than an hour is shown as such, not presented as current
+  const gen = Date.parse(String(ctx?.generated_at ?? ""));
+  if (Number.isFinite(gen) && nowMs - gen > 60 * 60 * 1000) items.push({ level: "info", text: "هذه الإحاطة مبنية على قراءة أقدم من ساعة؛ حدّثها قبل الاعتماد عليها", why: "الدليل: وقت القراءة المسجل" });
   const crit = items.filter((i) => i.level === "critical").length; const warn = items.filter((i) => i.level === "warning").length;
   const ALERTS: [string, string, string, string] = ["تنبيه واحد", "تنبيهان", "تنبيهات", "تنبيهًا"];
   const headline = crit ? `${ar(crit, ["أمر عاجل واحد", "أمران عاجلان", "أمور عاجلة", "أمرًا عاجلًا"])}${warn ? ` و${ar(warn, ALERTS)}` : ""} — تحتاج انتباهك اليوم` : warn ? `لا أمور عاجلة — ${ar(warn, ALERTS)} للمتابعة` : "اليوم هادئ — لا تنبيهات تشغيلية";

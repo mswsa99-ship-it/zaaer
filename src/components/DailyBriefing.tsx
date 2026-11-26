@@ -56,12 +56,12 @@ export function DailyBriefing() {
               const hot = rows.filter((i) => i.level !== "info").length;
               return (
                 <section key={g.id} aria-label={g.label} data-area={g.id}>
-                  <h3 className="mb-1.5 flex items-center gap-2 text-sm font-semibold"><g.icon className="h-4 w-4" aria-hidden="true" />{g.label}{hot > 0 && <span className="text-xs font-semibold" aria-label={`${hot} تنبيهات`}>({hot})</span>}</h3>
+                  <h3 className="mb-1.5 flex items-center gap-2 text-sm font-semibold"><g.icon className="h-4 w-4" aria-hidden="true" />{g.label}<span className="text-xs font-normal opacity-80">{hot > 0 ? `· ${hot} تحتاج انتباهًا` : "· للعلم فقط"}</span></h3>
                   <ul className="space-y-2">
-                    {rows.map((i, k) => (
-                      <li key={k} className="flex items-start gap-2 text-sm text-ink-700">
+                    {[...rows.filter((i) => i.level !== "info"), ...rows.filter((i) => i.level === "info")].map((i, k) => (
+                      <li key={k} className={`flex items-start gap-2 text-sm text-ink-700${i.level === "info" ? " opacity-75" : ""}`}>
                         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot[i.level]}`} />
-                        <span className="flex-1">{i.text}{i.link && <Link to={i.link} className="mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
+                        <span className="min-w-0 flex-1 break-words">{i.text}{i.level === "info" && <span className="ms-2 text-[11px]">(للعلم)</span>}{i.why && <span className="mt-0.5 block text-[11px] opacity-75">{i.why}</span>}{i.link && <Link to={i.link} className="mt-1 flex min-h-[44px] w-fit min-w-[44px] items-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
                       </li>
                     ))}
                   </ul>

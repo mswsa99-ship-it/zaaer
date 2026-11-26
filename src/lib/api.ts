@@ -1376,7 +1376,7 @@ export async function fetchAllPages<R>(page: (limit: number, offset: number) => 
 // ---------------------------------------------------------------------------
 export interface OpsProposal { id: string; action: string; summary: string; args: Record<string, unknown> }
 export interface OpsReply { conversation_id: string; reply: string; proposals: OpsProposal[]; mode: "ai" | "deterministic"; ai_status?: string }
-export interface Briefing { headline: string; items: Array<{ level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination" }>; text: string; insights: string | null; mode: "ai" | "deterministic"; ai_status?: string; date?: string; generated_at?: string }
+export interface Briefing { headline: string; items: Array<{ level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination"; why?: string }>; text: string; insights: string | null; mode: "ai" | "deterministic"; ai_status?: string; date?: string; generated_at?: string }
 
 export async function aiOpsChat(message: string, branchId: string, conversationId?: string | null): Promise<OpsReply> {
   const { data, error } = await supabase.functions.invoke<OpsReply>("ai-ops", { body: { mode: "chat", message, branch_id: branchId, conversation_id: conversationId ?? null } });
