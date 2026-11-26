@@ -742,7 +742,8 @@
     "CT": "Copy terms (plan3.8)",
     "DT": "Design tokens and contrast",
     "RBR": "RoomAI brand",
-    "ER": "Guest reserve edge wiring"
+    "ER": "Guest reserve edge wiring",
+    "RNG": "فترة التاريخ في ملخص اليوم وتسوية الشبكة، وتبويبات المراكز (tests/e2e/range_screens.spec.ts)"
   },
   "renamed": [
     {
