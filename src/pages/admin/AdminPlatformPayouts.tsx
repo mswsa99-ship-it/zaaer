@@ -95,7 +95,7 @@ export default function AdminPlatformPayouts() {
               <Card key={`${g.branch_id}|${g.source_id}|${g.month}`}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-ink-800">{g.source} · {monthName(g.month)}</p>
-                  {allBranches && <Badge testId="payout-branch">{branchName(g.branch_id)}</Badge>}
+                  {allBranches && <Badge className="max-w-full whitespace-normal" testId="payout-branch">{branchName(g.branch_id)}</Badge>}
                   {allBranches && g.branch_id && <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="payout-open-branch" onClick={() => setBranchId(g.branch_id!)} aria-label={`فتح فرع ${branchName(g.branch_id)} لمطابقة ${g.source}`}>فتح الفرع للمطابقة</button>}
                   <div className="flex items-center gap-3 text-sm"><span className="text-ink-500">{COUNT.payment(g.items.length)} · <span dir="ltr">{sar(total)}</span></span>
                     {!allBranches && <button type="button" className="btn-ghost text-xs" onClick={() => setPicked((s) => { const n = new Set(s); for (const x of g.items) { if (allIn) n.delete(x.id); else n.add(x.id); } return n; })}>{allIn ? "إلغاء التحديد" : "تحديد الكل"}</button>}</div>
@@ -130,7 +130,7 @@ export default function AdminPlatformPayouts() {
             <Card key={`${p.branch_id}:${p.id}`} className={p.status === "cancelled" ? "opacity-60" : ""}>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">{sourceName(p.source_id)}</p>
-                {allBranches && <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge>}
+                {allBranches && <Badge className="max-w-full whitespace-normal" testId="payout-branch">{branchName(p.branch_id)}</Badge>}
                 {p.status === "cancelled" && <Badge className="opacity-70">ملغاة</Badge>}
               </div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
@@ -152,7 +152,7 @@ export default function AdminPlatformPayouts() {
             <tbody>
               {payouts.map((p) => (
                 <tr key={`${p.branch_id}:${p.id}`} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
-                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
+                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge className="max-w-full whitespace-normal" testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
                   <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] text-ink-400">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</td><td dir="ltr">{sar(p.received_halalas)}</td>
                   <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
                   <td className="break-all font-mono text-xs">{p.reference}</td>
