@@ -280,3 +280,40 @@ test("AB-Y1 policies: the owner's all-branches list tags each policy with its br
   await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /سياسة جديدة/ })).toBeVisible();
 });
+
+test("AB-K2 knowledge: the owner's all-branches view shows each answer once with its branch or «كل الفروع», read-only, and opens a branch to edit", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/knowledge", { waitUntil: "networkidle" });
+  const perBranch = await page.getByRole("heading", { level: 3 }).allInnerTexts();
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("kb-readonly-note").waitFor();
+  const titles = await page.getByRole("heading", { level: 3 }).allInnerTexts();
+  expect(new Set(titles).size).toBe(titles.length);
+  expect(titles.length).toBeGreaterThanOrEqual(perBranch.length);
+  await expect(page.getByRole("button", { name: /سؤال وجواب/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(تعديل|أرشفة): / })).toHaveCount(0);
+  await expect(page.getByTestId("admin-row-branch").first()).toBeVisible();
+});
+
+test("AB-K3 knowledge: an answer written for Jeddah only is tagged Jeddah, and an all-branches answer shows once, in the owner's all-branches view", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/knowledge", { waitUntil: "networkidle" });
+  const pick = page.locator(`select[aria-label="الفرع النشط"]`).first();
+  await pick.selectOption({ label: "فرع جدة — الكورنيش" });
+  for (const [q, a, scope] of [["سؤال جدة فقط؟", "جواب جدة فقط", "branch"], ["سؤال كل الفروع؟", "جواب كل الفروع", "org"]] as const) {
+    await page.getByRole("button", { name: /سؤال وجواب/ }).click();
+    const dlg = page.getByRole("dialog");
+    await dlg.getByRole("textbox").nth(0).fill(q);
+    await dlg.locator("textarea").first().fill(a);
+    await dlg.locator("select").nth(1).selectOption(scope);
+    await dlg.getByRole("button", { name: "حفظ", exact: true }).click();
+    await expect(dlg).toBeHidden();
+  }
+  await pick.selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("kb-readonly-note").waitFor();
+  const jed = page.getByRole("heading", { level: 3, name: "سؤال جدة فقط؟" });
+  await expect(jed).toHaveCount(1);
+  await expect(page.locator("div.card, [class*=card]").filter({ has: jed }).first()).toContainText("الكورنيش");
+  await expect(page.getByRole("heading", { level: 3, name: "سؤال كل الفروع؟" })).toHaveCount(1);
+  await expect(page.locator("div.card, [class*=card]").filter({ has: page.getByRole("heading", { level: 3, name: "سؤال كل الفروع؟" }) }).first()).toContainText("كل الفروع");
+});

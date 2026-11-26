@@ -13,6 +13,7 @@ import { knowledgeApi, suggestKeywords, KNOWLEDGE_CATEGORY_LABELS, type Knowledg
 import { SectionTitle, Card, LoadingScreen, Badge, Spinner, ErrorBanner, EmptyState, LoadErrorCard } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, Toggle, ReasonInput, ArchivedBadge , NumberInput, useFormDraft, useEditDraft, DraftRestoreBanner } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
+import { useBranch } from "../../lib/branch";
 import { formatDateTime, COUNT } from "../../lib/utils";
 import { BookOpen, Plus, Pencil, Search, MessageCircleQuestion, Archive, RotateCcw, FileText, Building2, Globe, Lock, Sparkles } from "lucide-react";
 
@@ -25,7 +26,8 @@ const EMPTY = (branchId: string | null): KnowledgeDraft => ({ branch_id: branchI
 export default function AdminKnowledge() {
   const { profile, can } = useAuth();
   const role = profile?.role ?? "";
-  const canEdit = can("knowledge");
+  const { branches, allBranches, setBranchId } = useBranch();
+  const canEdit = can("knowledge") && !allBranches; // «جميع الفروع»: read-only; an answer is changed inside one branch
   const canOrgWide = ["owner", "manager"].includes(role);
 
   const [tab, setTab] = useState<Tab>("entries");
@@ -41,7 +43,12 @@ export default function AdminKnowledge() {
   const q = useBranchQuery<KbData>(async (branchId) => {
     const [rows, open] = await Promise.all([knowledgeApi.list(branchId, showArchived), knowledgeApi.unanswered(branchId, "open")]);
     return { rows, open };
-  }, [showArchived], NO_KB);
+  }, [showArchived], NO_KB, { merge: (parts) => {
+    // an organisation-wide answer comes back with every branch: keep it once
+    const uniq = <T extends { id: string }>(l: T[]) => [...new Map(l.map((x) => [x.id, x])).values()];
+    return { rows: uniq(parts.flatMap((x) => x.rows)), open: uniq(parts.flatMap((x) => x.open)) };
+  } });
+  const branchName = (id: string | null) => branches.find((b) => b.id === id)?.name_ar ?? "";
   const { rows, open } = q.data; const branchId = q.branchId; const load = q.reload;
 
   const filtered = useMemo(() => {
@@ -88,7 +95,7 @@ export default function AdminKnowledge() {
   return (
     <div>
       <SectionTitle title="قاعدة المعرفة" subtitle="كل ما يحق للمساعد قوله للنزلاء — من هذه السجلات فقط، ولا يخترع شيئًا" action={
-        <div className="flex items-center gap-2"><BranchPicker />{canEdit && <button onClick={() => startNew()} className="btn-primary text-sm"><Plus className="h-4 w-4" /> سؤال وجواب</button>}</div>} />
+        <div className="flex items-center gap-2"><BranchPicker allowAll />{canEdit && <button onClick={() => startNew()} className="btn-primary text-sm"><Plus className="h-4 w-4" /> سؤال وجواب</button>}</div>} />
 
       {/* the three sources, in one line */}
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
@@ -97,6 +104,7 @@ export default function AdminKnowledge() {
         <Link to="/admin/branches" className="card flex items-center gap-3 p-3 hover:bg-ink-50"><Building2 className="h-5 w-5 text-brand-600" /><div><p className="text-sm font-semibold text-ink-800">بيانات الفرع</p><p className="text-[11px] text-ink-400">مواعيد الوصول والمغادرة، العنوان، الهاتف ↗</p></div></Link>
       </div>
 
+      {allBranches && <div className="mb-3 rounded-xl border-2 border-dashed px-3 py-2 text-sm" role="note" data-testid="kb-readonly-note"><b>عرض جميع الفروع للقراءة فقط.</b> لتعديل إجابة خاصة بفرع اضغط «فتح الفرع للتعديل». الإجابات المعلّمة «كل الفروع» تُعدَّل من أي فرع.</div>}
       {(error || (q.error && rows.length + open.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -125,7 +133,8 @@ export default function AdminKnowledge() {
                   <p className="mt-1.5 whitespace-pre-line text-sm text-ink-600">{r.answer}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Badge className="bg-brand-50 text-brand-700">{KNOWLEDGE_CATEGORY_LABELS[r.category] ?? r.category}</Badge>
-                    <Badge className="bg-ink-50 text-ink-500">{r.branch_id ? "هذا الفرع" : "كل الفروع"}</Badge>
+                    <Badge className="bg-ink-50 text-ink-500" testId="admin-row-branch">{r.branch_id ? (allBranches ? branchName(r.branch_id) : "هذا الفرع") : "كل الفروع"}</Badge>
+                    {allBranches && r.branch_id && <button type="button" onClick={() => setBranchId(r.branch_id!)} className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="admin-row-open-branch" aria-label={`فتح فرع ${branchName(r.branch_id)} لتعديل الإجابة`}>فتح الفرع للتعديل</button>}
                     {r.keywords.map((k) => <span key={k} className="rounded-md border border-ink-100 px-1.5 py-0.5 text-[11px] text-ink-500">{k}</span>)}
                   </div>
                   <p className="mt-2 text-[11px] text-ink-400">{r.used_count ? `استُخدمت ${COUNT.times(r.used_count)}` : "لم تُستخدم بعد"}{r.last_used_at ? ` · آخر مرة ${formatDateTime(r.last_used_at)}` : ""}{r.archive_reason ? ` · سبب الأرشفة: ${r.archive_reason}` : ""}</p>
@@ -151,6 +160,7 @@ export default function AdminKnowledge() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-ink-800">{u.question}</p>
+                  {allBranches && <p className="text-[11px]"><Badge testId="admin-row-branch">{u.branch_id ? branchName(u.branch_id) : "كل الفروع"}</Badge></p>}
                   <p className="text-[11px] text-ink-400">سُئل {COUNT.times(u.asked_count)} · آخر مرة {formatDateTime(u.last_asked_at)}</p>
                 </div>
                 {canEdit && (
