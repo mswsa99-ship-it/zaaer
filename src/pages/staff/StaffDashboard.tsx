@@ -65,7 +65,7 @@ export default function StaffDashboard() {
   const tiles: BoardTile[] = [];
   let board: { title: string; subtitle: string; rowsTitle: string; rows: BoardRow[] };
   if (role === "housekeeping") {
-    board = { title: "مهام اليوم", subtitle: "الوحدات التي تنتظر التنظيف", rowsTitle: "وصول اليوم", rows: [] };
+    board = { title: "مهام اليوم", subtitle: "الوحدات التي تنتظر التنظيف", rowsTitle: "الوحدات التي تنتظر التنظيف", rows: [] };
     if (sum) tiles.push({ key: "dirty", label: "وحدات للتنظيف", value: sum.units.dirty, to: "/staff/housekeeping", tone: sum.units.dirty > 0 ? "warning" : undefined },
       { key: "hk-open", label: "مهام مفتوحة", value: sum.housekeeping.open, to: "/staff/housekeeping" },
       { key: "hk-unassigned", label: "بلا مكلّف", value: sum.housekeeping.unassigned, to: "/staff/housekeeping" });

@@ -21,6 +21,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
   const [view, setView] = useState({ y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) - 1 });
   const [fresh, setFresh] = useState(true); // the first tap after opening always starts a new selection
   const btn = useRef<HTMLButtonElement>(null);
+  const focusDay = useRef<string | null>(null);
   const dlg = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -34,6 +35,34 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
     const root = dlg.current; if (!root) return;
     (root.querySelector<HTMLElement>('[data-day][aria-pressed="true"]:not([disabled])') ?? root.querySelector<HTMLElement>(`[data-day="${todayISO()}"]:not([disabled])`) ?? root.querySelector<HTMLElement>("[data-day]:not([disabled])"))?.focus();
   }, [open]);
+  // after an arrow key crossed into another month, focus the day once that month is drawn
+  useEffect(() => {
+    if (!open || !focusDay.current) return;
+    dlg.current?.querySelector<HTMLElement>(`[data-day="${focusDay.current}"]:not([disabled])`)?.focus();
+    focusDay.current = null;
+  }, [open, view]);
+  const onDialogKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") { // focus stays inside the dialog while it is open
+      const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("button:not([disabled]),[tabindex]:not([tabindex='-1'])"));
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      return;
+    }
+    const cur = (e.target as HTMLElement).closest?.("[data-day]")?.getAttribute("data-day");
+    if (!cur) return;
+    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+    const step = e.key === "ArrowRight" ? (rtl ? -1 : 1) : e.key === "ArrowLeft" ? (rtl ? 1 : -1) : e.key === "ArrowDown" ? 7 : e.key === "ArrowUp" ? -7 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const t = new Date(cur + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + step);
+    const next = t.toISOString().slice(0, 10);
+    if ((min && next < min) || (max && next > max)) return;
+    const el = e.currentTarget.querySelector<HTMLElement>(`[data-day="${next}"]:not([disabled])`);
+    if (el) { el.focus(); return; }
+    focusDay.current = next; setView({ y: t.getUTCFullYear(), m: t.getUTCMonth() });
+  };
   const openIt = () => { setPick({ a: from || null, b: !from || from === to ? null : to }); setView({ y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) - 1 }); setFresh(true); setOpen(true); };
   const move = (d: number) => setView((v) => { const t = v.y * 12 + v.m + d; return { y: Math.floor(t / 12), m: t % 12 }; });
   const disabled = (d: string) => (!!min && d < min) || (!!max && d > max);
@@ -48,7 +77,7 @@ export function DateRangePicker({ from, to, onChange, min, max, single = false, 
       {open && (
         <>
           <button type="button" tabIndex={-1} aria-hidden="true" className="fixed inset-0 z-40 cursor-default bg-[var(--scrim)] sm:bg-transparent" onClick={() => setOpen(false)} />
-          <div ref={dlg} role="dialog" aria-label={label} className="fixed inset-x-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-2xl border border-rai-line bg-rai-surface p-3 shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:mt-1 sm:w-80">
+          <div ref={dlg} role="dialog" aria-modal="true" aria-label={label} onKeyDown={onDialogKey} className="fixed inset-x-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-2xl border border-rai-line bg-rai-surface p-3 shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:start-0 sm:top-full sm:mt-1 sm:w-80">
             <div className="mb-2 flex items-center justify-between">
               <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] px-2" aria-label="الشهر السابق" onClick={() => move(-1)}><ChevronRight className="h-5 w-5" /></button>
               <span className="text-sm font-semibold text-rai-ink">{MONTHS[view.m]} <bdi dir="ltr">{view.y}</bdi></span>

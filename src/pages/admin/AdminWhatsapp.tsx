@@ -114,6 +114,7 @@ function BridgePanel({ row, live, busy, run, newKey, setNewKey }: { row: WaChann
   const [program, setProgram] = useState<"checking" | "available" | "missing">("checking");
   useEffect(() => {
     let alive = true;
+    if (isDemo) { setProgram("missing"); return () => { alive = false; }; }   // the review copy ships no Windows program: no request, no 404
     fetch(PROGRAM_URL, { method: "HEAD" }).then((r) => alive && setProgram(r.ok ? "available" : "missing")).catch(() => alive && setProgram("missing"));
     return () => { alive = false; };
   }, []);

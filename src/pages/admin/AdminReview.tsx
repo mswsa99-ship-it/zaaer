@@ -69,8 +69,8 @@ function ItemRow({ item, selected, onToggle, onMark, onObject, onUndo, busy }: {
   const canUndo = !open && item.reviewed_by_me && Date.parse(item.reviewed_at!) > Date.now() - 600_000;
   const actions = open && mode === "idle" && (
     <div className="flex flex-wrap gap-1">
-      <button type="button" onClick={() => setMode("ok")} className="btn-ghost px-2 py-1 text-[11px]" data-testid="review-ok"><CheckCheck className="h-3.5 w-3.5" /> تمت المراجعة</button>
-      <button type="button" onClick={() => setMode("objection")} className="btn-ghost px-2 py-1 text-[11px] text-warning-700" data-testid="review-object"><MessageSquareWarning className="h-3.5 w-3.5" /> اعتراض / يحتاج إجراء</button>
+      <button type="button" onClick={() => setMode("ok")} className="btn-ghost px-2 py-1 text-[11px] max-sm:min-h-11" data-testid="review-ok"><CheckCheck className="h-3.5 w-3.5" /> تمت المراجعة</button>
+      <button type="button" onClick={() => setMode("objection")} className="btn-ghost px-2 py-1 text-[11px] text-warning-700 max-sm:min-h-11" data-testid="review-object"><MessageSquareWarning className="h-3.5 w-3.5" /> اعتراض / يحتاج إجراء</button>
     </div>
   );
   return (
@@ -91,12 +91,12 @@ function ItemRow({ item, selected, onToggle, onMark, onObject, onUndo, busy }: {
         {actions}
         {open && mode !== "idle" && (
           <div className="mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-ink-100 bg-ink-50/60 p-2" data-testid="review-confirm">
-            <input className="input h-8 min-w-0 flex-1 basis-48 text-xs" value={rowNote} onChange={(e) => setRowNote(e.target.value)} autoFocus
+            <input className="input h-8 max-sm:h-11 min-w-0 flex-1 basis-48 text-xs" value={rowNote} onChange={(e) => setRowNote(e.target.value)} autoFocus
               placeholder={mode === "ok" ? "ملاحظة المراجعة (اختيارية)" : "ما الذي تعترض عليه أو تطلب توضيحه؟ (إلزامي)"} aria-label={mode === "ok" ? "ملاحظة المراجعة لهذا البند" : "نص الاعتراض"} />
             {mode === "ok"
-              ? <button type="button" className="btn-primary text-xs" disabled={busy} onClick={() => onMark(rowNote.trim())}>تأكيد: تمت مراجعته</button>
-              : <button type="button" className="btn-outline text-xs text-warning-700" disabled={busy || rowNote.trim().length < 3} onClick={() => void onObject(rowNote.trim()).then((ok) => { if (ok) { setMode("idle"); setRowNote(""); } })}>إرسال الاعتراض</button>}
-            <button type="button" className="btn-ghost text-xs" onClick={() => { setMode("idle"); setRowNote(""); }}>إلغاء</button>
+              ? <button type="button" className="btn-primary text-xs max-sm:min-h-11" disabled={busy} onClick={() => onMark(rowNote.trim())}>تأكيد: تمت مراجعته</button>
+              : <button type="button" className="btn-outline text-xs text-warning-700 max-sm:min-h-11" disabled={busy || rowNote.trim().length < 3} onClick={() => void onObject(rowNote.trim()).then((ok) => { if (ok) { setMode("idle"); setRowNote(""); } })}>إرسال الاعتراض</button>}
+            <button type="button" className="btn-ghost text-xs max-sm:min-h-11" onClick={() => { setMode("idle"); setRowNote(""); }}>إلغاء</button>
           </div>
         )}
       </div>
@@ -187,14 +187,14 @@ export default function AdminReview() {
                 <input type="checkbox" className="h-4 w-4" checked={selectable.length > 0 && selectable.every((id) => selected.has(id))}
                   onChange={(e) => setSelected(e.target.checked ? new Set(selectable) : new Set())} /> تحديد الكل ({selectable.length})
               </label>
-              <input className="input h-8 min-w-0 max-w-sm flex-1 basis-48 text-xs" placeholder="ملاحظة المراجعة (اختيارية)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة المراجعة" />
+              <input className="input h-8 max-sm:h-11 min-w-0 max-w-sm flex-1 basis-48 text-xs" placeholder="ملاحظة المراجعة (اختيارية)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة المراجعة" />
               {!confirmBulk
-                ? <><button type="button" disabled={busy || selected.size === 0} aria-describedby={selected.size === 0 ? "dr-adminreview-5" : undefined} title={selected.size === 0 ? "حدّد بندًا واحدًا على الأقل" : undefined} onClick={() => setConfirmBulk(true)} className="btn-primary text-xs">
+                ? <><button type="button" disabled={busy || selected.size === 0} aria-describedby={selected.size === 0 ? "dr-adminreview-5" : undefined} title={selected.size === 0 ? "حدّد بندًا واحدًا على الأقل" : undefined} onClick={() => setConfirmBulk(true)} className="btn-primary text-xs max-sm:min-h-11">
                     <CheckCheck className="h-3.5 w-3.5" /> تأشير المحدد كمراجَع ({selected.size})
                   </button><DisabledReason id="dr-adminreview-5" show={selected.size === 0} text="حدّد بندًا واحدًا على الأقل" /></>
                 : <span className="flex flex-wrap items-center gap-2 text-xs" data-testid="review-bulk-confirm">تأكيد مراجعة {selected.size}؟
-                    <button type="button" className="btn-primary text-xs" disabled={busy} onClick={() => { const n = note.trim(); setNote(""); void mark([...selected], n); }}>{busy ? <Spinner className="h-3.5 w-3.5" /> : "نعم، تمت المراجعة"}</button>
-                    <button type="button" className="btn-ghost text-xs" onClick={() => setConfirmBulk(false)}>إلغاء</button></span>}
+                    <button type="button" className="btn-primary text-xs max-sm:min-h-11" disabled={busy} onClick={() => { const n = note.trim(); setNote(""); void mark([...selected], n); }}>{busy ? <Spinner className="h-3.5 w-3.5" /> : "نعم، تمت المراجعة"}</button>
+                    <button type="button" className="btn-ghost text-xs max-sm:min-h-11" onClick={() => setConfirmBulk(false)}>إلغاء</button></span>}
             </div>
           )}
           {error && items && <div className="mb-2"><ErrorBanner message={error} /></div>}

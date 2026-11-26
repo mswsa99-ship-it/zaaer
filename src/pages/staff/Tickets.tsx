@@ -187,7 +187,7 @@ export default function Tickets() {
       )}
 
       {canSeeHandoff && (
-        <section id="tickets-handoff" className="scroll-mt-4">
+        <section id="tickets-handoff" className="scroll-mt-24">
           <SectionTitle title="طلبات التحويل لموظف" subtitle={`طلبات مفتوحة: ${openHandoff}`} />
           {handoffs.length === 0 ? (
             <EmptyState icon={<LifeBuoy className="h-10 w-10" />} title="لا توجد طلبات تدخل" description="تظهر هنا الحالات التي أحالها المساعد الذكي إلى موظف." />
@@ -227,7 +227,7 @@ export default function Tickets() {
         </section>
       )}
 
-      <section id="tickets-maintenance" className="scroll-mt-4">
+      <section id="tickets-maintenance" className="scroll-mt-24">
         <SectionTitle level={2} title="البلاغات والصيانة" subtitle={`بلاغات مفتوحة: ${openMaint}`} action={
           <div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلاغ جديد</button></div>
         } />

@@ -70,7 +70,7 @@ export function DailyBriefing() {
             })}
           </div>
           {b.insights && <div className="mt-4 rounded-xl bg-brand-50 p-3 text-sm text-brand-900"><p className="mb-1 flex items-center gap-1 text-xs font-semibold text-brand-700"><Sparkles className="h-3.5 w-3.5" /> توصيات المساعد (للمراجعة البشرية)</p><p className="whitespace-pre-wrap">{b.insights}</p></div>}
-          <p className="mt-3 text-[11px] text-ink-400">{b.date} · {b.generated_at ? formatDateTime(b.generated_at) : ""} · {b.mode === "ai" ? "إحاطة مع توصيات ذكية" : "إحاطة مبنية على بيانات النظام مباشرة"}</p>
+          <p className="mt-3 text-[11px] text-ink-400">{b.date} · {b.generated_at ? `آخر تحديث ${formatDateTime(b.generated_at)}` : ""} · {b.mode === "ai" ? "إحاطة مع توصيات ذكية" : "إحاطة مبنية على بيانات النظام مباشرة"}</p>
         </>
       )}
     </Card>
