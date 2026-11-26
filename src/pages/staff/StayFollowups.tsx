@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { Moon, LogOut, Clock, CheckCircle2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { stayApi, type StayFollowups as Followups } from "../../lib/api";
+import { useBranch } from "../../lib/branch";
 import { useBranchQuery } from "../../lib/useBranchQuery";
 import { SectionTitle, LoadingScreen, Card, Badge, LoadErrorCard, ErrorBanner } from "../../components/ui";
 import { BranchPicker } from "../../components/BranchPicker";
@@ -14,10 +15,19 @@ import { mergeFollowups } from "../../lib/allBranches";
 import { formatCurrency, formatDateTime } from "../../lib/utils";
 
 const sar = (h: number) => formatCurrency(h / 100);
+const bn = (x: object) => { const n = (x as { branch_name?: string }).branch_name; return n ? ` · ${n}` : ""; };
 const NONE: Followups = { generated_at: "", overdue: [], departed_open: [], late_departures: [] };
 
 export default function StayFollowups() {
-  const q = useBranchQuery<Followups>((branchId) => stayApi.followups(branchId), [], NONE, { merge: (parts) => mergeFollowups(parts) ?? NONE });
+  const { allBranches, branches } = useBranch();
+  // «جميع الفروع»: each row carries its branch name (unit numbers repeat across branches)
+  const q = useBranchQuery<Followups>(async (branchId) => {
+    const f = await stayApi.followups(branchId);
+    const name = allBranches ? branches.find((b) => b.id === branchId)?.name_ar : undefined;
+    if (!name || !f) return f;
+    const tag = <X extends object>(rows: X[]) => rows.map((x) => ({ ...x, branch_name: name }));
+    return { ...f, overdue: tag(f.overdue), departed_open: tag(f.departed_open), late_departures: tag(f.late_departures) } as Followups;
+  }, [allBranches, branches], NONE, { merge: (parts) => mergeFollowups(parts) ?? NONE });
   if (q.loading) return <LoadingScreen />;
   if (q.error && !q.data.generated_at) return <div><SectionTitle title="متابعة الإقامات" action={<BranchPicker allowAll />} /><LoadErrorCard message={q.error} onRetry={q.reload} /></div>;
   const f = q.data;
@@ -28,19 +38,19 @@ export default function StayFollowups() {
       <div className="space-y-6">
         <Group icon={Moon} title="ليالٍ غير مدفوعة بعد موعدها" count={f.overdue.length} empty="لا ليالي متأخرة السداد." testId="followups-overdue">
           {f.overdue.map((x) => (
-            <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}`} sub={`${x.guest ?? "—"} · المغادرة ${x.check_out}${x.overdue_since ? ` · متأخرة منذ ${formatDateTime(x.overdue_since)}` : ""}`}
+            <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}${bn(x)}`} sub={`${x.guest ?? "—"} · المغادرة ${x.check_out}${x.overdue_since ? ` · متأخرة منذ ${formatDateTime(x.overdue_since)}` : ""}`}
               side={<><span className="font-medium text-danger-600" dir="ltr">{sar(x.overdue_amount)}</span>{x.excused ? <Badge className="bg-ink-100 text-ink-500">سُجِّل سبب الاستمرار</Badge> : <Badge className="bg-danger-500/10 text-danger-600">التمديد والخدمات موقوفة</Badge>}</>} />
           ))}
         </Group>
         <Group icon={LogOut} title="غادر ولم يُغلق" count={f.departed_open.length} empty="كل المغادرات مغلقة." testId="followups-departed">
           {f.departed_open.map((x) => (
-            <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}`} sub={`${x.guest ?? "—"} · غادر ${x.checked_out_at ? formatDateTime(x.checked_out_at) : "—"} · ${x.missing.join(" · ") || "—"}`}
+            <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}${bn(x)}`} sub={`${x.guest ?? "—"} · غادر ${x.checked_out_at ? formatDateTime(x.checked_out_at) : "—"} · ${x.missing.join(" · ") || "—"}`}
               side={<>{x.inspected ? <Badge className="bg-success-500/10 text-success-600">فُحصت</Badge> : <Badge className="bg-warning-500/10 text-warning-700">بلا فحص</Badge>}{x.deposit_balance > 0 && <span className="text-xs text-ink-500">تأمين <span dir="ltr">{sar(x.deposit_balance)}</span></span>}</>} />
           ))}
         </Group>
         <Group icon={Clock} title="تجاوزوا موعد المغادرة" count={f.late_departures.length} empty="لا أحد تجاوز موعد مغادرته." testId="followups-late">
           {f.late_departures.map((x) => (
-            <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}`} sub={`${x.guest ?? "—"} · كان موعد المغادرة ${x.check_out} الساعة ${x.departure_time}`}
+            <Row key={x.id} id={x.id} title={`${x.internal_ref} · وحدة ${x.room_number ?? "—"}${bn(x)}`} sub={`${x.guest ?? "—"} · كان موعد المغادرة ${x.check_out} الساعة ${x.departure_time}`}
               side={<Badge className="bg-warning-500/10 text-warning-700">مقيم بعد موعده</Badge>} />
           ))}
         </Group>

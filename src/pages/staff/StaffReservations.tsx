@@ -218,8 +218,8 @@ export default function StaffReservations() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative max-w-full max-sm:basis-full"><Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-ink-400" /><input className="input w-56 max-w-full pr-9 max-sm:w-full" placeholder="مرجع / نزيل / جوال / شركة" value={String(filters.q ?? "")} onChange={(e) => set("q", e.target.value)} aria-label="بحث" /></div>
           <select className="input w-auto max-sm:min-w-0 max-sm:flex-1" value={String(filters.status ?? "")} onChange={(e) => { set("status", e.target.value); set("open_only", !e.target.value); }} aria-label="الحالة"><option value="">كل الحالات</option>{Object.entries(RESERVATION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-          <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.open_only)} onChange={(e) => set("open_only", e.target.checked)} /> المفتوحة فقط</label>
-          {moneyRole && <label className="flex items-center gap-1.5 text-sm text-ink-600"><input type="checkbox" checked={isOn(filters.has_balance)} onChange={(e) => set("has_balance", e.target.checked)} /> عليها متبقٍ</label>}
+          <label className="flex items-center gap-1.5 text-sm text-ink-600 max-sm:min-h-11"><input type="checkbox" checked={isOn(filters.open_only)} onChange={(e) => set("open_only", e.target.checked)} /> المفتوحة فقط</label>
+          {moneyRole && <label className="flex items-center gap-1.5 text-sm text-ink-600 max-sm:min-h-11"><input type="checkbox" checked={isOn(filters.has_balance)} onChange={(e) => set("has_balance", e.target.checked)} /> عليها متبقٍ</label>}
           <button type="button" onClick={() => setMoreOpen(!moreOpen)} className="btn-ghost text-sm sm:hidden" data-testid="toggle-more" aria-expanded={moreOpen} aria-controls="res-more"><SlidersHorizontal className="h-4 w-4" /> خيارات العرض{activeCount ? ` (${activeCount})` : ""}</button>
           <div id="res-more" className={`${moreOpen ? "flex" : "hidden"} w-full flex-wrap items-center gap-2 sm:contents`}>
           <button type="button" onClick={() => setAdvanced(!advanced)} className={`btn-ghost text-sm ${advanced ? "text-brand-700" : ""}`} data-testid="toggle-advanced" aria-expanded={advanced}><SlidersHorizontal className="h-4 w-4" /> مرشحات إضافية{activeCount ? ` (${activeCount})` : ""}</button>
@@ -265,7 +265,7 @@ export default function StaffReservations() {
             {sel("access_status", "الوصول للوحدة", Object.entries(ACCESS_STATUS_LABELS))}
             <label className="flex items-center gap-1.5 text-xs text-ink-600">المجموعة <input className="input w-28 py-1 text-xs font-mono" value={String(filters.group_ref ?? "")} onChange={(e) => set("group_ref", e.target.value)} aria-label="المجموعة" /></label>
             {sel("platform_collects", "من يقبض", [["true", "المنصة"], ["false", "المنشأة"]])}
-            <label className="flex items-center gap-1.5 text-xs text-ink-600"><input type="checkbox" checked={isOn(filters.has_discount)} onChange={(e) => set("has_discount", e.target.checked)} /> فيها خصم</label>
+            <label className="flex items-center gap-1.5 text-xs text-ink-600 max-sm:min-h-11"><input type="checkbox" checked={isOn(filters.has_discount)} onChange={(e) => set("has_discount", e.target.checked)} /> فيها خصم</label>
             {sel("sort", "الترتيب", Object.entries(SORT_LABELS).filter(([k]) => k !== "default") as Array<[string, string]>, SORT_LABELS.default)}
           </div>
         )}

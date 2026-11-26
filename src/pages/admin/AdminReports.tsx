@@ -440,7 +440,7 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-ink-700">تقرير الخصومات (من {from} إلى {to})</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-ink-600"><input type="checkbox" checked={afterArrival} onChange={(e) => setAfterArrival(e.target.checked)} /> بعد الوصول فقط</label>
+          <label className="flex items-center gap-1.5 text-xs text-ink-600 max-sm:min-h-11"><input type="checkbox" checked={afterArrival} onChange={(e) => setAfterArrival(e.target.checked)} /> بعد الوصول فقط</label>
           {d && <p className="text-sm text-ink-600">{COUNT.discount(d.count)} · <span className="font-semibold" dir="ltr">{sar(d.total_halalas)}</span></p>}
           <ExportMenu allOnly source={{ statement: statementFor("تقرير الخصومات", afterArrival ? ["بعد الوصول فقط"] : []), table, pageCount: d?.rows?.length ?? 0, total: d?.rows?.length ?? 0 }} />
         </div>

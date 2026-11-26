@@ -53,12 +53,18 @@ export function Field({ label, children, hint, className, error }: { label: stri
   useEffect(() => {
     const el = box.current?.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea");
     if (el && !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby") && !(el as HTMLInputElement).labels?.length) el.setAttribute("aria-labelledby", id);
+    // an error (or hint) is read with the control when it gets focus; the control's own describedby ids stay, ours is added or removed
+    if (el) {
+      const mine = id + "-d"; const rest = (el.getAttribute("aria-describedby") ?? "").split(/\s+/).filter((x) => x && x !== mine);
+      const next = error || hint ? [...rest, mine] : rest;
+      if (next.length) el.setAttribute("aria-describedby", next.join(" ")); else el.removeAttribute("aria-describedby");
+    }
   });
   return (
     <div className={"min-w-0 " + (className ?? "")} ref={box}>
       <label className="label" id={id}>{label}</label>
       {children}
-      {error ? <p className="mt-1 text-xs text-danger-600" role="alert">{error}</p> : hint && <p className="mt-1 text-xs text-ink-400">{hint}</p>}
+      {error ? <p className="mt-1 text-xs text-danger-600" role="alert" id={id + "-d"}>{error}</p> : hint && <p className="mt-1 text-xs text-ink-400" id={id + "-d"}>{hint}</p>}
     </div>
   );
 }

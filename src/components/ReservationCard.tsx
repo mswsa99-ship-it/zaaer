@@ -26,7 +26,7 @@ export function ReservationCardRow({ r }: { r: import("../lib/hooks").Reservatio
             </div>
             <p className="mt-1 text-sm text-ink-600">{maskName(r.primary_guest?.full_name)}</p>
             <p className="mt-0.5 text-xs text-ink-400">
-              {r.room?.room_number ?? "—"} · {r.room_category?.name_ar} · {r.source?.name ?? "—"}
+              {r.branch ? `${r.branch.name_ar} · ` : ""}{r.room?.room_number ?? "—"} · {r.room_category?.name_ar} · {r.source?.name ?? "—"}
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">

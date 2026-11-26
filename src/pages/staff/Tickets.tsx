@@ -88,6 +88,8 @@ export default function Tickets() {
   const creatingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // opening the new-report form moves focus to its first control (keyboard and screen reader users land in it)
+  useEffect(() => { if (showForm) window.setTimeout(() => document.querySelector<HTMLElement>("[data-ticket-form] select")?.focus({ preventScroll: false }), 0); }, [showForm]);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newRoom, setNewRoom] = useState("");
@@ -143,6 +145,9 @@ export default function Tickets() {
     finally { setActing(null); }
   }
 
+  /** A jump chip scrolls to its section and moves keyboard focus into it, so the next Tab continues there. */
+  function jumpTo(id: string) { const el = document.getElementById(id); if (!el) return; el.scrollIntoView({ block: "start" }); el.focus({ preventScroll: true }); }
+
   async function createTicket(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -181,13 +186,13 @@ export default function Tickets() {
 
       {canSeeHandoff && (
         <nav aria-label="أقسام الصفحة" className="-mt-4 flex flex-wrap gap-2 text-sm" data-testid="tickets-jump">
-          <button type="button" className="btn-outline min-h-[44px] text-sm" onClick={() => document.getElementById("tickets-handoff")?.scrollIntoView({ block: "start" })}>طلبات التحويل ({openHandoff})</button>
-          <button type="button" className="btn-outline min-h-[44px] text-sm" onClick={() => document.getElementById("tickets-maintenance")?.scrollIntoView({ block: "start" })}>البلاغات والصيانة ({openMaint})</button>
+          <button type="button" className="btn-outline min-h-[44px] text-sm" onClick={() => jumpTo("tickets-handoff")}>طلبات التحويل ({openHandoff})</button>
+          <button type="button" className="btn-outline min-h-[44px] text-sm" onClick={() => jumpTo("tickets-maintenance")}>البلاغات والصيانة ({openMaint})</button>
         </nav>
       )}
 
       {canSeeHandoff && (
-        <section id="tickets-handoff" className="scroll-mt-24">
+        <section id="tickets-handoff" tabIndex={-1} className="scroll-mt-24 outline-none">
           <SectionTitle title="طلبات التحويل لموظف" subtitle={`طلبات مفتوحة: ${openHandoff}`} />
           {handoffs.length === 0 ? (
             <EmptyState icon={<LifeBuoy className="h-10 w-10" />} title="لا توجد طلبات تدخل" description="تظهر هنا الحالات التي أحالها المساعد الذكي إلى موظف." />
@@ -227,14 +232,14 @@ export default function Tickets() {
         </section>
       )}
 
-      <section id="tickets-maintenance" className="scroll-mt-24">
+      <section id="tickets-maintenance" tabIndex={-1} className="scroll-mt-24 outline-none">
         <SectionTitle level={2} title="البلاغات والصيانة" subtitle={`بلاغات مفتوحة: ${openMaint}`} action={
-          <div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><button onClick={() => setShowForm(!showForm)} className="btn-primary text-sm"><Plus className="h-4 w-4" /> بلاغ جديد</button></div>
+          <div className="flex flex-wrap items-center gap-2"><BranchPicker allowAll /><button type="button" onClick={() => setShowForm(!showForm)} aria-expanded={showForm} className="btn-primary text-sm" data-testid="ticket-new"><Plus className="h-4 w-4" /> بلاغ جديد</button></div>
         } />
 
         {showForm && (
           <Card className="mb-4">
-            <form onSubmit={createTicket} className="space-y-3" data-ticket-form noValidate>
+            <form onSubmit={createTicket} className="space-y-3" data-ticket-form noValidate aria-label="بلاغ صيانة جديد">
               <Field label="الوحدة" error={fieldErr.room}>
                 <select value={newRoom} onChange={(e) => { setNewRoom(e.target.value); setFieldErr((f) => ({ ...f, room: undefined })); }} className="input" aria-invalid={fieldErr.room ? true : undefined}>
                   <option value="">اختيار وحدة</option>

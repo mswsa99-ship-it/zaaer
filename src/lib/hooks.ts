@@ -2,6 +2,7 @@ import { useEffect, useId } from "react";
 import { supabase } from "./supabase";
 import { useBranchQuery, must } from "./useBranchQuery";
 import { useAuth } from "./auth";
+import { useBranch } from "./branch";
 
 export interface ReservationCard {
   id: string;
@@ -43,11 +44,14 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
   const todayOnly = !!filter?.todayOnly;
   // 0052 (PERM-07): the payment status is money — a role the matrix does not let see money never gets it on a card
   const money = useAuth().permissions.seesMoney;
+  // «جميع الفروع» (owner): a card says which branch it belongs to, since unit numbers repeat across branches
+  const { allBranches, branches } = useBranch();
 
   const q = useBranchQuery<ReservationCard[]>(async (branchId) => {
     const { data: cards, error: cardsErr } = await supabase.rpc("fn_reservation_cards", { p_branch: branchId, p_status: statusKey ? statusKey.split(",") : null, p_today_only: todayOnly });
     if (cardsErr) throw cardsErr;
-    const list = (cards ?? []) as unknown as ReservationCard[];
+    const branchName = allBranches ? branches.find((b) => b.id === branchId)?.name_ar : undefined;
+    const list = ((cards ?? []) as unknown as ReservationCard[]).map((r) => branchName ? { ...r, branch: { name_ar: branchName } } : r);
     if (list.length === 0) return list;
     // Primary guests are loaded separately (reservation_guests is role-gated on the server: a role that may not
     // read them simply gets no rows, and the card shows "—").
@@ -58,7 +62,7 @@ export function useReservations(filter?: { status?: string[]; todayOnly?: boolea
       .eq("is_primary", true)) as { reservation_id: string; full_name: string }[];
     const guestMap = new Map(guests.map((g) => [g.reservation_id, g.full_name]));
     return list.map((r) => ({ ...r, payment_status: money ? r.payment_status : null, primary_guest: { full_name: guestMap.get(r.id) ?? "—" } }));
-  }, [statusKey, todayOnly, money], NO_CARDS, { merge: (parts) => parts.flat() });   // «جميع الفروع» (owner): every branch's cards in one list
+  }, [statusKey, todayOnly, money, allBranches, branches], NO_CARDS, { merge: (parts) => parts.flat() });   // «جميع الفروع» (owner): every branch's cards in one list
   const reload = q.reload;
 
   // Realtime: any reservation change reloads the active branch's list. Each use of this hook has its own channel:
