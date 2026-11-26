@@ -11,6 +11,7 @@ import { supabase } from "../../lib/supabase";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
 import { moneyApi, type CashAccount } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { useBranch } from "../../lib/branch";
 import { accountLabel } from "../../lib/useCashAccounts";
 import { latinDigits } from "../../lib/validation";
 import { SectionTitle, LoadingScreen, Card, EmptyState, ErrorBanner, Badge, LoadErrorCard } from "../../components/ui";
@@ -24,7 +25,8 @@ type Draft = Partial<CashAccount> & { kind: CashAccount["kind"]; name: string };
 
 export default function AdminCashAccounts() {
   const { can } = useAuth();
-  const canEdit = can("cash_accounts");
+  const { branches, allBranches, setBranchId } = useBranch();
+  const canEdit = can("cash_accounts") && !allBranches; // «جميع الفروع»: read-only; a change is made inside one branch
   const [showArchived, setShowArchived] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [lifecycle, setLifecycle] = useState<{ a: CashAccount; archive: boolean } | null>(null);
@@ -34,16 +36,24 @@ export default function AdminCashAccounts() {
   // G24 (decision 40): the accounts of the active branch only
   const q = useBranchQuery<CashAccount[]>(async (branchId) => must(await supabase.from("cash_accounts")
     .select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version")
-    .eq("branch_id", branchId).order("kind").order("name")) as CashAccount[], [], NO_ACCOUNTS);
+    .eq("branch_id", branchId).order("kind").order("name")) as CashAccount[], [], NO_ACCOUNTS, { merge: (parts) => parts.flat() });
   const rows = q.data; const load = q.reload; const branchId = q.branchId;
   // the IBAN lives in «دليل الفرع» (0056); shown here beside the account it must agree with
   const [iban, setIban] = useState<string | null>(null);
+  const [ibanMap, setIbanMap] = useState<Record<string, string | null>>({});
   useEffect(() => {
-    if (!branchId) { setIban(null); return; }
+    if (!allBranches) { setIbanMap({}); return; }
+    let alive = true;
+    void Promise.all(branches.map(async (b) => [b.id, ((await supabase.rpc("fn_branch_iban", { p_branch: b.id })).data as string | null) ?? null] as const))
+      .then((r) => { if (alive) setIbanMap(Object.fromEntries(r)); });
+    return () => { alive = false; };
+  }, [allBranches, branches, q.data]);
+  useEffect(() => {
+    if (!branchId || allBranches) { setIban(null); return; }
     let alive = true;
     supabase.rpc("fn_branch_iban", { p_branch: branchId }).then(({ data }) => { if (alive) setIban((data as string | null) ?? null); });
     return () => { alive = false; };
-  }, [branchId, q.data]);
+  }, [branchId, allBranches, q.data]);
 
   if (q.loading) return <LoadingScreen />;
   const visible = rows.filter((r) => showArchived || !r.archived_at);
@@ -66,6 +76,7 @@ export default function AdminCashAccounts() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-ink-800">{a.name}</span>
+                      {allBranches && <Badge testId="cash-branch">{branches.find((b) => b.id === a.branch_id)?.name_ar}</Badge>}
                       {a.is_default && a.is_active && !a.archived_at && <Badge className="bg-brand-50 text-brand-700"><Star className="ml-1 inline h-3 w-3" />الافتراضي</Badge>}
                       <ArchivedBadge archivedAt={a.archived_at} />
                       {!a.is_active && !a.archived_at && <Badge className="bg-warning-500/10 text-warning-700">موقوف</Badge>}
@@ -75,10 +86,11 @@ export default function AdminCashAccounts() {
                       {a.account_prefix && a.account_suffix
                         ? <p className="mt-0.5 text-xs text-ink-500" data-testid="account-rule">رقم الحساب يبدأ بـ <span dir="ltr">{a.account_prefix}</span> وينتهي بـ <span dir="ltr">{a.account_suffix}</span></p>
                         : <p className="mt-1 rounded-lg bg-warning-500/10 px-2 py-1 text-xs text-warning-700" data-testid="account-rule-missing">لم تُكتب بداية رقم الحساب ونهايته: يحتاجهما رصد الرسائل البنكية لنسبة كل حركة إلى هذا الفرع.</p>}
-                      <p className="mt-0.5 text-xs text-ink-500">الآيبان: {iban ? <span dir="ltr" className="font-mono">{iban.replace(/(.{4})/g, "$1 ").trim()}</span> : "غير مُدخل"} · <Link to="/admin/branches" className="text-brand-700 underline">من «دليل الفرع»</Link></p>
+                      <p className="mt-0.5 text-xs text-ink-500">الآيبان: {(allBranches ? ibanMap[a.branch_id] : iban) ? <span dir="ltr" className="font-mono">{String(allBranches ? ibanMap[a.branch_id] : iban).replace(/(.{4})/g, "$1 ").trim()}</span> : "غير مُدخل"} · <Link to="/admin/branches" className="text-brand-700 underline">من «دليل الفرع»</Link></p>
                     </>}
                     {a.archive_reason && <p className="mt-0.5 text-xs text-ink-400">سبب الأرشفة: {a.archive_reason}</p>}
                   </div>
+                  {allBranches && <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1.5 text-xs" data-testid="cash-open-branch" onClick={() => setBranchId(a.branch_id)} aria-label={`فتح فرع ${a.name} لتعديل الحسابات`}>فتح الفرع للتعديل</button>}
                   {canEdit && (
                     <div className="flex gap-1">
                       {!a.archived_at && <button onClick={() => setDraft({ ...a })} className="btn-ghost p-1.5" title="تعديل" aria-label="تعديل"><Pencil className="h-4 w-4" /></button>}
@@ -97,10 +109,10 @@ export default function AdminCashAccounts() {
   return (
     <div>
       <SectionTitle title="الصناديق والحسابات" subtitle="لكل فرع صندوق نقد واحد وحساب بنكي واحد، ولا يُقيَّد فيهما إلا ما يخص هذا الفرع" action={
-        <div className="flex min-w-0 flex-wrap items-center gap-3"><BranchPicker />{canEdit && missing.map((k) => <button key={k} onClick={() => setDraft({ kind: k, name: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> {k === "cash_box" ? "إضافة صندوق" : "إضافة حساب بنكي"}</button>)}</div>} />
+        <div className="flex min-w-0 flex-wrap items-center gap-3"><BranchPicker allowAll />{canEdit && missing.map((k) => <button key={k} onClick={() => setDraft({ kind: k, name: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> {k === "cash_box" ? "إضافة صندوق" : "إضافة حساب بنكي"}</button>)}</div>} />
       {q.error && rows.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       {notice && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">{notice}</p>}
-      {missingDefault.length > 0 && rows.length > 0 && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">لا يوجد {missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم في هذا الفرع: لا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.</p>}
+      {!allBranches && missingDefault.length > 0 && rows.length > 0 && <p className="mb-4 rounded-xl bg-warning-500/10 px-3 py-2 text-sm text-warning-700">لا يوجد {missingDefault.map((k) => KIND_LABEL[k]).join(" ولا ")} مستخدم في هذا الفرع: لا يُقبل قبض أو رد بهذه الطريقة حتى يُضاف.</p>}
       <div className="mb-4"><Toggle checked={showArchived} onChange={setShowArchived} label="إظهار المؤرشف" /></div>
       {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : rows.length === 0 ? <EmptyState icon={<Wallet className="h-10 w-10" />} title="لا توجد صناديق ولا حسابات" description="لكل فرع صندوق وحساب بنكي من البداية؛ أضف ما تحتاج." /> : (
         <div className="grid gap-6 lg:grid-cols-2">{group("cash_box")}{group("bank_account")}</div>

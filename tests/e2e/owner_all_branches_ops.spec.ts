@@ -208,3 +208,48 @@ test("AB-P2 payment providers: the owner's all-branches view lists each branch r
   await expect(page.getByTestId("payment-all")).toHaveCount(0);
   await expect(page.getByTestId("save-payment-settings")).toBeVisible();
 });
+
+test("AB-P3 payment providers: a populated branch and an empty branch keep their own status in the all-branches view; the stored key is only a yes/no", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/payment-providers", { waitUntil: "networkidle" });
+  const pick = page.getByLabel("الفرع", { exact: true });
+  await pick.selectOption({ label: "فرع الرياض — طريق الملك فهد" });
+  const inputs = page.locator("input");
+  await page.locator("select.input").nth(1).selectOption("moyasar");
+  await inputs.nth(0).fill("MERCH-RIY-1");
+  await inputs.nth(1).fill("pk_test_synthetic_riyadh");
+  await inputs.nth(2).fill("sk_test_synthetic_9876");
+  await page.getByTestId("save-payment-settings").click();
+  await expect(page.getByText("حُفظت إعدادات الدفع.")).toBeVisible();
+  await pick.selectOption({ label: "جميع الفروع" });
+  const rows = page.getByTestId("payment-branch-row");
+  await expect(rows).toHaveCount(2);
+  const riy = page.getByTestId("payment-all").locator("> div").filter({ hasText: "الرياض" }).first();
+  const jed = page.getByTestId("payment-all").locator("> div").filter({ hasText: "الكورنيش" }).first();
+  await expect(riy).toContainText("MERCH-RIY-1");
+  await expect(riy).toContainText("ميسّر");
+  await expect(riy).toContainText("محفوظ ومشفّر");
+  await expect(riy).toContainText("البيانات مكتملة");
+  await expect(jed).not.toContainText("MERCH-RIY-1");
+  await expect(jed).toContainText("لم يُختر");
+  await expect(jed).toContainText("غير مُدخل");
+  await expect(jed).toContainText("البيانات غير مكتملة");
+  const body = await page.locator("body").innerText();
+  expect(body).not.toContain("pk_test_synthetic_riyadh");
+  expect(body).not.toContain("sk_test_synthetic_9876");
+  expect(body).not.toContain("9876");
+});
+
+test("AB-C1 cash accounts: the owner's all-branches view lists both branches' accounts with a branch tag, read-only, and opens a branch to edit", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/cash-accounts", { waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("cash-branch").first().waitFor();
+  const tags = await page.getByTestId("cash-branch").allInnerTexts();
+  expect(new Set(tags).size).toBe(2);
+  await expect(page.getByRole("button", { name: "تعديل", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /إضافة/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /أرشفة|استعادة/ })).toHaveCount(0);
+  await page.getByTestId("cash-open-branch").first().click();
+  await expect(page.getByTestId("cash-branch")).toHaveCount(0);
+});
