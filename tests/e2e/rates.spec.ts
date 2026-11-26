@@ -85,6 +85,32 @@ test.describe("rates (phase 2)", () => {
     await expect.poll(async () => parseSar(await page.locator('div:has(> :is(p, span):text-is("الإجمالي")) > :is(p, span)[dir=ltr]').first().innerText())).toBe(700);
   });
 
+  test("DV1 a discount without its reason is refused at the reason field: marked, explained, focused", async ({ page, loginAs }) => {
+    const t = riyadhToday();
+    await loginAs("owner");
+    await startBooking(page, /استوديو مريح/, plus(t, 100), plus(t, 102), "ضيف الخصم");
+    const discount = page.locator("div:has(> label:has-text('خصم (إجمالي)')) input[data-money]");
+    await discount.fill("50");
+    await page.getByRole("button", { name: "إنشاء الحجز" }).click();
+    const reason = page.getByLabel("سبب الخصم");
+    await expect(reason).toHaveAttribute("aria-invalid", "true");
+    await expect(reason).toBeFocused();
+    await expect(page.getByRole("alert").filter({ hasText: "اكتب سبب الخصم." })).toBeVisible();
+    expect(page.url()).toContain("/staff/reservations/new");   // nothing was created
+  });
+
+  test("DV2 a discount above the rent is said at the discount field, and the disabled create button gives that reason, not «no price»", async ({ page, loginAs }) => {
+    const t = riyadhToday();
+    await loginAs("owner");
+    await startBooking(page, /استوديو مريح/, plus(t, 105), plus(t, 107), "ضيف الخصم");
+    await page.locator("div:has(> label:has-text('خصم (إجمالي)')) input[data-money]").fill("99999");
+    await expect(page.getByRole("alert").filter({ hasText: "الخصم أكبر من" }).first()).toBeVisible();
+    const create = page.getByRole("button", { name: "إنشاء الحجز" });
+    await expect(create).toBeDisabled();
+    await expect(page.getByText("الخصم غير مقبول: راجع الرسالة تحت حقل الخصم.")).toBeVisible();
+    await expect(page.getByText("لا يوجد سعر محسوب لهذه الفترة بعد")).toHaveCount(0);
+  });
+
   test("PR14 before arrival a switch to a unit of another type shows the new price first, then re-prices the stay by it (0048)", async ({ page, loginAs }) => {
     const t = riyadhToday();
     await loginAs("supervisor");

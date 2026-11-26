@@ -76,6 +76,9 @@ export default function StaffReservationNew() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [times, setTimes] = useState({ arrival: "", departure: "" });
   const [quote, setQuote] = useState<Quote | null>(null);
+  // why the quote was refused (an excessive discount, a price that cannot be computed): said at the field, not only in the banner
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [reasonTried, setReasonTried] = useState(false);
   const [rooms, setRooms] = useState<Array<{ room_id: string; room_number: string; status: string; cleanliness: string; block_name: string | null }>>([]);
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
@@ -107,14 +110,20 @@ export default function StaffReservationNew() {
           opsApi.quote(branchId, f.category_id, f.check_in, f.check_out, f.override ? f.nightly_rate : null, canDiscount ? f.discount : 0, f.source_id || null),
           opsApi.availableRooms(branchId, f.check_in, f.check_out, f.category_id),
         ]);
-        if (!alive) return; setQuote(q); setRooms(r); setError(null);
+        if (!alive) return; setQuote(q); setRooms(r); setError(null); setQuoteError(null);
         if (f.room_id && !r.some((x) => x.room_id === f.room_id)) setF((p) => ({ ...p, room_id: "" }));
-      } catch (e) { if (alive) { setQuote(null); setError(toArabicError(e)); } }
+      } catch (e) { if (alive) { setQuote(null); setError(toArabicError(e)); setQuoteError(toArabicError(e)); } }
     })();
     return () => { alive = false; };
   }, [branchId, cats, f.category_id, f.check_in, f.check_out, f.override, f.nightly_rate, f.discount, f.source_id, nights, canDiscount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit() {
+    // the server also refuses a discount without its reason; say it here, at the field, and move there
+    if (canDiscount && f.discount > 0 && !f.discount_reason.trim()) {
+      setReasonTried(true); setError(null);
+      window.setTimeout(() => { const el = document.getElementById("discount-reason"); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus({ preventScroll: true }); } }, 30);
+      return;
+    }
     setBusy(true); setError(null);
     try {
       const named = companionRows.filter((c) => c.full_name.trim()).map((c) => ({ full_name: c.full_name.trim(), relationship: c.relationship.trim() || null }));
@@ -149,6 +158,7 @@ export default function StaffReservationNew() {
     : pastStay && !canLate ? "الإقامة في الماضي وصلاحيتك لا تسمح بالتسجيل المتأخر."
     : pastStay && !lateReason.trim() ? "اكتب سبب التسجيل المتأخر."
     : source?.kind === "external" && f.platform_collects == null ? "حدّد من يحصّل المبلغ: المنصة أم الفندق."
+    : !quote && quoteError && canDiscount && f.discount > 0 ? "الخصم غير مقبول: راجع الرسالة تحت حقل الخصم."
     : !quote ? "لا يوجد سعر محسوب لهذه الفترة بعد، تحقق من النوع والتواريخ."
     : null;
   const step1Ok = nights > 0 && !!f.category_id && (!pastStay || (canLate && !!lateReason.trim()));
@@ -306,10 +316,10 @@ export default function StaffReservationNew() {
               <Toggle checked={f.override} onChange={(v) => setF({ ...f, override: v, nightly_rate: v ? (quote?.nightly_rate ?? cat?.base_price_halalas ?? 0) : null })} label="سعر ليلة يدوي لكل الليالي" />
               {f.override && <><MoneyInput valueHalalas={f.nightly_rate} onChange={(h) => setF({ ...f, nightly_rate: h })} />{!isMgr && <p className="text-[11px] text-ink-400">لا يقل عن السعر المحسوب؛ الأقل خصمٌ ضمن حدك.</p>}</>}
               {canDiscount && <>
-                <Field label="خصم (إجمالي)" hint={quote?.discount_max != null ? (isMgr ? undefined : `المسموح لك حتى ${formatCurrency(quote.discount_max / 100)}${quote.supervisor_max_discount_bp ? ` (حتى ${quote.supervisor_max_discount_bp / 100}% وبما لا ينزل تحت أدنى سعر)` : " — لا خصم للمشرف في هذا الفرع"}`) : undefined}>
+                <Field label="خصم (إجمالي)" error={!quote && quoteError && f.discount > 0 ? quoteError : null} hint={quote?.discount_max != null ? (isMgr ? undefined : `المسموح لك حتى ${formatCurrency(quote.discount_max / 100)}${quote.supervisor_max_discount_bp ? ` (حتى ${quote.supervisor_max_discount_bp / 100}% وبما لا ينزل تحت أدنى سعر)` : " — لا خصم للمشرف في هذا الفرع"}`) : undefined}>
                   <MoneyInput valueHalalas={f.discount} onChange={(h) => setF({ ...f, discount: h ?? 0 })} />
                 </Field>
-                {f.discount > 0 && <Field label="سبب الخصم (إلزامي)"><input className="input" value={f.discount_reason} onChange={(e) => setF({ ...f, discount_reason: e.target.value })} aria-label="سبب الخصم" /></Field>}
+                {f.discount > 0 && <Field label="سبب الخصم (إلزامي)" error={reasonTried && !f.discount_reason.trim() ? "اكتب سبب الخصم." : null}><input id="discount-reason" className="input" value={f.discount_reason} aria-invalid={(reasonTried && !f.discount_reason.trim()) || undefined} onChange={(e) => setF({ ...f, discount_reason: e.target.value })} aria-label="سبب الخصم" /></Field>}
               </>}
             </div>
             {quote && (
