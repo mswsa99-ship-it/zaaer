@@ -15,13 +15,36 @@ describe("staff menu with centres (6.2)", () => {
       for (const p of staffNav(role)) expect(reachable.has(p.path), `${role} loses ${p.path}`).toBe(true);
     });
   }
-  it("the owner's menu is 9 items with three centres", () => {
-    expect(staffMenu("owner").map((m) => m.label)).toEqual(["لوحة الوحدات", "لوحة العمليات", "النزيل", "الحجوزات", "المالية", "المراجعة", "خدمة الغرف", "الرموز", "البلاغات"]);
+  it("the owner's menu is 6 items: Review sits inside Finance, Codes and Reports inside Room Service", () => {
+    expect(staffMenu("owner").map((m) => m.label)).toEqual(["لوحة الوحدات", "لوحة العمليات", "النزيل", "الحجوزات", "المالية", "خدمة الغرف"]);
   });
   it("every page tagged with a centre is listed in that centre's tab order", () => {
-    for (const hub of ["guest", "finance", "review"] as const) {
+    for (const hub of ["guest", "finance", "service"] as const) {
       const tagged = PAGES.filter((p) => p.hub === hub).map((p) => p.path).sort();
       expect(hubTabs(hub, "owner").map((p) => p.path).sort()).toEqual(tagged);
     }
+  });
+
+  // the grouping is navigation only: what each role may open is exactly what it could open before (nothing widens, nothing is lost)
+  const WAS = {
+    owner: { review: ["/staff/day-close", "/staff/platforms"], service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"] },
+    manager: { review: ["/staff/day-close", "/staff/platforms"], service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"] },
+    supervisor: { review: ["/staff/day-close", "/staff/platforms"], service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"] },
+    finance: { review: ["/staff/day-close"], service: ["/staff/housekeeping", "/staff/tickets"] },
+    housekeeping: { review: [], service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"] },
+  } as const;
+  for (const role of ALL_STAFF) {
+    it(`${role}: Review tabs and Room Service tabs are the same pages as before, inside Finance and Room Service`, () => {
+      const finance = hubTabs("finance", role).map((p) => p.path);
+      const service = hubTabs("service", role).map((p) => p.path);
+      expect(finance.filter((p) => p === "/staff/day-close" || p === "/staff/platforms")).toEqual([...WAS[role].review]);
+      expect(service).toEqual([...WAS[role].service]);
+      // the finance entry of a role with no payments tab leads to a page it may open (the first tab it has)
+      const menu = staffMenu(role).find((m) => m.label === "المالية");
+      if (menu) expect(menu.members).toContain(menu.path);
+    });
+  }
+  it("/admin/review (owner only) is not a staff tab and no staff centre lists it", () => {
+    for (const hub of ["guest", "finance", "service"] as const) for (const role of ALL_STAFF) expect(hubTabs(hub, role).map((p) => p.path)).not.toContain("/admin/review");
   });
 });

@@ -62,11 +62,11 @@ export interface NavPage {
 }
 
 /** 6.2 (U11): three centres with tabs replace 13 separate menu links — the staff menu goes from 22 items to 9 at most. */
-export type HubId = "guest" | "finance" | "review";
+export type HubId = "guest" | "finance" | "service";
 export const HUBS: Record<HubId, { label: string; icon: LucideIcon }> = {
   guest: { label: "النزيل", icon: UserCheck },
   finance: { label: "المالية", icon: Wallet },
-  review: { label: "المراجعة", icon: ClipboardCheck },
+  service: { label: "خدمة الغرف", icon: Sparkles },
 };
 
 export const PAGES: readonly NavPage[] = [
@@ -90,7 +90,7 @@ export const PAGES: readonly NavPage[] = [
   { path: "/staff/journey", label: "رحلة الضيف", icon: Route, hub: "guest", area: "staff", roles: ["owner", "manager", "supervisor"] },
   // decision 13: the day's terminal total against the terminal vouchers (§16: owner, manager, supervisor, finance)
   // A2/A3 (0063): the closing of the day — the boxes counted against the system, the review, the edit window
-  { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, hub: "review", area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
+  { path: "/staff/day-close", label: "إقفال اليوم", icon: Vault, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["day.close", "day.close.approve"] },
   // A4 (0064): the expense vouchers and the ledger of the box and the bank account
   { path: "/staff/expenses", label: "المصروفات", icon: HandCoins, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["expense.create", "expense.cancel", "ledger.view"] },
   { path: "/staff/ledger", label: "دفتر الحركة", icon: ClipboardList, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: ["ledger.view"] },
@@ -103,11 +103,11 @@ export const PAGES: readonly NavPage[] = [
   // 0033: the day's follow-up (overdue nights, departures not closed, late departures) and the per-employee day (decision 5)
   { path: "/staff/followups", label: "متابعة الإقامات", icon: BellRing, hub: "guest", area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
   // decision 4: today's and tomorrow's platform arrivals, matched against the platform (the supervisor's daily list)
-  { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, hub: "review", area: "staff", roles: ["owner", "manager", "supervisor"] },
+  { path: "/staff/platforms", label: "مطابقة المنصات", icon: Link2, hub: "finance", area: "staff", roles: ["owner", "manager", "supervisor"] },
   { path: "/staff/day-summary", label: "ملخص اليوم", icon: ClipboardList, hub: "finance", area: "staff", roles: MONEY_ROLES, cap: MONEY_CAPS },
-  { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, area: "staff", roles: ALL_STAFF },
-  { path: "/staff/codes", label: "الرموز", icon: KeyRound, area: "staff", roles: CODES_ROLES, cap: ["keybox.code"] },
-  { path: "/staff/tickets", label: "البلاغات", icon: Wrench, area: "staff", roles: ALL_STAFF },
+  { path: "/staff/housekeeping", label: "خدمة الغرف", icon: Sparkles, hub: "service", area: "staff", roles: ALL_STAFF },
+  { path: "/staff/codes", label: "الرموز", icon: KeyRound, hub: "service", area: "staff", roles: CODES_ROLES, cap: ["keybox.code"] },
+  { path: "/staff/tickets", label: "البلاغات", icon: Wrench, hub: "service", area: "staff", roles: ALL_STAFF },
   { path: "/staff/inbox", label: "الوارد", icon: Inbox, hub: "guest", area: "staff", roles: ALL_STAFF, navRoles: MONEY_ROLES },
 
   // ---- admin — order within a group = navigation order ----
@@ -212,8 +212,8 @@ export function staffNav(role: string | null | undefined, allows?: Allows): NavP
 /** The order of a centre's tabs (the first it has is where its menu link leads). */
 const HUB_ORDER: Record<HubId, string[]> = {
   guest: ["/staff/access-approvals", "/staff/arrivals", "/staff/identity-verification", "/staff/journey", "/staff/followups", "/staff/inbox"],
-  finance: ["/staff/payments", "/staff/orders", "/staff/expenses", "/staff/ledger", "/staff/accounts", "/staff/bank", "/staff/pos-settlement", "/staff/day-summary"],
-  review: ["/staff/day-close", "/staff/platforms"],
+  finance: ["/staff/payments", "/staff/orders", "/staff/expenses", "/staff/ledger", "/staff/accounts", "/staff/bank", "/staff/pos-settlement", "/staff/day-summary", "/staff/day-close", "/staff/platforms"],
+  service: ["/staff/housekeeping", "/staff/codes", "/staff/tickets"],
 };
 /** The tabs of a centre for a role, in order (only pages the role sees). */
 export function hubTabs(hub: HubId, role: string | null | undefined, allows?: Allows): NavPage[] {
