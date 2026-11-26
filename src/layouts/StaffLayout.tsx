@@ -19,8 +19,8 @@ import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 import { useOrganizationName } from "../lib/organization";
 import { useJourneyAlerts } from "../lib/journeyAlerts";
 
-/** Header buttons: 20px icon (was 16, +25%) in a 55px target (was 44). */
-const HEADER_BTN = "flex h-[55px] w-[55px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
+/** Header buttons: 20px icon (was 16, +25%) in a 48px target (was 44), grouped with no gap on the left. */
+const HEADER_BTN = "flex h-12 w-12 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
 
 export default function StaffLayout() {
   const orgName = useOrganizationName();
@@ -106,12 +106,14 @@ export default function StaffLayout() {
           <header className="flex flex-wrap items-center gap-x-2 gap-y-0 border-b border-ink-100 bg-white/90 px-3 py-1.5 backdrop-blur lg:hidden">
             <img src={roomaiAsset("roomai-mark.svg")} alt="" className="h-8 w-8" />
             <span className="min-w-0 truncate text-sm font-semibold text-ink-800">{PRODUCT_NAME}</span>
-            <div id="ops-assistant-phone-dock" className="mr-auto" />
+            <div className="mr-auto flex flex-wrap items-center justify-end">
+            <div id="ops-assistant-phone-dock" />
             <Link to="/staff/account" className={HEADER_BTN} aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-5 w-5" aria-hidden="true" /></Link>
             <ThemeToggle className={HEADER_BTN} />
-            <button onClick={handleSignOut} className={HEADER_BTN} aria-label="تسجيل الخروج">
+            <button onClick={handleSignOut} className={HEADER_BTN + " ms-2"} aria-label="تسجيل الخروج">
               <LogOut className="h-5 w-5" />
             </button>
+            </div>
           </header>
         </div>
         {/* IX-03: the code alert scrolls away with the page instead of pinning a tall block on a phone */}
