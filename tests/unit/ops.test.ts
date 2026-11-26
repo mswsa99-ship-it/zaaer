@@ -182,3 +182,13 @@ describe("followups and day summary read tools (read-only, signed-in person's ow
     }
   });
 });
+
+describe("the fallback for a role without money", () => {
+  it("OPSNOMONEY an omitted balance list is said to be unavailable, never read as «no debts»", () => {
+    const c: Record<string, any> = { ...ctx }; delete c.in_house_with_balance; delete c.checked_out_with_deposit;
+    const r = fallbackOpsReply("من عليه متبقي؟", c);
+    expect(r).toContain("غير متاحة لصلاحيتك"); expect(r).not.toContain("لا مديونيات");
+    // a role with money and a truly empty list still gets the plain answer
+    expect(fallbackOpsReply("من عليه متبقي؟", { ...ctx, in_house_with_balance: [], checked_out_with_deposit: [] })).toContain("لا مديونيات");
+  });
+});
