@@ -61,7 +61,7 @@ export function DailyBriefing() {
                     {[...rows.filter((i) => i.level !== "info"), ...rows.filter((i) => i.level === "info")].map((i, k) => (
                       <li key={k} className={`flex items-start gap-2 text-sm text-ink-700${i.level === "info" ? " opacity-75" : ""}`}>
                         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot[i.level]}`} />
-                        <span className="min-w-0 flex-1 break-words">{i.text}{i.level === "info" && <span className="ms-2 text-[11px]">(للعلم)</span>}{i.why && <span className="mt-0.5 block text-[11px] opacity-75">{i.why}</span>}{i.link && <Link to={i.link} className="mt-1 flex min-h-[44px] w-fit min-w-[44px] items-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
+                        <span className="min-w-0 flex-1 break-words">{i.text}{i.level === "info" && <span className="ms-2 text-[11px]">({i.horizon === "upcoming" ? "قادم" : i.horizon === "unavailable" ? "غير متاح" : "للعلم"})</span>}{i.why && <span className="mt-0.5 block text-[11px] opacity-75">{i.why}</span>}{i.link && <Link to={i.link} className="mt-1 flex min-h-[44px] w-fit min-w-[44px] items-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
                       </li>
                     ))}
                   </ul>
