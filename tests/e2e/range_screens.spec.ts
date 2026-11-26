@@ -123,3 +123,17 @@ test.describe("date picker keyboard", () => {
     await expect(trigger).toBeFocused();
   });
 });
+
+test.describe("all branches with a period", () => {
+  test("RNG11 POS settlement «جميع الفروع» + a period: the card says period and lists rows for the whole period, not only the first day", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/pos-settlement", { waitUntil: "networkidle" });
+    await page.locator('select[aria-label="الفرع النشط"]').first().selectOption({ label: "جميع الفروع" });
+    await pickRange(page, /اليوم أو الفترة/, 2, 5);
+    const card = page.getByTestId("pos-all-branches");
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("heading", { name: "تسويات الفترة المختارة في جميع الفروع" })).toBeVisible();
+    await expect(card.getByText("المجاميع اليومية من السندات تظهر عند اختيار فرع واحد")).toBeVisible();
+    await expect(page.getByTestId("pos-range")).toHaveCount(0);   // the per-day voucher overview is one branch only
+  });
+});

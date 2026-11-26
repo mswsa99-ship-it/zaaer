@@ -36,11 +36,15 @@ export default function PosSettlement() {
       supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version")
         .eq("branch_id", branchId).eq("kind", "bank_account").eq("is_active", true).is("archived_at", null).order("name"),
       supabase.from("pos_settlements").select("id, branch_id, account_id, business_date, terminal_total_halalas, system_total_halalas, difference_halalas, voucher_count, status, note, version, updated_at")
-        .eq("branch_id", branchId).gte("business_date", addDaysISO(todayISO(), -14)).order("business_date", { ascending: false }),
+        .eq("branch_id", branchId).gte("business_date", date < addDaysISO(todayISO(), -14) ? date : addDaysISO(todayISO(), -14)).order("business_date", { ascending: false }),
     ]);
     return { accounts: must(a) as CashAccount[], history: must(h) as Hist[] };
-  }, [tick], NO_DATA, { merge: (parts) => ({ accounts: parts.flatMap((p) => p.accounts), history: parts.flatMap((p) => p.history).sort((x, y) => (x.business_date < y.business_date ? 1 : -1)) }) });
-  const { accounts, history } = q.data; const branchId = q.branchId;
+  }, [tick, date], NO_DATA, { merge: (parts) => ({ accounts: parts.flatMap((p) => p.accounts), history: parts.flatMap((p) => p.history).sort((x, y) => (x.business_date < y.business_date ? 1 : -1)) }) });
+  const { accounts, history: allHistory } = q.data; const branchId = q.branchId;
+  const recentFrom = addDaysISO(todayISO(), -14);
+  const history = allHistory.filter((x) => x.business_date >= recentFrom);   // «آخر أسبوعين»
+  const periodRows = allHistory.filter((x) => x.business_date >= date && x.business_date <= (rangeTo > date ? rangeTo : date));   // the chosen day or period, every branch
+  const isPeriod = rangeTo > date;
   const { branches } = useBranch();
   const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
   useEffect(() => {
@@ -63,7 +67,7 @@ export default function PosSettlement() {
                 {!q.all && <Field label="الحساب البنكي (جهاز الشبكة)"><select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="الحساب البنكي">{accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}{a.is_default ? " (الافتراضي)" : ""}</option>)}</select></Field>}
               </div>
             </Card>
-            {q.all && <Card data-testid="pos-all-branches"><h2 className="mb-2 text-sm font-semibold text-rai-ink">تسويات اليوم المختار في جميع الفروع</h2><p className="mb-2 text-xs text-rai-ink-muted">عرض للقراءة فقط. لإدخال تسوية اختر فرعًا واحدًا.</p>{history.filter((x) => x.business_date === date).length === 0 ? <p className="text-xs text-rai-ink-muted">لا تسويات مسجلة في هذا اليوم.</p> : <div className="divide-y divide-ink-50 text-sm">{history.filter((x) => x.business_date === date).map((x) => <div key={x.id} className="flex items-center justify-between gap-2 py-2"><span>{branchName(x.branch_id)}<span className="block text-[11px] text-rai-ink-muted">{nameOf(x.account_id)}</span></span>{x.status === "matched" ? <Badge className="bg-rai-success-tint text-rai-success">مطابقة</Badge> : <Badge className="bg-rai-danger-tint text-rai-danger">فرق <span dir="ltr">{sar(x.difference_halalas)}</span></Badge>}</div>)}</div>}</Card>}
+            {q.all && <Card data-testid="pos-all-branches"><h2 className="mb-2 text-sm font-semibold text-rai-ink">{isPeriod ? "تسويات الفترة المختارة في جميع الفروع" : "تسويات اليوم المختار في جميع الفروع"}</h2><p className="mb-2 text-xs text-rai-ink-muted">{isPeriod ? "عرض للقراءة فقط للتسويات المحفوظة من " + date + " إلى " + rangeTo + ". المجاميع اليومية من السندات تظهر عند اختيار فرع واحد، ولإدخال تسوية اختر فرعًا واحدًا." : "عرض للقراءة فقط. لإدخال تسوية اختر فرعًا واحدًا."}</p>{periodRows.length === 0 ? <p className="text-xs text-rai-ink-muted">{isPeriod ? "لا تسويات محفوظة في هذه الفترة." : "لا تسويات مسجلة في هذا اليوم."}</p> : <div className="divide-y divide-ink-50 text-sm">{periodRows.map((x) => <div key={x.id} className="flex items-center justify-between gap-2 py-2"><span>{isPeriod && <bdi dir="ltr" className="me-2 font-medium">{x.business_date}</bdi>}{branchName(x.branch_id)}<span className="block text-[11px] text-rai-ink-muted">{nameOf(x.account_id)}</span></span>{x.status === "matched" ? <Badge className="bg-rai-success-tint text-rai-success">مطابقة</Badge> : <Badge className="bg-rai-danger-tint text-rai-danger">فرق <span dir="ltr">{sar(x.difference_halalas)}</span></Badge>}</div>)}</div>}</Card>}
             {!q.all && branchId && accountId && rangeTo > date && <RangeOverview branchId={branchId} accountId={accountId} from={date} to={rangeTo} tick={tick} onPick={(d) => { setDate(d); setRangeTo(d); }} />}
             {!q.all && branchId && accountId && rangeTo <= date && <DayCard branchId={branchId} accountId={accountId} date={date} onSaved={() => setTick((t) => t + 1)} />}
           </div>
