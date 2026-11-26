@@ -116,7 +116,7 @@ export default function Codes() {
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="تصفية الوحدات">
         {FILTERS.map((f) => (
           <button key={f.key} type="button" onClick={() => setFilter(f.key)} aria-pressed={filter === f.key}
-            className={cn("inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm transition-colors",
+            className={cn("inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-3 py-1.5 text-sm sm:min-h-0 transition-colors",
               filter === f.key ? "border-brand-400 bg-brand-50 text-brand-700" : "border-ink-100 bg-white text-ink-600 hover:bg-ink-50")}>
             {f.key !== "all" && <CodeLight tone={TONE[f.key]} size="h-2.5 w-2.5" />}
             {f.label}
