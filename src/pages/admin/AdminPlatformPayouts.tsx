@@ -14,11 +14,12 @@ import { accountLabel } from "../../lib/useCashAccounts";
 import { SectionTitle, LoadingScreen, Card, ErrorBanner, Badge, LoadErrorCard, EmptyState } from "../../components/ui";
 import { Modal, Field, ActionForm, Submit, MoneyInput, ReasonInput } from "../../components/forms";
 import { BranchPicker } from "../../components/BranchPicker";
+import { useBranch } from "../../lib/branch";
 import { formatCurrency, todayISO, isoDateIn, UI_LOCALE, COUNT } from "../../lib/utils";
 import { bpToPercent } from "../../lib/money";
 
 const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
-interface Payout { id: string; source_id: string; account_id: string; expected_halalas: number; commission_bp: number | null; commission_halalas: number | null; received_halalas: number; difference_halalas: number; voucher_count: number; received_on: string; reference: string; note: string | null; status: string; cancel_reason: string | null; created_at: string }
+interface Payout { branch_id?: string; id: string; source_id: string; account_id: string; expected_halalas: number; commission_bp: number | null; commission_halalas: number | null; received_halalas: number; difference_halalas: number; voucher_count: number; received_on: string; reference: string; note: string | null; status: string; cancel_reason: string | null; created_at: string }
 interface Data { unsettled: PlatformPayment[]; payouts: Payout[]; accounts: CashAccount[]; sources: Array<{ id: string; name: string }> }
 const NO_DATA: Data = { unsettled: [], payouts: [], accounts: [], sources: [] };
 /** The month a payment belongs to, by the property's calendar day (not the UTC one). */
@@ -28,7 +29,9 @@ const monthName = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateStr
 
 export default function AdminPlatformPayouts() {
   const { canFull } = useAuth();
-  const canCancel = canFull("platform.payouts");
+  const { branches, allBranches, setBranchId } = useBranch();   // «جميع الفروع» (owner): read-only; matching, recording and cancelling stay inside one branch
+  const canCancel = canFull("platform.payouts") && !allBranches;
+  const branchName = (id?: string) => branches.find((b) => b.id === id)?.name_ar ?? "";
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [cancelFor, setCancelFor] = useState<Payout | null>(null);
@@ -43,16 +46,21 @@ export default function AdminPlatformPayouts() {
       supabase.from("cash_accounts").select("id, branch_id, kind, name, bank_name, account_last4, account_prefix, account_suffix, is_default, is_active, archived_at, archive_reason, version").eq("branch_id", branchId).eq("kind", "bank_account").order("name"),
       supabase.from("booking_sources").select("id, name").order("name"),
     ]);
-    return { unsettled: u, payouts: must(p) as Payout[], accounts: must(a) as CashAccount[], sources: (s.data as Data["sources"]) ?? [] };
-  }, [], NO_DATA);
+    return { unsettled: u.map((x) => ({ ...x, branch_id: branchId })), payouts: (must(p) as Payout[]).map((x) => ({ ...x, branch_id: branchId })), accounts: must(a) as CashAccount[], sources: (s.data as Data["sources"]) ?? [] };
+  }, [], NO_DATA, { merge: (parts) => ({
+    unsettled: parts.flatMap((x) => x.unsettled), payouts: parts.flatMap((x) => x.payouts),
+    accounts: [...new Map(parts.flatMap((x) => x.accounts).map((a) => [a.id, a])).values()],
+    sources: [...new Map(parts.flatMap((x) => x.sources).map((x) => [x.id, x])).values()],
+  }) });
   const { unsettled, payouts, accounts, sources } = q.data; const branchId = q.branchId;
   useEffect(() => { setPicked(new Set()); }, [branchId]);   // a selection never carries over to another branch
 
   const groups = useMemo(() => {
-    const m = new Map<string, { source_id: string; source: string; month: string; items: PlatformPayment[] }>();
+    const m = new Map<string, { source_id: string; source: string; month: string; branch_id?: string; items: PlatformPayment[] }>();
     for (const x of unsettled) {
-      const k = `${x.source_id}|${monthOf(x.occurred_at)}`;
-      if (!m.has(k)) m.set(k, { source_id: x.source_id, source: x.source_name ?? "—", month: monthOf(x.occurred_at), items: [] });
+      const bid = (x as { branch_id?: string }).branch_id;
+      const k = `${bid}|${x.source_id}|${monthOf(x.occurred_at)}`;
+      if (!m.has(k)) m.set(k, { branch_id: bid, source_id: x.source_id, source: x.source_name ?? "—", month: monthOf(x.occurred_at), items: [] });
       m.get(k)!.items.push(x);
     }
     return [...m.values()];
@@ -73,7 +81,7 @@ export default function AdminPlatformPayouts() {
 
   return (
     <div>
-      <SectionTitle title="إيداعات المنصات" subtitle="الدفعات الآجلة عبر المنصات مقابل ما أودعته المنصة في الحساب — شهريًا" action={<BranchPicker />} />
+      <SectionTitle title="إيداعات المنصات" subtitle="الدفعات الآجلة عبر المنصات مقابل ما أودعته المنصة في الحساب — شهريًا" action={<BranchPicker allowAll />} />
       {q.error && <div className="mb-4">{unsettled.length + payouts.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
 
       <h3 className="mb-2 text-sm font-semibold text-ink-700">دفعات لم تُطابق بعد</h3>
@@ -83,16 +91,18 @@ export default function AdminPlatformPayouts() {
             const total = g.items.reduce((s, x) => s + x.signed_halalas, 0);
             const allIn = g.items.every((x) => picked.has(x.id));
             return (
-              <Card key={g.source_id + g.month}>
+              <Card key={`${g.branch_id}|${g.source_id}|${g.month}`}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-ink-800">{g.source} · {monthName(g.month)}</p>
+                  {allBranches && <Badge testId="payout-branch">{branchName(g.branch_id)}</Badge>}
+                  {allBranches && g.branch_id && <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="payout-open-branch" onClick={() => setBranchId(g.branch_id!)} aria-label={`فتح فرع ${branchName(g.branch_id)} لمطابقة ${g.source}`}>فتح الفرع للمطابقة</button>}
                   <div className="flex items-center gap-3 text-sm"><span className="text-ink-500">{COUNT.payment(g.items.length)} · <span dir="ltr">{sar(total)}</span></span>
-                    <button type="button" className="btn-ghost text-xs" onClick={() => setPicked((s) => { const n = new Set(s); for (const x of g.items) { if (allIn) n.delete(x.id); else n.add(x.id); } return n; })}>{allIn ? "إلغاء التحديد" : "تحديد الكل"}</button></div>
+                    {!allBranches && <button type="button" className="btn-ghost text-xs" onClick={() => setPicked((s) => { const n = new Set(s); for (const x of g.items) { if (allIn) n.delete(x.id); else n.add(x.id); } return n; })}>{allIn ? "إلغاء التحديد" : "تحديد الكل"}</button>}</div>
                 </div>
                 <div className="divide-y divide-ink-50 text-sm">
                   {g.items.map((x) => (
-                    <label key={x.id} className="flex cursor-pointer items-center gap-3 py-1.5" data-testid="platform-payment">
-                      <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id)} />
+                    <label key={x.id} className={`flex items-center gap-3 py-1.5 ${allBranches ? "" : "cursor-pointer"}`} data-testid="platform-payment">
+                      {!allBranches && <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={picked.has(x.id)} onChange={() => toggle(x.id)} />}
                       <span className="font-mono text-xs">{x.number}</span>
                       <span className="min-w-0 flex-1 truncate text-ink-600">{x.internal_ref}{x.external_ref ? ` · ${x.external_ref}` : ""} · وصول <span dir="ltr">{x.check_in}</span></span>
                       <span dir="ltr" className={x.kind === "refund" ? "text-danger-600" : "text-ink-800"}>{sar(x.signed_halalas)}</span>
@@ -118,8 +128,8 @@ export default function AdminPlatformPayouts() {
             <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-2 text-right font-medium">التاريخ</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">الإجمالي</th><th className="text-right font-medium">العمولة</th><th className="text-right font-medium">المستلم</th><th className="text-right font-medium">الفرق</th><th className="text-right font-medium">المرجع</th><th></th></tr></thead>
             <tbody>
               {payouts.map((p) => (
-                <tr key={p.id} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
-                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
+                <tr key={`${p.branch_id}:${p.id}`} className={`border-b border-ink-50 ${p.status === "cancelled" ? "text-ink-400 line-through" : ""}`}>
+                  <td className="py-2" dir="ltr">{p.received_on}</td><td>{sourceName(p.source_id)}{allBranches && <> <Badge testId="payout-branch">{branchName(p.branch_id)}</Badge></>}<span className="block text-[11px] text-ink-400 no-underline">{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</span></td>
                   <td dir="ltr">{sar(p.expected_halalas)}</td><td dir="ltr">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] text-ink-400">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</td><td dir="ltr">{sar(p.received_halalas)}</td>
                   <td dir="ltr" className={p.difference_halalas === 0 ? "" : "text-warning-700"}>{sar(p.difference_halalas)}{p.note && <span className="block text-[11px] text-ink-400" dir="rtl">{p.note}</span>}</td>
                   <td className="font-mono text-xs">{p.reference}</td>

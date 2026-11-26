@@ -353,3 +353,16 @@ test("AB-V1 availability: the owner's all-branches view lists both branches' sto
   await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);
   await expect(page.getByTestId("avail-value")).toHaveCount(0);
 });
+
+test("AB-W1 platform deposits: the owner's all-branches view is read-only with a branch tag per group (no ticking, no matching), and opening the branch restores the single-branch matching controls", async ({ page, loginAs }) => {
+  await loginAs("owner");
+  await page.goto("/#/admin/platform-payouts", { waitUntil: "networkidle" });
+  await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
+  await page.getByTestId("payout-branch").first().waitFor();
+  expect(await page.getByTestId("platform-payment").count()).toBeGreaterThan(0);
+  expect(await page.locator('[data-testid="platform-payment"] input[type=checkbox]').count()).toBe(0);
+  expect(await page.getByRole("button", { name: /تحديد الكل|تأكيد/ }).count()).toBe(0);
+  await page.getByTestId("payout-open-branch").first().click();
+  await page.locator('[data-testid="platform-payment"] input[type=checkbox]').first().waitFor();
+  expect(await page.getByTestId("payout-branch").count()).toBe(0);
+});
