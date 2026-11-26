@@ -227,7 +227,7 @@ function ar(k: number, [one, two, few, many]: [string, string, string, string]):
 const DAYS: [string, string, string, string] = ["يوم واحد", "يومان", "أيام", "يومًا"];
 const UNITS: [string, string, string, string] = ["وحدة واحدة", "وحدتان", "وحدات", "وحدة"];
 
-export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string }
+export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination" }
 
 export function buildBriefing(ctx: Record<string, any>): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
   const s = ctx?.summary ?? {}; const u = s.units ?? {}; const av = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
@@ -242,6 +242,9 @@ export function buildBriefing(ctx: Record<string, any>): { headline: string; ite
   const unitsAttn = (ctx.units_needing_attention ?? []) as any[]; // deno-lint-ignore no-explicit-any
   const arrivingDirty = unitsAttn.filter((x) => x.next_arrival && x.next_arrival <= s.date);
   if (arrivingDirty.length) items.push({ level: "critical", text: `${ar(arrivingDirty.length, ["وحدة واحدة عليها", "وحدتان عليهما", "وحدات عليها", "وحدة عليها"])} وصول اليوم وليست جاهزة: ${arrivingDirty.map((x) => x.room).join("، ")}`, link: "/staff/housekeeping" });
+  // coordination: a read-only cross-check between the front desk and the units — an arrival today on a unit that is under maintenance
+  const maintArrival = unitsAttn.filter((x) => x.status === "maintenance" && x.next_arrival && x.next_arrival <= s.date);
+  if (maintArrival.length) items.push({ level: "critical", area: "coordination", text: `وصول اليوم على وحدة في الصيانة: ${maintArrival.slice(0, 5).map((x) => "وحدة " + x.room).join("، ")} — يحتاج استقبالًا وصيانة قرارًا مشتركًا`, link: "/staff/tickets" });
   if (n(u.dirty)) items.push({ level: "warning", text: `تحتاج تنظيفًا: ${ar(n(u.dirty), UNITS)} — مهام غير مسندة ${n(hk.unassigned)}، قيد التنفيذ ${n(hk.in_progress)}، أُنجزت اليوم ${n(hk.completed_today)}`, link: "/staff/housekeeping" });
   if (n(u.maintenance)) items.push({ level: "warning", text: `في الصيانة: ${ar(n(u.maintenance), UNITS)}`, link: "/staff/tickets" });
   if (n(f.outstanding_in_house)) items.push({ level: "warning", text: `متبقٍ على النزلاء المقيمين: ${sar(f.outstanding_in_house)}`, link: "/staff/payments" });

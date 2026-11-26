@@ -1,10 +1,23 @@
 import { Link } from "react-router-dom";
-import { Sunrise, RefreshCw, Sparkles } from "lucide-react";
+import { Sunrise, RefreshCw, Sparkles, ConciergeBell, Wallet, Wrench, Workflow } from "lucide-react";
 import { useBranchQuery } from "../lib/useBranchQuery";
 import { useBranch } from "../lib/branch";
 import { aiOpsBriefing, type Briefing } from "../lib/api";
 import { Card, Spinner, ErrorBanner } from "./ui";
 import { formatDateTime } from "../lib/utils";
+
+type Area = "coordination" | "reception" | "finance" | "ops";
+const AREAS: { id: Area; label: string; icon: typeof Wrench }[] = [
+  { id: "coordination", label: "التنسيق بين الأقسام", icon: Workflow }, { id: "reception", label: "الاستقبال", icon: ConciergeBell },
+  { id: "finance", label: "المالية", icon: Wallet }, { id: "ops", label: "التشغيل", icon: Wrench },
+];
+/** Which team's desk an alert belongs to: set by the alert, else by the page it points to. Reading only; the link just opens the page. */
+function areaOf(i: { area?: Area; link?: string }): Area {
+  if (i.area) return i.area;
+  if (i.link === "/staff/arrivals" || i.link === "/staff/reservations") return "reception";
+  if (i.link === "/staff/payments" || i.link === "/staff/followups") return "finance";
+  return "ops";
+}
 
 /** Morning briefing: deterministic prioritized items from the ops context + optional AI recommendations. */
 export function DailyBriefing() {
@@ -36,14 +49,26 @@ export function DailyBriefing() {
       {b && (
         <>
           <p className="text-sm font-medium text-ink-700">{b.headline}</p>
-          <ul className="mt-3 space-y-2">
-            {b.items.map((i, k) => (
-              <li key={k} className="flex items-start gap-2 text-sm text-ink-700">
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot[i.level]}`} />
-                <span className="flex-1">{i.text}{i.link && <Link to={i.link} className="mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-3 space-y-4" data-testid="briefing-areas">
+            {AREAS.map((g) => {
+              const rows = b.items.filter((i) => areaOf(i) === g.id);
+              if (!rows.length) return null;
+              const hot = rows.filter((i) => i.level !== "info").length;
+              return (
+                <section key={g.id} aria-label={g.label} data-area={g.id}>
+                  <h3 className="mb-1.5 flex items-center gap-2 text-sm font-semibold"><g.icon className="h-4 w-4" aria-hidden="true" />{g.label}{hot > 0 && <span className="text-xs font-semibold" aria-label={`${hot} تنبيهات`}>({hot})</span>}</h3>
+                  <ul className="space-y-2">
+                    {rows.map((i, k) => (
+                      <li key={k} className="flex items-start gap-2 text-sm text-ink-700">
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot[i.level]}`} />
+                        <span className="flex-1">{i.text}{i.link && <Link to={i.link} className="mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-xs text-brand-600 hover:underline">فتح</Link>}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
           {b.insights && <div className="mt-4 rounded-xl bg-brand-50 p-3 text-sm text-brand-900"><p className="mb-1 flex items-center gap-1 text-xs font-semibold text-brand-700"><Sparkles className="h-3.5 w-3.5" /> توصيات المساعد (للمراجعة البشرية)</p><p className="whitespace-pre-wrap">{b.insights}</p></div>}
           <p className="mt-3 text-[11px] text-ink-400">{b.date} · {b.generated_at ? formatDateTime(b.generated_at) : ""} · {b.mode === "ai" ? "إحاطة مع توصيات ذكية" : "إحاطة مبنية على بيانات النظام مباشرة"}</p>
         </>

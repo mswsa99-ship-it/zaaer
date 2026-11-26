@@ -206,3 +206,12 @@ describe("the fallback for a role without money", () => {
     expect(fallbackOpsReply("من يغادر اليوم؟", ctx)).toContain("متبقٍ");
   });
 });
+
+describe("home alerts: the coordination cross-check (read only)", () => {
+  it("OPSCOORD an arrival today on a unit in maintenance is one coordination alert; no arrival, no alert", () => {
+    const c: Record<string, any> = { ...ctx, units_needing_attention: [{ room: "105", status: "maintenance", cleanliness: "clean", next_arrival: ctx.summary.date }] };
+    const hit = buildBriefing(c).items.filter((i) => i.area === "coordination");
+    expect(hit).toHaveLength(1); expect(hit[0].text).toContain("وحدة 105"); expect(hit[0].level).toBe("critical");
+    expect(buildBriefing({ ...ctx, units_needing_attention: [{ room: "105", status: "maintenance", cleanliness: "clean", next_arrival: null }] }).items.some((i) => i.area === "coordination")).toBe(false);
+  });
+});
