@@ -387,6 +387,8 @@ test("AB-W2 platform deposits: both branches keep their own source/month groups 
   const row = page.locator("tbody tr", { hasText: "JED-DEP-0001" });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText("جدة");
+  await expect(row).toContainText("الحساب البنكي الرئيسي");   // the deposit lands in Jeddah's own bank account, never a Riyadh one
+  await expect(row).not.toContainText("حساب الشبكة والتحويل");
   await expect(page.getByTestId("payout-branch-empty")).toContainText("فرع فارغ للمنصات");
   await expect(page.getByTestId("payout-branch-empty")).toHaveCount(1);
 });
@@ -400,6 +402,7 @@ test("AB-W3 platform deposits on a phone: each matched deposit is a labelled car
   await card.waitFor();
   for (const label of ["التاريخ", "الإجمالي", "العمولة", "المستلم", "الفرق", "المرجع"]) await expect(card.getByText(label, { exact: true })).toBeVisible();
   await expect(card.getByTestId("payout-branch")).toContainText("جدة");
+  await expect(card).toContainText("الحساب البنكي الرئيسي");
   const ref = card.getByTestId("payout-ref-phone");
   await expect(ref).toContainText("JED-DEP-0001");
   const box = (await ref.boundingBox())!;
@@ -410,4 +413,15 @@ test("AB-W3 platform deposits on a phone: each matched deposit is a labelled car
   // a pending row's arrival date stays in one piece
   const d = page.getByTestId("platform-payment").first().locator('span[dir="ltr"].whitespace-nowrap');
   expect((await d.boundingBox())!.height).toBeLessThan(30);
+});
+
+for (const role of ["manager", "finance"] as const) test(`AB-N2 (${role}): a ${role} keeps single-branch admin pages: no «جميع الفروع» on rates, payments, cash, policies, knowledge, structure, availability or platform deposits, and no all-mode markers`, async ({ page, loginAs }) => {
+  {
+    await loginAs(role);
+    for (const u of ["/#/admin/rates", "/#/admin/payment-providers", "/#/admin/cash-accounts", "/#/admin/policies", "/#/admin/knowledge", "/#/admin/structure", "/#/admin/availability", "/#/admin/platform-payouts", "/#/admin/rooms"]) {
+      await page.goto(u, { waitUntil: "networkidle" });
+      await expect(page.getByText("جميع الفروع")).toHaveCount(0);
+      for (const id of ["payout-branch", "avail-all", "payout-open-branch", "admin-row-open-branch"]) await expect(page.getByTestId(id)).toHaveCount(0);
+    }
+  }
 });

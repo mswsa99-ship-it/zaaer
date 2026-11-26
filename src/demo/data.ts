@@ -303,7 +303,7 @@ export function seed(): Store {
     const expected = jv.reduce((t: number, v) => t + (v.kind === "receipt" ? v.amount_halalas : -v.amount_halalas), 0);
     const bp = Number(s.booking_sources.find((x) => x.id === fixed(20))?.commission_bp ?? 0); const commission = Math.round((expected * bp) / 10000);
     const payId = uid();
-    put("platform_payouts", [{ id: payId, organization_id: ORG, branch_id: BRANCH_B, source_id: fixed(20), account_id: (s.cash_accounts as Row[]).find((x) => x.branch_id === BRANCH_B)?.id ?? null, expected_halalas: expected, commission_bp: bp, commission_halalas: commission, received_halalas: expected - commission, difference_halalas: 0, voucher_count: jv.length, received_on: addDays(T, -1), reference: "JED-DEP-0001-مرجع-إيداع-طويل-للاختبار", note: null, status: "confirmed", created_by: null, created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null }]);
+    put("platform_payouts", [{ id: payId, organization_id: ORG, branch_id: BRANCH_B, source_id: fixed(20), account_id: fixed(703), expected_halalas: expected, commission_bp: bp, commission_halalas: commission, received_halalas: expected - commission, difference_halalas: 0, voucher_count: jv.length, received_on: addDays(T, -1), reference: "JED-DEP-0001-مرجع-إيداع-طويل-للاختبار", note: null, status: "confirmed", created_by: null, created_at: nowISO(), cancelled_by: null, cancelled_at: null, cancel_reason: null }]);
     for (const v of jv) v.payout_id = payId;
   }
   put("reservations", res); put("reservation_guests", guests); put("reservation_allocations", allocs); put("reservation_charges", charges); put("financial_vouchers", vouchers);
