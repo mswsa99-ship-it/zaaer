@@ -103,8 +103,8 @@ export default function StaffRooms() {
   const u = summary?.units;
   const tabs = (
     <div className="flex max-w-full flex-wrap gap-1 rounded-xl bg-ink-100 p-1 text-sm" role="tablist">
-      <button role="tab" aria-selected={view === "board"} onClick={() => setView("board")} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 ${view === "board" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}><LayoutGrid className="h-4 w-4" /> اللوحة</button>
-      <button role="tab" aria-selected={view === "calendar"} onClick={() => setView("calendar")} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 ${view === "calendar" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`} data-testid="tab-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</button>
+      <button role="tab" aria-selected={view === "board"} onClick={() => setView("board")} className={`flex items-center gap-1 min-h-[44px] rounded-lg px-3 py-1.5 ${view === "board" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}><LayoutGrid className="h-4 w-4" /> اللوحة</button>
+      <button role="tab" aria-selected={view === "calendar"} onClick={() => setView("calendar")} className={`flex items-center gap-1 min-h-[44px] rounded-lg px-3 py-1.5 ${view === "calendar" ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`} data-testid="tab-calendar"><CalendarRange className="h-4 w-4" /> تقويم الحجوزات</button>
     </div>
   );
   return (
@@ -116,7 +116,7 @@ export default function StaffRooms() {
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 font-semibold text-warning-700"><BellRing className="h-4 w-4" aria-hidden="true" /> ينتظرك الآن</p>
             <ul className="mt-1 space-y-0.5 text-sm text-ink-800">
-              {now.slice(0, 4).map((n) => <li key={n.key}>{n.to ? <Link to={n.to} className="hover:underline">{n.text}</Link> : n.text}</li>)}
+              {now.slice(0, 4).map((n) => <li key={n.key}>{n.to ? <Link to={n.to} className="inline-flex min-h-[44px] items-center hover:underline">{n.text}</Link> : n.text}</li>)}
             </ul>
             {now.length > 4 && <p className="mt-1 text-xs text-ink-500">و{now.length - 4 === 1 ? "أمر آخر" : `${now.length - 4} أمور أخرى`}</p>}
           </div>
@@ -148,7 +148,7 @@ export default function StaffRooms() {
         <select className="input w-auto py-1.5 text-sm" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="نوع الوحدة" data-testid="filter-category"><option value="">كل الأنواع</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         <select className="input w-auto py-1.5 text-sm" value={floor} onChange={(e) => setFloor(e.target.value)} aria-label="الطابق" data-testid="filter-floor"><option value="">كل الطوابق</option>{floors.map((f) => <option key={f} value={f}>{f}</option>)}</select>
         {view === "board" && ([["all", "الكل"], ["free", "خالية"], ["occupied", "مؤجرة"], ["ready", "جاهزة"], ["arriving", "وصول اليوم"], ["departing", "مغادرة اليوم"], ["dirty", "تحتاج تنظيفًا"], ["maintenance", "صيانة"], ["attention", "تحتاج انتباهًا"]] as const).map(([k, v]) => (
-          <button key={k} type="button" aria-pressed={filter === k} data-testid={`units-filter-${k}`} onClick={() => setFilter(k)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${filter === k ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-600"}`}>{v}</button>
+          <button key={k} type="button" aria-pressed={filter === k} data-testid={`units-filter-${k}`} onClick={() => setFilter(k)} className={`min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium ${filter === k ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-600"}`}>{v}</button>
         ))}
       </div>
       {view === "calendar" ? <CalendarView roomFilter={(id) => visible.some((x) => x.room_id === id)} /> : visible.length === 0 ? <EmptyState icon={<DoorClosed className="h-10 w-10" />} title="لا وحدات مطابقة" /> : (
@@ -159,8 +159,8 @@ export default function StaffRooms() {
             return (
               <Card key={x.room_id} className={!x.is_active ? "opacity-60" : ""} data-testid="unit-card" data-room={x.room_number} data-urgency={urgency(x)}>
                 <div className="flex items-start justify-between">
-                  <div><p className="text-lg font-bold text-ink-800">{x.room_number}</p><p className="text-[11px] text-ink-400">{x.category}{x.block ? ` · ${x.block}` : ""}{x.floor ? ` / ${x.floor}` : ""}</p>
-                    {lic.reads && lic.licenses.get(x.room_id) && <p className="text-[11px] text-ink-500" data-testid="unit-license">رقم الترخيص: <span dir="ltr" className="font-mono">{lic.licenses.get(x.room_id)}</span></p>}</div>
+                  <div><p className="text-lg font-bold text-ink-800">{x.room_number}</p><p className="text-[12px] text-ink-400">{x.category}{x.block ? ` · ${x.block}` : ""}{x.floor ? ` / ${x.floor}` : ""}</p>
+                    {lic.reads && lic.licenses.get(x.room_id) && <p className="text-[12px] text-ink-500" data-testid="unit-license">رقم الترخيص: <span dir="ltr" className="font-mono">{lic.licenses.get(x.room_id)}</span></p>}</div>
                   <Badge className={ROOM_STATUS_COLORS[x.status as RoomStatus] ?? "bg-ink-100"}>{roomStatusLabel(x.status, x.cleanliness)}</Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -179,7 +179,7 @@ export default function StaffRooms() {
                     {over && <p className="mt-0.5 font-medium text-danger-600">تجاوز موعد المغادرة</p>}
                   </Link>
                 ) : <p className="mt-3 rounded-xl bg-ink-50 p-2.5 text-xs text-ink-400">خالية الآن{x.next ? "" : " · لا وصول قادم"}</p>}
-                {x.next && <p className="mt-2 flex items-center gap-1 text-[11px] text-ink-400"><CalendarClock className="h-3 w-3" /> القادم: {x.next.internal_ref} في <span dir="ltr">{x.next.check_in}</span></p>}
+                {x.next && <p className="mt-2 flex items-center gap-1 text-[12px] text-ink-400"><CalendarClock className="h-3 w-3" /> القادم: {x.next.internal_ref} في <span dir="ltr">{x.next.check_in}</span></p>}
               </Card>
             );
           })}
@@ -220,14 +220,14 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
         <button type="button" className="btn-ghost px-2 py-1" onClick={() => setFrom(addDaysISO(from, span))} aria-label="الفترة التالية"><ChevronLeft className="h-4 w-4" /></button>
         <button type="button" className="btn-ghost py-1 text-xs" onClick={() => setFrom(addDaysISO(todayISO(), -2))}>اليوم</button>
         {([14, 30] as const).map((n) => <button key={n} type="button" onClick={() => setSpan(n)} className={`rounded-lg px-3 py-1 text-xs font-medium ${span === n ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-600"}`}>{n} يومًا</button>)}
-        <span className="mr-auto flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
+        <span className="mr-auto flex flex-wrap items-center gap-2 text-[12px] text-ink-500">
           {Object.entries({ confirmed: "مؤكد", pending_verification: "بانتظار التحقق", checked_in: "مقيم", checked_out: "غادر", closed: "مغلق" }).map(([k, v]) => <span key={k} className="flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded ${SEG_COLORS[k]}`} /> {v}</span>)}
         </span>
       </div>
       <DataState loading={cal.loading} error={cal.error} empty={!!data && units.length === 0} onRetry={cal.reload} emptyIcon={<DoorClosed className="h-10 w-10" />} emptyTitle="لا وحدات مطابقة">
         <div className="card overflow-x-auto p-0">
           <div style={{ minWidth: 190 + span * colW }}>
-            <div className="grid border-b border-ink-100 bg-ink-50 text-[11px] text-ink-500" style={{ gridTemplateColumns: `190px repeat(${span}, ${colW}px)` }}>
+            <div className="grid border-b border-ink-100 bg-ink-50 text-[12px] text-ink-500" style={{ gridTemplateColumns: `190px repeat(${span}, ${colW}px)` }}>
               <div className="sticky right-0 z-10 border-l border-ink-100 bg-ink-50 px-3 py-2 font-medium">الوحدة</div>
               {days.map((d) => { const dt = new Date(d + "T00:00:00Z"); const isToday = d === today; return <div key={d} className={`border-l border-ink-50 px-1 py-1 text-center ${isToday ? "bg-brand-50 font-semibold text-brand-700" : ""}`} data-today={isToday || undefined}><div>{WEEKDAYS[dt.getUTCDay()]}</div><div dir="ltr">{d.slice(5)}</div></div>; })}
             </div>
@@ -236,8 +236,8 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
               return (
                 <div key={unit.room_id} className="grid border-b border-ink-50 text-xs" style={{ gridTemplateColumns: `190px repeat(${span}, ${colW}px)`, minHeight: 40 }} data-testid="calendar-row" data-room={unit.room_number}>
                   <div className="sticky right-0 z-10 flex items-center justify-between gap-2 border-l border-ink-100 bg-white px-3 py-1.5">
-                    <div><span className="font-semibold text-ink-800">{unit.room_number}</span><span className="mr-1 text-[10px] text-ink-400">{unit.category}</span>{unit.floor && <div className="text-[10px] text-ink-400">{unit.block ? `${unit.block} / ` : ""}{unit.floor}</div>}</div>
-                    <Badge className={`${CLEANLINESS_COLORS[unit.cleanliness] ?? "bg-ink-100"} px-1.5 py-0 text-[10px]`}>{CLEANLINESS_LABELS[unit.cleanliness] ?? unit.cleanliness}</Badge>
+                    <div><span className="font-semibold text-ink-800">{unit.room_number}</span><span className="mr-1 text-[12px] text-ink-400">{unit.category}</span>{unit.floor && <div className="text-[12px] text-ink-400">{unit.block ? `${unit.block} / ` : ""}{unit.floor}</div>}</div>
+                    <Badge className={`${CLEANLINESS_COLORS[unit.cleanliness] ?? "bg-ink-100"} px-1.5 py-0 text-[12px]`}>{CLEANLINESS_LABELS[unit.cleanliness] ?? unit.cleanliness}</Badge>
                   </div>
                   <div className="relative col-span-full col-start-2 grid" style={{ gridTemplateColumns: `repeat(${span}, ${colW}px)`, gridColumn: `2 / span ${span}` }}>
                     {days.map((d) => <div key={d} className={`border-l border-ink-50 ${d === today ? "bg-brand-50/60" : ""}`} style={{ gridRow: 1 }} />)}
@@ -249,10 +249,10 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
                       const title = `${s.internal_ref} · ${s.guest ?? "—"} · ${RESERVATION_STATUS_LABELS[s.status as ReservationStatus] ?? s.status}${s.payment_status ? ` · ${PAYMENT_STATUS_LABELS[s.payment_status as keyof typeof PAYMENT_STATUS_LABELS] ?? s.payment_status}` : ""}${s.balance_due_halalas ? ` · متبقٍ ${formatCurrency(s.balance_due_halalas / 100)}` : ""}`;
                       return (
                         <Link key={s.reservation_id + s.from_date} to={`/staff/reservations/${s.reservation_id}`} title={title} data-testid="calendar-segment" data-ref={s.internal_ref}
-                          className={`my-1.5 flex items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[11px] leading-7 ${SEG_COLORS[s.status] ?? "bg-ink-300"} ${s.starts_before ? "rounded-l-md" : "rounded-r-md"} ${s.ends_after ? "rounded-r-none" : "rounded-l-md"} ${s.starts_before ? "rounded-r-none" : ""}`}
+                          className={`my-1.5 flex items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[12px] leading-7 ${SEG_COLORS[s.status] ?? "bg-ink-300"} ${s.starts_before ? "rounded-l-md" : "rounded-r-md"} ${s.ends_after ? "rounded-r-none" : "rounded-l-md"} ${s.starts_before ? "rounded-r-none" : ""}`}
                           style={{ gridColumn: `${start + 1} / ${end + 1}`, gridRow: 1 }}>
                           <span className="truncate">{s.guest ?? s.internal_ref}</span>
-                          {s.balance_due_halalas ? <span className="text-[10px] opacity-90">· متبقٍ</span> : null}
+                          {s.balance_due_halalas ? <span className="text-[12px] opacity-90">· متبقٍ</span> : null}
                         </Link>
                       );
                     })}
@@ -263,7 +263,7 @@ function CalendarView({ roomFilter }: { roomFilter: (roomId: string) => boolean 
           </div>
         </div>
       </DataState>
-      <p className="mt-2 text-[11px] text-ink-400">كل شريط إقامة من يوم الوصول إلى يوم المغادرة (ليلة المغادرة خالية). الملغاة وعدم الحضور لا تظهر. انقر الشريط لفتح الحجز.</p>
+      <p className="mt-2 text-[12px] text-ink-400">كل شريط إقامة من يوم الوصول إلى يوم المغادرة (ليلة المغادرة خالية). الملغاة وعدم الحضور لا تظهر. انقر الشريط لفتح الحجز.</p>
     </div>
   );
 }

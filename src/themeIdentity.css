@@ -259,9 +259,9 @@ body, #root {background:var(--paper);color:var(--ink);}
   :root .overflow-x-auto table.res-table, :root .res-table, .res-table tbody {display:block;width:100%;max-width:100%;min-width:0;}
   :root .res-table td.font-mono {white-space:nowrap;overflow-wrap:normal;}
   :root .res-table thead {display:none;}
-  :root .res-table tr {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem .75rem;padding:.75rem;border-top:1px solid var(--line);}
+  :root .res-table tr {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.3rem .75rem;padding:.6rem .75rem;border-top:1px solid var(--line);}
   :root .res-table td {display:block;padding:0;white-space:normal;min-width:0;overflow-wrap:anywhere;}
-  :root .res-table td[data-label]::before {content:attr(data-label);display:block;font-size:11px;color:var(--ink-muted);}
+  :root .res-table td[data-label]::before {content:attr(data-label);display:block;font-size:12px;line-height:1.2;color:var(--ink-muted);}
   :root .res-table td:last-child {grid-column:1 / -1;}
   :root .res-table td:last-child a {width:100%;}
 }
@@ -303,4 +303,10 @@ body, #root {background:var(--paper);color:var(--ink);}
     background-repeat: no-repeat;
     background-attachment: local, local, scroll, scroll;
   }
+}
+
+/* UX review: touch targets. On a phone the shared buttons and select boxes in the page are at least 44px tall
+   (the size is in px, not rem, so 200% text does not change it). */
+@media (max-width: 639px) {
+  :root main .btn, :root main [class*="btn-"], :root main select.input { min-height: 44px; }
 }

@@ -123,15 +123,15 @@ export function ReservationOperations({ reservationId, refreshKey, onChanged }: 
           </Card>
           <Card>
             <h3 className="mb-2 text-sm font-semibold text-ink-700">السندات</h3>
-            <VoucherList rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 break-words text-[11px] text-rai-ink-muted"><span>{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}</span>{accounts.nameOf(v.account_id) && <span>{accounts.nameOf(v.account_id)}</span>}{v.reference && <span>المرجع: <bdi dir="ltr" className="font-mono">{v.reference}</bdi></span>}<span><bdi dir="rtl">{formatDateTime(v.occurred_at)}</bdi></span>{v.created_by_name && <span>{v.created_by_name}</span>}</div>
-                {v.original_number && <div className="text-[10px] text-brand-700">تصحيح للسند {v.original_number}</div>}
-                {v.replaced_by_number && <div className="text-[10px] text-ink-500">صُحّح بالسند {v.replaced_by_number}</div>}</span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
+            <VoucherList rows={(d.vouchers ?? []).map((v) => [<span key="n" className="font-mono text-xs">{v.number}</span>, <span key="k">{VOUCHER_KIND_LABELS[v.kind as VoucherKind] ?? v.kind}<div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 break-words text-[12px] text-rai-ink-muted"><span>{v.kind === "deposit_apply" ? "من رصيد التأمين" : PAYMENT_METHOD_LABELS[v.method as PaymentMethod] ?? v.method}</span>{accounts.nameOf(v.account_id) && <span>{accounts.nameOf(v.account_id)}</span>}{v.reference && <span>المرجع: <bdi dir="ltr" className="font-mono">{v.reference}</bdi></span>}<span><bdi dir="rtl">{formatDateTime(v.occurred_at)}</bdi></span>{v.created_by_name && <span>{v.created_by_name}</span>}</div>
+                {v.original_number && <div className="text-[12px] text-brand-700">تصحيح للسند {v.original_number}</div>}
+                {v.replaced_by_number && <div className="text-[12px] text-ink-500">صُحّح بالسند {v.replaced_by_number}</div>}</span>, <span key="v" dir="ltr" className={v.status === "cancelled" ? "line-through text-ink-400" : ""}>{sar(v.amount_halalas)}</span>,
               v.status === "cancelled" ? <div key="s" className="flex flex-col items-end gap-0.5"><Badge className="bg-danger-500/10 text-danger-600" >ملغى</Badge>{printVoucher(v)}</div> : (
                 <div key="a" className="flex flex-col items-end gap-0.5">
                   {printVoucher(v)}
-                  {canCorrect(v) && <button onClick={() => setCorrecting(v)} className="btn-ghost px-2 py-1 text-[11px]"><PencilLine className="h-3 w-3" /> تصحيح</button>}
+                  {canCorrect(v) && <button onClick={() => setCorrecting(v)} className="btn-ghost px-2 py-1 text-[12px]"><PencilLine className="h-3 w-3" /> تصحيح</button>}
                   {can("voucher.cancel") && !v.payout_id && <CancelVoucherButton id={v.id} onDone={done} />}
-                  {v.payout_id && <span className="text-[10px] text-ink-400">ضمن مطابقة منصة</span>}
+                  {v.payout_id && <span className="text-[12px] text-ink-400">ضمن مطابقة منصة</span>}
                 </div>)])} empty="لا سندات" />
           </Card>
           {canMoney && ((d.invoices ?? []).length > 0 || uninvoiced !== 0) && (
@@ -203,7 +203,7 @@ function Table({ rows, empty }: { rows: Array<Array<React.ReactNode>>; empty: st
 function CancelVoucherButton({ id, onDone }: { id: string; onDone: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   return (<>
-    <button onClick={() => setOpen(true)} className="btn-ghost px-2 py-1 text-[11px] text-danger-600">إلغاء السند</button>
+    <button onClick={() => setOpen(true)} className="btn-ghost px-2 py-1 text-[12px] text-danger-600">إلغاء السند</button>
     <ReasonDialog open={open} title="إلغاء سند" warning="الإلغاء يعكس أثر السند محاسبيًا ويبقي سجله. لا يعني أن مزود الدفع ردّ المبلغ للنزيل." onClose={() => setOpen(false)} onSubmit={async (reason) => { await opsApi.cancelVoucher(id, reason); setOpen(false); await onDone(); }} />
   </>);
 }
@@ -420,7 +420,7 @@ function StayNights({ reservationId, version }: { reservationId: string; version
       <div className="flex flex-wrap gap-1.5">
         {rows.map((n) => (
           <span key={n.night + n.status + (n.removed_at ?? "")} title={n.status === "removed" ? `أُزيلت: ${n.removed_reason ?? ""}` : NIGHT_BASIS_AR[n.basis] ?? n.basis}
-            className={`rounded-lg border px-2 py-1 text-[11px] ${n.status === "removed" ? "border-ink-100 text-ink-400 line-through" : "border-ink-100 text-ink-600"}`}>
+            className={`rounded-lg border px-2 py-1 text-[12px] ${n.status === "removed" ? "border-ink-100 text-ink-400 line-through" : "border-ink-100 text-ink-600"}`}>
             <span dir="ltr">{n.night.slice(8, 10)}/{n.night.slice(5, 7)}</span> · {sar(n.price)} <span className="text-ink-400">{NIGHT_BASIS_AR[n.basis] ?? ""}</span>
           </span>
         ))}

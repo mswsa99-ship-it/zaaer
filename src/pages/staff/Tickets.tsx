@@ -203,8 +203,8 @@ export default function Tickets() {
                       {h.details && <p className="mt-1 text-xs text-ink-400">{detailsText(h.details)}</p>}
                       <p className="mt-1 text-xs text-ink-400">
                         {branchOf(h.branch_id) && <span data-testid="ticket-branch">{branchOf(h.branch_id)} · </span>}{formatDateTime(h.created_at)}
-                        {h.reservation_id && <> · <Link to={`/staff/reservations/${h.reservation_id}`} className="text-brand-600 hover:underline">فتح الحجز</Link></>}
-                        {h.conversation_id && <> · <Link to="/staff/inbox" className="text-brand-600 hover:underline">المحادثة</Link></>}
+                        {h.reservation_id && <> · <Link to={`/staff/reservations/${h.reservation_id}`} className="inline-flex min-h-[44px] items-center text-brand-600 hover:underline">فتح الحجز</Link></>}
+                        {h.conversation_id && <> · <Link to="/staff/inbox" className="inline-flex min-h-[44px] items-center text-brand-600 hover:underline">المحادثة</Link></>}
                       </p>
                     </div>
                   </div>

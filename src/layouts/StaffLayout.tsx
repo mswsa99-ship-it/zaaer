@@ -119,7 +119,7 @@ export default function StaffLayout() {
         {/* IX-03: the code alert scrolls away with the page instead of pinning a tall block on a phone */}
         <KeyboxAlertBanner alerts={codeAlerts} />
         {!!journeyAlerts && (
-          <Link to="/staff/journey" className="mx-4 mt-3 flex min-h-[44px] items-center gap-2 rounded-xl bg-rai-danger-tint px-3 py-2 text-sm font-medium text-rai-danger hover:underline lg:mx-8" data-testid="admin-journey-alerts">
+          <Link to="/staff/journey" className="mx-4 mt-2 flex min-h-[44px] items-center gap-2 rounded-xl bg-rai-danger-tint px-3 py-1 text-sm font-medium text-rai-danger hover:underline lg:mx-8" data-testid="admin-journey-alerts">
             <BellRing className="h-4 w-4 shrink-0" aria-hidden />
             <span>{journeyAlerts === 1 ? "تنبيه واحد يخصّك" : journeyAlerts === 2 ? "تنبيهان يخصّانك" : journeyAlerts <= 10 ? `${journeyAlerts} تنبيهات تخصّك` : `${journeyAlerts} تنبيهًا يخصّك`} في «رحلة الضيف». افتحها</span>
           </Link>
