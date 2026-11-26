@@ -134,7 +134,7 @@ export default function AdminPlatformPayouts() {
                 {p.status === "cancelled" && <Badge className="opacity-70">ملغاة</Badge>}
               </div>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                <dt className="opacity-70">التاريخ</dt><dd dir="ltr" className="text-left">{p.received_on}</dd>
+                <dt className="opacity-70">التاريخ</dt><dd dir="ltr" className="whitespace-nowrap text-left">{p.received_on}</dd>
                 <dt className="opacity-70">الحساب</dt><dd>{accountName(p.account_id)} · {COUNT.payment(p.voucher_count)}</dd>
                 <dt className="opacity-70">الإجمالي</dt><dd dir="ltr" className="text-left">{sar(p.expected_halalas)}</dd>
                 <dt className="opacity-70">العمولة</dt><dd dir="ltr" className="text-left">{p.commission_halalas ? <>{sar(p.commission_halalas)} <span className="text-[11px] opacity-70">({bpToPercent(p.commission_bp)}%)</span></> : "—"}</dd>
