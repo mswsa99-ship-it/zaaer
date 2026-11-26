@@ -1,6 +1,6 @@
 /**
  * 26 Nov 13:10 (user): the review joins finance. Only the entry point moved into the finance centre: the owner gets «المراجعة»
- * as the last finance tab; manager and finance have no such tab and still cannot open the page.
+ * as the last finance tab; manager, finance and supervisor have no such tab and still cannot open the page.
  */
 import { test, expect } from "./fixtures";
 
@@ -15,7 +15,7 @@ test("FR1 owner: «المراجعة» is the last finance tab and opens the revi
   await expect(page.getByTestId("hub-tabs").getByRole("link", { name: "المراجعة" })).toHaveAttribute("aria-current", "page");
 });
 
-for (const role of ["manager", "finance"] as const) {
+for (const role of ["manager", "finance", "supervisor"] as const) {
   test(`FR2 ${role}: no review tab in the finance centre, and the page stays closed`, async ({ page, loginAs, go }) => {
     await loginAs(role);
     await go("/staff/payments");
