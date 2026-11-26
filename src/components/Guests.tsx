@@ -28,7 +28,9 @@ const sar = (h: number | null | undefined) => formatCurrency((h ?? 0) / 100);
 type Guest = ReservationDetail["guests"][number];
 
 /** The red alert of a ban, the hold, and the main guest's rating (decision 21) — above everything else on the booking page. */
-export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged: () => void }) {
+/** part: "alerts" = the ban and the hold (safety, always first on the page); "info" = the rating and the hold/rate buttons (below the stay's next step); omitted = both, as before. */
+export function GuestAlerts({ d, onChanged, part }: { d: ReservationDetail; onChanged: () => void; part?: "alerts" | "info" }) {
+  const showAlerts = part !== "info", showInfo = part !== "alerts";
   const { can } = useAuth();
   const canHold = can("hold.set");
   const canLift = can("hold.lift");
@@ -38,8 +40,8 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
   const gp = d.guest_profile;
   const open = !["cancelled", "rejected", "closed", "no_show"].includes(d.reservation.status);
   return (
-    <div className="space-y-3">
-      {bans.map((b) => (
+    <div className={`space-y-3 ${(showAlerts && (bans.length > 0 || d.hold)) || (showInfo && (gp?.rating != null || gp?.rating_note || ((canHold || (gp && canRate)) && open))) ? "mb-4" : ""}`}>
+      {showAlerts && bans.map((b) => (
         <div key={b.ban_id} data-testid="guest-ban-alert" className="flex items-start gap-3 rounded-xl border border-danger-500/40 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
           <ShieldBan className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="min-w-0">
@@ -49,7 +51,7 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
           </div>
         </div>
       ))}
-      {d.hold && (
+      {showAlerts && d.hold && (
         <div data-testid="hold-alert" className="flex items-start gap-3 rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="min-w-0 flex-1">
@@ -60,7 +62,7 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
           {canLift && <button onClick={() => setDialog("lift")} className="btn-outline text-xs">رفع الحظر</button>}
         </div>
       )}
-      {(gp?.rating != null || gp?.rating_note) && (
+      {showInfo && (gp?.rating != null || gp?.rating_note) && (
         <div data-testid="guest-rating" className="flex items-start gap-3 rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-2.5 text-sm text-ink-700">
           <Star className="mt-0.5 h-4 w-4 shrink-0 text-warning-700" />
           <div className="min-w-0 flex-1">
@@ -69,7 +71,7 @@ export function GuestAlerts({ d, onChanged }: { d: ReservationDetail; onChanged:
           </div>
         </div>
       )}
-      {(canHold || (gp && canRate)) && open && (
+      {showInfo && (canHold || (gp && canRate)) && open && (
         <div className="flex flex-wrap gap-2">
           {canHold && !d.hold && <button onClick={() => setDialog("hold")} className="btn-ghost text-xs text-danger-600"><ShieldAlert className="h-3.5 w-3.5" /> وضع حظر على الحجز</button>}
           {gp && canRate && <button onClick={() => setDialog("rate")} className="btn-ghost text-xs"><Star className="h-3.5 w-3.5" /> {gp.rating != null ? "تعديل تقييم النزيل" : "تقييم النزيل"}</button>}

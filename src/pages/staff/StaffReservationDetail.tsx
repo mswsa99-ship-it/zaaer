@@ -217,7 +217,7 @@ export default function StaffReservationDetail() {
       )}
 
       {/* decision 21: the ban's red alert, the hold and the rating; the hold is also shown to roles without the detail RPC */}
-      {extra ? <div className="mb-4"><GuestAlerts d={extra} onChanged={load} /></div> : detail.security_hold && (
+      {extra ? <GuestAlerts d={extra} onChanged={load} part="alerts" /> : detail.security_hold && (
         <div className="mb-4 rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-600">
           <p className="font-semibold">يوجد حظر على هذا الحجز</p>
           {detail.security_hold_reason && <p className="mt-0.5 text-xs">{detail.security_hold_reason}</p>}
@@ -227,6 +227,7 @@ export default function StaffReservationDetail() {
       <StayProgress canMoney={canMoney} onJump={jump}
         r={{ status: detail.status, identity_status: detail.identity_status, has_room: !!detail.room, total_halalas: detail.total_halalas, paid_halalas: detail.paid_halalas, check_out: detail.check_out, today: todayISO(),
           government_registration: !!detail.government_registration, shomoos_accepted_at: detail.shomoos_accepted_at ?? null, access_status: detail.access_status }} />
+      {extra && <GuestAlerts d={extra} onChanged={load} part="info" />}
 
       {loadError && <div className="mb-4"><ErrorBanner message={loadError} /></div>}
       {actionError && <div className="mb-4"><ErrorBanner message={actionError} /></div>}
