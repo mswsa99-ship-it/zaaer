@@ -19,6 +19,8 @@ import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 import { useOrganizationName } from "../lib/organization";
 import { useJourneyAlerts } from "../lib/journeyAlerts";
+import { useReviewSummary } from "../lib/reviewAlerts";
+import { ReviewNavCount } from "../components/ReviewBanner";
 
 /** Header buttons: 20px icon (was 16, +25%) in a 48px target (was 44), grouped with no gap on the left. */
 const HEADER_BTN = "flex h-[48px] w-[48px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
@@ -42,6 +44,7 @@ export default function StaffLayout() {
   const codeAlerts = useKeyboxAlerts();
   // «رحلة الضيف»: the open alerts of the journey (its clock runs from here every minute)
   const journeyAlerts = useJourneyAlerts();
+  const review = useReviewSummary();
   // U3: on a phone, four pages in the bottom bar and the whole menu behind «المزيد»
   const tabs = pickTabs(nav, bottomTabPrefs(profile?.role));
   const [moreOpen, setMoreOpen] = useState(false);
@@ -142,6 +145,7 @@ export default function StaffLayout() {
                 {tabsOf.map((t) => (
                   <NavLink key={t.path} to={t.path} className={({ isActive }) => cn("flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium", isActive ? "border-brand-600 text-brand-700" : "border-transparent text-ink-600 hover:text-ink-800")}>
                     {t.tabLabel ?? t.label}
+                    {t.path === "/admin/review" && <ReviewNavCount summary={review} />}
                     {t.path === "/staff/journey" && !!journeyAlerts && <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-danger-500 px-1.5 text-[11px] font-semibold leading-5 text-white" aria-label={`${journeyAlerts} تنبيهات مفتوحة`}>{journeyAlerts}</span>}
                   </NavLink>
                 ))}
