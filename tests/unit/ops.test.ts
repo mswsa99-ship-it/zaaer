@@ -294,4 +294,14 @@ describe("home alerts: current risk, upcoming risk, information, unavailable (de
     const b = buildBriefing({ ...ctx, generated_at: "2026-10-21T10:00:00Z" }, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh");
     expect(b.headline).toContain("غير محدّثة"); expect(b.headline).not.toContain("تحتاج انتباهك اليوم");
   });
+
+  it("STALE2 on a stale reading every item (critical too) says itself that it is not today's state", () => {
+    const items = buildBriefing({ ...ctx, generated_at: "2026-10-21T10:00:00Z" }, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh").items.filter((i) => i.key !== "stale_reading");
+    expect(items.length).toBeGreaterThan(2); for (const i of items) { expect(i.stale).toBe(true); expect(i.why).toContain("غير محدّثة"); }
+  });
+  it("TZ1 the timezone argument absent, null or undefined falls back to Asia/Riyadh (localDay's own fallback), the same as passing it; an invalid zone does not throw", () => {
+    const at = Date.parse(ctx.summary.date + "T09:00:00Z"); const f = (tz?: any) => buildBriefing({ ...ctx, generated_at: ctx.summary.date + "T08:00:00Z" }, at, tz).items.some((i) => i.key === "stale_reading");
+    expect(f()).toBe(f("Asia/Riyadh")); expect(f(null)).toBe(f("Asia/Riyadh")); expect(f("Not/AZone")).toBe(f("Asia/Riyadh"));
+    expect(f("Asia/Riyadh")).toBe(false);
+  });
 });

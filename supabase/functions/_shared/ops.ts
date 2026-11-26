@@ -228,7 +228,7 @@ function ar(k: number, [one, two, few, many]: [string, string, string, string]):
 const DAYS: [string, string, string, string] = ["يوم واحد", "يومان", "أيام", "يومًا"];
 const UNITS: [string, string, string, string] = ["وحدة واحدة", "وحدتان", "وحدات", "وحدة"];
 
-export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination"; why?: string; entities?: string[]; horizon?: "now" | "upcoming" | "info" | "unavailable"; key?: string }
+export interface BriefingItem { level: "critical" | "warning" | "info"; text: string; link?: string; area?: "coordination"; why?: string; stale?: boolean; entities?: string[]; horizon?: "now" | "upcoming" | "info" | "unavailable"; key?: string }
 
 export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now(), tz?: string | null): { headline: string; items: BriefingItem[]; text: string } { // deno-lint-ignore no-explicit-any
   const s = ctx?.summary ?? {}; const u = s.units ?? {}; const av = s.arrivals ?? {}; const dp = s.departures ?? {}; const hk = s.housekeeping ?? {}; const f = s.finance ?? {};
@@ -268,6 +268,8 @@ export function buildBriefing(ctx: Record<string, any>, nowMs: number = Date.now
   if (ctx?.summary && ctx.overdue_arrivals === undefined) items.push({ level: "info", horizon: "unavailable", key: "overdue_unavailable", text: "فحص الوصول المتأخر غير متاح الآن", why: "الدليل: قائمة الوصول المتأخر لم تصل" });
   if (ctx?.summary && ctx.units_needing_attention === undefined) items.push({ level: "info", horizon: "unavailable", key: "units_unavailable", text: "فحص الوحدات المتأثرة بالوصول غير متاح الآن، فغياب التنبيه عنها لا يعني سلامتها", why: "الدليل: قائمة الوحدات لم تصل" });
   if (ctx?.summary && ctx.overstays === undefined) items.push({ level: "info", horizon: "unavailable", key: "overstays_unavailable", text: "فحص تجاوز موعد المغادرة غير متاح الآن", why: "الدليل: قائمة التجاوزات لم تصل" });
+  // D3: when the reading is not today's, no item is presented as today's state: each carries the caveat itself
+  if (items.some((i) => i.key === "stale_reading")) for (const i of items) if (i.key !== "stale_reading") { i.stale = true; i.why = `${i.why ?? "الدليل: قراءة سابقة"} · قراءة غير محدّثة، لا تُعدّ حالة اليوم`; }
   const crit = items.filter((i) => i.level === "critical").length; const warn = items.filter((i) => i.level === "warning").length;
   const ALERTS: [string, string, string, string] = ["تنبيه واحد", "تنبيهان", "تنبيهات", "تنبيهًا"];
   const baseHeadline = crit ? `${ar(crit, ["أمر عاجل واحد", "أمران عاجلان", "أمور عاجلة", "أمرًا عاجلًا"])}${warn ? ` و${ar(warn, ALERTS)}` : ""} — تحتاج انتباهك اليوم` : warn ? `لا أمور عاجلة — ${ar(warn, ALERTS)} للمتابعة` : items.some((i) => i.horizon === "unavailable") ? "لا تنبيهات الآن، لكن بعض الفحوص غير متاحة" : "اليوم هادئ — لا تنبيهات تشغيلية";
