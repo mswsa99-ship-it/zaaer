@@ -80,9 +80,25 @@ test.describe("owner all branches: tickets, inbox, housekeeping", () => {
     await expect(page.getByTestId("journey-branch")).toHaveCount(0);
     await expect(picker(page)).toHaveValue(/.+/);
   });
+  test("AB-R1 admin units: the owner's all-branches list merges both branches' units with a branch tag, offers no add, and each row opens its own branch for editing", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/admin/rooms", { waitUntil: "networkidle" });
+    await expect(picker(page).locator("option").last()).toHaveText("جميع الفروع");
+    await picker(page).selectOption({ label: "جميع الفروع" });
+    await expect(page.getByTestId("admin-unit-card").first()).toBeVisible();
+    const tags = new Set(await page.getByTestId("admin-unit-branch").allTextContents());
+    expect(tags.size).toBeGreaterThanOrEqual(2);
+    await expect(page.getByRole("button", { name: /وحدة جديدة/ })).toHaveCount(0);       // a new unit needs one branch: no add in the merged list
+    await expect(page.getByRole("button", { name: /^تعديل الوحدة/ })).toHaveCount(0);      // no edit bound to a guessed branch
+    await page.locator('[data-testid="admin-unit-card"][data-room="J-1"]').getByTestId("admin-unit-open-branch").click();
+    await expect(page.getByTestId("admin-unit-branch")).toHaveCount(0);                    // now the one branch: plain list again
+    await expect(page.locator('[data-testid="admin-unit-card"][data-room="J-1"]')).toBeVisible();
+    await expect(page.getByRole("button", { name: /^تعديل الوحدة J-1/ })).toBeVisible();   // edit is back, on that branch
+  });
+
   test("AB-N1 a supervisor keeps single-branch pages (no «جميع الفروع» anywhere on them)", async ({ page, loginAs }) => {
     await loginAs("supervisor");
-    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey"]) {
+    for (const u of ["/#/staff/tickets", "/#/staff/housekeeping", "/#/staff/inbox", "/#/staff/codes", "/#/staff/journey", "/#/admin/rooms"]) {
       await page.goto(u, { waitUntil: "networkidle" });
       await expect(page.getByText("جميع الفروع")).toHaveCount(0);
     }

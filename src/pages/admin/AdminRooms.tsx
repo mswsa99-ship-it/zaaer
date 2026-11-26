@@ -3,6 +3,7 @@ import { DoorClosed, Plus, Pencil } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { useBranchQuery, must } from "../../lib/useBranchQuery";
+import { useBranch } from "../../lib/branch";
 import { opsApi, VALIDATION_AR } from "../../lib/api";
 import { latinDigits, normalizeUnitLicense, fieldError } from "../../lib/validation";
 import { individualAllows } from "../../lib/individualPermissions";
@@ -12,7 +13,7 @@ import { Modal, Field, ActionForm, Submit, DefinitionLifecycle, ArchivedBadge, T
 import { BranchPicker } from "../../components/BranchPicker";
 import { ROOM_STATUS_LABELS, ROOM_STATUS_COLORS, CLEANLINESS_LABELS, CLEANLINESS_COLORS, type RoomStatus } from "../../lib/types";
 
-interface RoomRow { id: string; room_number: string; status: RoomStatus; cleanliness: string; is_active: boolean; archived_at: string | null; version: number; notes: string | null; category_id: string; block_id: string | null; floor_id: string | null; category?: { name_ar: string } | null; block?: { name: string } | null; floor?: { name: string } | null }
+interface RoomRow { branch_id?: string; id: string; room_number: string; status: RoomStatus; cleanliness: string; is_active: boolean; archived_at: string | null; version: number; notes: string | null; category_id: string; block_id: string | null; floor_id: string | null; category?: { name_ar: string } | null; block?: { name: string } | null; floor?: { name: string } | null }
 interface Opt { id: string; name: string; block_id?: string }
 
 const NO_DATA: { rooms: RoomRow[]; cats: Opt[]; blocks: Opt[]; floors: Opt[] } = { rooms: [], cats: [], blocks: [], floors: [] };
@@ -28,6 +29,7 @@ export default function AdminRooms() {
   const lic = useUnitLicenses();
 
   // G24 (decision 40): the units of the active branch only
+  const { branches, allBranches, setBranchId } = useBranch();
   const q = useBranchQuery(async (branchId) => {
     const [r, c, b, f] = await Promise.all([
       supabase.from("rooms").select("id, room_number, status, cleanliness, is_active, archived_at, version, notes, category_id, block_id, floor_id, category:room_categories(name_ar), block:blocks(name), floor:floors(name)").eq("branch_id", branchId).order("room_number"),
@@ -36,11 +38,11 @@ export default function AdminRooms() {
       supabase.from("floors").select("id, name, block_id").eq("branch_id", branchId).is("archived_at", null).order("sort_order"),
     ]);
     return {
-      rooms: must(r) as unknown as RoomRow[],
+      rooms: (must(r) as unknown as RoomRow[]).map((x) => ({ ...x, branch_id: branchId })),
       cats: ((c.data ?? []) as { id: string; name_ar: string }[]).map((x) => ({ id: x.id, name: x.name_ar })),
       blocks: (b.data as Opt[]) ?? [], floors: (f.data as Opt[]) ?? [],
     };
-  }, [], NO_DATA);
+  }, [], NO_DATA, { merge: (parts) => ({ rooms: parts.flatMap((x) => x.rooms), cats: parts.flatMap((x) => x.cats), blocks: parts.flatMap((x) => x.blocks), floors: parts.flatMap((x) => x.floors) }) });
   const { rooms, cats, blocks, floors } = q.data; const load = q.reload; const branchId = q.branchId;
   // 6.5 (U4): a new unit's form survives a reload; the licence number is deliberately NOT stored in the draft
   const roomPristine = (d: Partial<RoomRow>) => !d.room_number?.trim() && !d.notes?.trim();
@@ -61,12 +63,12 @@ export default function AdminRooms() {
   return (
     <div>
       <SectionTitle title="الوحدات" subtitle={`${counts.active} فعالة من ${counts.total} — النشاط الإداري مستقل عن النظافة والإشغال`} action={
-        <div className="flex items-center gap-3"><BranchPicker />{canAdd && <button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id, license: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button>}</div>} />
+        <div className="flex items-center gap-3"><BranchPicker allowAll />{canAdd && !allBranches && <button onClick={() => setDraft({ room_number: "", is_active: true, category_id: cats[0]?.id, license: "" })} className="btn-primary text-sm"><Plus className="h-4 w-4" /> وحدة جديدة</button>}</div>} />
       {q.error && rooms.length > 0 && <div className="mb-4"><ErrorBanner message={q.error} /></div>}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input className="input w-36" aria-label="بحث برقم الوحدة" placeholder="بحث برقم الوحدة" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} />
-        <select className="input w-auto" value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} aria-label="النوع"><option value="all">كل الأنواع</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <select className="input w-auto" value={filter.block} onChange={(e) => setFilter({ ...filter, block: e.target.value })} aria-label="البلوك"><option value="all">كل البلوكات</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+        {!allBranches && <select className="input w-auto" value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} aria-label="النوع"><option value="all">كل الأنواع</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+        {!allBranches && <select className="input w-auto" value={filter.block} onChange={(e) => setFilter({ ...filter, block: e.target.value })} aria-label="البلوك"><option value="all">كل البلوكات</option>{blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>}
         <select className="input w-auto" value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} aria-label="الحالة"><option value="all">كل الحالات</option>{Object.entries(ROOM_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <Toggle checked={filter.archived} onChange={(v) => setFilter({ ...filter, archived: v })} label="إظهار المؤرشف" />
       </div>
@@ -77,9 +79,11 @@ export default function AdminRooms() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-base font-semibold text-ink-800">{r.room_number}</p>
+                  {allBranches && r.branch_id && <p className="mt-1"><Badge testId="admin-unit-branch">{branches.find((x) => x.id === r.branch_id)?.name_ar}</Badge></p>}
                   <p className="text-xs text-ink-400">{r.category?.name_ar} · {r.block?.name ?? "—"} / {r.floor?.name ?? "—"}</p>
                 </div>
-                {canEdit && <button onClick={() => setDraft({ ...r, license: lic.licenses.get(r.id) ?? "" })} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>}
+                                {canEdit && allBranches && r.branch_id && <button onClick={() => setBranchId(r.branch_id!)} className="btn-ghost p-1.5 text-xs" data-testid="admin-unit-open-branch" aria-label={`فتح فرع الوحدة ${r.room_number} للتعديل`}>فتح الفرع</button>}
+                {canEdit && !allBranches && <button onClick={() => setDraft({ ...r, license: lic.licenses.get(r.id) ?? "" })} className="btn-ghost p-1.5" aria-label={`تعديل الوحدة ${r.room_number}`} title="تعديل"><Pencil className="h-4 w-4" /></button>}
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <Badge className={ROOM_STATUS_COLORS[r.status]}>{ROOM_STATUS_LABELS[r.status]}</Badge>
