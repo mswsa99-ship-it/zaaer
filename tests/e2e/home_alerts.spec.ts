@@ -25,7 +25,7 @@ test("HOME3 a reception role WITHOUT money: the whole rendered briefing carries 
   expect(html).not.toMatch(/ر\.س|متبقٍ|رصيد|تأمين|SAR/);
   await expect(areas.locator("section[data-area='finance']")).toHaveCount(0);
 });
-test("HOME4 two branches with the SAME unit number: the maintenance+arrival alert belongs to the branch that has the arrival only", async ({ page, loginAs, go }) => {
+test("HOME4 two branches with the SAME unit number: the maintenance+arrival alert belongs to the branch that has the arrival only", async ({ page, loginAs }) => {
   await loginAs("owner");
   await page.evaluate(() => { const S = JSON.parse(localStorage.getItem("zaaer_demo_store_v9")!); const A = S.branches[0].id;
     const roomA = S.rooms.find((r: any) => r.status === "maintenance" && r.branch_id === A); const al = S.reservation_allocations.find((x: any) => x.status === "active" && S.reservations.find((r: any) => r.id === x.reservation_id && r.status === "confirmed" && r.branch_id === A));
