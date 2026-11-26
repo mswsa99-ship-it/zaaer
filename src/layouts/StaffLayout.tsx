@@ -20,7 +20,7 @@ import { useOrganizationName } from "../lib/organization";
 import { useJourneyAlerts } from "../lib/journeyAlerts";
 
 /** Header buttons: 20px icon (was 16, +25%) in a 48px target (was 44), grouped with no gap on the left. */
-const HEADER_BTN = "flex h-12 w-12 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
+const HEADER_BTN = "flex h-[48px] w-[48px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
 
 export default function StaffLayout() {
   const orgName = useOrganizationName();
