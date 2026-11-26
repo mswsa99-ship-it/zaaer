@@ -149,6 +149,7 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
   const [reference, setReference] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [fileErr, setFileErr] = useState<string | null>(null);
+  const [amountErr, setAmountErr] = useState<string | null>(null);   // an empty save marks every missing field, not only the first one thrown
   const [key] = useState(newIdempotencyKey());
 
   // 6.5 (U4): what is typed survives a reload (this tab, per branch) and the form offers to restore it; the receipt file is never stored
@@ -190,8 +191,14 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
 
   return (
     <ActionForm onSubmit={async () => {
-      if (!files.length) throw new Error("VALIDATION: attachment_required");
-      if (!amount || amount <= 0) throw new Error("VALIDATION: amount");
+      const noFile = !files.length, noAmount = !amount || amount <= 0;
+      if (noFile || noAmount) {
+        // the rules and the thrown message stay as they were (attachment first); the fields now say what is missing and focus goes to the first one on the page
+        setAmountErr(noAmount ? "اكتب مبلغًا أكبر من صفر." : null);
+        setFileErr(noFile ? "المرفق مطلوب." : null);   // short field text; the banner keeps the full sentence
+        document.querySelector<HTMLInputElement>(noAmount ? 'input[aria-label="المبلغ"]' : 'input[aria-label="المرفق"]')?.focus();
+        throw new Error(noFile ? "VALIDATION: attachment_required" : "VALIDATION: amount");
+      }
       const attachments = await Promise.all(files.map(async (f) => ({ data_base64: await toBase64(f), file_name: f.name })));
       await expenseApi.create({ branch_id: branchId, account_id: accountId, category_id: categoryId, amount_halalas: amount, description: desc.trim(), payee: payee.trim() || null,
                                 reference: isBank ? reference.trim() || null : null, occurred_on: day, idempotency_key: key, attachments });
@@ -208,13 +215,13 @@ function ExpenseForm({ branchId, onDone, onCancel }: { branchId: string; onDone:
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="يُصرف من"><select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="يُصرف من">{accounts.map((a) => <option key={a.id} value={a.id}>{a.kind === "cash_box" ? "الصندوق" : "الحساب البنكي"} — {a.name}</option>)}</select></Field>
         <Field label="التصنيف"><select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="التصنيف"><option value="">اختر…</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-        <Field label="المبلغ"><MoneyInput valueHalalas={amount} onChange={setAmount} label="المبلغ" /></Field>
+        <Field label="المبلغ" error={amountErr}><MoneyInput valueHalalas={amount} onChange={(h) => { setAmount(h); setAmountErr(null); }} label="المبلغ" invalid={!!amountErr} /></Field>
         <Field label="التاريخ" hint="اليوم أو خلال 31 يومًا مضت."><input type="date" className="input" dir="ltr" max={todayISO()} min={addDaysISO(todayISO(), -31)} value={day} onChange={(e) => e.target.value && setDay(e.target.value)} aria-label="التاريخ" /></Field>
         <Field label="الوصف" className="sm:col-span-2"><input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={500} aria-label="الوصف" placeholder="مثال: قطع غيار للمكيف" /></Field>
         <Field label="المستفيد (اختياري)"><input className="input" value={payee} onChange={(e) => setPayee(e.target.value)} maxLength={120} aria-label="المستفيد" /></Field>
         {isBank && <Field label="رقم العملية البنكية (اختياري)"><input className="input" dir="ltr" value={reference} onChange={(e) => setReference(e.target.value.toUpperCase())} maxLength={60} aria-label="رقم العملية" /></Field>}
         <Field label="المرفق (إلزامي)" hint="صورة الفاتورة أو الإيصال: صورة أو PDF، حتى 5 ملفات، 10 ميجابايت للملف." className="sm:col-span-2" error={fileErr}>
-          <input type="file" className="input" accept="image/png,image/jpeg,image/webp,application/pdf" multiple onChange={(e) => { pick(e.target.files); e.target.value = ""; }} aria-label="المرفق" />
+          <input type="file" className="input" aria-invalid={!!fileErr || undefined} accept="image/png,image/jpeg,image/webp,application/pdf" multiple onChange={(e) => { pick(e.target.files); e.target.value = ""; }} aria-label="المرفق" />
         </Field>
         {files.length > 0 && <ul className="sm:col-span-2 space-y-1 text-sm" data-testid="expense-files">{files.map((f, i) => <li key={i} className="flex items-center justify-between gap-2"><span className="truncate"><Paperclip className="ml-1 inline h-3.5 w-3.5" />{f.name}</span><button type="button" className="btn-ghost text-xs" onClick={() => setFiles(files.filter((_, k) => k !== i))}>إزالة</button></li>)}</ul>}
       </div>
