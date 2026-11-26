@@ -46,8 +46,8 @@ describe("fitOpsContext", () => {
     const r = fitOpsContext(c, 2000);
     const p = JSON.parse(r.text);
     expect(r.mode).toBe("envelope"); expect(r.text.length).toBeLessThanOrEqual(2000);
-    expect(p._context_cut).toBe(true); expect(p._dropped_keys).toEqual(["notes"]); expect(p.summary).toEqual(c.summary); expect(p.flag).toBe(true);
-    expect(opsContextNote(r)).toContain("_dropped_keys");
+    expect(p._context_cut).toBe(true); expect(p._dropped_keys).toEqual(["notes"]); expect(p._dropped_count).toBe(1); expect(p._dropped_keys_listed).toBe(1); expect(p.summary).toEqual(c.summary); expect(p.flag).toBe(true);
+    expect(opsContextNote(r)).toContain("_dropped_keys"); expect(opsContextNote(r)).toContain("_dropped_count");
   });
   it("a root array, a primitive and an object with no list all give valid JSON within the limit", () => {
     for (const v of [Array.from({ length: 400 }, (_, i) => item(i)), "y".repeat(5000), { only: "z".repeat(5000) }]) {
@@ -56,6 +56,23 @@ describe("fitOpsContext", () => {
       expect(() => JSON.parse(r.text)).not.toThrow();
       expect(r.mode).not.toBe("full");
     }
+  });
+  it("more than 20 and very long dropped keys: still valid JSON within the limit, with the true total and an honest listed count", () => {
+    const c: Record<string, unknown> = {};
+    for (let i = 0; i < 80; i++) c["مفتاح_طويل_جدا_" + i + "_" + "k".repeat(90)] = "v".repeat(500);
+    const r = fitOpsContext(c, 1500);
+    const p = JSON.parse(r.text);
+    expect(r.mode).toBe("envelope"); expect(r.text.length).toBeLessThanOrEqual(1500);
+    const kept = Object.keys(p).filter((k) => !k.startsWith("_")).length;
+    expect(p._dropped_count + kept).toBe(80); expect(r.droppedKeys).toHaveLength(p._dropped_count); expect(p._dropped_count).toBeGreaterThan(20);
+    expect(p._dropped_keys.length).toBe(p._dropped_keys_listed); expect(p._dropped_keys_listed).toBeLessThanOrEqual(80);
+    expect(p._dropped_keys_listed).toBeGreaterThan(0);
+    for (const k of p._dropped_keys) expect(Array.from(k as string).length).toBeLessThanOrEqual(61);
+  });
+  it("the floor: a tiny limit still returns valid JSON that carries the total dropped count", () => {
+    const r = fitOpsContext({ a: "x".repeat(3000), b: "y".repeat(3000) }, 120);
+    const p = JSON.parse(r.text);
+    expect(p._context_cut).toBe(true); expect(p._dropped_count).toBe(2);
   });
   it("empty lists are fine and are not reported as omitted", () => {
     const r = fitOpsContext({ a: [], b: { c: [] }, big: "q".repeat(9000) }, 1000);

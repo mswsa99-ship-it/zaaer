@@ -353,7 +353,8 @@ export function diffBriefing(prev: BriefingItem[], cur: BriefingItem[]): { key: 
  *  - "trimmed": whole items were dropped from the largest lists (any depth up to 6, including lists in lists), from the tail,
  *    until it fit. `omitted` counts the dropped items per path, and the JSON carries the same counts under `_omitted`.
  *  - "envelope": the lists were not enough (a huge scalar, a deep object, a non-object root). The JSON is a small object that keeps
- *    the top-level values that fit, in key order, and names every dropped top-level key under `_dropped_keys`, with `_context_cut: true`.
+ *    the top-level values that fit, in key order, with `_context_cut: true`, the total `_dropped_count`, and `_dropped_keys` (long keys shortened). If not every key name fits,
+ *    `_dropped_keys_listed` says how many are named, so a partial list is never mistaken for the whole. The last floor is `{_context_cut, _dropped_count}`, still valid JSON.
  * It never mutates its input, and its work is bounded: item sizes are measured once, and one final stringify checks the result.
  */
 export type FitOpsContext = { text: string; omitted: Record<string, number>; droppedKeys: string[]; mode: "full" | "trimmed" | "envelope" };
@@ -373,8 +374,19 @@ export function fitOpsContext(ctx: unknown, limit = 12000): FitOpsContext {
         if (used + cost <= room) { out[k] = v; used += cost; } else dropped.push(k);
       }
     } else dropped.push("(root)");
-    const text = JSON.stringify({ ...out, _context_cut: true, _dropped_keys: dropped });
-    return { text: text.length <= limit ? text : JSON.stringify({ _context_cut: true, _dropped_keys: dropped.slice(0, 20) }).slice(0, limit), omitted: {}, droppedKeys: dropped, mode: "envelope" };
+    const mk = (kept: Record<string, unknown>, keys: string[]) => JSON.stringify({ ...kept, _context_cut: true, _dropped_count: dropped.length, _dropped_keys_listed: keys.length, _dropped_keys: keys });
+    const whole = mk(out, dropped);
+    if (whole.length <= limit) return { text: whole, omitted: {}, droppedKeys: dropped, mode: "envelope" };
+    // the kept values or the key list do not fit: first try the key list alone (long keys shortened), then the minimal floor, which is always valid JSON
+    const listed: string[] = [];
+    for (const k of dropped) {
+      const short = Array.from(k).length > 60 ? Array.from(k).slice(0, 60).join("") + "…" : k;
+      if (mk({}, [...listed, short]).length > limit) break;
+      listed.push(short);
+    }
+    const alone = mk({}, listed);
+    if (alone.length <= limit) return { text: alone, omitted: {}, droppedKeys: dropped, mode: "envelope" };
+    return { text: JSON.stringify({ _context_cut: true, _dropped_count: dropped.length }), omitted: {}, droppedKeys: dropped, mode: "envelope" };   // with under ~60 characters of room nothing smaller is meaningful; still valid JSON
   };
   if (root === null || typeof root !== "object" || Array.isArray(root)) return envelope();
   type L = { path: string; arr: unknown[]; sizes: number[]; total: number };
@@ -408,5 +420,5 @@ export function fitOpsContext(ctx: unknown, limit = 12000): FitOpsContext {
 export function opsContextNote(fit: FitOpsContext): string {
   if (fit.mode === "full") return "";
   if (fit.mode === "trimmed") return "\n\nتنبيه: السياق أُرسل مختصرًا بسبب الحجم. الحقل _omitted يبيّن عدد البنود المحذوفة من كل قائمة؛ لا تذكر أن أي قائمة كاملة، وقل إنها جزئية عند الاستشهاد بها.";
-  return "\n\nتنبيه: السياق أُرسل مختصرًا جدًا بسبب الحجم. الحقل _dropped_keys يسرد المفاتيح المحذوفة؛ لا تستنتج شيئًا عنها ولا تذكر أن الصورة كاملة.";
+  return "\n\nتنبيه: السياق أُرسل مختصرًا جدًا بسبب الحجم. الحقل _dropped_count يبيّن عدد المفاتيح المحذوفة و_dropped_keys يسرد ما أمكن منها (والعدد المسرود في _dropped_keys_listed)؛ لا تستنتج شيئًا عنها ولا تذكر أن الصورة كاملة.";
 }
