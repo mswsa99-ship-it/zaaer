@@ -68,6 +68,7 @@ export default function AdminRates() {
   return (
     <div>
       <SectionTitle title="تقويم الأسعار" subtitle="الأنواع في صفوف والليالي في أعمدة. الرمادي سعر النوع الأساسي (لا سعر في التقويم). تعديل الأسعار لا يمس حجزًا قائمًا." action={<BranchPicker allowAll />} />
+      {allBranches && <div className="mb-3 rounded-xl border-2 border-dashed px-3 py-2 text-sm" role="note" data-testid="rates-readonly-note"><b>عرض جميع الفروع للقراءة فقط.</b> الأرقام أدناه كما هي في كل فرع. لتعديل سعر اضغط «فتح الفرع للتعديل» بجانب النوع، أو اختر الفرع من القائمة أعلاه.</div>}
       {q.error && <div className="mb-4">{cal.categories.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
       {notice && <p className="mb-4 rounded-xl bg-success-500/10 px-3 py-2 text-sm text-success-600" role="status">{notice}</p>}
 
@@ -90,9 +91,9 @@ export default function AdminRates() {
           <table className="border-separate border-spacing-0 text-xs" data-testid="rates-grid">
             <thead>
               <tr>
-                <th className="sticky right-0 z-20 min-w-[8.5rem] border-b border-l border-ink-100 bg-white px-3 py-2 text-right font-semibold text-ink-700 sm:min-w-[13rem]">النوع</th>
+                <th className="sticky right-0 z-20 min-w-[7rem] border-b border-l border-ink-100 bg-white px-3 py-2 text-right font-semibold text-ink-700 sm:min-w-[13rem]">النوع</th>
                 {nights.map((n) => (
-                  <th key={n} className={`min-w-[4.5rem] border-b border-ink-100 px-1 py-1.5 text-center font-medium ${isPast(n) ? "bg-ink-50 text-ink-400" : dow(n) === 5 || dow(n) === 6 ? "bg-brand-50/60 text-brand-800" : "text-ink-600"}`}>
+                  <th key={n} className={`min-w-[3.6rem] border-b border-ink-100 px-1 py-1.5 text-center font-medium ${isPast(n) ? "bg-ink-50 text-ink-400" : dow(n) === 5 || dow(n) === 6 ? "bg-brand-50/60 text-brand-800" : "text-ink-600"}`}>
                     <div>{DAY_NAMES[dow(n)]}</div><div dir="ltr" className="text-[10px] opacity-80">{n.slice(8, 10)}/{n.slice(5, 7)}</div>
                   </th>
                 ))}
@@ -104,7 +105,7 @@ export default function AdminRates() {
           </table>
         </Card>
       )}
-      <p className="mt-3 text-[11px] text-ink-400">{allBranches && <b className="block">عرض جميع الفروع للقراءة فقط: لتعديل سعر افتح الفرع.</b>}اضغط خانة لتحديدها، وShift مع الضغط لتحديد مدى في الصف نفسه. «المتوفر» للعرض: الوحدات الفعّالة ناقص الحجوزات المؤكدة والمقيمة تلك الليلة. الأسبوعي والشهري والحد الأدنى في «أنواع الوحدات»؛ التأمين في إعدادات الفرع.</p>
+      <p className="mt-3 text-[11px] text-ink-400">{!allBranches && <>اضغط خانة لتحديدها، وShift مع الضغط لتحديد مدى في الصف نفسه. «المتوفر» للعرض: الوحدات الفعّالة ناقص الحجوزات المؤكدة والمقيمة تلك الليلة. الأسبوعي والشهري والحد الأدنى في «أنواع الوحدات»؛ التأمين في إعدادات الفرع.</>}</p>
 
       <Modal open={editing} title={`تعديل المحدد (${selection.length})`} onClose={() => setEditing(false)}>
         {editing && branchId && <EditSelection branchId={branchId} cells={selection} categories={cal.categories} onDone={(n) => { setEditing(false); setNotice(`حُدِّثت الخانات: ${n}.`); reload(); }} />}
@@ -125,7 +126,7 @@ function TypeRows({ c, past, picked, onPick, readOnly = false, branchName, onOpe
         <th scope="row" className="sticky right-0 z-10 border-l border-t border-ink-100 bg-white px-3 pb-1 pt-2 text-right align-top font-normal">
           <div className="font-semibold text-ink-800">{c.name}</div>
           {readOnly && branchName && <div className="mt-0.5 flex flex-wrap items-center gap-1"><Badge testId="rates-branch">{branchName}</Badge>{onOpen && <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-[11px]" onClick={onOpen} data-testid="rates-open-branch" aria-label={`فتح فرع ${c.name} لتعديل الأسعار`}>فتح الفرع للتعديل</button>}</div>}
-          <div className="mt-0.5 text-[10px] leading-4 text-ink-400">
+          <div className={`mt-0.5 text-[10px] leading-4 text-ink-400 ${readOnly ? "hidden sm:block" : ""}`}>
             الأساسي {sar(c.base_price)}{c.min_nightly != null && <> · الأدنى {sar(c.min_nightly)}</>}
             {(c.weekly_price != null || c.monthly_price != null) && <div>{c.weekly_price != null && <>أسبوعي {sar(c.weekly_price)}</>}{c.weekly_price != null && c.monthly_price != null && " · "}{c.monthly_price != null && <>شهري {sar(c.monthly_price)}</>}</div>}
             <div>المتوفر من {c.units}</div>
@@ -147,11 +148,11 @@ function TypeRows({ c, past, picked, onPick, readOnly = false, branchName, onOpe
             const on = picked.has(keyOf(cell)); const isPast = past(d.night);
             return (
               <td key={d.night} className="px-0.5 py-0.5">
-                <button type="button" disabled={isPast || readOnly} onClick={(e) => onPick(cell, e.shiftKey)}
+                {readOnly ? <span role="text" aria-disabled="true" aria-label={`${c.name} ${label(r)} ${d.night}`} data-testid="rates-cell" className={`block w-full px-1 py-1.5 text-center tabular-nums ${isPast || v == null ? "opacity-50" : "font-semibold"}`}>{short(shown)}</span> : <button type="button" disabled={isPast} onClick={(e) => onPick(cell, e.shiftKey)}
                   aria-pressed={on} aria-label={`${c.name} ${label(r)} ${d.night}`} data-testid="rates-cell"
-                  className={`w-full ${readOnly ? "cursor-default" : ""} rounded-lg px-1 py-1.5 text-center tabular-nums transition ${isPast ? "cursor-default bg-ink-50 text-ink-400" : on ? "bg-brand-600 font-semibold text-white" : v != null ? "bg-white font-semibold text-ink-800 ring-1 ring-inset ring-ink-100 hover:ring-brand-300" : "bg-ink-50/60 text-ink-400 hover:bg-ink-100"}`}>
+                  className={`w-full px-1 py-1.5 text-center tabular-nums rounded-lg transition ${isPast ? "cursor-default bg-ink-50 text-ink-400" : on ? "bg-brand-600 font-semibold text-white" : v != null ? "bg-white font-semibold text-ink-800 ring-1 ring-inset ring-ink-100 hover:ring-brand-300" : "bg-ink-50/60 text-ink-400 hover:bg-ink-100"}`}>
                   {short(shown)}
-                </button>
+                </button>}
               </td>
             );
           })}

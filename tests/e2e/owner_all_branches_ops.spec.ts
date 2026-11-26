@@ -189,7 +189,7 @@ test("AB-R3 rates: the owner's all-branches calendar stacks both branches read-o
   await page.getByTestId("rates-branch").first().waitFor();
   const tags = await page.getByTestId("rates-branch").allInnerTexts();
   expect(new Set(tags).size).toBe(2);
-  expect(await page.getByTestId("rates-cell").first().isDisabled()).toBe(true);
+  await expect(page.getByTestId("rates-cell").first()).toHaveAttribute("aria-disabled", "true");
   await expect(page.getByRole("button", { name: "تعديل المحدد" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /تعديل مجموعة/ })).toHaveCount(0);
   await page.getByTestId("rates-open-branch").first().click();
