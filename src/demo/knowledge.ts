@@ -56,12 +56,12 @@ export function knowledgeRpcs(ctx: Permissions & {
   staffId: () => string | null;
 }): Record<string, (a: any) => any> {
   const { T, byId, me, myBranches, hasRole, requireCap, requireBranch, checkVersion, audit, emit, staffId } = ctx;
-  const publicRows = (branch: string) => T("knowledge_entries").filter((k) => k.organization_id === byId("branches", branch)?.organization_id && k.is_public && k.is_active && !k.archived_at && (k.branch_id == null || k.branch_id === branch))
+  const publicRows = (branch: string) => T("knowledge_entries").filter((k) => k.organization_id === byId("branches", branch)?.organization_id && k.is_public && k.is_active && !k.archived_at && (k.branch_id == null || k.branch_id === branch) && !(k.branch_id == null && T("knowledge_entries").some((o) => o.overrides_entry_id === k.id && o.branch_id === branch && !o.archived_at)))
     .sort((a, b) => b.priority - a.priority || b.used_count - a.used_count || String(a.created_at).localeCompare(String(b.created_at)));
   const pick = (k: Row) => ({ id: k.id, category: k.category, question: k.question, keywords: k.keywords, answer: k.answer, priority: k.priority });
   return {
     fn_public_knowledge: ({ p_branch }) => publicRows(p_branch).map(pick),
-    fn_staff_knowledge: ({ p_branch }) => { const m = me(); if (!m || !myBranches().includes(p_branch)) return []; return T("knowledge_entries").filter((k) => k.organization_id === m.organization_id && k.is_active && !k.archived_at && (k.branch_id == null || k.branch_id === p_branch)).map((k) => ({ ...pick(k), is_public: k.is_public })); },
+    fn_staff_knowledge: ({ p_branch }) => { const m = me(); if (!m || !myBranches().includes(p_branch)) return []; return T("knowledge_entries").filter((k) => k.organization_id === m.organization_id && k.is_active && !k.archived_at && (k.branch_id == null || k.branch_id === p_branch) && !(k.branch_id == null && T("knowledge_entries").some((o) => o.overrides_entry_id === k.id && o.branch_id === p_branch && !o.archived_at))).map((k) => ({ ...pick(k), is_public: k.is_public })); },
     fn_admin_upsert_knowledge: ({ p }) => {
       requireCap("knowledge");
       const m = me()!; const branch = p.branch_id || null;
@@ -75,6 +75,7 @@ export function knowledgeRpcs(ctx: Permissions & {
       if ((p.is_active ?? cur?.is_active ?? true) !== false) {
         const key = questionKey(q);
         const other = T("knowledge_entries").find((x) => x.organization_id === m.organization_id && !x.archived_at && x.is_active && x.id !== cur?.id
+          && !(cur?.overrides_entry_id && x.id === cur.overrides_entry_id) && !(cur && x.overrides_entry_id === cur.id)
           && (x.branch_id == null || scope == null || x.branch_id === scope) && questionKey(String(x.question ?? "")) === key);
         if (other) throw new Error("KNOWLEDGE_CONFLICT: " + other.id);
       }

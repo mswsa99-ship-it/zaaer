@@ -2,11 +2,12 @@
 -- the knowledge functions return to their 0010 / 0055 definitions. Branch overrides of shared entries become ordinary
 -- branch entries (the shared entry shows again beside them, as before 0149).
 drop function if exists fn_policy_masters_list(), fn_policy_master_preview(jsonb), fn_policy_master_apply(jsonb), fn_policy_branch_revert(uuid, text[], text),
-  fn_policy_plan(uuid, jsonb), fn_policy_master_input(jsonb, uuid), fn_policy_gate(uuid), fn_policy_masters_of(uuid),
+  fn_policy_plan(uuid, jsonb), fn_policy_master_input(jsonb, uuid), fn_policy_gate(uuid, text), fn_policy_masters_of(uuid),
   fn_knowledge_main_preview(uuid, jsonb), fn_knowledge_main_apply(uuid, jsonb), fn_knowledge_plan(uuid, uuid, jsonb), fn_knowledge_gate(uuid),
   fn_knowledge_branch_override(uuid, uuid, jsonb), fn_knowledge_revert_override(uuid, text), fn_knowledge_effective(uuid);
 drop trigger if exists trg_policy_inherit on property_policies;
 drop function if exists fn_trg_policy_inherit();
+drop function if exists fn_policy_sync_key(), fn_preview_token(text, uuid, bigint, text), fn_preview_token_ok(text, uuid, text, text);
 create or replace function fn_public_knowledge(p_branch uuid)
 returns table (id uuid, category text, question text, keywords text[], answer text, priority int)
 language sql stable security definer set search_path = public as $$

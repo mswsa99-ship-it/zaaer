@@ -16,6 +16,7 @@ import { seed, uid, todayISO, addDays, nowISO, ORG, STAFF, type Row, type Store 
 import { scriptedReply, normalizeArabic } from "../../supabase/functions/_shared/guardrails";
 import { buildBriefing, fallbackOpsReply } from "../../supabase/functions/_shared/ops";
 import { seedKnowledge, knowledgeRpcs } from "./knowledge";
+import { inheritanceRpcs, inheritPolicyEdit } from "./inheritance";
 import { guestRpcs, detailExtras, fingerprint, checkIdentity, validMapUrl, validHttpsUrl } from "./guests";
 import { phase6Rpcs } from "./phase6";
 import { phase2Rpcs } from "./phase2";
@@ -401,7 +402,7 @@ class QB implements PromiseLike<any> {
         return { data: this.one ? data[0] : data, error: null, count: null };
       }
       if (this.mode === "update" && this.table === "property_policies") {
-        const hit = rows.filter(match); try { const next = hit.map((r) => { const m = { ...r, ...this.payload }; policyRules(m, r); return m; }); hit.forEach((r, i) => Object.assign(r, next[i])); }
+        const hit = rows.filter(match); try { const next = hit.map((r) => { const m = { ...r, ...this.payload }; policyRules(m, r); inheritPolicyEdit(r, m); return m; }); hit.forEach((r, i) => Object.assign(r, next[i])); }
         catch (e) { return { data: null, error: { message: (e as Error).message, code: "P0001" }, count: null }; }
         emit(this.table); return { data: hit.map((r) => project(this.table, r, this.sel, this.service)), error: null, count: null };
       }
@@ -1386,6 +1387,7 @@ const rpcsMore: Record<string, (a: any) => any> = {
     else { if (r.access_status === "delivered") { r.access_status = "acknowledged"; r.updated_at = nowISO(); emit("reservations"); } for (const e of T("access_delivery_events")) if (e.reservation_id === r.id) e.acknowledged = true; }
     return { allowed: true, code: kb.code_plain, room_number: roomNo(r.room_id) }; },
   ...knowledgeRpcs({ T, byId, me, myBranches, hasRole, requireRole, requireBranch, checkVersion, audit, emit, staffId, ...perm }),
+  ...inheritanceRpcs({ T, byId, me, myBranches, hasRole, requireBranch, checkVersion, audit, emit, staffId, requireCap: perm.requireCap, can: perm.can }),
   ...guestRpcs(guestCtx),
 
   // ---- WhatsApp per branch (0021) + the reception computer (0023): the demo sends nothing; the WhatsApp simulator

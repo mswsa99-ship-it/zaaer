@@ -146,6 +146,79 @@ do $$ begin
   begin perform fn_knowledge_main_preview((select id from knowledge_entries where organization_id='ac000000-0000-4000-8000-000000000001' and branch_id is null and question like '%مواقف%'), '{"answer":"x"}'::jsonb); perform in_rec('IN30 a supervisor cannot edit a hotel-level knowledge entry', false);
   exception when others then perform in_rec('IN30 a supervisor cannot edit a hotel-level knowledge entry', sqlerrm like 'FORBIDDEN%', sqlerrm); end;
 end $$;
+
+-- exit catalogue, overwrite authority, individual mode
+reset role;
+do $$ declare a int; b int; begin
+  select seq into a from fn_hotel_exit_tables() where table_name = 'policy_masters'; select seq into b from fn_hotel_exit_tables() where table_name = 'property_policies';
+  perform in_rec('IN31 the hotel exit catalogue includes policy_masters, emptied after the branch rows that point to it', a is not null and b is not null and b < a, a::text || ' ' || b::text);
+end $$;
+insert into staff_profiles(id,auth_user_id,organization_id,full_name,email,role) values ('ac100000-0000-4000-8000-000000000004','ac200000-0000-4000-8000-000000000004','ac000000-0000-4000-8000-000000000001','IN individual supervisor','in-ind@example.test','supervisor');
+insert into branch_memberships(staff_id,branch_id) values ('ac100000-0000-4000-8000-000000000004','ac010000-0000-4000-8000-000000000001');
+insert into staff_page_access(staff_id,organization_id,enabled,page_grants) values ('ac100000-0000-4000-8000-000000000004','ac000000-0000-4000-8000-000000000001',true,'{"/admin/policies":{"view":true,"add":true,"edit":true},"/admin/knowledge":{"view":true,"add":true,"edit":true}}');
+create or replace function in_ans(p_id uuid) returns text language sql security definer as $$ select answer from knowledge_entries where id = p_id $$;
+create or replace function in_shared() returns uuid language sql security definer as $$ select id from knowledge_entries where organization_id='ac000000-0000-4000-8000-000000000001' and branch_id is null and question like '%مواقف%' $$;
+create or replace function in_ovr_ans() returns text language sql security definer as $$ select answer from knowledge_entries where branch_id = 'ac010000-0000-4000-8000-000000000002' and overrides_entry_id = in_shared() $$;
+-- an override in the second branch (made by the owner) that the one-branch manager must not be able to overwrite
+set role authenticated; select in_login('ac200000-0000-4000-8000-000000000001');
+select fn_knowledge_branch_override(in_shared(), 'ac010000-0000-4000-8000-000000000002', '{"answer":"نص عنيزة الخاص"}'::jsonb);
+select in_login('ac200000-0000-4000-8000-000000000003');
+do $$ declare kp jsonb; e uuid := in_shared(); v int := (select version from knowledge_entries where id = in_shared()); before text := in_ans(in_shared()); begin
+  kp := fn_knowledge_main_preview(e, jsonb_build_object('answer','نص جديد للجميع','version',v));
+  begin
+    perform fn_knowledge_main_apply(e, jsonb_build_object('answer','نص جديد للجميع','version',v,'token',kp->>'token','overwrite_branches',jsonb_build_array('ac010000-0000-4000-8000-000000000002')));
+    perform in_rec('IN32 a one-branch manager cannot overwrite another branch''s own entry', false);
+  exception when others then perform in_rec('IN32 a one-branch manager cannot overwrite another branch''s own entry, and nothing is applied', sqlerrm like 'FORBIDDEN%' and in_ans(e) = before, sqlerrm); end;
+end $$;
+-- an individual-mode supervisor with page grants: no hotel-level writes of either kind, may revert a policy of their own branch
+select in_login('ac200000-0000-4000-8000-000000000004');
+do $$ declare pid uuid; begin
+  begin perform fn_policy_master_preview('{"topic":"wifi","title":"x","content_ar":"y"}'::jsonb); perform in_rec('IN33 an individual-mode supervisor cannot make a hotel-level policy change', false);
+  exception when others then perform in_rec('IN33 an individual-mode supervisor cannot make a hotel-level policy change', sqlerrm like 'FORBIDDEN%', sqlerrm); end;
+  begin perform fn_knowledge_main_preview(in_shared(), '{"answer":"x"}'::jsonb); perform in_rec('IN34 an individual-mode supervisor cannot edit a hotel-level knowledge entry', false);
+  exception when others then perform in_rec('IN34 an individual-mode supervisor cannot edit a hotel-level knowledge entry', sqlerrm like 'FORBIDDEN%', sqlerrm); end;
+  select id into pid from property_policies where branch_id = 'ac010000-0000-4000-8000-000000000001' and topic = 'checkin';
+  update property_policies set content_ar = 'نص فرع بريدة' where id = pid;
+  perform fn_policy_branch_revert(pid, null, 'x');
+  perform in_rec('IN35 an individual-mode supervisor with the policies page edit grant reverts their own branch policy, as they could edit it', (select content_ar like '%7:00%' from property_policies where id = pid));
+end $$;
+
+-- redaction: the one-branch manager's knowledge preview names only their own branch and shows no override id of another branch
+select in_login('ac200000-0000-4000-8000-000000000003');
+do $$ declare kp jsonb; b4 text; begin
+  kp := fn_knowledge_main_preview(in_shared(), jsonb_build_object('answer','نص آخر','version',(select version from knowledge_entries where id = in_shared())));
+  perform in_rec('IN36 a one-branch manager sees only their own branch in the preview, the other is only counted',
+    jsonb_array_length(kp->'branches') = 1 and kp->'branches'->0->>'branch_id' = 'ac010000-0000-4000-8000-000000000001'
+    and (kp->'hidden_branches'->>'keep_override')::int = 1 and kp::text not like '%عنيزة%' and kp::text not like '%ac010000-0000-4000-8000-000000000002%', kp::text);
+  b4 := in_ovr_ans();
+  -- that preview's token still applies (it binds the full plan)
+  perform fn_knowledge_main_apply(in_shared(), jsonb_build_object('answer','نص آخر','version',(select version from knowledge_entries where id = in_shared()),'token',kp->>'token'));
+  perform in_rec('IN37 the redacted preview still applies; the hidden branch keeps its own text', in_ans(in_shared()) like '%آخر%' and in_ovr_ans() is not distinct from b4 and b4 is not null, coalesce(in_ovr_ans(),'NULL'));
+end $$;
+-- the server secret missing: no preview, no apply (fails closed, never a public constant)
+select in_login('ac200000-0000-4000-8000-000000000001');
+do $$ declare pv jsonb; begin
+  pv := fn_policy_master_preview('{"topic":"privacy","title":"الخصوصية","content_ar":"نص"}'::jsonb);
+  perform set_config('app.identity_key', '', true);
+  begin perform fn_policy_master_preview('{"topic":"privacy","title":"الخصوصية","content_ar":"نص"}'::jsonb); perform in_rec('IN38 with no server secret a preview is refused', false);
+  exception when others then perform in_rec('IN38 with no server secret a preview is refused', (sqlerrm like '%PREVIEW_UNAVAILABLE%' or sqlerrm like '%SECRET_NOT_CONFIGURED%'), sqlerrm); end;
+  begin perform fn_policy_master_apply('{"topic":"privacy","title":"الخصوصية","content_ar":"نص"}'::jsonb || jsonb_build_object('id', pv->'master'->>'id', 'token', '9999999999.' || repeat('0',64))); perform in_rec('IN39 with no server secret an apply with a made-up token is refused, nothing is written', false);
+  exception when others then perform in_rec('IN39 with no server secret an apply with a made-up token is refused, nothing is written', (sqlerrm like '%PREVIEW_UNAVAILABLE%' or sqlerrm like '%SECRET_NOT_CONFIGURED%') and not exists (select 1 from property_policies where topic = 'privacy'), sqlerrm); end;
+  begin perform fn_policy_master_apply('{"topic":"privacy","title":"الخصوصية","content_ar":"نص"}'::jsonb || jsonb_build_object('id', pv->'master'->>'id', 'token', '9999999999.' || repeat('0',64))); exception when others then null; end;
+  perform set_config('app.identity_key', 'test-identity-key', true);
+end $$;
+
+-- trigger bypass: a client that sets the marker itself (flag value 1, or any guess) still cannot move the link
+select in_login('ac200000-0000-4000-8000-000000000001');
+do $$ declare mid uuid; pid uuid; begin
+  select id, master_id into pid, mid from property_policies where master_id is not null and organization_id='ac000000-0000-4000-8000-000000000001' limit 1;
+  perform set_config('app.policy_sync', '1', true);
+  update property_policies set master_id = null, master_version = 99, override_fields = '{}' where id = pid;
+  perform in_rec('IN40 a client setting app.policy_sync=1 cannot unlink or re-version a branch row',
+    (select master_id = mid and master_version <> 99 from property_policies where id = pid));
+  perform set_config('app.policy_sync', '', true);
+  perform in_rec('IN41 the marker is not left set after the RPCs', coalesce(current_setting('app.policy_sync', true), '') = '');
+end $$;
 reset role;
 select 'FAIL' as result, name, detail from test_results where not ok;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from test_results;

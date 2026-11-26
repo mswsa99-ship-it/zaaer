@@ -67,7 +67,8 @@ export interface KnowledgePlanBranch {
   changed_fields: KnowledgeField[];       // inherits: these change for the branch
   overwritable_fields: KnowledgeField[];  // keep_override: these would change if the branch is chosen
 }
-export interface KnowledgePreview { entry_id: string; version: number; changed_fields: KnowledgeField[]; branches: KnowledgePlanBranch[]; token: string }
+/** branches lists only the branches the caller may see; hidden_branches counts the others (no names, no entry ids). */
+export interface KnowledgePreview { entry_id: string; version: number; changed_fields: KnowledgeField[]; branches: KnowledgePlanBranch[]; hidden_branches: { inherits: number; keep_override: number }; token: string }
 export interface KnowledgeEffectiveRow {
   id: string; branch_id: string | null; origin: "hotel" | "branch_override" | "branch_only"; overrides_entry_id: string | null;
   category: string; question: string; keywords: string[]; answer: string; answer_en: string | null;

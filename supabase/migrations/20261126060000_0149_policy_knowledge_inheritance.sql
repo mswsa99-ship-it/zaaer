@@ -1,11 +1,10 @@
 /*
 # 0149 — Policies and knowledge base: entered once at the hotel level, inherited by the branches
 
-Owner's decision (WhatsApp 26 Nov 2026, 13:52 request, 14:06 approval): the hotel's policies and the assistant's
-knowledge base are entered once, copied to every branch, and a branch may change its own copy (e.g. a different check-in
-time in one branch). Changing the hotel-level text never silently erases a branch's own change: by default a branch's
-customised fields are kept; the hotel-level change overwrites a branch only when that branch is chosen explicitly, and
-before anything is written a preview names the branches and the fields it will change.
+The hotel's policies and the assistant's knowledge base are entered once, copied to every branch, and a branch may change
+its own copy (e.g. a different check-in time in one branch). Changing the hotel-level text never silently erases a
+branch's own change: by default a branch's customised fields are kept; the hotel-level change overwrites a branch only when
+that branch is chosen explicitly, and before anything is written a preview names the branches and the fields it will change.
 
 Policies (property_policies is one row per branch, kept as it is):
   - the hotel-level texts live in policy_masters (one row per hotel and topic; no direct client access, RPCs only).
@@ -16,7 +15,10 @@ Policies (property_policies is one row per branch, kept as it is):
 Knowledge base (knowledge_entries already has branch_id null = shared by every branch):
   - overrides_entry_id: a branch's own version of a shared entry; the shared entry is hidden for that branch while the
     override is active and not archived. Reverting = archiving the override (nothing is erased).
-Scope: policies and knowledge only. No tax, deposit, legal or language fields. Additive only.
+Authority: hotel-level policy changes need owner or manager, the policies capability and page gate, and every branch;
+a branch revert needs what a direct edit of that branch's policy needs; hotel-level knowledge edits need what
+fn_admin_upsert_knowledge needs for a hotel-level entry; overwriting a branch's own text also needs that branch.
+Scope: policies and knowledge only. No tax, deposit, legal or language fields. Additive only; see supabase/rollback/0149_rollback.sql.
 */
 
 create table if not exists policy_masters (
@@ -53,6 +55,12 @@ create or replace trigger zz_hotel_pointers after insert or update of branch_id,
 create or replace trigger zz_hotel_pointers after insert or update of archived_by, branch_id, master_id, organization_id on public.property_policies
   for each row execute function fn_hotel_pointers('archived_by', 'staff_profiles', 'branch_id', 'branches', 'master_id', 'policy_masters');
 
+-- the in-RPC marker is not a plain flag a client could set with set_config: it is bound to this transaction and the server secret
+create or replace function fn_policy_sync_key() returns text language sql stable security definer set search_path = public as $$
+  select md5(txid_current()::text || fn_secret('identity_key'))
+$$;
+revoke all on function fn_policy_sync_key() from public, anon, authenticated;
+
 -- ---------------------------------------------------------------------------------------------- policies: row trigger
 -- a direct edit of a linked row (the existing screen) keeps the link and records which fields the branch now owns;
 -- a client cannot set or move the link itself (only the RPCs below, which set app.policy_sync, may)
@@ -60,7 +68,7 @@ create or replace function fn_trg_policy_inherit() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare v_changed text[] := '{}';
 begin
-  if current_setting('app.policy_sync', true) = '1' then return new; end if;
+  if current_setting('app.policy_sync', true) = fn_policy_sync_key() then return new; end if;
   if tg_op = 'INSERT' then
     new.master_id := null; new.master_version := null; new.override_fields := '{}';
     return new;
@@ -180,10 +188,13 @@ revoke all on function fn_policy_gate(uuid, text) from public, anon, authenticat
 -- a preview token: <expiry epoch>.<hmac of actor, hotel, expiry and everything the apply will do>; an apply recomputes it, so a
 -- changed input, plan, master version, actor or hotel, a replay after the change, or an expired token is refused
 create or replace function fn_preview_token(p_kind text, p_org uuid, p_expiry bigint, p_body text) returns text
-language sql stable security definer set search_path = public, extensions as $$
-  select p_expiry::text || '.' || encode(hmac(p_kind || '|' || p_org::text || '|' || coalesce(fn_staff_id()::text,'') || '|' || p_expiry::text || '|' || p_body,
-                                              coalesce(nullif(current_setting('app.identity_key', true), ''), 'preview-token'), 'sha256'), 'hex');
-$$;
+language plpgsql stable security definer set search_path = public, extensions as $$
+declare v_key text := fn_secret('identity_key');
+begin
+  -- fails closed: without the server's secret no preview can be made or applied
+  if v_key is null or v_key = '' then raise exception 'PREVIEW_UNAVAILABLE: server secret missing'; end if;
+  return p_expiry::text || '.' || encode(hmac(p_kind || '|' || p_org::text || '|' || coalesce(fn_staff_id()::text,'') || '|' || p_expiry::text || '|' || p_body, v_key, 'sha256'), 'hex');
+end $$;
 revoke all on function fn_preview_token(text, uuid, bigint, text) from public, anon, authenticated;
 create or replace function fn_preview_token_ok(p_kind text, p_org uuid, p_token text, p_body text) returns boolean
 language plpgsql stable security definer set search_path = public as $$
@@ -260,7 +271,7 @@ begin
     raise exception 'VALIDATION: overwrite_not_overridden';
   end if;
   v_ver := (v_m->>'version')::int;
-  perform set_config('app.policy_sync', '1', true);
+  perform set_config('app.policy_sync', fn_policy_sync_key(), true);
   if v_cur is null then
     insert into policy_masters(id, organization_id, topic, topic_label, title, content_ar, content_en, is_public, sort_order, version, created_by, updated_by)
     values (v_mid, v_org, v_m->>'topic', v_m->>'topic_label', v_m->>'title', v_m->>'content_ar', v_m->>'content_en', (v_m->>'is_public')::boolean,
@@ -339,7 +350,7 @@ begin
   v_f := array(select f from unnest(v_f) f where f = any(r.override_fields));
   if cardinality(v_f) = 0 then return jsonb_build_object('ok', true, 'reverted', '[]'::jsonb); end if;
   v_before := jsonb_build_object('title', r.title, 'content_ar', r.content_ar, 'content_en', r.content_en, 'is_public', r.is_public, 'override_fields', r.override_fields);
-  perform set_config('app.policy_sync', '1', true);
+  perform set_config('app.policy_sync', fn_policy_sync_key(), true);
   update property_policies set
     title = case when 'title' = any(v_f) then m->>'title' else title end,
     content_ar = case when 'content_ar' = any(v_f) then m->>'content_ar' else content_ar end,
@@ -485,7 +496,14 @@ declare v_org uuid := fn_user_org_id(); v_plan jsonb;
 begin
   perform fn_knowledge_gate(v_org);
   v_plan := fn_knowledge_plan(v_org, p_entry, p);
-  return v_plan || jsonb_build_object('token', fn_preview_token('knowledge', v_org, extract(epoch from now())::bigint + 900, p_entry::text || v_plan::text || coalesce(p::text, '')));
+  -- the token binds the FULL plan (every branch of the hotel); the answer shows only the branches this person may see,
+  -- and counts the rest without naming them or their entries
+  return jsonb_build_object('entry_id', v_plan->'entry_id', 'version', v_plan->'version', 'changed_fields', v_plan->'changed_fields',
+    'branches', (select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(v_plan->'branches') e where (e->>'branch_id')::uuid in (select fn_user_branch_ids())),
+    'hidden_branches', jsonb_build_object(
+        'inherits', (select count(*) from jsonb_array_elements(v_plan->'branches') e where (e->>'branch_id')::uuid not in (select fn_user_branch_ids()) and e->>'action' = 'inherits'),
+        'keep_override', (select count(*) from jsonb_array_elements(v_plan->'branches') e where (e->>'branch_id')::uuid not in (select fn_user_branch_ids()) and e->>'action' = 'keep_override')),
+    'token', fn_preview_token('knowledge', v_org, extract(epoch from now())::bigint + 900, p_entry::text || v_plan::text || coalesce(p::text, '')));
 end $$;
 revoke all on function fn_knowledge_main_preview(uuid, jsonb) from public, anon;
 grant execute on function fn_knowledge_main_preview(uuid, jsonb) to authenticated;
