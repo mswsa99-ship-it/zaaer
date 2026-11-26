@@ -206,7 +206,7 @@ function ArrivalCard({ s, id, done, refused, branchId, canAct, canDeliver, money
         </div>
       )}
       {canAct && core.length === 0 && !oneStep && (
-        <ActionForm onSubmit={submit}>
+        <ActionForm onSubmit={submit} clearOnEdit staleWhen={`${c.deposit_balance}|${c.collected}|${s.version}`}>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {rentShort > 0 && (
             <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">

@@ -122,9 +122,12 @@ export function SubmitRow({ busy, label, onCancel, danger, cancelLabel = "إلغ
 }
 
 /** Generic form wrapper: shows the error inline and never clears the inputs on failure (U01). */
-export function ActionForm({ onSubmit, children, error }: { onSubmit: () => Promise<void>; children: ReactNode; error?: string | null }) {
+export function ActionForm({ onSubmit, children, error, staleWhen, clearOnEdit }: { onSubmit: () => Promise<void>; children: ReactNode; error?: string | null; staleWhen?: string; clearOnEdit?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // a refusal belongs to the state it was refused in: when that state changes under the form (a deposit saved elsewhere on
+  // the page), the message is out of date. The typed values stay.
+  useEffect(() => { setErr(null); }, [staleWhen]);
   // 6.7 (U7): the lock is a ref, not only the busy state — two submits fired in the same tick (before the
   // disabled state renders) must still run onSubmit once, or a non-idempotent form writes twice.
   const inFlight = useRef(false);
@@ -138,7 +141,7 @@ export function ActionForm({ onSubmit, children, error }: { onSubmit: () => Prom
     try { await onSubmit(); } catch (ex) { setErr(toArabicError(ex)); } finally { inFlight.current = false; setBusy(false); }
   };
   return (
-    <form onSubmit={submit} noValidate>{/* SETUP-15: our Arabic messages, not the browser's English ones */}
+    <form onSubmit={submit} noValidate onInput={clearOnEdit ? () => setErr(null) : undefined} onChange={clearOnEdit ? () => setErr(null) : undefined}>{/* SETUP-15: our Arabic messages, not the browser's English ones */}
       {(err || error) && <div className="mb-3"><ErrorBanner message={err ?? error ?? ""} /></div>}
       <FormBusy.Provider value={busy}>{children}</FormBusy.Provider>
     </form>
