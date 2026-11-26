@@ -339,8 +339,15 @@ test("AB-V1 availability: the owner's all-branches view lists both branches' sto
   await page.locator(`select[aria-label="الفرع النشط"]`).first().selectOption({ label: "جميع الفروع" });
   await page.getByTestId("admin-row-branch").first().waitFor();
   const tags = await page.getByTestId("admin-row-branch").allInnerTexts();
-  // a branch with no stock rows is named in a note, never silently left out
-  expect(new Set(tags).size + (await page.getByTestId("avail-branch-empty").count())).toBe(2);
+  expect(new Set(tags).size).toBe(2);
+  await expect(page.getByTestId("avail-branch-empty")).toHaveCount(0);
+  // each card keeps its own branch's figures: Jeddah 3 / 1 / 1, never Riyadh's
+  const jed = page.getByTestId("avail-all").locator("> div").filter({ hasText: "الكورنيش" });
+  await expect(jed.first().getByTestId("avail-value")).toContainText("3");
+  const nums = await jed.first().getByTestId("avail-value").locator("dd").allInnerTexts();
+  expect(nums).toEqual(["3", "1", "1"]);
+  const riy = await page.getByTestId("avail-all").locator("> div").filter({ hasText: "الملك فهد" }).first().getByTestId("avail-value").locator("dd").allInnerTexts();
+  expect(riy).not.toEqual(["3", "1", "1"]);
   await expect(page.locator("input[type=number], input[inputmode=numeric]")).toHaveCount(0);
   await page.getByTestId("admin-row-open-branch").first().click();
   await expect(page.getByTestId("admin-row-branch")).toHaveCount(0);

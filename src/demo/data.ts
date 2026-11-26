@@ -414,7 +414,9 @@ export function seed(): Store {
     { id: uid(), organization_id: ORG, branch_id: BRANCH_A, topic: "parking", title: "المواقف", content_ar: "مواقف مجانية أمام المبنى.", content_en: null, is_public: true, sort_order: 3, updated_by: null, updated_at: ts(-30), created_at: ts(-300) },
     { id: uid(), organization_id: ORG, branch_id: BRANCH_A, topic: "cancellation", title: "سياسة الإلغاء", content_ar: "إلغاء مجاني حتى 48 ساعة قبل الوصول للحجز المباشر.", content_en: null, is_public: true, sort_order: 4, updated_by: null, updated_at: ts(-30), created_at: ts(-300) },
   ]);
-  put("inventory_periods", [cat.studio, cat.one, cat.two].flatMap((c) => Array.from({ length: 14 }, (_, i) => ({ id: uid(), branch_id: BRANCH_A, category_id: c, date: addDays(T, i), total_units: c === cat.studio ? 7 : c === cat.one ? 5 : 3, publicly_visible_units: c === cat.studio ? 3 : 2, blocked_units: c === cat.one ? 1 : 0, created_at: ts(-30) }))));
+  put("inventory_periods", [...[cat.studio, cat.one, cat.two].flatMap((c) => Array.from({ length: 14 }, (_, i) => ({ id: uid(), branch_id: BRANCH_A, category_id: c, date: addDays(T, i), total_units: c === cat.studio ? 7 : c === cat.one ? 5 : 3, publicly_visible_units: c === cat.studio ? 3 : 2, blocked_units: c === cat.one ? 1 : 0, created_at: ts(-30) }))),
+    // the second branch keeps its own, different stock (3 units, 1 public, 1 blocked) so an all-branches view shows two real sets
+    ...Array.from({ length: 14 }, (_, i) => ({ id: uid(), branch_id: BRANCH_B, category_id: cat.jed, date: addDays(T, i), total_units: 3, publicly_visible_units: 1, blocked_units: 1, created_at: ts(-30) }))]);
   put("release_rules", [cat.studio, cat.one, cat.two].map((c) => ({ id: uid(), branch_id: BRANCH_A, category_id: c, enabled: c !== cat.two, initial_public_release: 1, release_increment: 1, release_trigger: "access_delivered", created_at: ts(-300) })));
   put("released_slots", [{ id: uid(), branch_id: BRANCH_A, category_id: cat.studio, date: T, released_count: 2, updated_at: ts(0, 9) }]);
   put("integration_events", []);
