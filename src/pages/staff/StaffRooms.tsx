@@ -164,6 +164,7 @@ export default function StaffRooms() {
                   <Badge className={ROOM_STATUS_COLORS[x.status as RoomStatus] ?? "bg-ink-100"}>{roomStatusLabel(x.status, x.cleanliness)}</Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  {!x.is_active && <Badge className="bg-rai-line text-rai-ink-muted" testId="unit-inactive">غير فعالة</Badge>}
                   <Badge className={CLEANLINESS_COLORS[x.cleanliness]}><Sparkles className="h-3 w-3" /> {CLEANLINESS_LABELS[x.cleanliness]}</Badge>
                   <Badge className={x.keybox_ready ? "bg-success-500/10 text-success-600" : "bg-ink-100 text-ink-500"}><KeyRound className="h-3 w-3" /> {x.keybox_ready ? "الرمز جاهز" : "الرمز غير جاهز"}</Badge>
                   {x.open_maintenance > 0 && <Badge className="bg-danger-500/10 text-danger-600"><Wrench className="h-3 w-3" /> صيانة</Badge>}
