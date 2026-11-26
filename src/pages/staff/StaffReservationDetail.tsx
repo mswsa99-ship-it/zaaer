@@ -84,6 +84,7 @@ export default function StaffReservationDetail() {
   const [officeGuest, setOfficeGuest] = useState<{ open: boolean; guest: GuestDetail | null }>({ open: false, guest: null });
   const [summaryOpen, setSummaryOpen] = useState(false);
   const canOffice = can("guest.enter");
+  const canApproveId = can("identity.approve");   // the server refuses anyone else: the buttons are not shown to them
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -258,13 +259,13 @@ export default function StaffReservationDetail() {
                   </div>
                   {g.verification_status !== "verified" && g.verification_status !== "rejected" && (
                     <div className="flex flex-wrap justify-end gap-2">
-                      {g.data_submitted && <button onClick={() => approveIdentity(g.id)} disabled={action === "identity_" + g.id} className="btn-accent text-xs">
+                      {g.data_submitted && canApproveId && <button onClick={() => approveIdentity(g.id)} disabled={action === "identity_" + g.id} className="btn-accent text-xs">
                         {action === "identity_" + g.id ? <Spinner className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />} اعتمد
                       </button>}
                       {canOffice && !["cancelled", "rejected", "closed", "checked_out", "no_show"].includes(detail.status) && <button onClick={() => setOfficeGuest({ open: true, guest: g })} className="btn-outline text-xs" data-testid={`office-enter-${g.id}`}>
                         <IdCard className="h-3.5 w-3.5" /> {g.data_submitted ? "تصحيح من الوثيقة" : "إدخال من الوثيقة"}
                       </button>}
-                      {g.data_submitted && <button onClick={() => { setRejectingGuest(rejectingGuest === g.id ? null : g.id); setRejectReason(""); }} className="btn-danger text-xs">
+                      {g.data_submitted && canApproveId && <button onClick={() => { setRejectingGuest(rejectingGuest === g.id ? null : g.id); setRejectReason(""); }} className="btn-danger text-xs">
                         <UserX className="h-3.5 w-3.5" /> رفض
                       </button>}
                     </div>
