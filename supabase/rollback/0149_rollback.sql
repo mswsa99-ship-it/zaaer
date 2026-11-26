@@ -86,7 +86,11 @@ begin
   end if;
   return jsonb_build_object('ok', true, 'id', k.id, 'version', k.version);
 end $function$;
+-- the 0078 pointer checks as they were
+create or replace trigger zz_hotel_pointers after insert or update of branch_id, organization_id on public.knowledge_entries
+  for each row execute function fn_hotel_pointers('branch_id', 'branches');
+create or replace trigger zz_hotel_pointers after insert or update of archived_by, branch_id, organization_id on public.property_policies
+  for each row execute function fn_hotel_pointers('archived_by', 'staff_profiles', 'branch_id', 'branches');
 alter table knowledge_entries drop column if exists overrides_entry_id;
 alter table property_policies drop column if exists override_fields, drop column if exists master_version, drop column if exists master_id;
-alter table system_settings drop constraint if exists system_settings_policy_masters_array;
-alter table system_settings drop column if exists policy_masters;
+drop table if exists policy_masters;
