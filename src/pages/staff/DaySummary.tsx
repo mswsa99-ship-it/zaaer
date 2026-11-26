@@ -28,13 +28,13 @@ export default function DaySummary() {
     merge: (parts) => {
       const ok = parts.filter((x): x is NonNullable<Summary> => !!x);
       if (ok.length === 0) return null;
-      return { ...ok[0], everyone: ok.every((x) => x.everyone), rows: mergeRows(ok.map((x) => x.rows as unknown as Record<string, unknown>[]), (r) => [r.staff_name, r.kind, r.method].join("|"), ["count", "total"]) as unknown as NonNullable<Summary>["rows"] };
+      return { ...ok[0], everyone: ok.every((x) => x.everyone), rows: mergeRows(ok.map((x) => x.rows as unknown as Record<string, unknown>[]), (r) => [r.staff_id ?? r.staff_name, r.kind, r.method].join("|"), ["count", "total"]) as unknown as NonNullable<Summary>["rows"] };
     },
   });
   if (q.loading) return <LoadingScreen />;
   const sum = q.data;
   const staff = new Map<string, NonNullable<Summary>["rows"]>();
-  for (const r of sum?.rows ?? []) { const k = r.staff_name; staff.set(k, [...(staff.get(k) ?? []), r]); }
+  for (const r of sum?.rows ?? []) { const k = String(r.staff_id ?? r.staff_name); staff.set(k, [...(staff.get(k) ?? []), r]); }
   return (
     <div>
       <SectionTitle title={from === to ? "ملخص اليوم للموظفين" : "ملخص الفترة للموظفين"} subtitle={from === to ? "ما قبضه كل موظف وما ردّه في يوم الفرع، بالنوع والطريقة" : "ما قبضه كل موظف وما ردّه من أول يوم في الفترة إلى آخر يوم فيها، مجمّعًا بالنوع والطريقة"} action={<BranchPicker allowAll />} />
@@ -45,12 +45,12 @@ export default function DaySummary() {
       {q.error && !sum ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : q.error ? <ErrorBanner message={q.error} /> : null}
       {sum && staff.size === 0 && <EmptyState icon={<ClipboardList className="h-10 w-10" />} title={from === to ? "لا سندات في هذا اليوم" : "لا سندات في هذه الفترة"} />}
       <div className="grid gap-4 lg:grid-cols-2" data-testid="day-summary">
-        {[...staff.entries()].map(([name, rows]) => {
+        {[...staff.entries()].map(([key, rows]) => { const name = rows[0].staff_name;
           // OWNER-04: the drawer's movement — deposits in and out included, what a platform holds left out
           const net = rows.reduce((a, r) => a + (PLATFORM.includes(r.method ?? "") ? 0 : (SIGN[r.kind] ?? 0) * r.total), 0);
           const cash = rows.reduce((a, r) => a + (r.method === "cash" ? (SIGN[r.kind] ?? 0) * r.total : 0), 0);   // finance review: the all-methods net is not the cash in the drawer
           return (
-            <Card key={name}>
+            <Card key={key}>
               <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold text-ink-800">{name}</h2><span className="text-end text-xs text-ink-500">صافي الحركة (نقد وشبكة وتحويل، يشمل التأمين) <span dir="ltr" className="font-medium text-ink-800">{sar(net)}</span><br />منه نقدًا في الصندوق <span dir="ltr" data-testid="day-summary-cash" className="font-medium">{sar(cash)}</span></span></div>
               <div className="divide-y divide-ink-50 text-sm">
                 {rows.map((r, i) => (
