@@ -2118,6 +2118,16 @@ const rpcsStay: Record<string, (a: any) => any> = {
     return { generated_at: nowISO(), overdue, departed_open, late_departures };
   },
   // what each employee received and paid back on one branch day, by method; a supervisor sees their own (decision 5)
+  // 0147: the same summary over from..to, both days included, in the same shape
+  fn_staff_day_summary_range: ({ p_branch, p_from, p_to }) => {
+    requireMoney(); requireBranch(p_branch); if (!p_from || !p_to) throw new Error("VALIDATION: business_date"); if (p_from > p_to) throw new Error("VALIDATION: date_range");
+    const everyone = hasRole("owner", "manager", "finance"); const groups = new Map<string, Row>();
+    for (const v of T("financial_vouchers").filter((x) => x.branch_id === p_branch && x.status === "approved" && dayOf(x.occurred_at) >= p_from && dayOf(x.occurred_at) <= p_to && (everyone || x.created_by === staffId()))) {
+      const method = v.kind === "deposit_apply" ? null : v.method; const k = `${v.created_by}|${v.kind}|${method}`;
+      const g = groups.get(k) ?? { staff_id: v.created_by, staff_name: staffName(v.created_by) ?? "—", kind: v.kind, method, count: 0, total: 0 }; g.count++; g.total += v.amount_halalas; groups.set(k, g);
+    }
+    return { date: p_from, from: p_from, to: p_to, everyone, rows: [...groups.values()].sort((a, b) => String(a.staff_name).localeCompare(String(b.staff_name)) || String(a.kind).localeCompare(String(b.kind)) || String(a.method ?? "").localeCompare(String(b.method ?? ""))) };
+  },
   fn_staff_day_summary: ({ p_branch, p_date }) => {
     requireMoney(); requireBranch(p_branch); if (!p_date) throw new Error("VALIDATION: business_date");
     const everyone = hasRole("owner", "manager", "finance"); const groups = new Map<string, Row>();

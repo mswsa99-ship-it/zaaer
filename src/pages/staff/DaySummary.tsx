@@ -21,8 +21,9 @@ const SIGN: Record<string, 1 | -1 | 0> = { receipt: 1, deposit: 1, refund: -1, d
 const PLATFORM = ["ota_deferred", "booking_platform"];
 
 export default function DaySummary() {
-  const [date, setDate] = useState(todayISO());
-  const q = useBranchQuery<Summary | null>((branchId) => stayApi.daySummary(branchId, date), [date], null, {
+  const [from, setFrom] = useState(todayISO());
+  const [to, setTo] = useState(todayISO());
+  const q = useBranchQuery<Summary | null>((branchId) => stayApi.daySummaryRange(branchId, from, to), [from, to], null, {
     // «جميع الفروع» (owner): each employee's rows from every branch add up by kind and method
     merge: (parts) => {
       const ok = parts.filter((x): x is NonNullable<Summary> => !!x);
@@ -38,11 +39,11 @@ export default function DaySummary() {
     <div>
       <SectionTitle title="ملخص اليوم للموظفين" subtitle="ما قبضه كل موظف وما ردّه في يوم الفرع، بالنوع والطريقة" action={<BranchPicker allowAll />} />
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="text-sm text-ink-600">اليوم <DateRangePicker single className="mt-1" label="اليوم" from={date} to={date} max={todayISO()} onChange={(a) => setDate(a || todayISO())} /></div>
+        <div className="text-sm text-ink-600">اليوم أو الفترة <DateRangePicker className="mt-1" label="اليوم أو الفترة: يوم أو من تاريخ إلى تاريخ" from={from} to={to} max={todayISO()} onChange={(a, b) => { const f = a || todayISO(); setFrom(f); setTo(b || f); }} /></div>
         {sum && !sum.everyone && <p className="text-xs text-ink-500">تظهر هنا سنداتك أنت؛ يرى المالك والمدير والمالية سندات الجميع.</p>}
       </div>
       {q.error && !sum ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : q.error ? <ErrorBanner message={q.error} /> : null}
-      {sum && staff.size === 0 && <EmptyState icon={<ClipboardList className="h-10 w-10" />} title="لا سندات في هذا اليوم" />}
+      {sum && staff.size === 0 && <EmptyState icon={<ClipboardList className="h-10 w-10" />} title={from === to ? "لا سندات في هذا اليوم" : "لا سندات في هذه الفترة"} />}
       <div className="grid gap-4 lg:grid-cols-2" data-testid="day-summary">
         {[...staff.entries()].map(([name, rows]) => {
           // OWNER-04: the drawer's movement — deposits in and out included, what a platform holds left out

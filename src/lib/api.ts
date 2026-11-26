@@ -281,6 +281,7 @@ export const VALIDATION_AR: Record<string, string> = {
   nationality: "الجنسية مطلوبة.",
   birth_date: "تاريخ الميلاد غير صالح.",
   birth_date_range: "تاريخ الميلاد خارج النطاق المنطقي.",
+  date_range: "بداية الفترة بعد نهايتها.",
   consent_required: "يجب الإقرار بصحة البيانات.",
   phone_required_primary: "رقم الجوال مطلوب للنزيل الرئيسي.",
   // data validity (0047)
@@ -602,6 +603,8 @@ export const stayApi = {
   undoCancel: (reservationId: string, reason: string) => rpc<{ ok: boolean; status: string }>("fn_staff_undo_cancel", { p: { reservation_id: reservationId, reason } }),
   followups: (branchId: string) => rpc<StayFollowups>("fn_stay_followups", { p_branch: branchId }),
   daySummary: (branchId: string, date: string) => rpc<DaySummary>("fn_staff_day_summary", { p_branch: branchId, p_date: date }),
+  /** one day (from = to) or a period, both ends included (0147) */
+  daySummaryRange: (branchId: string, from: string, to: string) => rpc<DaySummary & { from: string; to: string }>("fn_staff_day_summary_range", { p_branch: branchId, p_from: from, p_to: to }),
 };
 
 // ---------------------------------------------------------------------------

@@ -86,6 +86,7 @@ do $$ declare b text := '''00000000-0000-0000-0000-000000000012'''; f text := qu
     'select fn_rate_calendar(' || b || ', ' || t || ', ' || t || ')',
     'select fn_stay_followups(' || b || ')',
     'select fn_staff_day_summary(' || b || ', ' || t || ')',
+    'select fn_staff_day_summary_range(' || b || ', ' || t || ', ' || t || ')',
     'select fn_platform_unsettled(' || b || ')',
     'select fn_keybox_board(' || b || ')'] loop
     s := t_fails(q, '%FORBIDDEN%');

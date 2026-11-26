@@ -1228,6 +1228,33 @@ describe("G08/G10/G17/G19 — the stay cycle in the demo (0033: decisions 1, 3, 
     expect(await fails(rpc("fn_staff_day_summary", { p_branch: A, p_date: day(0) }))).toMatch(/^FORBIDDEN/);
   });
 
+  it("SD15R the day summary over a period: a day or from-to, both ends included, same scope as one day, a reversed range is refused", async () => {
+    const own = await book(N2, 0, 1);
+    await pay(own.id, 4000);
+    await login("reception@demo.sa");
+    const id = await ready(N1, 0, 1);
+    await arrive(id, 10000);
+    // one day through the range function = the one-day function
+    const one = await rpc<any>("fn_staff_day_summary", { p_branch: A, p_date: day(0) });
+    const same = await rpc<any>("fn_staff_day_summary_range", { p_branch: A, p_from: day(0), p_to: day(0) });
+    expect(same.rows).toEqual(one.rows);
+    // a longer period that includes today keeps today's rows, with both ends inclusive
+    const span = await rpc<any>("fn_staff_day_summary_range", { p_branch: A, p_from: day(-3), p_to: day(0) });
+    // rows of the same employee, kind and method add up, so each of today's groups is at least what today alone gave
+    for (const r of one.rows) { const m = span.rows.find((x: any) => x.staff_id === r.staff_id && x.kind === r.kind && x.method === r.method); expect(m.count).toBeGreaterThanOrEqual(r.count); expect(m.total).toBeGreaterThanOrEqual(r.total); }
+    expect(span.from).toBe(day(-3)); expect(span.to).toBe(day(0));
+    // a period that ends yesterday does not include today
+    const before = await rpc<any>("fn_staff_day_summary_range", { p_branch: A, p_from: day(-3), p_to: day(-1) });
+    expect(before.rows.filter((r: any) => r.kind === "deposit" && r.total === 10000)).toEqual([]);
+    expect(await fails(rpc("fn_staff_day_summary_range", { p_branch: A, p_from: day(0), p_to: day(-1) }))).toMatch(/date_range/);
+    expect(await fails(rpc("fn_staff_day_summary_range", { p_branch: A, p_from: null, p_to: day(0) }))).toMatch(/business_date/);
+    await login("owner@demo.sa");
+    const all = await rpc<any>("fn_staff_day_summary_range", { p_branch: A, p_from: day(0), p_to: day(0) });
+    expect(all.everyone).toBe(true);
+    await login("housekeeping@demo.sa");
+    expect(await fails(rpc("fn_staff_day_summary_range", { p_branch: A, p_from: day(0), p_to: day(0) }))).toMatch(/^FORBIDDEN/);
+  });
+
   it("SD16 finance and housekeeping register no arrival, departure, Shomoos, damage, code, overdue reason or correction", async () => {
     const id = await ready(K1, 0, 2);
     const calls: Array<[string, Record<string, unknown>]> = [
