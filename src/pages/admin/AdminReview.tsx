@@ -162,13 +162,13 @@ export default function AdminReview() {
         <div className="flex gap-1 rounded-xl bg-ink-50 p-1 text-xs" role="tablist" aria-label="الحالة">
           {([["open", "بانتظار المراجعة"], ["reviewed", "تمت مراجعتها"], ["all", "الكل"]] as const).map(([k, l]) => (
             <button key={k} type="button" role="tab" aria-selected={status === k} onClick={() => { setStatus(k); setItems(null); }}
-              className={`rounded-lg px-3 py-1.5 ${status === k ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{l}</button>
+              className={`rounded-lg px-3 py-1.5 max-sm:min-h-11 ${status === k ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{l}</button>
           ))}
         </div>
         <div className="flex flex-wrap gap-1 text-xs" role="group" aria-label="النوع">
           {GROUPS.map(([g, l]) => (
             <button key={g || "all"} type="button" aria-pressed={group === g} onClick={() => setGroup(g)}
-              className={`rounded-full border px-3 py-1 ${group === g ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-500"}`}>
+              className={`rounded-full border px-3 py-1 max-sm:min-h-11 ${group === g ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-500"}`}>
               {l}{g && counts[g] ? ` (${counts[g]})` : ""}
             </button>
           ))}
