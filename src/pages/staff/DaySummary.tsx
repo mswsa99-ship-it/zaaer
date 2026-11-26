@@ -37,7 +37,7 @@ export default function DaySummary() {
   for (const r of sum?.rows ?? []) { const k = r.staff_name; staff.set(k, [...(staff.get(k) ?? []), r]); }
   return (
     <div>
-      <SectionTitle title="ملخص اليوم للموظفين" subtitle="ما قبضه كل موظف وما ردّه في يوم الفرع، بالنوع والطريقة" action={<BranchPicker allowAll />} />
+      <SectionTitle title={from === to ? "ملخص اليوم للموظفين" : "ملخص الفترة للموظفين"} subtitle={from === to ? "ما قبضه كل موظف وما ردّه في يوم الفرع، بالنوع والطريقة" : "ما قبضه كل موظف وما ردّه من أول يوم في الفترة إلى آخر يوم فيها، مجمّعًا بالنوع والطريقة"} action={<BranchPicker allowAll />} />
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="text-sm text-ink-600">اليوم أو الفترة <DateRangePicker className="mt-1" label="اليوم أو الفترة: يوم أو من تاريخ إلى تاريخ" from={from} to={to} max={todayISO()} onChange={(a, b) => { const f = a || todayISO(); setFrom(f); setTo(b || f); }} /></div>
         {sum && !sum.everyone && <p className="text-xs text-ink-500">تظهر هنا سنداتك أنت؛ يرى المالك والمدير والمالية سندات الجميع.</p>}

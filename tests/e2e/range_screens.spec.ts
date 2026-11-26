@@ -45,3 +45,20 @@ test.describe("period on day summary and POS settlement", () => {
     await expect(page.getByTestId("date-range-value").first()).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
+
+test.describe("centre tab strip", () => {
+  test("RNG4 phone: the open finance tab is inside the visible strip on entry (owner)", async ({ page, loginAs }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await loginAs("owner");
+    for (const path of ["/staff/day-summary", "/staff/accounts", "/staff/ledger"]) {
+      await page.goto(`/#${path}`, { waitUntil: "networkidle" });
+      const strip = page.getByTestId("hub-tabs");
+      const tab = strip.locator('[aria-current="page"]');
+      await expect(tab).toBeVisible();
+      const s = await strip.boundingBox(); const t = await tab.boundingBox();
+      expect(t!.x).toBeGreaterThanOrEqual(s!.x - 1);
+      expect(t!.x + t!.width).toBeLessThanOrEqual(s!.x + s!.width + 1);
+    }
+    await page.screenshot({ path: "/tmp/proof/rng4-tab-in-view.png" });
+  });
+});

@@ -52,7 +52,7 @@ export default function PosSettlement() {
 
   return (
     <div>
-      <SectionTitle title="تسوية الشبكة" subtitle="إجمالي جهاز الشبكة لليوم مقابل سندات الشبكة المسجلة على الحساب نفسه" action={<BranchPicker allowAll />} />
+      <SectionTitle title="تسوية الشبكة" subtitle={rangeTo > date ? "نظرة للقراءة فقط على أيام الفترة؛ التسوية تُحفظ ليوم واحد" : "إجمالي جهاز الشبكة لليوم مقابل سندات الشبكة المسجلة على الحساب نفسه"} action={<BranchPicker allowAll />} />
       {q.error && <div className="mb-4">{accounts.length ? <ErrorBanner message={q.error} /> : <LoadErrorCard message={q.error} onRetry={q.reload} />}</div>}
       {!q.error && accounts.length === 0 ? <EmptyState icon={<CreditCard className="h-10 w-10" />} title="لا يوجد حساب بنكي فعّال" description="يعرّف المالك أو المدير حساب الشبكة من «الصناديق والحسابات»." /> : accounts.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-3">

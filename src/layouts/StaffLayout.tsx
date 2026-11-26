@@ -22,6 +22,13 @@ import { useJourneyAlerts } from "../lib/journeyAlerts";
 /** Header buttons: 20px icon (was 16, +25%) in a 48px target (was 44), grouped with no gap on the left. */
 const HEADER_BTN = "flex h-[48px] w-[48px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
 
+/** the open tab of a centre scrolls into view when its strip is wider than the screen (nothing else on the page moves) */
+function centerActiveTab(el: HTMLElement | null) {
+  const a = el?.querySelector<HTMLElement>('[aria-current="page"]');
+  if (!el || !a || el.scrollWidth <= el.clientWidth) return;
+  el.scrollLeft += a.getBoundingClientRect().left + a.offsetWidth / 2 - (el.getBoundingClientRect().left + el.clientWidth / 2);
+}
+
 export default function StaffLayout() {
   const orgName = useOrganizationName();
   const { profile, signOut, can, canFull, permissions } = useAuth();
@@ -129,7 +136,7 @@ export default function StaffLayout() {
             const hub = pageFor(location.pathname)?.hub;
             const tabsOf = hub ? hubTabs(hub, profile?.role, allows) : [];
             return tabsOf.length > 1 ? (
-              <nav aria-label="تبويبات المركز" data-testid="hub-tabs" className="mb-4 flex gap-1 overflow-x-auto border-b border-ink-100">
+              <nav key={location.pathname} aria-label="تبويبات المركز" data-testid="hub-tabs" ref={centerActiveTab} className="mb-4 flex gap-1 overflow-x-auto border-b border-ink-100">
                 {tabsOf.map((t) => (
                   <NavLink key={t.path} to={t.path} className={({ isActive }) => cn("flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium", isActive ? "border-brand-600 text-brand-700" : "border-transparent text-ink-600 hover:text-ink-800")}>
                     {t.label}
