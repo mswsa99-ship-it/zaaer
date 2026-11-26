@@ -45,7 +45,9 @@ export default function DaySummary() {
       {q.error && !sum ? <LoadErrorCard message={q.error} onRetry={q.reload} /> : q.error ? <ErrorBanner message={q.error} /> : null}
       {sum && staff.size === 0 && <EmptyState icon={<ClipboardList className="h-10 w-10" />} title={from === to ? "لا سندات في هذا اليوم" : "لا سندات في هذه الفترة"} />}
       <div className="grid gap-4 lg:grid-cols-2" data-testid="day-summary">
-        {[...staff.entries()].map(([key, rows]) => { const name = rows[0].staff_name;
+        {[...staff.entries()].map(([key, rows], idx) => { const dup = [...staff.values()].filter((r) => r[0].staff_name === rows[0].staff_name).length > 1;   // two people with one name: tell the cards apart without showing any id
+          const nth = dup ? [...staff.values()].filter((r, j) => j <= idx && r[0].staff_name === rows[0].staff_name).length : 0;
+          const name = dup ? `${rows[0].staff_name} (${nth})` : rows[0].staff_name;
           // OWNER-04: the drawer's movement — deposits in and out included, what a platform holds left out
           const net = rows.reduce((a, r) => a + (PLATFORM.includes(r.method ?? "") ? 0 : (SIGN[r.kind] ?? 0) * r.total), 0);
           const cash = rows.reduce((a, r) => a + (r.method === "cash" ? (SIGN[r.kind] ?? 0) * r.total : 0), 0);   // finance review: the all-methods net is not the cash in the drawer
