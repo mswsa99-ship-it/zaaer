@@ -1,4 +1,4 @@
 {
-  "version": "20261126044000",
-  "note": "newest migration applied by hand on the real project (0146, 00:42:55 Riyadh) and read back from supabase_migrations.schema_migrations"
+  "version": "20261126051000",
+  "note": "newest migration applied by hand on the real project (0148, 14:18 Riyadh 2026-11-26) and read back from supabase_migrations.schema_migrations"
 }
