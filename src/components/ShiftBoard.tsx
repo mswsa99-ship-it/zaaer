@@ -12,6 +12,7 @@ import { CreditCard, LogIn } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn, maskName } from "../lib/utils";
 import type { ReservationCard } from "../lib/hooks";
+import { nextAction } from "./ReservationCard";
 
 export interface BoardTile { key: string; label: string; value: ReactNode; note?: string; to: string; tone?: "warning" | "danger" }
 export interface BoardRow { r: ReservationCard; action: "collect" | "arrive" }
@@ -37,16 +38,22 @@ export function ShiftBoard({ role, title, subtitle, tiles, rowsTitle, rows }: { 
           <p className="px-4 py-6 text-center text-sm text-ink-500">لا شيء ينتظر الآن</p>
         ) : (
           <ul className="divide-y divide-ink-100">
-            {rows.map(({ r, action }) => (
+            {rows.map(({ r, action }) => {
+              // the label says the stay's real next step (the one engine of the cards and the booking page): a row that still waits for a unit or the identity says so, not «سجّل الوصول»
+              const step = nextAction(r);
+              const ready = step === "تسجيل الوصول";
+              const label = ready ? (action === "collect" ? "حصّل وسجّل" : "سجّل الوصول") : step;
+              return (
               <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
                 <span className="font-mono text-xs font-semibold text-ink-800" dir="ltr">{r.internal_ref}</span>
                 <span className="min-w-0 flex-1 truncate text-ink-600">{maskName(r.primary_guest?.full_name)} · {r.room?.room_number ?? "—"}</span>
                 <Link to={`/staff/reservations/${r.id}`} data-testid={`shift-action-${action}`} className="btn-ghost inline-flex h-8 items-center gap-1.5 px-3 text-xs">
-                  {action === "collect" ? <CreditCard className="h-3.5 w-3.5" aria-hidden="true" /> : <LogIn className="h-3.5 w-3.5" aria-hidden="true" />}
-                  {action === "collect" ? "حصّل وسجّل" : "سجّل الوصول"}
+                  {ready && action === "collect" ? <CreditCard className="h-3.5 w-3.5" aria-hidden="true" /> : <LogIn className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {label}
                 </Link>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

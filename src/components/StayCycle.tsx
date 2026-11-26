@@ -41,9 +41,15 @@ export function StayCycle({ reservationId, branchId, refreshKey, onChanged }: { 
   const load = useCallback(async () => {
     try { setS(await stayApi.status(reservationId)); setLoadError(null); } catch (e) { setLoadError(toArabicError(e)); }
   }, [reservationId]);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  // a change made elsewhere on the page (a deposit receipt, a room switch) makes the last message here out of date; our own
+  // done() sets a fresh notice first, so that one is kept
+  const ownAt = useRef(0);
+  useEffect(() => {
+    if (Date.now() - ownAt.current > 1500) { setReasons(null); setError(null); setNotice(null); }
+    load();
+  }, [load, refreshKey]);
 
-  const done: Done = async (message) => { setReasons(null); setError(null); setNotice(message ?? null); await load(); onChanged(); };
+  const done: Done = async (message) => { setReasons(null); setError(null); setNotice(message ?? null); await load(); ownAt.current = Date.now(); onChanged(); };
   const fail = (message: string) => { setNotice(null); setError(message); };
   const refused = (items: string[]) => { setNotice(null); setError(null); setReasons(items.length ? items : ["تعذّر تنفيذ الإجراء"]); };
 

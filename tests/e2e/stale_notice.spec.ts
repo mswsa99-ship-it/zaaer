@@ -24,3 +24,34 @@ test("SN1 the deposit refusal in the arrival form goes away as soon as the clerk
   await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
   await expect(arrival.getByRole("alert")).toBeVisible();
 });
+
+test("SN2 the start-of-shift arrival rows say each stay's real next step, not «سجّل الوصول» on all of them", async ({ page, loginAs, go }) => {
+  await loginAs("supervisor");
+  await go("/staff/dashboard");
+  const rows = page.getByTestId("shift-rows").locator("li");
+  await expect(rows.first()).toBeVisible();
+  const labels = (await rows.locator("a[data-testid^='shift-action-']").allInnerTexts()).map((t) => t.trim());
+  expect(labels.length).toBeGreaterThan(1);
+  expect(new Set(labels).size, `labels: ${labels.join(" | ")}`).toBeGreaterThan(1);
+  expect(labels.some((l) => /هوية|وحدة/.test(l))).toBe(true);
+});
+
+test("SN3 the arrival notice goes away when another part of the page changes the stay (a deposit saved after the arrival)", async ({ page, loginAs, go }) => {
+  await loginAs("supervisor");
+  await openByRoom(page, go, "203", "confirmed");
+  const arrival = page.getByTestId("arrival");
+  const dep = arrival.locator("fieldset").filter({ hasText: "سند قبض التأمين" });
+  await dep.locator("input[data-money]").fill("50");
+  await dep.getByLabel(/استلمت المبلغ/).check();
+  await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
+  const notice = page.getByTestId("stay-notice");
+  await expect(notice).toContainText("سُجِّل الوصول");
+  await page.waitForTimeout(2000);   // the clerk's own reload has settled; what follows is a different action
+  await expect(notice).toContainText("سُجِّل الوصول");   // and the notice survived its own refresh
+  await page.getByRole("button", { name: "قبض تأمين" }).click();
+  const dlg = page.getByRole("dialog");
+  await dlg.locator("input[data-money]").first().fill("10");
+  await dlg.getByRole("button", { name: "حفظ السند" }).click();
+  await expect(dlg).toHaveCount(0);
+  await expect(notice).toHaveCount(0);
+});
