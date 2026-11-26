@@ -310,3 +310,16 @@ body, #root {background:var(--paper);color:var(--ink);}
 @media (max-width: 639px) {
   :root main .btn, :root main [class*="btn-"], :root main select.input { min-height: 44px; }
 }
+
+/* UX review (wide tables): plain sideways-scrolling areas (accounts, reports, day close, journey) get the same soft edge as the cards,
+   so a cut-off column is not mistaken for the whole table. Transparent over the page; a keyboard focus ring shows when the area is focused. */
+@media (max-width: 639px) {
+  :root div.overflow-x-auto:not(.card):not([role="tablist"]):not([data-no-scroll-region]) {
+    background:
+      linear-gradient(to right, var(--card) 30%, transparent) left center / 32px 100% no-repeat local,
+      linear-gradient(to left, var(--card) 30%, transparent) right center / 32px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(15,23,42,.22), rgba(15,23,42,0)) left center / 12px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,.22), rgba(15,23,42,0)) right center / 12px 100% no-repeat scroll;
+  }
+}
+:root [data-scroll-region="1"]:focus-visible { outline: 2px solid var(--focus, #0f766e); outline-offset: 2px; }

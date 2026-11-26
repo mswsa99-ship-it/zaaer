@@ -2,6 +2,7 @@ import { DemoBanner } from "../components/DemoBanner";
 import { PRODUCT_NAME, roomaiAsset } from "../lib/brand";
 import { LoadingScreen } from "../components/ui";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { useScrollRegions } from "../lib/useScrollRegions";
 import { useFocusTrap, useMainFocusOnRoute, useScrollOnRoute, focusMain } from "../lib/useFocusTrap";
 import { useGlobalShortcuts } from "../lib/shortcuts";
 import { Outlet, NavLink, Link, useNavigate, useLocation, useNavigationType } from "react-router-dom";
@@ -38,6 +39,7 @@ export default function AdminLayout() {
   const tabs = pickTabs(groups.flatMap((g) => g.items), ["/admin/dashboard", "/admin/reservations", "/admin/finance", "/admin/review", "/admin/guests", "/admin/policies", "/admin/audit-logs"]);
   const location = useLocation();
   useMainFocusOnRoute(location.pathname);
+  useScrollRegions(location.pathname);
   useScrollOnRoute(location.key, location.pathname, useNavigationType());
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
   useGlobalShortcuts();   // 6.15

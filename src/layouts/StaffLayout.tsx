@@ -2,6 +2,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { PRODUCT_NAME, roomaiAsset } from "../lib/brand";
 import { DemoBanner } from "../components/DemoBanner";
 import { useEffect, useRef, useState } from "react";
+import { useScrollRegions } from "../lib/useScrollRegions";
 import { useFocusTrap, useMainFocusOnRoute, useScrollOnRoute, focusMain } from "../lib/useFocusTrap";
 import { useGlobalShortcuts } from "../lib/shortcuts";
 import { Outlet, NavLink, useNavigate, Link, useLocation, useNavigationType } from "react-router-dom";
@@ -46,6 +47,7 @@ export default function StaffLayout() {
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   useMainFocusOnRoute(location.pathname);
+  useScrollRegions(location.pathname);
   useGlobalShortcuts();   // 6.15
   useScrollOnRoute(location.key, location.pathname, useNavigationType());
   useEffect(() => { setMoreOpen(false); }, [location.pathname]);
