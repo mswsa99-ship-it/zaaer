@@ -2757,7 +2757,7 @@ function invoke(name: string, opts: any, trustedService = false) {
   }
   if (name === "bank-mail") { if (!can("bank.manage")) return { data: null, error: { message: "forbidden" } }; return { data: { configured: false, fetched: 0, results: [], demo: true }, error: null }; }
   if (name === "ai-health") return { data: { configured: false, ok: false, model: null, error: "وضع العرض التجريبي — لا مزود متصل" }, error: null };
-  if (name === "ai-ops") { if (body.mode === "briefing") { const ctx = rpcs.fn_ai_ops_context({ p_branch: body.branch_id, p_date: body.date ?? null }); if (!ctx) return { data: null, error: { message: "forbidden" } }; const b = buildBriefing(ctx); return { data: { ...b, insights: null, mode: "deterministic", ai_status: "demo", generated_at: ctx.generated_at, date: ctx.summary?.date }, error: null }; } const r = opsChat(body); return r.error ? { data: null, error: r.error } : { data: r.data, error: null }; }
+  if (name === "ai-ops") { if (body.mode === "briefing") { const ctx = rpcs.fn_ai_ops_context({ p_branch: body.branch_id, p_date: body.date ?? null }); if (!ctx) return { data: null, error: { message: "forbidden" } }; const b = buildBriefing(ctx, Date.now(), "Asia/Riyadh"); return { data: { ...b, insights: null, mode: "deterministic", ai_status: "demo", generated_at: ctx.generated_at, date: ctx.summary?.date }, error: null }; } const r = opsChat(body); return r.error ? { data: null, error: r.error } : { data: r.data, error: null }; }
   if (name === "ai-reception") {
     const branch=body.branch_id; const bbScope=byId("branches",branch);
     const organizationId=trustedService ? bbScope?.organization_id : me()?.organization_id ?? guestOrg();

@@ -27,7 +27,7 @@ export function DailyBriefing() {
   const nameOf = (id: string) => branches.find((x) => x.id === id)?.name_ar ?? "";
   const q = useBranchQuery<Briefing | null>(async (branchId) => {
     const r = await aiOpsBriefing(branchId);
-    return allBranches ? { ...r, headline: `${nameOf(branchId)}: ${r.headline}`, items: r.items.map((i) => ({ ...i, text: `${nameOf(branchId)}: ${i.text}` })) } : r;
+    return allBranches ? { ...r, headline: `${nameOf(branchId)}: ${r.headline}`, items: r.items.map((i) => ({ ...i, key: i.key ? `${branchId}:${i.key}` : i.key, text: `${nameOf(branchId)}: ${i.text}` })) } : r;
   }, [allBranches], null, {
     merge: (parts) => {
       const ok = parts.filter((x): x is Briefing => !!x);

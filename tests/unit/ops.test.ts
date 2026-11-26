@@ -106,7 +106,7 @@ describe("ops output gate", () => {
 
 describe("deterministic briefing", () => {
   it("orders critical items first and reports money in SAR", () => {
-    const b = buildBriefing(ctx);
+    const b = buildBriefing(ctx, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh");
     expect(b.items[0].level).toBe("critical");
     expect(b.headline).toMatch(/عاجل/);
     expect(b.text).toContain("R-3");
@@ -272,11 +272,26 @@ describe("home alerts: current risk, upcoming risk, information, unavailable (de
   it("EVID1 every critical and warning item has an evidence line and a stable key", () => {
     for (const i of lvl(ctx).filter((x) => x.level !== "info")) { expect(i.why, i.text).toBeTruthy(); expect(i.key, i.text).toBeTruthy(); }
   });
-  it("DIFF1 cross-day: the same unresolved risk is 'persistent' and still shown; a new one is 'new'; a worse one is 'escalated'; keys are order-independent", () => {
+  it("DIFF1 cross-day (non-persistent, pure): the key is the KIND, entities are the members; same set = persistent and still shown; one booking joining = changed with that booking as added, not a whole new alert; worse = escalated; new kind = new", () => {
     const k = (o: any) => ({ level: "warning" as const, text: "a", ...o });
-    const prev = [k({ key: "x" }), k({ key: "y" })]; const cur = [k({ key: "x" }), k({ key: "y", level: "critical" }), k({ key: "z" })];
+    const prev = [k({ key: "x", entities: ["1", "2"] }), k({ key: "y" })]; const cur = [k({ key: "x", entities: ["2", "1"] }), k({ key: "y", level: "critical" }), k({ key: "z" })];
     expect(diffBriefing(prev, cur).map((d) => d.state)).toEqual(["persistent", "escalated", "new"]);
-    const a = buildBriefing({ ...ctx, overstays: [{ ref: "A", room: "1", days_over: 1 }, { ref: "B", room: "2", days_over: 1 }] }).items[0].key;
-    expect(buildBriefing({ ...ctx, overstays: [{ ref: "B", room: "2", days_over: 1 }, { ref: "A", room: "1", days_over: 1 }] }).items[0].key).toBe(a);
+    const d = diffBriefing([k({ key: "x", entities: ["1"] })], [k({ key: "x", entities: ["1", "3"] })])[0]; expect(d.state).toBe("changed"); expect(d.added).toEqual(["3"]);
+    const o = buildBriefing({ ...ctx, overstays: [{ ref: "B", room: "2", days_over: 1 }, { ref: "A", room: "1", days_over: 1 }] }, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh").items.find((i) => i.key === "overstay")!;
+    expect(o.entities).toEqual(["A", "B"]);
+  });
+  it("PRIV1 a role without money: text, why, key and entities carry no balance/deposit/due claim anywhere", () => {
+    const c = { ...ctx, summary: { ...ctx.summary, finance: undefined, departures: { expected: 1, done: 0, with_balance: 1 }, arrivals: { expected: 2, arrived: 1, pending_identity: 1, unpaid: 1 } }, in_house_with_balance: undefined, checked_out_with_deposit: undefined };
+    const dump = JSON.stringify(buildBriefing(c, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh").items);
+    expect(dump).not.toMatch(/ر\.س|متبقٍ|رصيد|balance|deposit|تأمين|unpaid|دفع/);
+  });
+  it("UNAVAIL4 missing arrivals/departures/units groups: no '0%' occupancy, no false calm, each named unavailable", () => {
+    const b = buildBriefing({ summary: { date: D }, overstays: [], overdue_arrivals: [], units_needing_attention: [] }, Date.parse(D + "T09:00:00Z"), "Asia/Riyadh");
+    expect(b.items.some((i) => /الإشغال \d/.test(i.text))).toBe(false); expect(b.headline).not.toContain("هادئ");
+    expect(b.items.filter((i) => i.horizon === "unavailable").length).toBeGreaterThanOrEqual(2);
+  });
+  it("STALE1 a stale reading never says 'needs your attention today': the headline says the reading is not current", () => {
+    const b = buildBriefing({ ...ctx, generated_at: "2026-10-21T10:00:00Z" }, Date.parse(ctx.summary.date + "T09:00:00Z"), "Asia/Riyadh");
+    expect(b.headline).toContain("غير محدّثة"); expect(b.headline).not.toContain("تحتاج انتباهك اليوم");
   });
 });
