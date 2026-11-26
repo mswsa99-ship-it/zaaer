@@ -182,7 +182,7 @@ export default function StaffReservationNew() {
           <button type="button" className="btn-ghost px-3 py-1 text-xs" onClick={clearDraft}>تجاهلها</button>
         </div>
       )}
-      <ol className="mb-4 flex gap-2 text-sm" aria-label="خطوات الحجز" data-testid="wizard-steps">
+      <ol className="mb-4 grid grid-cols-2 gap-2 text-sm min-[320px]:flex" aria-label="خطوات الحجز" data-testid="wizard-steps">
         {STEPS.map((t, i) => (
           <li key={t} className={`flex-1 rounded-xl px-3 py-2 text-center ${step === i + 1 ? "bg-brand-600 font-semibold text-white" : "bg-ink-100 text-ink-600"}`} aria-current={step === i + 1 ? "step" : undefined}>{i + 1} · {t}</li>
         ))}

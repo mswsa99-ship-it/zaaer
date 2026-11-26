@@ -43,3 +43,11 @@ test("SW4 195px reservation detail: each money figure in the summary stays on on
   for (const h of hs) expect(h).toBeLessThan(1.6);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(195);
 });
+
+for (const role of ["owner", "manager"] as const) for (const [name, path] of [["housekeeping", "/staff/housekeeping"], ["rooms", "/staff/rooms"], ["reservations list", "/staff/reservations"], ["tickets", "/staff/tickets"], ["new booking", "/staff/reservations/new"]] as const) {
+  test(`SW5 195px ${role} (branch picker shown) ${name}: the page is not wider than the screen`, async ({ page, loginAs, go }) => {
+    await page.setViewportSize({ width: 195, height: 700 });
+    await loginAs(role); await go(path);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(195);
+  });
+}

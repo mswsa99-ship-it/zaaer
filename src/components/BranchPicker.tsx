@@ -20,9 +20,9 @@ export function BranchPicker({ className, allowAll = false }: { className?: stri
   }
   if (branches.length === 1) return <span className={"inline-flex items-center gap-1.5 text-sm text-ink-500 " + (className ?? "")}><Building2 className="h-4 w-4" /> {branches[0].name_ar}</span>;
   return (
-    <label className={"inline-flex max-w-full min-w-0 items-center gap-2 text-sm " + (className ?? "")}>
-      <Building2 className="h-4 w-4 text-ink-400" />
-      <select value={withAll && allBranches ? ALL : branchId ?? ""} onChange={(e) => (e.target.value === ALL ? setAllBranches(true) : setBranchId(e.target.value))} className="input w-auto min-w-0 max-w-full py-2.5" aria-label="الفرع النشط">
+    <label className={"inline-flex w-full max-w-full min-w-0 items-center gap-2 text-sm sm:w-auto " + (className ?? "")}>
+      <Building2 className="h-4 w-4 shrink-0 text-ink-400" />
+      <select value={withAll && allBranches ? ALL : branchId ?? ""} onChange={(e) => (e.target.value === ALL ? setAllBranches(true) : setBranchId(e.target.value))} className="input min-w-0 max-w-full flex-1 py-2.5 sm:w-auto sm:flex-none" aria-label="الفرع النشط">
         {branches.map((b) => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
         {withAll && <option value={ALL}>جميع الفروع</option>}
       </select>
