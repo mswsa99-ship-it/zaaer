@@ -62,7 +62,7 @@ test("BATCHA4 day close: when the review says what blocks the send, that box's o
   await dlg.getByRole("button", { name: "إغلاق" }).first().click();
   await expect(pos.getByText("أدخل المبلغ المعدود (صفر إن لم يوجد).")).toBeVisible();
   await expect(pos.getByLabel("الشبكة: المُدخل")).toHaveAttribute("aria-invalid", "true");
-  await expect(pos.getByLabel("الشبكة: المُدخل")).toBeFocused();
+  await expect(cash.getByLabel("النقد: سبب الفرق")).toBeFocused();   // the first marked field in page order
   await expect(cash.getByText("اكتب سبب الفرق.")).toBeVisible();
   await expect(cash.getByLabel("النقد: سبب الفرق")).toHaveAttribute("aria-invalid", "true");
 });
