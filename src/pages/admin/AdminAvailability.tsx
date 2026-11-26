@@ -62,13 +62,31 @@ export default function AdminAvailability() {
       } />
       {(error || (q.error && rows.length > 0)) && <div className="mb-4"><ErrorBanner message={(error ?? q.error) as string} /></div>}
       {allBranches && !q.error && branches.filter((b) => !rows.some((r) => r.branch_id === b.id)).map((b) => <p key={b.id} data-testid="avail-branch-empty" className="mb-2 rounded-xl border-2 border-dashed px-3 py-2 text-sm">{b.name_ar}: لا توجد سجلات توفر لهذه الفترة.</p>)}
-      {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : <Card className="overflow-x-auto">
+      {q.error && rows.length === 0 ? <LoadErrorCard message={q.error} onRetry={load} /> : allBranches ? (
+        <div className="space-y-2" data-testid="avail-all">
+          {rows.map((r) => (
+            <Card key={r.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{r.category?.name_ar}</span>
+                <span dir="ltr" className="text-sm">{r.date}</span>
+                <Badge testId="admin-row-branch">{branchName(r.branch_id)}</Badge>
+                <button type="button" className="btn-ghost mr-auto shrink-0 whitespace-nowrap p-1 text-xs" data-testid="admin-row-open-branch" onClick={() => setBranchId(r.branch_id!)} aria-label={`فتح فرع ${branchName(r.branch_id)} لتعديل التوفر ${r.date}`}>فتح الفرع للتعديل</button>
+              </div>
+              <dl className="mt-2 grid grid-cols-3 gap-2 text-center text-xs" data-testid="avail-value">
+                <div><dt>الإجمالي</dt><dd className="text-base font-semibold">{r.total_units}</dd></div>
+                <div><dt>المعروض للعامة</dt><dd className="text-base font-semibold">{r.publicly_visible_units}</dd></div>
+                <div><dt>المحجوب</dt><dd className="text-base font-semibold">{r.blocked_units}</dd></div>
+              </dl>
+            </Card>
+          ))}
+          {rows.length === 0 && <div className="py-8 text-center text-sm">لا توجد سجلات توفر لهذه الفترة.</div>}
+        </div>
+      ) : <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-ink-100 text-xs text-ink-400">
               <th className="py-2 text-right font-medium">التاريخ</th>
               <th className="py-2 text-right font-medium">التصنيف</th>
-              {allBranches && <th className="py-2 text-right font-medium">الفرع</th>}
               <th className="py-2 text-center font-medium">الإجمالي</th>
               <th className="py-2 text-center font-medium">المعروض للعامة</th>
               <th className="py-2 text-center font-medium">المحجوب</th>
@@ -80,16 +98,9 @@ export default function AdminAvailability() {
               <tr key={r.id} className="border-b border-ink-50">
                 <td className="py-2.5 text-ink-700">{r.date}</td>
                 <td className="py-2.5 text-ink-600">{r.category?.name_ar}</td>
-                {allBranches && <td className="py-2.5"><Badge testId="admin-row-branch">{branchName(r.branch_id)}</Badge> <button type="button" className="btn-ghost shrink-0 whitespace-nowrap p-1 text-xs" data-testid="admin-row-open-branch" onClick={() => setBranchId(r.branch_id!)} aria-label={`فتح فرع ${branchName(r.branch_id)} لتعديل التوفر ${r.date}`}>فتح الفرع للتعديل</button></td>}
-                <td className="py-2.5 text-center">
-                  {allBranches ? <span data-testid="avail-value">{r.total_units}</span> : <NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting !== null} />}
-                </td>
-                <td className="py-2.5 text-center">
-                  {allBranches ? <span data-testid="avail-value">{r.publicly_visible_units}</span> : <NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting !== null} />}
-                </td>
-                <td className="py-2.5 text-center">
-                  {allBranches ? <span data-testid="avail-value">{r.blocked_units}</span> : <NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting !== null} />}
-                </td>
+                <td className="py-2.5 text-center"><NumberInput value={r.total_units} onCommit={(v) => updateField(r, "total_units", v)} className="mx-auto w-16 text-center" label={`إجمالي الوحدات ${r.date ?? ""}`} disabled={acting !== null} /></td>
+                <td className="py-2.5 text-center"><NumberInput value={r.publicly_visible_units} onCommit={(v) => updateField(r, "publicly_visible_units", v)} className="mx-auto w-16 text-center" label={`المعروض للعامة ${r.date ?? ""}`} disabled={acting !== null} /></td>
+                <td className="py-2.5 text-center"><NumberInput value={r.blocked_units} onCommit={(v) => updateField(r, "blocked_units", v)} className="mx-auto w-16 text-center" label={`الوحدات المحجوبة ${r.date ?? ""}`} disabled={acting !== null} /></td>
                 <td className="py-2.5 text-xs" aria-live="polite">{rowState[r.id] && <span className={rowState[r.id].ok ? "text-success-600" : "text-danger-600"}>{rowState[r.id].text}</span>}</td>
               </tr>
             ))}
