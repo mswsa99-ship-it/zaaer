@@ -118,8 +118,8 @@ test.describe("finance scope fixtures", () => {
       await page.reload({ waitUntil: "networkidle" });
       for (const route of ["pos-settlement", "day-summary"]) {
         await page.goto(`/#/staff/${route}`, { waitUntil: "networkidle" });
+        await expect(page.locator(SEL).first().locator("option")).toHaveCount(2);   // waits for the selector (a read before it renders gave 0)
         const opts = await page.locator(SEL).first().locator("option").allInnerTexts();
-        expect(opts.length).toBe(2);
         expect(opts.join("|")).not.toContain("جميع الفروع");
         await expect(page.getByTestId("pos-all-branches")).toHaveCount(0);
       }
