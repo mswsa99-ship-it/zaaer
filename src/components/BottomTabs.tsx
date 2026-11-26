@@ -25,21 +25,28 @@ const SHORT: Record<string, string> = {
   "/admin/guests": "النزلاء", "/admin/policies": "السياسات", "/admin/audit-logs": "السجل", "/admin/assistant": "المساعد", "/admin/knowledge": "المعرفة",
 };
 
+/** Every item has the same icon box and label line, so the five sit on one rhythm; the page you are on gets a tinted pill. */
+const ICON_BOX = "flex h-7 w-14 items-center justify-center rounded-full";
+const ACTIVE_BOX = "bg-[color-mix(in_srgb,currentColor_18%,transparent)]";
+const LABEL = "whitespace-nowrap px-0.5 text-center text-[12px] leading-4";
+
 export function BottomTabs({ items, onMore, moreOpen }: { items: TabItem[]; onMore: () => void; moreOpen: boolean }) {
   return (
     <nav aria-label="التنقل الرئيسي" data-testid="bottom-tabs"
-      className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap border-t border-ink-100 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-[repeat(auto-fit,minmax(3.6rem,1fr))] border-t border-ink-100 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
       {items.map((it) => (
         <NavLink key={it.to} to={it.to}
-          className={({ isActive }) => cn("flex min-h-[56px] basis-[3.6rem] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold", isActive ? "text-brand-700" : "text-ink-500")}>
-          <it.icon className="h-5 w-5" aria-hidden="true" />
-          <span className="whitespace-nowrap px-0.5 text-center leading-tight">{SHORT[it.to] ?? it.label}</span>
+          className={({ isActive }) => cn("flex min-h-[60px] flex-col items-center justify-center gap-1 text-xs font-semibold", isActive ? "text-brand-700" : "text-ink-500")}>
+          {({ isActive }) => (<>
+            <span className={cn(ICON_BOX, isActive && ACTIVE_BOX)} data-active={isActive ? "true" : undefined}><it.icon className="h-5 w-5" aria-hidden="true" /></span>
+            <span className={cn(LABEL, isActive && "font-bold")}>{SHORT[it.to] ?? it.label}</span>
+          </>)}
         </NavLink>
       ))}
       <button type="button" onClick={onMore} aria-expanded={moreOpen} data-testid="bottom-tabs-more"
-        className="flex min-h-[56px] basis-[3.6rem] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold text-ink-500">
-        <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
-        <span className="whitespace-nowrap px-0.5 text-center leading-tight">المزيد</span>
+        className="flex min-h-[60px] flex-col items-center justify-center gap-1 text-xs font-semibold text-ink-500">
+        <span className={ICON_BOX}><MoreHorizontal className="h-5 w-5" aria-hidden="true" /></span>
+        <span className={LABEL}>المزيد</span>
       </button>
     </nav>
   );

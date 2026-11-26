@@ -1,3 +1,4 @@
+import { ThemeToggle } from "../components/ThemeToggle";
 import { PRODUCT_NAME, roomaiAsset } from "../lib/brand";
 import { DemoBanner } from "../components/DemoBanner";
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +18,9 @@ import { KeyboxAlertBanner, KeyboxNavCount } from "../components/KeyboxAlert";
 import { useKeyboxAlerts } from "../lib/keyboxAlerts";
 import { useOrganizationName } from "../lib/organization";
 import { useJourneyAlerts } from "../lib/journeyAlerts";
+
+/** Header buttons: 20px icon (was 16, +25%) in a 55px target (was 44). */
+const HEADER_BTN = "flex h-[55px] w-[55px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100";
 
 export default function StaffLayout() {
   const orgName = useOrganizationName();
@@ -103,9 +107,10 @@ export default function StaffLayout() {
             <img src={roomaiAsset("roomai-mark.svg")} alt="" className="h-8 w-8" />
             <span className="min-w-0 truncate text-sm font-semibold text-ink-800">{PRODUCT_NAME}</span>
             <div id="ops-assistant-phone-dock" className="mr-auto" />
-            <Link to="/staff/account" className="flex h-[44px] w-[44px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-4 w-4" aria-hidden="true" /></Link>
-            <button onClick={handleSignOut} className="flex h-[44px] w-[44px] items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100" aria-label="تسجيل الخروج">
-              <LogOut className="h-4 w-4" />
+            <Link to="/staff/account" className={HEADER_BTN} aria-label="حسابي" data-testid="my-account-link-phone"><UserCog className="h-5 w-5" aria-hidden="true" /></Link>
+            <ThemeToggle className={HEADER_BTN} />
+            <button onClick={handleSignOut} className={HEADER_BTN} aria-label="تسجيل الخروج">
+              <LogOut className="h-5 w-5" />
             </button>
           </header>
         </div>
