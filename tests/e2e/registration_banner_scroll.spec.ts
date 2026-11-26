@@ -27,7 +27,7 @@ test("RB1 error banner: one scroll per refused save; typing and the checkbox do 
   await save.click();
   await expect.poll(count).toBe(2);              // a second refusal with the same text scrolls once more
   // the banner is above the sticky save bar
-  const a = await alert.boundingBox(), bar = await save.boundingBox();
-  expect(a!.y + a!.height).toBeLessThanOrEqual(bar!.y);
+  // the smooth scroll settles after the call: poll the same bound until it holds (no fixed sleep)
+  await expect.poll(async () => { const a = await alert.boundingBox(), bar = await save.boundingBox(); return !!a && !!bar && a.y + a.height <= bar.y; }).toBe(true);
   await page.screenshot({ path: "/tmp/proof/rb1-390.png" });
 });
