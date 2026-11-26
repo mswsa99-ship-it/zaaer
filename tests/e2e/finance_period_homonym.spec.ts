@@ -79,3 +79,50 @@ for (const width of [390, 1280]) {
     });
   });
 }
+
+/** FP3 one employee with vouchers in two branches is ONE card in «جميع الفروع» and the cash adds up (seed: staff 0002 has vouchers in both).
+ *  FP4 a supervisor / finance user who belongs to BOTH branches (membership added in the demo store) gets a branch selector with the two
+ *  branches but never «جميع الفروع», and the POS all-branches card never appears. All-branches stays owner-only. */
+test.describe("finance scope fixtures", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  const SEL = 'select[aria-label="الفرع النشط"]';
+
+  test("FP3 same employee across branches merges into one card (cash adds up)", async ({ page, loginAs }) => {
+    await loginAs("owner");
+    await page.goto("/#/staff/day-summary", { waitUntil: "networkidle" });
+    const cashOf = async (value: string) => {
+      await page.locator(SEL).first().selectOption({ value });
+      await pick(page, "2026-11-01", "2026-11-26");
+      const cards = await page.getByTestId("day-summary").locator("h2").allInnerTexts();
+      const cash = (await page.getByTestId("day-summary-cash").allInnerTexts()).map(sarNum);
+      return { cards, cash };
+    };
+    const r = await cashOf(RIYADH), j = await cashOf(JEDDAH), all = await cashOf("__all__");
+    const idx = (x: { cards: string[] }) => x.cards.findIndex((c) => c.includes("فهد الاستقبال"));
+    expect(idx(r)).toBeGreaterThanOrEqual(0);
+    expect(idx(j)).toBeGreaterThanOrEqual(0);           // the same person has vouchers in both branches
+    expect(all.cards.filter((c) => c.includes("فهد الاستقبال")).length).toBe(1);
+    expect(all.cash[idx(all)]).toBeCloseTo(r.cash[idx(r)] + j.cash[idx(j)], 2);
+  });
+
+  for (const role of ["supervisor", "finance"] as const) {
+    test(`FP4 ${role} in two branches: selector lists both, no «جميع الفروع», no POS all-branches card`, async ({ page, loginAs }) => {
+      await loginAs(role);
+      await page.goto("/#/staff/pos-settlement", { waitUntil: "networkidle" });
+      await page.evaluate(({ KEY, JEDDAH }) => {
+        const s = JSON.parse(localStorage.getItem(KEY)!);
+        const id = (suffix: string) => s.staff_profiles.find((x: any) => String(x.id).endsWith(suffix)).id;
+        for (const suffix of ["0002", "0004"]) s.branch_memberships.push({ id: "fp4-" + suffix, staff_id: id(suffix), branch_id: JEDDAH, created_at: "2026-01-30T07:00:00.000Z", removed_at: null, removed_by: null });
+        localStorage.setItem(KEY, JSON.stringify(s));
+      }, { KEY, JEDDAH });
+      await page.reload({ waitUntil: "networkidle" });
+      for (const route of ["pos-settlement", "day-summary"]) {
+        await page.goto(`/#/staff/${route}`, { waitUntil: "networkidle" });
+        const opts = await page.locator(SEL).first().locator("option").allInnerTexts();
+        expect(opts.length).toBe(2);
+        expect(opts.join("|")).not.toContain("جميع الفروع");
+        await expect(page.getByTestId("pos-all-branches")).toHaveCount(0);
+      }
+    });
+  }
+});
