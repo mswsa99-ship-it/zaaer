@@ -165,16 +165,17 @@ export default function AdminReview() {
               className={`rounded-lg px-3 py-1.5 max-sm:min-h-11 ${status === k ? "bg-white font-medium text-ink-800 shadow-sm" : "text-ink-500"}`}>{l}</button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1 text-xs" role="group" aria-label="النوع">
+        <div className="-mx-1 flex gap-1 overflow-x-auto px-1 text-xs max-sm:w-full max-sm:flex-nowrap sm:flex-wrap" role="group" aria-label="النوع">
           {GROUPS.map(([g, l]) => (
             <button key={g || "all"} type="button" aria-pressed={group === g} onClick={() => setGroup(g)}
-              className={`rounded-full border px-3 py-1 max-sm:min-h-11 ${group === g ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-500"}`}>
+              className={`shrink-0 rounded-full border px-3 py-1 max-sm:min-h-11 ${group === g ? "border-brand-500 bg-brand-50 font-medium text-brand-700" : "border-ink-100 text-ink-500"}`}>
               {l}{g && counts[g] ? ` (${counts[g]})` : ""}
             </button>
           ))}
         </div>
         {checked && <span className="mr-auto flex items-center gap-1 text-[11px] text-ink-400"><Activity className="h-3.5 w-3.5" /> آخر فحص للمراقبة{branch ? ` (${branch.name_ar})` : ""} {formatDateTime(checked)}</span>}
       </div>
+      <p className="mb-3 text-[11px] text-rai-ink-muted" data-testid="review-scope">القائمة تعرض بنود كل الفروع المتاحة لك، وكل بند يذكر فرعه. فحص المراقبة يخص الفرع المفتوح حاليًا فقط.</p>
       {undo && <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-success-500/10 px-3 py-2 text-xs text-success-700" role="status" data-testid="review-undo-toast">
             تمت مراجعة {undo.ids.length === 1 ? "بند واحد" : `${undo.ids.length} بنود`}.
             <button type="button" className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline" onClick={() => void takeBack(undo.ids)} disabled={busy}><Undo2 className="h-3 w-3" /> تراجع</button></div>}
@@ -187,6 +188,7 @@ export default function AdminReview() {
                 <input type="checkbox" className="h-4 w-4" checked={selectable.length > 0 && selectable.every((id) => selected.has(id))}
                   onChange={(e) => setSelected(e.target.checked ? new Set(selectable) : new Set())} /> تحديد الكل ({selectable.length})
               </label>
+              {selected.size > 0 && (<>
               <input className="input h-8 max-sm:h-11 min-w-0 max-w-sm flex-1 basis-48 text-xs" placeholder="ملاحظة المراجعة (اختيارية)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="ملاحظة المراجعة" />
               {!confirmBulk
                 ? <><button type="button" disabled={busy || selected.size === 0} aria-describedby={selected.size === 0 ? "dr-adminreview-5" : undefined} title={selected.size === 0 ? "حدّد بندًا واحدًا على الأقل" : undefined} onClick={() => setConfirmBulk(true)} className="btn-primary text-xs max-sm:min-h-11">
@@ -195,6 +197,7 @@ export default function AdminReview() {
                 : <span className="flex flex-wrap items-center gap-2 text-xs" data-testid="review-bulk-confirm">تأكيد مراجعة {selected.size}؟
                     <button type="button" className="btn-primary text-xs max-sm:min-h-11" disabled={busy} onClick={() => { const n = note.trim(); setNote(""); void mark([...selected], n); }}>{busy ? <Spinner className="h-3.5 w-3.5" /> : "نعم، تمت المراجعة"}</button>
                     <button type="button" className="btn-ghost text-xs max-sm:min-h-11" onClick={() => setConfirmBulk(false)}>إلغاء</button></span>}
+              </>)}
             </div>
           )}
           {error && items && <div className="mb-2"><ErrorBanner message={error} /></div>}
