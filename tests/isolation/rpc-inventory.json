@@ -1,10 +1,10 @@
 {
   "generated_from": "source1446+tranche3+rpc-fixtures",
   "engine": "PGlite (Postgres WASM), not standalone PG16",
-  "total": 338,
+  "total": 339,
   "counts": {
     "control-valid": 103,
-    "unexecuted-no-adapter": 189,
+    "unexecuted-no-adapter": 190,
     "control-valid-weak-oracle": 33,
     "control-invalid-needs-fixture": 4,
     "skipped-no-coverage-credit": 9
@@ -2912,6 +2912,12 @@
     {
       "signature": "fn_whatsapp_status(c branch_whatsapp_channels)",
       "family": "other",
+      "status": "unexecuted-no-adapter",
+      "coverage": "unexecuted"
+    },
+    {
+      "signature": "fn_staff_day_summary_range(p_branch uuid, p_from date, p_to date)",
+      "family": "reservation",
       "status": "unexecuted-no-adapter",
       "coverage": "unexecuted"
     }
