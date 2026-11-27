@@ -193,3 +193,7 @@ echo "== running 0154 similar bookings tests"
 run_tests tests/sql/similar_bookings_0154_tests.sql
 echo "== running 0155 column privilege tests"
 run_tests tests/sql/column_privileges_0155_tests.sql
+echo "== running staff day-summary range tests (0147: period aggregation, inclusive ends, scope)"
+run_tests tests/sql/day_summary_range_0147_tests.sql
+echo "== running POS settlement range tests (0148: sparse period days, totals, guards)"
+run_tests tests/sql/pos_settlement_range_0148_tests.sql

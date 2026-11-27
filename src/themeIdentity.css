@@ -250,7 +250,7 @@ body, #root {background:var(--paper);color:var(--ink);}
 
 /* UX review: the wizard's «التالي» is the one forward action; the quiet tint read as disabled. A solid fill, full width on a phone. */
 :root .wizard-next {background:#174f60;color:#ffffff;min-height:44px;flex:1 1 auto;}
-:root .wizard-next:hover:not(:disabled) {background:#123f4d;}
+:root .wizard-next:hover:not(:disabled) {background:#123f4d;color:#ffffff;}
 @media (min-width: 640px) { :root .wizard-next { flex:0 0 auto; min-width:8rem; } }
 
 /* UX review (390px): the reservations table was 1084px wide with the dates, status and balance off-screen and no cue.
