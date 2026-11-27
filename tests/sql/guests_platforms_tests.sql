@@ -488,8 +488,8 @@ end $$;
 -- =====================================================================
 set role authenticated;
 select t_login('a0000000-0000-0000-0000-000000000008', 'mgr@test.local');
-do $$ declare b branches%rowtype; a text; c text; m text; l text; ok jsonb; begin
-  select * into b from branches where id = '00000000-0000-0000-0000-000000000010';
+do $$ declare b record; a text; c text; m text; l text; ok jsonb; begin
+  select id, version, name_ar into b from branches where id = '00000000-0000-0000-0000-000000000010';
   a := t_fails(format('select fn_admin_upsert_branch(%L::jsonb)', jsonb_build_object('id', b.id, 'version', b.version, 'name_ar', b.name_ar, 'name_en', '  ')), '%name_en%');
   c := t_fails(format('select fn_admin_upsert_branch(%L::jsonb)', jsonb_build_object('name_ar', 'فرع بلا اسم إنجليزي')), '%name_en%');
   m := t_fails(format('select fn_admin_upsert_branch(%L::jsonb)', jsonb_build_object('id', b.id, 'version', b.version, 'name_ar', b.name_ar, 'map_url', 'http://maps.google.com/?q=1')), '%map_url%')

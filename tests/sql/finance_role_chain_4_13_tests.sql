@@ -41,6 +41,9 @@ create or replace function g_exp(p_amt bigint, p_key text) returns jsonb languag
     'amount_halalas',p_amt,'description','G exp','attachments',g_att(),'idempotency_key',p_key)) $$;
 create or replace function g_blk(p text) returns text[] language sql security definer as $$ select fn_checkin_core_blockers(p::uuid) $$;
 create or replace function g_mon(p text) returns text[] language sql security definer as $$ select fn_checkin_money_blockers(p::uuid) $$;
+-- 0155: clients cannot read staff_profiles.email directly any more; the tests look a profile up by email through a definer helper
+create or replace function t_sp(p_email text) returns setof staff_profiles language sql security definer as $$ select * from staff_profiles where email = p_email $$;
+grant execute on function t_sp(text) to authenticated;
 create or replace function g_n(p text) returns bigint language plpgsql security definer as $$ declare n bigint; begin execute p into n; return n; end $$;
 create or replace function g_reasons(p jsonb) returns text language sql as $$ select coalesce(p->>'reasons','') $$;
 
@@ -91,7 +94,7 @@ do $$ declare b uuid := '00000000-0000-0000-0000-000000000010'; d date := g_toda
   perform g_record('C1-03b housekeeping cannot submit the supervisor''s valid draft (FORBIDDEN); it stays draft', e like '42501%' and (select status from day_closings where id=c.id)='draft', e);
   s := fn_day_closing_submit(c.id, (rv->>'version')::int, rv->>'hash');
   select * into c from day_closings where id=c.id;
-  perform g_record('C1-04 supervisor submits: status submitted, submitted_by = supervisor staff id, edit window set in the future', (s->>'ok')::boolean and c.status='submitted' and c.submitted_by = (select id from staff_profiles where email='sup@test.local') and c.edit_until > now(), s::text);
+  perform g_record('C1-04 supervisor submits: status submitted, submitted_by = supervisor staff id, edit window set in the future', (s->>'ok')::boolean and c.status='submitted' and c.submitted_by = (select id from t_sp('sup@test.local')) and c.edit_until > now(), s::text);
   g := fn_day_closing_get(b, d);
   perform g_record('C1-05 after submit the system figure is revealed', exists (select 1 from jsonb_array_elements(g->'live'->'boxes') x where x ? 'system_halalas'), null);
   -- negatives on the submitted closing
@@ -130,7 +133,7 @@ do $$ declare c day_closings%rowtype; r jsonb; e text; rid uuid; ed0 timestamptz
   r := fn_day_closing_decide(rid, true, 'اعتماد المالك');
   select * into c from day_closings where id = g_id('c1')::uuid;
   perform g_record('C2-07 the owner approves: request approved, decided_by = owner, closing edit window reopened (edit_until > now)',
-    (r->>'ok')::boolean and (select status='approved' and decided_by=(select id from staff_profiles where email='owner@test.local') from day_closing_requests where id=rid) and c.edit_until > now(), r::text);
+    (r->>'ok')::boolean and (select status='approved' and decided_by=(select id from t_sp('owner@test.local')) from day_closing_requests where id=rid) and c.edit_until > now(), r::text);
   e := g_p(format('select fn_day_closing_decide(%L::uuid, true, null)', rid));
   perform g_record('C2-08 a decided request cannot be decided again (REQUEST_DECIDED)', e like 'P0001 REQUEST_DECIDED%', e);
 exception when others then perform g_record('C2 block', false, sqlerrm); end $$;

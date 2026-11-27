@@ -10,6 +10,9 @@ insert into auth.users(id,email,email_confirmed_at) values
 ('98000000-0000-0000-0000-000000000004','signup-pending@example.test',now()),
 ('98000000-0000-0000-0000-000000000005','signup-operator@example.test',now());
 insert into staff_profiles(organization_id,full_name,email,role,is_active) values('00000000-0000-0000-0000-000000000001','موظف مدعو للتسجيل','signup-pending@example.test','supervisor',true);
+-- 0155: clients cannot read staff_profiles.email directly any more, so the check goes through a definer helper that runs as the table owner
+create or replace function t_staff_has_email(p_uid uuid, p_email text, p_role text) returns boolean language sql security definer as $$ select exists(select 1 from staff_profiles where auth_user_id = p_uid and email = p_email and role::text = p_role) $$;
+grant execute on function t_staff_has_email(uuid,text,text) to authenticated;
 insert into platform_operators(auth_user_id,full_name) values('98000000-0000-0000-0000-000000000005','مشغل اختبار التسجيل');
 select t_login('98000000-0000-0000-0000-000000000002','signup-new@example.test');
 set local role authenticated;
@@ -25,7 +28,7 @@ begin perform fn_owner_register_hotel('{"name_ar":"x"}');bad:=false;exception wh
 insert into signup_results values('invalid fields rejected before creation',bad);
 a:=fn_owner_register_hotel('{"name_ar":"فندق التسجيل الذاتي","branch_name":"أول فرع","full_name":"مالك جديد موثق","slug":"owner-self-signup-test","organization_id":"00000000-0000-0000-0000-000000000001","email":"forged@example.test","role":"platform_operator"}');
 perform set_config('test.signup_org',a->>'id',true);
-insert into signup_results select 'new owner uses real identity and new tenant, not client email or organization',fn_user_org_id()=(a->>'id')::uuid and fn_user_org_id()<>'00000000-0000-0000-0000-000000000001'::uuid and exists(select 1 from staff_profiles where auth_user_id='98000000-0000-0000-0000-000000000001' and email='signup-new@example.test' and role='owner');
+insert into signup_results select 'new owner uses real identity and new tenant, not client email or organization',fn_user_org_id()=(a->>'id')::uuid and fn_user_org_id()<>'00000000-0000-0000-0000-000000000001'::uuid and t_staff_has_email('98000000-0000-0000-0000-000000000001','signup-new@example.test','owner');
 insert into signup_results select 'new owner has no branches until internal setup',count(*)=0 from branches;
 b:=fn_owner_register_hotel('{}');insert into signup_results values('repeat registration idempotently returns same hotel',b->>'id'=a->>'id' and b->>'existing'='true');
 insert into signup_results select 'fresh hotel settings disable demo mode',exists(select 1 from system_settings where organization_id=(a->>'id')::uuid and not demo_mode) and exists(select 1 from ai_settings where organization_id=(a->>'id')::uuid);

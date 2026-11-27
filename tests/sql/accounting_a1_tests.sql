@@ -73,7 +73,9 @@ do $$ declare r jsonb; ok_iban text := t_iban('80000000000000001192'); bad_iban 
   r := fn_admin_set_branch_guide(jsonb_build_object('branch_id', t_id('b'), 'bank_name','مصرف الاختبار', 'bank_beneficiary','فايف اورز', 'bank_iban', ok_iban));
   -- … and an account end that disagrees with the saved IBAN is refused in turn
   a1 := t_fails(format('select fn_admin_upsert_cash_account(%L::jsonb)', jsonb_build_object('id', t_id('bank_b'), 'name','حساب الفرع', 'version', t_ver(t_id('bank_b')), 'account_prefix','346', 'account_suffix','5555')), 'VALIDATION: iban_suffix%');
+  reset role; -- 0155: the test reads the IBAN column directly (clients no longer can), so read it as the table owner
   g2 := (select bank_iban from branches where id = t_id('b'));
+  set role authenticated;
   perform t_record('AC05 the IBAN in the branch''s bank details and the end of the bank account''s number must agree, whichever is saved second',
     g1 = 'ok' and a1 = 'ok' and g2 = ok_iban and g2 like '%1192', concat_ws(' / ', g1, a1, g2));
 exception when others then perform t_record('AC05 the IBAN in the branch''s bank details and the end of the bank account''s number must agree, whichever is saved second', false, sqlerrm); end $$;

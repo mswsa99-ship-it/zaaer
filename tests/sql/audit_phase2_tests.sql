@@ -202,7 +202,9 @@ end $$;
 do $$ declare r jsonb; sp staff_profiles; e jsonb; begin
   r := fn_admin_invite_staff(jsonb_build_object('email', 'Invited.One@Test.Local', 'full_name', 'موظف مدعو', 'role', 'supervisor', 'branch_ids', jsonb_build_array(t_id('b')), 'phone', '٠٥٥١٢٣٤٥٦٧'));
   e := fn_admin_update_staff(jsonb_build_object('staff_id', r->>'staff_id', 'email', 'invited.two@test.local', 'reason', 'تصحيح البريد قبل الدخول'));
+  reset role; -- 0155: the test reads the staff email directly (clients no longer can), so check it as the table owner
   select * into sp from staff_profiles where id = (r->>'staff_id')::uuid;
+  set role authenticated;
   perform t_record('QD11 an invite checks the email, needs a branch for a non-owner, checks the phone (Arabic digits read); the email is corrected before the first sign-in',
     t_err(format('select fn_admin_invite_staff(%L::jsonb)', jsonb_build_object('email', 'not-an-email', 'full_name', 'س', 'role', 'supervisor', 'branch_ids', jsonb_build_array(t_id('b')))), 'VALIDATION: email%') = 'ok'
     and t_err(format('select fn_admin_invite_staff(%L::jsonb)', jsonb_build_object('email', 'nobranch@test.local', 'full_name', 'بلا فرع', 'role', 'supervisor')), 'VALIDATION: branch_required%') = 'ok'

@@ -51,7 +51,7 @@ end $$;
 insert into days values ('D', t_today('00000000-0000-0000-0000-000000000010') + 200);
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
-do $$ declare r jsonb; b branches%rowtype; begin
+do $$ declare r jsonb; b record; begin
   -- a type priced by channel: base 200.00, weekly 1250.00 (178.57 a night), monthly 4550.00 (151.67 a night), minimum 150.00
   r := fn_admin_upsert_room_category(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'name_ar', 'نوع الأسعار', 'base_capacity', 2, 'max_capacity', 3,
          'base_price_halalas', 20000, 'weekly_price_halalas', 125000, 'monthly_price_halalas', 455000, 'min_nightly_halalas', 15000, 'price_mode', 'by_channel'));
@@ -61,7 +61,7 @@ do $$ declare r jsonb; b branches%rowtype; begin
   r := fn_admin_upsert_room(jsonb_build_object('branch_id', '00000000-0000-0000-0000-000000000010', 'category_id', t_id('cat'), 'room_number', 'PR-2'));
   insert into ids values ('room2', (r->>'id')::uuid);
   -- the supervisor may give up to 10% (the default is 0: no supervisor discount until the owner or a manager sets it)
-  select * into b from branches where id = '00000000-0000-0000-0000-000000000010';
+  select id, name_ar, version into b from branches where id = '00000000-0000-0000-0000-000000000010';
   perform fn_admin_upsert_branch(jsonb_build_object('id', b.id, 'name_ar', b.name_ar, 'version', b.version, 'supervisor_max_discount_bp', 1000));
 end $$;
 
@@ -171,8 +171,8 @@ do $$ declare q jsonb; ok jsonb; r1 text; r2 text; r3 text; r4 text; r5 text; ba
 exception when others then perform t_record('PR06 the supervisor discounts with a reason within the percentage; more, no reason, or a lower manual price are refused', false, sqlerrm); end $$;
 -- the minimum nightly price is the other limit: with 50% allowed, 200.00 off a 600.00 stay goes under 3 × 150.00
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
-do $$ declare b branches%rowtype; begin
-  select * into b from branches where id = '00000000-0000-0000-0000-000000000010';
+do $$ declare b record; begin
+  select id, name_ar, version into b from branches where id = '00000000-0000-0000-0000-000000000010';
   perform fn_admin_upsert_branch(jsonb_build_object('id', b.id, 'name_ar', b.name_ar, 'version', b.version, 'supervisor_max_discount_bp', 5000));
 end $$;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');

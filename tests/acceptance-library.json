@@ -607,6 +607,7 @@
   },
   "prefixes": {
     "SB": "0154: the similar-booking warning reports the same guest (phone or name) on the same branch, dates and unit type, never a different guest",
+    "CP": "0155: the branch IBAN and the staff email are not directly readable by signed-in members or anon; every other column and the definer paths still work",
     "PB": "0152: a booking reuses a guest profile only if the caller may see it (branch grant); hidden id refused, hidden phone makes a new profile, owner still links",
     "HM": "0150: the by-staff lines of the discounts, late-entries and identities reports carry staff_id and group by it, so two staff with the same name are two lines",
     "NM": "0151: two active staff members cannot carry the same name (case, spaces, Arabic marks, alef forms ignored); distinct names, inactive namesakes and unchanged names pass",

@@ -191,3 +191,5 @@ echo "== running 0152 profile scope tests"
 run_tests tests/sql/profile_scope_0152_tests.sql
 echo "== running 0154 similar bookings tests"
 run_tests tests/sql/similar_bookings_0154_tests.sql
+echo "== running 0155 column privilege tests"
+run_tests tests/sql/column_privileges_0155_tests.sql

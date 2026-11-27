@@ -7,6 +7,9 @@ grant all on test_results to public;
 create or replace function t_login(p_uid uuid, p_email text) returns void language plpgsql as $$ begin
   perform set_config('request.jwt.claim.sub', p_uid::text, false);
   perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'email', p_email)::text, false); end $$;
+-- 0155: clients cannot read staff_profiles.email directly any more; the tests look a profile up by email through a definer helper
+create or replace function t_sp(p_email text) returns setof staff_profiles language sql security definer as $$ select * from staff_profiles where email = p_email $$;
+grant execute on function t_sp(text) to authenticated;
 create or replace function t_record(p_name text, p_ok boolean, p_detail text default null) returns void language sql security definer as $$ insert into test_results values (p_name, p_ok, p_detail) $$;
 grant execute on function t_record(text, boolean, text) to public;
 do $$ declare org uuid := '00000000-0000-0000-0000-000000000001'; begin
@@ -37,7 +40,7 @@ do $$ declare br uuid := '00000000-0000-0000-0000-000000000010'; e text; r jsonb
   begin perform fn_staff_invite('M151A@example.test','اسم مختلف تماما','supervisor',array[br]); e := 'accepted'; exception when others then e := sqlerrm; end;
   perform t_record('NM06 a duplicate email is still refused as DUPLICATE_EMAIL', e like '%DUPLICATE_EMAIL%', e);
   -- NM07 renaming onto another active person's name is refused; keeping the own name and editing another field is accepted
-  select id into sid from staff_profiles where email = 'm151d@example.test';
+  select id into sid from t_sp('m151d@example.test');
   begin perform fn_admin_update_staff(jsonb_build_object('staff_id', sid, 'full_name', 'محمد الاختبار', 'reason', 'اختبار')); e := 'accepted'; exception when others then e := sqlerrm; end;
   perform t_record('NM07 renaming onto an active namesake is refused', e like '%DUPLICATE_NAME%', e);
   begin r := fn_admin_update_staff(jsonb_build_object('staff_id', sid, 'phone', '0555000151', 'reason', 'اختبار')); e := 'accepted'; exception when others then e := sqlerrm; end;
@@ -66,11 +69,11 @@ do $$ declare org uuid := '00000000-0000-0000-0000-000000000001'; nm text; begin
   insert into staff_profiles(organization_id,full_name,email,role,is_active) values (org,'مدعو أول 151','c151a@example.test','supervisor',true),(org,'مدعو ثان 151','c151b@example.test','supervisor',true);
   perform t_login('a0000000-0000-0000-0000-0000000000d1','c151a@example.test');
   perform t_record('NM14c the claim result says the typed name was not applied (name_kept)', (fn_claim_staff_profile(' محمد  الاختبار ')->>'name_kept')::boolean, null);
-  select full_name into nm from staff_profiles where email='c151a@example.test';
-  perform t_record('NM14a a first sign-in cannot take an active namesake''s name: the invited name stays and the claim succeeds', nm = 'مدعو أول 151' and exists(select 1 from staff_profiles where email='c151a@example.test' and auth_user_id is not null), nm);
+  select full_name into nm from t_sp('c151a@example.test');
+  perform t_record('NM14a a first sign-in cannot take an active namesake''s name: the invited name stays and the claim succeeds', nm = 'مدعو أول 151' and exists(select 1 from t_sp('c151a@example.test') where auth_user_id is not null), nm);
   perform t_login('a0000000-0000-0000-0000-0000000000d2','c151b@example.test');
   perform t_record('NM14d a free typed name reports name_kept = false', not (fn_claim_staff_profile('اسم حر جديد 151')->>'name_kept')::boolean, null);
-  select full_name into nm from staff_profiles where email='c151b@example.test';
+  select full_name into nm from t_sp('c151b@example.test');
   perform t_record('NM14b a free typed name is still applied at first sign-in', nm = 'اسم حر جديد 151', nm);
 end $$;
 do $$ begin
