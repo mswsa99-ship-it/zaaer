@@ -15,10 +15,10 @@ do $$ declare org uuid := '00000000-0000-0000-0000-000000000001'; br uuid := '00
   a uuid := 'fe150000-0000-4000-8000-00000000000a'; b uuid := 'fe150000-0000-4000-8000-00000000000b'; o uuid := 'fe150000-0000-4000-8000-0000000000f0';
   r1 uuid; r2 uuid; ro reservations; begin
   select id into r1 from reservations where branch_id = br order by id limit 1; select id into r2 from reservations where branch_id = br and id <> r1 order by id limit 1;
-  insert into staff_profiles(id,auth_user_id,organization_id,full_name,email,role) values
-    (o,'a0000000-0000-0000-0000-0000000000f0',org,'مالك الاختبار','own150@example.test','owner'),
-    (a,'fe150000-0000-4000-8000-0000000001a1',org,'موظف مكرر','a150@example.test','supervisor'),
-    (b,'fe150000-0000-4000-8000-0000000001b1',org,'موظف مكرر','b150@example.test','supervisor');
+  insert into staff_profiles(id,auth_user_id,organization_id,full_name,email,role,is_active) values
+    (o,'a0000000-0000-0000-0000-0000000000f0',org,'مالك الاختبار','own150@example.test','owner',true),
+    (a,'fe150000-0000-4000-8000-0000000001a1',org,'موظف مكرر','a150@example.test','supervisor',true),
+    (b,'fe150000-0000-4000-8000-0000000001b1',org,'موظف مكرر','b150@example.test','supervisor',false);
   select id into src from booking_sources where kind='external' limit 1;
   select * into ro from reservations where branch_id=br limit 1;
   insert into reservation_charges(organization_id,branch_id,reservation_id,kind,description,quantity,unit_price_halalas,total_halalas,taxable,service_from,service_to,created_by,reason)
