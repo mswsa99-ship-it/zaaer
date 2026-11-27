@@ -119,12 +119,13 @@ export default function StaffReservationNew() {
 
   // 0154: a warning, never a block: the same guest already has a booking of this unit type on these dates
   const [similar, setSimilar] = useState<{ internal_ref: string; same_phone: boolean; same_name: boolean }[]>([]);
+  const [similarFailed, setSimilarFailed] = useState(false);   // the check itself failed: not the same as "no similar booking"
   useEffect(() => {
-    if (!branchId || !f.category_id || nights <= 0 || (!f.guest_name.trim() && !f.guest_phone.trim())) { setSimilar([]); return; }
+    if (!branchId || !f.category_id || nights <= 0 || (!f.guest_name.trim() && !f.guest_phone.trim())) { setSimilar([]); setSimilarFailed(false); return; }
     let alive = true;
     const t = window.setTimeout(() => {
       opsApi.similarBookings({ branch_id: branchId, category_id: f.category_id, check_in: f.check_in, check_out: f.check_out, guest_name: f.guest_name, guest_phone: f.guest_phone || null })
-        .then((r) => { if (alive) setSimilar(r.items); }).catch(() => { if (alive) setSimilar([]); });
+        .then((r) => { if (alive) { setSimilar(r.items); setSimilarFailed(false); } }).catch(() => { if (alive) { setSimilar([]); setSimilarFailed(true); } });
     }, 400);
     return () => { alive = false; window.clearTimeout(t); };
   }, [branchId, f.category_id, f.check_in, f.check_out, f.guest_name, f.guest_phone, nights]);
@@ -347,6 +348,11 @@ export default function StaffReservationNew() {
           <Card>
             <Toggle checked={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} label="تأكيد الحجز مباشرة" />
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
+            {similarFailed && similar.length === 0 && (
+              <p className="mt-3 rounded-lg border border-rai-line bg-rai-warning-tint p-3 text-xs text-rai-ink" role="status" data-testid="similar-booking-failed">
+                تعذّر التحقق من وجود حجز مشابه الآن. لم يُمنع الحفظ، لكن تأكد يدويًا أنه ليس حجزًا مكررًا.
+              </p>
+            )}
             {similar.length > 0 && (
               <div className="mt-3 rounded-lg border border-rai-line bg-rai-warning-tint p-3 text-sm text-rai-ink" role="status" data-testid="similar-booking-warning">
                 <p className="font-semibold">{similar.some((x) => x.same_phone) ? "يبدو أن هذا الحجز مكرر" : "يوجد حجز بنفس الاسم"}</p>

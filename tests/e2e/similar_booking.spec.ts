@@ -51,4 +51,23 @@ test.describe("similar booking warning (0154)", () => {
     await expect(w).toContainText("لنفس رقم الجوال");
     await expect(w.locator("bdi")).not.toContainText(",");        // one reference only (the phone match)
   });
+
+  test("SB13 a failed check is said so (not silent), creating stays allowed; a successful zero-result shows neither", async ({ page, loginAs }) => {
+    await loginAs("supervisor");
+    await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+    await page.evaluate(() => { (globalThis as { __raiFailSimilar?: boolean }).__raiFailSimilar = true; });
+    await reachPrice(page, "عبدالله الفحص", "0553334445");
+    const failed = page.getByTestId("similar-booking-failed");
+    await expect(failed).toBeVisible();
+    await expect(failed).toContainText("تعذّر التحقق");
+    await expect(page.getByTestId("similar-booking-warning")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "إنشاء الحجز" })).toBeEnabled();
+    await page.evaluate(() => { (globalThis as { __raiFailSimilar?: boolean }).__raiFailSimilar = false; });
+    await page.getByRole("button", { name: "السابق" }).click();
+    await fillGuest(page, "سعد الجديد", "0556667778");
+    await bookingNext(page);
+    await expect(page.getByRole("button", { name: "إنشاء الحجز" })).toBeVisible();
+    await expect(page.getByTestId("similar-booking-failed")).toHaveCount(0);
+    await expect(page.getByTestId("similar-booking-warning")).toHaveCount(0);
+  });
 });

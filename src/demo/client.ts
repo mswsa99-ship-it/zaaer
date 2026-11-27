@@ -758,6 +758,7 @@ const rpcs: Record<string, (a: any) => any> = {
   // multi-unit booking (0011): one reservation per unit sharing group_ref, all-or-nothing
   fn_staff_similar_bookings: ({ p }) => {
     requireCap("res.create");
+    if ((globalThis as { __raiFailSimilar?: boolean }).__raiFailSimilar) throw new Error("SIMULATED_OUTAGE");   // test hook: the check itself fails
     if (!p.check_in || !p.check_out || !p.category_id) return { count: 0, items: [] };
     const np = p.guest_phone ? normPhone(p.guest_phone) : null; const nk = nameKey(p.guest_name);
     const items = T("reservations").filter((r) => r.branch_id === p.branch_id && r.room_category_id === p.category_id && r.check_in === p.check_in && r.check_out === p.check_out && !["draft", "cancelled", "rejected"].includes(r.status))
