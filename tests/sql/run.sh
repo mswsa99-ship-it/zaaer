@@ -197,3 +197,7 @@ echo "== running staff day-summary range tests (0147: period aggregation, inclus
 run_tests tests/sql/day_summary_range_0147_tests.sql
 echo "== running POS settlement range tests (0148: sparse period days, totals, guards)"
 run_tests tests/sql/pos_settlement_range_0148_tests.sql
+echo "== running person name parts tests (0141: two-letter rule, repeated-letter part)"
+run_tests tests/sql/person_name_parts_0141_tests.sql
+echo "== running company tax tests (0142: VAT and address validation, 0143: detail mask)"
+run_tests tests/sql/company_tax_0142_0143_tests.sql

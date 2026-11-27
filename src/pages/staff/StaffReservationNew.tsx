@@ -156,7 +156,7 @@ export default function StaffReservationNew() {
 
   const namedCompanions = companionRows.filter((c) => c.full_name.trim()).length;
   // 0047: the server refuses these too; the form says so while typing (an untouched empty phone is not shouted at)
-  // User rule 25 Nov 13:16 (booking UX): the main guest's name is at least two parts; checkPersonName covers each part's quality
+  // User rule, 25 Nov 12:32 voice note (name must be two-part; 2 letters per part agreed at 13:16-13:17): the main guest name has at least two parts; checkPersonName covers each part
   const nameErr = fieldError(() => { checkPersonName(f.guest_name); if (f.guest_name.trim() && f.guest_name.trim().split(/\s+/).filter(Boolean).length < 2) throw new Error("VALIDATION: booking_name_two_parts"); }, VALIDATION_AR);
   const phoneErr = f.guest_phone.trim() ? fieldError(() => checkPhone(f.guest_phone, false), VALIDATION_AR) : null;
   const companionErr = companionRows.map((c) => fieldError(() => checkPersonName(c.full_name), VALIDATION_AR));
