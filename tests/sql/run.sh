@@ -185,3 +185,5 @@ run_tests tests/sql/finance_role_gap_4_13_tests.sql
 run_tests tests/sql/finance_role_chain_4_13_tests.sql
 echo "== running 0151 staff name tests"
 run_tests tests/sql/staff_name_0151_tests.sql
+echo "== running 0152 profile scope tests"
+run_tests tests/sql/profile_scope_0152_tests.sql
