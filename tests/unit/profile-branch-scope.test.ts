@@ -29,6 +29,8 @@ describe("0152 profile reuse respects the branch grant", () => {
     const viaPhone = await mk({ ci: 230, co: 231, name: "عمر", phone: "0500000061" });
     expect(viaPhone.guest_profile_id).not.toBe(ob.guest_profile_id);       // PB02 a hidden profile is never linked by phone
     expect(Object.keys(viaPhone).join(",")).not.toMatch(/name|phone/);    // PB03 the response carries no identity
+    { const mine = await rpc<any>("fn_guest_profile", { p_id: viaPhone.guest_profile_id }); expect(mine.duplicates ?? []).toEqual([]);   // PB08 no hidden name through the duplicates list
+      const lst = await rpc<any>("fn_guest_profiles", { p: { q: "0500000061", limit: 20 } }); expect(lst.rows.every((x: any) => !x.duplicates)).toBe(true); }   // PB09
     expect(await fails(rpc("fn_guest_profile", { p_id: ob.guest_profile_id }))).toContain("NOT_FOUND");   // PB04 still hidden afterwards
     expect((await mk({ ci: 260, co: 261, name: "فيصل", pid: own.guest_profile_id })).ok).toBe(true);     // PB05 a visible profile still links by id
     await login("owner@demo.sa");

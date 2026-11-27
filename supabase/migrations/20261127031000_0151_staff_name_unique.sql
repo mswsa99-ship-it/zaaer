@@ -42,9 +42,12 @@ begin
   end if;
   begin
   insert into staff_profiles(organization_id, full_name, email, phone, role, is_active) values (fn_user_org_id(), v_name, v_email, v_phone, v_role, true) returning * into sp;
-  exception when unique_violation then
+  exception when unique_violation then declare c text; begin
+    get stacked diagnostics c = constraint_name;
+    if c = 'uq_staff_active_name' then raise exception 'DUPLICATE_NAME'; end if;
     if exists (select 1 from staff_profiles where organization_id = fn_user_org_id() and lower(email) = v_email) then raise exception 'DUPLICATE_EMAIL'; end if;
-    raise exception 'DUPLICATE_NAME';
+    raise;
+  end;
   end;
   foreach b in array v_branches loop
     perform fn_require_branch(b);

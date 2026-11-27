@@ -56,6 +56,10 @@ do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; e1 text; e2 te
   perform t_record('PB02 the same phone as a hidden profile makes a NEW profile (no link to the other branch guest)', (r->>'guest_profile_id')::uuid <> t_id('ob_profile'), r->>'guest_profile_id');
   begin perform fn_guest_profile(t_id('ob_profile')); e3 := 'accepted'; exception when others then e3 := sqlerrm; end;
   perform t_record('PB03 the other branch profile stays hidden from that supervisor afterwards', e3 like '%NOT_FOUND%', e3);
+  perform t_record('PB08 the duplicates list of the caller own profile never names a profile of a branch they cannot see',
+    jsonb_array_length(fn_guest_profile((r->>'guest_profile_id')::uuid)->'duplicates') = 0, fn_guest_profile((r->>'guest_profile_id')::uuid)->>'duplicates');
+  perform t_record('PB09 the duplicates filter and counts of the list exclude profiles of other branches',
+    coalesce((select sum((x->>'duplicates')::int) from jsonb_array_elements(fn_guest_profiles('{"q":"0551000161","limit":20}'::jsonb)->'rows') x), 0) = 0, fn_guest_profiles('{"q":"0551000161","limit":20}'::jsonb)::text);
   r2 := fn_staff_create_reservation(jsonb_build_object('branch_id', bha, 'category_id', t_id('catha'), 'check_in', (t_today(bha) + 34)::text, 'check_out', (t_today(bha) + 35)::text,
       'guest_profile_id', (r->>'guest_profile_id')::uuid, 'guest_name', 'عمر النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
   perform t_record('PB04 a profile of the caller own branch still links by id', (r2->>'guest_profile_id')::uuid = (r->>'guest_profile_id')::uuid, r2->>'guest_profile_id');
