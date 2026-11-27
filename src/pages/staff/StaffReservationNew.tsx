@@ -354,7 +354,7 @@ export default function StaffReservationNew() {
                   {similar.some((x) => x.same_phone)
                     ? "يوجد حجز بنفس نوع الوحدة وفي نفس التواريخ لنفس رقم الجوال "
                     : "يوجد حجز بنفس نوع الوحدة وفي نفس التواريخ باسم مطابق لكن برقم جوال مختلف، فقد يكون نزيلًا آخر "}
-                  (<bdi dir="ltr" className="whitespace-nowrap">{similar.map((x) => x.internal_ref).join(" , ")}</bdi>).
+                  (<bdi dir="ltr" className="whitespace-nowrap">{(similar.some((x) => x.same_phone) ? similar.filter((x) => x.same_phone) : similar).map((x) => x.internal_ref).join(" , ")}</bdi>).
                   {" "}تأكد أنه حجز مختلف قبل الحفظ؛ يمكنك المتابعة إن كان كذلك.
                 </p>
               </div>

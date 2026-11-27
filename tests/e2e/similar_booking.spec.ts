@@ -40,4 +40,15 @@ test.describe("similar booking warning (0154)", () => {
     await w.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `/tmp/SB11_390_${info.project.name}.png` });
   });
+
+  test("SB12 mixed matches: phone wording lists only the phone-matched reference, not the name-only one", async ({ page, loginAs }) => {
+    await loginAs("supervisor");
+    await createReservation(page, "هادي الأول", "0551110001", { pickRoom: false });
+    await createReservation(page, "منصور الثاني", "0551110002", { pickRoom: false });
+    await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+    await reachPrice(page, "هادي الأول", "0551110002");          // name of the first, phone of the second
+    const w = page.getByTestId("similar-booking-warning");
+    await expect(w).toContainText("لنفس رقم الجوال");
+    await expect(w.locator("bdi")).not.toContainText(",");        // one reference only (the phone match)
+  });
 });
