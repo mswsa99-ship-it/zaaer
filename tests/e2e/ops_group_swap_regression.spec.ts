@@ -67,14 +67,16 @@ test("OPS-GR1 group of two units: each unit checks in and out on its own; the ot
   await page.getByRole("button", { name: "تأكيد قبول شموس للتسجيل" }).click();
   await expect(arrival).toContainText("الشروط الثابتة مكتملة");
   const rent = arrival.locator("fieldset").filter({ hasText: "سند قبض الإيجار" }), dep = arrival.locator("fieldset").filter({ hasText: "سند قبض التأمين" });
-  await rent.locator("input[data-money]").fill("300"); await rent.getByLabel(/استلمت المبلغ/).check();
+  // the first night's price depends on the weekday (Fri 300, Sat 250 in the demo rate calendar), so pay what the screen says is due before arrival
+  const due = ((await rent.getByText(/المطلوب قبل الوصول/).first().textContent()) ?? "").match(/([\d.]+)\s*ر\.س/)?.[1] ?? "300";
+  await rent.locator("input[data-money]").fill(String(parseFloat(due))); await rent.getByLabel(/استلمت المبلغ/).check();
   await dep.locator("input[data-money]").fill("50"); await dep.getByLabel(/استلمت المبلغ/).check();
   await arrival.getByRole("button", { name: "تسجيل الوصول" }).click();
   await expect(page.getByTestId("stay-notice")).toContainText("سُجِّل الوصول");
   const rows = panel.locator("tbody tr");
   await expect(rows.filter({ hasText: "مقيم" })).toHaveCount(1);
   await expect(rows.filter({ hasText: "مؤكد" })).toHaveCount(1);
-  await expect(panel.locator("tfoot")).toContainText("600.00");
+  await expect(panel.locator("tfoot")).toContainText((2 * parseFloat(due)).toFixed(2));
   // the other unit is untouched: still waits for a unit and its own checks
   await panel.getByRole("link").click();
   await expect(page.locator("main")).toContainText("الخطوة التالية: تخصيص وحدة");
@@ -84,5 +86,5 @@ test("OPS-GR1 group of two units: each unit checks in and out on its own; the ot
   await checkOut(page);
   await expect(rows.filter({ hasText: "غادر" })).toHaveCount(1);
   await expect(rows.filter({ hasText: "مؤكد" })).toHaveCount(1);
-  await expect(panel.locator("tfoot")).toContainText("600.00");
+  await expect(panel.locator("tfoot")).toContainText((2 * parseFloat(due)).toFixed(2));
 });
