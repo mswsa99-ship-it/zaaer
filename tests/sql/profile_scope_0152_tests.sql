@@ -76,6 +76,13 @@ do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; r jsonb; begin
   perform t_record('PB05 the owner (sees every branch) still links the phone to the existing profile', (r->>'guest_profile_id')::uuid = t_id('ob_profile'), r->>'guest_profile_id');
 exception when others then perform t_record('PB92 owner unexpected error', false, sqlerrm); end $$;
 reset role;
+select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
+set role authenticated;
+do $$ declare r jsonb; begin   -- a LATER stay in the branch the supervisor cannot see: an unfiltered max would show it
+  r := fn_staff_create_reservation(jsonb_build_object('branch_id', t_id('bb'), 'category_id', (select id from room_categories where branch_id = t_id('bb') limit 1), 'check_in', (t_today(t_id('bb')) + 60)::text, 'check_out', (t_today(t_id('bb')) + 61)::text,
+      'guest_profile_id', t_id('ob_profile'), 'guest_name', 'سلمان النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
+exception when others then perform t_record('PB95 hidden later stay fixture', false, sqlerrm); end $$;
+reset role;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 set role authenticated;
 do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; x jsonb; d jsonb; begin
@@ -83,14 +90,14 @@ do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; x jsonb; d jso
   x := (select e from jsonb_array_elements(fn_guest_profiles('{"q":"0551000161","limit":20}'::jsonb)->'rows') e where (e->>'id')::uuid = t_id('ob_profile'));
   d := fn_guest_profile(t_id('ob_profile'));
   perform t_record('PB10 a profile visible through one branch counts only that branch stays in the list, as in the detail', x is not null and (x->>'stays')::int = 2 and jsonb_array_length(d->'stays') = 2 and (x->>'stays')::int = jsonb_array_length(d->'stays'), coalesce(x->>'stays','null') || ' / ' || jsonb_array_length(d->'stays'));
-  perform t_record('PB11 the last arrival in the list ignores stays of a branch the caller cannot see', x is not null and (x->>'last_check_in')::date = t_today(bha) + 50, x->>'last_check_in');
+  perform t_record('PB11 the last arrival in the list ignores stays of a branch the caller cannot see', x is not null and (x->>'last_check_in')::date = t_today(bha) + 50 and (x->>'last_check_in')::date < t_today(bha) + 60, x->>'last_check_in');
 exception when others then perform t_record('PB93 scoped counts unexpected error', false, sqlerrm); end $$;
 reset role;
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
 do $$ declare x jsonb; begin
   x := (select e from jsonb_array_elements(fn_guest_profiles('{"q":"0551000161","limit":20}'::jsonb)->'rows') e where (e->>'id')::uuid = t_id('ob_profile'));
-  perform t_record('PB12 the owner still counts every stay of every branch', (x->>'stays')::int = 3 and jsonb_array_length(fn_guest_profile(t_id('ob_profile'))->'stays') = 3, x->>'stays');
+  perform t_record('PB12 the owner still counts every stay of every branch', (x->>'stays')::int = 4 and jsonb_array_length(fn_guest_profile(t_id('ob_profile'))->'stays') = 4 and (x->>'last_check_in')::date = t_today(t_id('bb')) + 60, x->>'stays');
 exception when others then perform t_record('PB94 owner counts unexpected error', false, sqlerrm); end $$;
 reset role;
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),160) as detail from test_results order by name;
