@@ -44,4 +44,10 @@ test.describe("branch labels and filter targets (390px)", () => {
       for (const h of hs) expect(h).toBeGreaterThanOrEqual(44);
     });
   }
+  test("BL4 reports: reservation reference links in tables are 44px tall", async ({ page, loginAs, go }) => {
+    await loginAs("owner"); await go("/admin/reports"); await page.waitForTimeout(1200);
+    const hs = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLAnchorElement>("td a[href*='/staff/reservations/']")).map((a) => Math.round(a.getBoundingClientRect().height)));
+    expect(hs.length).toBeGreaterThan(0);
+    for (const h of hs) expect(h).toBeGreaterThanOrEqual(44);
+  });
 });

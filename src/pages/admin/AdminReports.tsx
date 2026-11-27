@@ -368,7 +368,7 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
               <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الحجز</th><th className="text-right font-medium">المنصة</th><th className="text-right font-medium">حُجز في المنصة</th><th className="text-right font-medium">أُدخل</th><th className="text-right font-medium">التأخير</th><th className="text-right font-medium">الموظف</th></tr></thead>
               <tbody>{d.rows.map((r) => (
                 <tr key={r.id} className="border-b border-ink-50">
-                  <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.id}`}>{r.external_ref ?? r.internal_ref}</Link></td>
+                  <td className="py-1.5 font-mono text-xs"><Link className="inline-flex items-center hover:underline max-sm:min-h-11" to={`/staff/reservations/${r.id}`}>{r.external_ref ?? r.internal_ref}</Link></td>
                   <td className="text-xs">{r.source_name}</td><td className="text-xs" dir="ltr">{r.booked_on}</td><td className="text-xs" dir="ltr">{r.entered_on}</td>
                   <td className="text-xs">{r.lag_days} يوم{r.after_arrival && <Badge className="mr-1 bg-danger-500/10 text-danger-600">بعد الوصول</Badge>}</td>
                   <td className="text-xs text-ink-500">{r.created_by ?? "—"}</td>
@@ -413,7 +413,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
               <thead><tr className="border-b border-ink-100 text-xs text-ink-400"><th className="py-1.5 text-right font-medium">الحجز</th><th className="text-right font-medium">النزيل</th><th className="text-right font-medium">الوثيقة</th><th className="text-right font-medium">المسار</th><th className="text-right font-medium">اعتمدها</th><th className="text-right font-medium">متى</th></tr></thead>
               <tbody>{d.rows.map((r) => (
                 <tr key={r.guest_id} className="border-b border-ink-50">
-                  <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
+                  <td className="py-1.5 font-mono text-xs"><Link className="inline-flex items-center hover:underline max-sm:min-h-11" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
                   <td className="text-xs">{r.full_name}{!r.is_primary && <span className="mr-1 text-[10px] text-ink-400">(مرافق)</span>}</td>
                   <td className="text-xs">{r.identity_type ?? "—"} ••••{r.identity_last4 ?? ""}</td>
                   <td className="text-xs">{r.entry_path === "office" ? "من الوثيقة" : "أدخلها النزيل"}</td>
@@ -460,7 +460,7 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
                 <tbody>
                   {d.rows.map((r) => (
                     <tr key={r.id} className="border-b border-ink-50">
-                      <td className="py-1.5 font-mono text-xs"><Link className="hover:underline" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
+                      <td className="py-1.5 font-mono text-xs"><Link className="inline-flex items-center hover:underline max-sm:min-h-11" to={`/staff/reservations/${r.reservation_id}`}>{r.internal_ref}</Link></td>
                       <td dir="ltr">{sar(r.amount_halalas)}</td>
                       <td className="text-ink-600">{r.reason ?? "—"}{r.after_arrival && <Badge className="mr-1 bg-warning-500/10 text-warning-700">بعد الوصول</Badge>}</td>
                       <td className="text-xs text-ink-500">{r.staff ?? "—"}</td>
