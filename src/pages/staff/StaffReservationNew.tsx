@@ -349,8 +349,14 @@ export default function StaffReservationNew() {
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
             {similar.length > 0 && (
               <div className="mt-3 rounded-lg border border-rai-line bg-rai-warning-tint p-3 text-sm text-rai-ink" role="status" data-testid="similar-booking-warning">
-                <p className="font-semibold">يبدو أن هذا الحجز مكرر</p>
-                <p className="mt-1 text-xs">يوجد حجز بنفس نوع الوحدة وفي نفس التواريخ لنفس النزيل ({similar.map((x) => x.internal_ref).join("، ")}). تأكد أنه حجز مختلف قبل الحفظ؛ يمكنك المتابعة إن كان كذلك.</p>
+                <p className="font-semibold">{similar.some((x) => x.same_phone) ? "يبدو أن هذا الحجز مكرر" : "يوجد حجز بنفس الاسم"}</p>
+                <p className="mt-1 text-xs" data-testid="similar-booking-text">
+                  {similar.some((x) => x.same_phone)
+                    ? "يوجد حجز بنفس نوع الوحدة وفي نفس التواريخ لنفس رقم الجوال "
+                    : "يوجد حجز بنفس نوع الوحدة وفي نفس التواريخ باسم مطابق لكن برقم جوال مختلف، فقد يكون نزيلًا آخر "}
+                  (<bdi dir="ltr" className="whitespace-nowrap">{similar.map((x) => x.internal_ref).join(" , ")}</bdi>).
+                  {" "}تأكد أنه حجز مختلف قبل الحفظ؛ يمكنك المتابعة إن كان كذلك.
+                </p>
               </div>
             )}
             <button type="submit" disabled={busy || !!blockReason} aria-describedby={blockReason ? "create-block-reason" : undefined} title={blockReason ?? undefined} className="btn-primary mt-4 w-full" data-testid="create-reservation">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>

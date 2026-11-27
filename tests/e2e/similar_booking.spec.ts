@@ -9,6 +9,7 @@ test.describe("similar booking warning (0154)", () => {
     await reachPrice(page, "نايف المكرر", "0551234567");
     const w = page.getByTestId("similar-booking-warning");
     await expect(w).toBeVisible();
+    await expect(w).toContainText("لنفس رقم الجوال");
     await expect(page.getByRole("button", { name: "إنشاء الحجز" })).toBeEnabled();   // a warning, never a block
     await w.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `/tmp/SB10_${info.project.name}.png` });
@@ -20,5 +21,23 @@ test.describe("similar booking warning (0154)", () => {
     await bookingNext(page);
     await expect(page.getByRole("button", { name: "إنشاء الحجز" })).toBeVisible();
     await expect(page.getByTestId("similar-booking-warning")).toHaveCount(0);
+  });
+
+  test("SB11 same name with a different phone says so (name only), the reference is isolated LTR and does not wrap at 390", async ({ page, loginAs }, info) => {
+    await loginAs("supervisor");
+    await createReservation(page, "فيصل الاسم", "0551112223", { pickRoom: false });
+    await page.goto("/#/staff/reservations/new", { waitUntil: "networkidle" });
+    await reachPrice(page, "فيصل الاسم", "0509998887");
+    const w = page.getByTestId("similar-booking-warning");
+    await expect(w).toBeVisible();
+    await expect(w).toContainText("برقم جوال مختلف");
+    await expect(w).not.toContainText("لنفس رقم الجوال");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const ref = w.locator("bdi");
+    await expect(ref).toHaveAttribute("dir", "ltr");
+    const box = await ref.boundingBox();
+    expect(box!.height).toBeLessThan(24);                       // one line, not wrapped
+    await w.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `/tmp/SB11_390_${info.project.name}.png` });
   });
 });
