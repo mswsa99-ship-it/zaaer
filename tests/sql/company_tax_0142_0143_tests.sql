@@ -49,8 +49,11 @@ do $$ declare res uuid := t_id('res'); ok jsonb; d jsonb; v0 int := t_ct_ver(t_i
     t_fails(format('select fn_staff_set_company_tax(%L, %L, null, %s)', res, '200000000000002', t_ct_ver(res)), 'VALIDATION: vat_number%') = 'ok'
     and t_fails(format('select fn_staff_set_company_tax(%L, %L, null, %s)', res, '30000000000003', t_ct_ver(res)), 'VALIDATION: vat_number%') = 'ok'
     and t_fails(format('select fn_staff_set_company_tax(%L, %L, null, %s)', res, '3abcdefghijkl3', t_ct_ver(res)), 'VALIDATION: vat_number%') = 'ok', null);
-  perform t_record('CT03 the national address is checked on the enforced parts: a short building number is refused (a missing postal code is NOT refused today - defect D-0142-1 reported separately, not asserted here)',
+  perform t_record('CT03 the national address is checked on the enforced parts: a short building number is refused',
     t_fails(format('select fn_staff_set_company_tax(%L, null, %L::jsonb, %s)', res, '{"street":"x","city":"y","district":"z","building_number":"123","postal_code":"12345"}', t_ct_ver(res)), 'VALIDATION: company_address%') = 'ok', null);
+  perform t_record('CT03b a national address with no postal code, or no building number, is refused (D-0142-1: the DB checks must agree with the form)',
+    t_fails(format('select fn_staff_set_company_tax(%L, null, %L::jsonb, %s)', res, '{"street":"x","city":"y","district":"z","building_number":"1234"}', t_ct_ver(res)), 'VALIDATION: company_address%') = 'ok'
+    and t_fails(format('select fn_staff_set_company_tax(%L, null, %L::jsonb, %s)', res, '{"street":"x","city":"y","district":"z","postal_code":"12345"}', t_ct_ver(res)), 'VALIDATION: company_address%') = 'ok', null);
   perform t_record('CT04 the strict version guard names its errors',
     t_fails(format('select fn_staff_set_company_tax(%L, null, null, %s)', res, t_ct_ver(res) + 5), 'VERSION_CONFLICT%') = 'ok'
     and t_fails(format('select fn_staff_set_company_tax(%L, null, null, null)', res), 'VERSION_REQUIRED%') = 'ok', null);
