@@ -40,7 +40,7 @@ do $$ declare r jsonb; bb uuid; catb uuid; bha uuid := '00000000-0000-0000-0000-
   ob := fn_staff_create_reservation(jsonb_build_object('branch_id', bb, 'category_id', catb, 'check_in', (t_today(bb) + 20)::text, 'check_out', (t_today(bb) + 21)::text,
           'guest_phone', '0551000161', 'guest_name', 'سلمان النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
   insert into ids values ('bb', bb), ('catha', catha), ('ob_profile', (ob->>'guest_profile_id')::uuid);
-exception when others then perform t_record('PB00 fixture', false, sqlerrm); end $$;
+exception when others then perform t_record('PB90 fixture', false, sqlerrm); end $$;
 reset role;
 select t_login('a0000000-0000-0000-0000-000000000002', 'sup@test.local');
 set role authenticated;
@@ -58,7 +58,7 @@ do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; e1 text; e2 te
   r2 := fn_staff_create_reservation(jsonb_build_object('branch_id', bha, 'category_id', t_id('catha'), 'check_in', (t_today(bha) + 34)::text, 'check_out', (t_today(bha) + 35)::text,
       'guest_profile_id', (r->>'guest_profile_id')::uuid, 'guest_name', 'عمر النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
   perform t_record('PB04 a profile of the caller own branch still links by id', (r2->>'guest_profile_id')::uuid = (r->>'guest_profile_id')::uuid, r2->>'guest_profile_id');
-exception when others then perform t_record('PB00 unexpected error', false, sqlerrm); end $$;
+exception when others then perform t_record('PB91 unexpected error', false, sqlerrm); end $$;
 reset role;
 select t_login('a0000000-0000-0000-0000-000000000001', 'owner@test.local');
 set role authenticated;
@@ -66,7 +66,7 @@ do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', bha, 'category_id', t_id('catha'), 'check_in', (t_today(bha) + 40)::text, 'check_out', (t_today(bha) + 41)::text,
       'guest_phone', '0551000161', 'guest_name', 'كريم النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
   perform t_record('PB05 the owner (sees every branch) still links the phone to the existing profile', (r->>'guest_profile_id')::uuid = t_id('ob_profile'), r->>'guest_profile_id');
-exception when others then perform t_record('PB00 owner unexpected error', false, sqlerrm); end $$;
+exception when others then perform t_record('PB92 owner unexpected error', false, sqlerrm); end $$;
 reset role;
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),160) as detail from test_results order by name;
 rollback;
