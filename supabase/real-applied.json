@@ -1,1 +1,1 @@
-{"version": "20261128003900", "note": "newest migration applied by hand on the real project (0155, 2026-11-28 00:54 Riyadh) after a fresh encrypted backup with isolated restore proof, and read back from supabase_migrations.schema_migrations"}
+{"version": "20261128011000", "note": "newest migration applied by hand on the real project (0156, 2026-11-28 02:12 Riyadh) after a fresh encrypted backup (20261128-0211) with isolated restore proof, and read back from supabase_migrations.schema_migrations"}
