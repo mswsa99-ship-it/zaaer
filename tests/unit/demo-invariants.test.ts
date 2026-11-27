@@ -2661,6 +2661,9 @@ describe("Permissions matrix in the demo (0043)", () => {
     expect(await fails(rpc("fn_staff_invite", { p_email: "MX09-HK@demo.sa", p_full_name: "مرة أخرى", p_role: "housekeeping", p_branch_ids: [A] }))).toBe("DUPLICATE_EMAIL");
     expect(await fails(rpc("fn_staff_invite", { p_email: EMAIL.supervisor, p_full_name: "المشرف مرة أخرى", p_role: "supervisor", p_branch_ids: [A] }))).toBe("DUPLICATE_EMAIL");
     expect((await all("staff_profiles")).some((x) => x.email === "second-acct@demo.sa")).toBe(false);
+    // 0151: a second active person with the same name (spaces, marks, alef forms ignored) is refused; a distinguishing word is accepted
+    expect(await fails(rpc("fn_staff_invite", { p_email: "mx09-dup@demo.sa", p_full_name: " عامل  نظافة جديد ", p_role: "housekeeping", p_branch_ids: [A] }))).toBe("DUPLICATE_NAME");
+    expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-dup2@demo.sa", p_full_name: "عامل نظافة جديد - الدور الثاني", p_role: "housekeeping", p_branch_ids: [A] })).ok).toBe(true);
     // the owner gives any role
     await login(EMAIL.owner);
     expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-mgr@demo.sa", p_full_name: "مدير جديد", p_role: "manager", p_branch_ids: [A] })).ok).toBe(true);

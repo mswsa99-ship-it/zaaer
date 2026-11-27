@@ -183,3 +183,5 @@ run_tests tests/sql/client_errors_audit_gate_0140_tests.sql
 echo "== running 4.13 finance role gap and chain supplements"
 run_tests tests/sql/finance_role_gap_4_13_tests.sql
 run_tests tests/sql/finance_role_chain_4_13_tests.sql
+echo "== running 0151 staff name tests"
+run_tests tests/sql/staff_name_0151_tests.sql

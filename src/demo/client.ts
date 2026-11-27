@@ -589,6 +589,7 @@ const rpcs: Record<string, (a: any) => any> = {
     const rawPhone = String(q.phone ?? "").trim(); const phone = rawPhone ? latinDigits(rawPhone).replace(/[^0-9+]/g, "") || null : null; if (rawPhone && !normalizePhone(phone)) throw new Error("VALIDATION: phone");
     const branches: string[] = [...new Set<string>((Array.isArray(q.branch_ids) ? q.branch_ids : []).map(String))]; if (role !== "owner" && !branches.length) throw new Error("VALIDATION: branch_required");
     if (T("staff_profiles").some((x) => x.organization_id === ORG && String(x.email ?? "").toLowerCase() === email)) throw new Error("DUPLICATE_EMAIL");   // 0046
+    { const nk = nameKey(name); if (T("staff_profiles").some((x) => x.organization_id === ORG && x.is_active && nameKey(x.full_name) === nk)) throw new Error("DUPLICATE_NAME"); }   // 0151
     for (const b of branches) requireBranch(b);   // all or nothing, as the transaction
     const id = uid(); T("staff_profiles").push({ id, auth_user_id: null, organization_id: ORG, full_name: name, email, phone, role, is_active: true, created_at: nowISO(), sessions_ended_at: null, updated_at: null });
     for (const b of branches) { const m = T("branch_memberships").find((x) => x.staff_id === id && x.branch_id === b); if (m) { m.removed_at = null; m.removed_by = null; } else T("branch_memberships").push({ id: uid(), staff_id: id, branch_id: b, created_at: nowISO(), removed_at: null, removed_by: null }); }
@@ -2837,3 +2838,5 @@ export const demoFunctionsFetch = (async (input: RequestInfo | URL, init?: Reque
 export function demoBridgeKey(branchId: string): string | null {
   return T("branch_whatsapp_channels").find((x) => x.branch_id === branchId && x.mode === "web_bridge")?.bridge_key ?? null;
 }
+
+export const nameKey = (s: unknown): string => String(s ?? "").toLowerCase().replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/ـ/g, "").replace(/[\u064B-\u065F\u0670]/g, "").replace(/\s+/g, " ").trim();   // 0151

@@ -278,6 +278,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
         if (orgStaff().some((s) => s.id !== sp.id && String(s.email ?? "").toLowerCase() === vEmail)) throw new Error("DUPLICATE_EMAIL");
       }
       const vName: string | null = has("full_name") ? String(q.full_name ?? "").trim() || null : sp.full_name; if (!vName || vName.length > 120) throw new Error("VALIDATION: full_name");
+      if (vName !== sp.full_name && orgStaff().some((s) => s.id !== sp.id && s.is_active && nameKey(s.full_name) === nameKey(vName))) throw new Error("DUPLICATE_NAME");   // 0151
       let vPhone: string | null = sp.phone ?? null;
       if (has("phone")) { const raw = String(q.phone ?? "").trim(); vPhone = raw ? latinDigits(raw).replace(/[^0-9+]/g, "") || null : null; if (raw && !normalizePhone(vPhone)) throw new Error("VALIDATION: phone"); }
       const vRole: string = has("role") ? String(q.role) : sp.role; if (!STAFF_ROLES.includes(vRole)) throw new Error("INVALID_ROLE");
@@ -354,3 +355,5 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
     },
   };
 }
+
+const nameKey = (s: unknown): string => String(s ?? "").toLowerCase().replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/ـ/g, "").replace(/[\u064B-\u065F\u0670]/g, "").replace(/\s+/g, " ").trim();   // 0151
