@@ -40,7 +40,12 @@ begin
   if exists (select 1 from staff_profiles where organization_id = fn_user_org_id() and is_active and fn_person_name_key(full_name) = fn_person_name_key(v_name)) then
     raise exception 'DUPLICATE_NAME';
   end if;
+  begin
   insert into staff_profiles(organization_id, full_name, email, phone, role, is_active) values (fn_user_org_id(), v_name, v_email, v_phone, v_role, true) returning * into sp;
+  exception when unique_violation then
+    if exists (select 1 from staff_profiles where organization_id = fn_user_org_id() and lower(email) = v_email) then raise exception 'DUPLICATE_EMAIL'; end if;
+    raise exception 'DUPLICATE_NAME';
+  end;
   foreach b in array v_branches loop
     perform fn_require_branch(b);
     insert into branch_memberships(staff_id, branch_id) values (sp.id, b)
@@ -188,11 +193,12 @@ end$function$;
 
 -- data-layer backstop against a race between two invitations. Created only when no active duplicate exists today
 -- (an existing duplicate is never merged or removed here; it stays and is reported by the notice).
-DO $$ begin
-  if exists (select 1 from staff_profiles where is_active and fn_person_name_key(full_name) is not null
-             group by organization_id, fn_person_name_key(full_name) having count(*) > 1) then
-    raise notice '0151: active staff with the same name already exist; the unique index was NOT created';
-  else
-    create unique index if not exists uq_staff_active_name on staff_profiles (organization_id, (fn_person_name_key(full_name))) where is_active and fn_person_name_key(full_name) is not null;
+DO $$ declare n int; begin
+  select count(*) into n from (select 1 from staff_profiles where is_active and fn_person_name_key(full_name) is not null
+             group by organization_id, fn_person_name_key(full_name) having count(*) > 1) x;
+  if n > 0 then
+    -- preflight: nothing is merged or removed; the owner resolves the listed groups first, then this migration is applied
+    raise exception '0151 PREFLIGHT FAILED: % group(s) of active staff already share a name; resolve them first (nothing was changed)', n;
   end if;
+  create unique index if not exists uq_staff_active_name on staff_profiles (organization_id, (fn_person_name_key(full_name))) where is_active and fn_person_name_key(full_name) is not null;
 end $$;

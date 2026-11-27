@@ -60,6 +60,19 @@ do $$ declare br uuid := '00000000-0000-0000-0000-000000000010'; e text; r jsonb
   perform t_record('NM12c presentation-form letters equal the plain name of an existing person', e like '%DUPLICATE_NAME%', e);
 exception when others then perform t_record('NM00 unexpected error', false, sqlerrm); end $$;
 reset role;
+do $$ declare org uuid := '00000000-0000-0000-0000-000000000001'; nm text; begin
+  -- NM14 first sign-in: a typed name equal to an active namesake is ignored (the invited name stays, login works); a free typed name is applied
+  insert into auth.users(id,email,email_confirmed_at) values ('a0000000-0000-0000-0000-0000000000d1','c151a@example.test',now()),('a0000000-0000-0000-0000-0000000000d2','c151b@example.test',now()) on conflict(id) do nothing;
+  insert into staff_profiles(organization_id,full_name,email,role,is_active) values (org,'مدعو أول 151','c151a@example.test','supervisor',true),(org,'مدعو ثان 151','c151b@example.test','supervisor',true);
+  perform t_login('a0000000-0000-0000-0000-0000000000d1','c151a@example.test');
+  perform fn_claim_staff_profile(' محمد  الاختبار ');
+  select full_name into nm from staff_profiles where email='c151a@example.test';
+  perform t_record('NM14a a first sign-in cannot take an active namesake''s name: the invited name stays and the claim succeeds', nm = 'مدعو أول 151' and exists(select 1 from staff_profiles where email='c151a@example.test' and auth_user_id is not null), nm);
+  perform t_login('a0000000-0000-0000-0000-0000000000d2','c151b@example.test');
+  perform fn_claim_staff_profile('اسم حر جديد 151');
+  select full_name into nm from staff_profiles where email='c151b@example.test';
+  perform t_record('NM14b a free typed name is still applied at first sign-in', nm = 'اسم حر جديد 151', nm);
+end $$;
 do $$ begin
   perform t_record('NM12e a presentation-form spelling equals the plain letters', fn_person_name_key(E'\uFEE3\uFEA3\uFEE3\uFEA9') = fn_person_name_key('محمد'), fn_person_name_key(E'\uFEE3\uFEA3\uFEE3\uFEA9'));
   perform t_record('NM12f Persian ya and kaf equal the Arabic letters', fn_person_name_key(E'\u06A9\u06CC') = fn_person_name_key('كي'), null);

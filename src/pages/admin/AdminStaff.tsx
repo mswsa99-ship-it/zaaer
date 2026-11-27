@@ -33,6 +33,7 @@ export default function AdminStaff() {
   const [staff, setStaff] = useState<StaffListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [inviteErr, setInviteErr] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // invite form
@@ -60,12 +61,12 @@ export default function AdminStaff() {
   useEffect(() => { load(); }, [load]);
 
   async function invite() {
-    setError(null); setInvited(null);
+    setInviteErr(null); setInvited(null);
     // 0055 (SETUP-08): the same checks as the server, before sending
-    if (!email.trim() || !fullName.trim()) { setError("البريد والاسم مطلوبان."); return; }
-    if (!validEmail(email)) { setError(VALIDATION_AR.email); return; }
-    if (role !== "owner" && branchIds.length === 0) { setError(VALIDATION_AR.branch_required); return; }
-    if (phone.trim() && !normalizePhone(phone)) { setError(VALIDATION_AR.phone); return; }
+    if (!email.trim() || !fullName.trim()) { setInviteErr("البريد والاسم مطلوبان."); return; }
+    if (!validEmail(email)) { setInviteErr(VALIDATION_AR.email); return; }
+    if (role !== "owner" && branchIds.length === 0) { setInviteErr(VALIDATION_AR.branch_required); return; }
+    if (phone.trim() && !normalizePhone(phone)) { setInviteErr(VALIDATION_AR.phone); return; }
     setInviting(true);
     try {
       const r = await staffAdminApi.invite({ email: email.trim(), full_name: fullName.trim(), role, branch_ids: branchIds, phone: phone.trim() || null });
@@ -77,7 +78,7 @@ export default function AdminStaff() {
       }
       setEmail(""); setFullName(""); setBranchIds([]); setPhone("");
       await load();
-    } catch (e) { setError(toArabicError(e)); }
+    } catch (e) { setInviteErr(toArabicError(e)); }
     setInviting(false);
   }
 
@@ -140,6 +141,7 @@ export default function AdminStaff() {
             <button onClick={invite} disabled={inviting} className="btn-primary text-sm">{inviting ? <Spinner className="h-4 w-4" /> : "إرسال الدعوة"}</button>
             {invited && <Badge className="bg-success-500/10 text-success-600">تمت دعوة {invited}</Badge>}
           </div>
+          {inviteErr && <div className="mt-3" role="alert" data-testid="invite-error"><ErrorBanner message={inviteErr} /></div>}
         </Card>
       )}
 
