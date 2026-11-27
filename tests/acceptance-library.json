@@ -606,6 +606,7 @@
     }
   },
   "prefixes": {
+    "NM": "0151: two active staff members cannot carry the same name (case, spaces, Arabic marks, alef forms ignored); distinct names, inactive namesakes and unchanged names pass",
     "AD": "تعريفات الإدارة في الواجهة (tests/e2e/admin.spec.ts)",
     "AI": "حواجز المساعد الذكي على الخادم (tests/sql/core_tests.sql)",
     "AS": "إعدادات الذكاء الاصطناعي (tests/sql/ai_settings_tests.sql)",
