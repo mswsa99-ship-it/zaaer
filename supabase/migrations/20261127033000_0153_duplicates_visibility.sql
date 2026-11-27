@@ -30,7 +30,7 @@ begin
                        where g.guest_profile_id = gp.id and (v_owner or r.branch_id in (select fn_user_branch_ids()))), '[]'::jsonb),
     'duplicates', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'full_name', o.full_name,
                                                                'match', case when o.identity_fingerprint is not null and o.identity_fingerprint = gp.identity_fingerprint then 'identity' else 'phone' end,
-                                                               'stays', (select count(distinct g.reservation_id) from reservation_guests g where g.guest_profile_id = o.id)))
+                                                               'stays', (select count(distinct g.reservation_id) from reservation_guests g join reservations rr on rr.id = g.reservation_id where g.guest_profile_id = o.id and (v_owner or rr.branch_id in (select fn_user_branch_ids())))))
                             from guest_profiles o where o.organization_id = gp.organization_id and o.id <> gp.id
                               and (v_owner or fn_profile_visible(o.id))   -- 0153: only profiles the caller may see
                               and ((fn_normalize_phone(o.phone) is not null and fn_normalize_phone(o.phone) = fn_normalize_phone(gp.phone))
@@ -87,8 +87,8 @@ begin
     from org o
   ), prof as (                                    -- stays and last arrival by index, profile by profile
     select c.*,
-           (select count(distinct g.reservation_id) from reservation_guests g where g.guest_profile_id = c.id) as stays,
-           (select max(r.check_in) from reservation_guests g join reservations r on r.id = g.reservation_id where g.guest_profile_id = c.id) as last_check_in,
+           (select count(distinct g.reservation_id) from reservation_guests g join reservations rr on rr.id = g.reservation_id where g.guest_profile_id = c.id and (v_owner or rr.branch_id in (select fn_user_branch_ids()))) as stays,
+           (select max(r.check_in) from reservation_guests g join reservations r on r.id = g.reservation_id where g.guest_profile_id = c.id and (v_owner or r.branch_id in (select fn_user_branch_ids()))) as last_check_in,
            (c.phone is null or c.identity_fingerprint is null) as incomplete
     from counted c
     where (v_owner or exists (select 1 from reservation_guests g join reservations r on r.id = g.reservation_id

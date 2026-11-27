@@ -187,3 +187,5 @@ echo "== running 0151 staff name tests"
 run_tests tests/sql/staff_name_0151_tests.sql
 echo "== running 0152 profile scope tests"
 run_tests tests/sql/profile_scope_0152_tests.sql
+echo "== running 0154 similar bookings tests"
+run_tests tests/sql/similar_bookings_0154_tests.sql
