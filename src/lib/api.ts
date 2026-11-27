@@ -539,7 +539,7 @@ export const staffApi = {
   resolveMaintenance: (ticketId: string) => rpc<{ ok: boolean; room_status: string }>("fn_staff_resolve_maintenance", { p_ticket: ticketId }),
   resolveTicket: (ticketId: string) => rpc<{ ok: boolean }>("fn_staff_resolve_ticket", { p_ticket: ticketId }),
   releaseNextSlot: (branchId: string, categoryId: string, date: string, reason: string) => rpc<number>("fn_staff_release_next_slot", { p_branch: branchId, p_category: categoryId, p_date: date, p_reason: reason }),
-  claimProfile: (fullName?: string) => rpc<{ ok: boolean; role?: string; claimed?: boolean; bootstrap?: boolean; error?: string }>("fn_claim_staff_profile", { p_full_name: fullName ?? null }),
+  claimProfile: (fullName?: string) => rpc<{ ok: boolean; role?: string; claimed?: boolean; name_kept?: boolean; bootstrap?: boolean; error?: string }>("fn_claim_staff_profile", { p_full_name: fullName ?? null }),
   invite: (email: string, fullName: string, role: string, branchIds: string[]) => rpc<{ ok: boolean; staff_id: string }>("fn_staff_invite", { p_email: email, p_full_name: fullName, p_role: role, p_branch_ids: branchIds }),
   updateAiSettings: (patch: Record<string, unknown>) => rpc<{ ok: boolean }>("fn_admin_update_ai_settings", { p: patch }),
 };

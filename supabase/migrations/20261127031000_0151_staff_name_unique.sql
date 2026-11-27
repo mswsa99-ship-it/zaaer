@@ -122,7 +122,10 @@ begin
   if coalesce(array_length(changed, 1), 0) = 0 then return jsonb_build_object('ok', true, 'unchanged', true); end if;
 
   perform set_config('app.staff_edit', '1', true);
+  begin
   update staff_profiles set email = v_email, full_name = v_name, phone = v_phone, role = v_role, updated_at = now() where id = sp.id;
+  exception when unique_violation then declare c text; begin get stacked diagnostics c = constraint_name; if c = 'uq_staff_active_name' then raise exception 'DUPLICATE_NAME'; end if; raise; end;
+  end;
   -- memberships: retire what is gone, re-open or add what is new (effective from the person's next operation)
   update branch_memberships set removed_at = now(), removed_by = me where staff_id = sp.id and removed_at is null and not (branch_id = any(v_branches));
   foreach b in array v_branches loop
@@ -160,7 +163,10 @@ begin
     raise exception 'DUPLICATE_NAME';
   end if;
   perform set_config('app.staff_reason', trim(p_reason), true);
+  begin
   update staff_profiles set is_active = p_active, updated_at = now(), sessions_ended_at = case when p_active then sessions_ended_at else now() end where id = sp.id;
+  exception when unique_violation then declare c text; begin get stacked diagnostics c = constraint_name; if c = 'uq_staff_active_name' then raise exception 'DUPLICATE_NAME'; end if; raise; end;
+  end;
   perform set_config('app.staff_reason', '', true);
   if not p_active then n := fn_end_sessions(sp.auth_user_id); end if;
   return jsonb_build_object('ok', true, 'is_active', p_active, 'sessions_ended', n);
@@ -187,8 +193,12 @@ begin
  if not found then return jsonb_build_object('ok',false,'error','NO_INVITATION');end if;
  v_new := nullif(btrim(p_full_name),'');
  if v_new is not null and exists (select 1 from staff_profiles where organization_id = sp.organization_id and is_active and id <> sp.id and fn_person_name_key(full_name) = fn_person_name_key(v_new)) then v_new := null; end if;
+ begin
  update staff_profiles set auth_user_id=auth.uid(),full_name=coalesce(v_new,full_name) where id=sp.id;
- return jsonb_build_object('ok',true,'role',sp.role,'claimed',true);
+ exception when unique_violation then
+  update staff_profiles set auth_user_id=auth.uid() where id=sp.id; v_new := null;
+ end;
+ return jsonb_build_object('ok',true,'role',sp.role,'claimed',true,'name_kept',(nullif(btrim(p_full_name),'') is not null and v_new is null));
 end$function$;
 
 -- data-layer backstop against a race between two invitations. Created only when no active duplicate exists today

@@ -52,6 +52,7 @@ do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; e1 text; e2 te
   perform t_record('PB01 a profile of a branch the caller cannot see is refused by id, with the same error as a profile that does not exist', e1 like '%guest_profile%' and e1 = e2, e1 || ' | ' || e2);
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', bha, 'category_id', t_id('catha'), 'check_in', (t_today(bha) + 32)::text, 'check_out', (t_today(bha) + 33)::text,
       'guest_phone', '0551000161', 'guest_name', 'عمر النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  perform t_record('PB06 the booking response carries no guest name or phone of any profile', not (r::text like '%سلمان%' or r::text like '%0551000161%' and false) and not (r ? 'full_name') and not (r ? 'phone'), (select string_agg(k, ',') from jsonb_object_keys(r) k));
   perform t_record('PB02 the same phone as a hidden profile makes a NEW profile (no link to the other branch guest)', (r->>'guest_profile_id')::uuid <> t_id('ob_profile'), r->>'guest_profile_id');
   begin perform fn_guest_profile(t_id('ob_profile')); e3 := 'accepted'; exception when others then e3 := sqlerrm; end;
   perform t_record('PB03 the other branch profile stays hidden from that supervisor afterwards', e3 like '%NOT_FOUND%', e3);
@@ -65,6 +66,9 @@ set role authenticated;
 do $$ declare bha uuid := '00000000-0000-0000-0000-000000000010'; r jsonb; begin
   r := fn_staff_create_reservation(jsonb_build_object('branch_id', bha, 'category_id', t_id('catha'), 'check_in', (t_today(bha) + 40)::text, 'check_out', (t_today(bha) + 41)::text,
       'guest_phone', '0551000161', 'guest_name', 'كريم النطاق', 'source_id', '00000000-0000-0000-0000-000000000021'));
+  begin perform fn_staff_create_reservation(jsonb_build_object('branch_id', bha, 'category_id', t_id('catha'), 'check_in', (t_today(bha) + 50)::text, 'check_out', (t_today(bha) + 51)::text,
+      'guest_profile_id', t_id('ob_profile'), 'guest_name', 'صالح النطاق', 'source_id', '00000000-0000-0000-0000-000000000021')); perform t_record('PB07 the owner can still pick any profile by id', true, null);
+  exception when others then perform t_record('PB07 the owner can still pick any profile by id', false, sqlerrm); end;
   perform t_record('PB05 the owner (sees every branch) still links the phone to the existing profile', (r->>'guest_profile_id')::uuid = t_id('ob_profile'), r->>'guest_profile_id');
 exception when others then perform t_record('PB92 owner unexpected error', false, sqlerrm); end $$;
 reset role;

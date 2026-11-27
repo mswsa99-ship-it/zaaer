@@ -65,11 +65,11 @@ do $$ declare org uuid := '00000000-0000-0000-0000-000000000001'; nm text; begin
   insert into auth.users(id,email,email_confirmed_at) values ('a0000000-0000-0000-0000-0000000000d1','c151a@example.test',now()),('a0000000-0000-0000-0000-0000000000d2','c151b@example.test',now()) on conflict(id) do nothing;
   insert into staff_profiles(organization_id,full_name,email,role,is_active) values (org,'مدعو أول 151','c151a@example.test','supervisor',true),(org,'مدعو ثان 151','c151b@example.test','supervisor',true);
   perform t_login('a0000000-0000-0000-0000-0000000000d1','c151a@example.test');
-  perform fn_claim_staff_profile(' محمد  الاختبار ');
+  perform t_record('NM14c the claim result says the typed name was not applied (name_kept)', (fn_claim_staff_profile(' محمد  الاختبار ')->>'name_kept')::boolean, null);
   select full_name into nm from staff_profiles where email='c151a@example.test';
   perform t_record('NM14a a first sign-in cannot take an active namesake''s name: the invited name stays and the claim succeeds', nm = 'مدعو أول 151' and exists(select 1 from staff_profiles where email='c151a@example.test' and auth_user_id is not null), nm);
   perform t_login('a0000000-0000-0000-0000-0000000000d2','c151b@example.test');
-  perform fn_claim_staff_profile('اسم حر جديد 151');
+  perform t_record('NM14d a free typed name reports name_kept = false', not (fn_claim_staff_profile('اسم حر جديد 151')->>'name_kept')::boolean, null);
   select full_name into nm from staff_profiles where email='c151b@example.test';
   perform t_record('NM14b a free typed name is still applied at first sign-in', nm = 'اسم حر جديد 151', nm);
 end $$;
