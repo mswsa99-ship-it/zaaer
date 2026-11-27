@@ -756,6 +756,16 @@ const rpcs: Record<string, (a: any) => any> = {
   fn_available_rooms: ({ p_branch, p_from, p_to, p_category, p_exclude_reservation }) => T("rooms").filter((r) => r.branch_id === p_branch && myBranches().includes(p_branch) && r.is_active && !r.archived_at && !["blocked", "out_of_service", "maintenance"].includes(r.status) && (!p_category || r.category_id === p_category) && roomAvailable(r.id, p_from, p_to, p_exclude_reservation)).map((r) => ({ room_id: r.id, room_number: r.room_number, category_id: r.category_id, category_name: byId("room_categories", r.category_id)?.name_ar, status: r.status, cleanliness: r.cleanliness, block_name: byId("blocks", r.block_id)?.name ?? null, floor_name: byId("floors", r.floor_id)?.name ?? null })).sort((a, b) => a.room_number.localeCompare(b.room_number, "en", { numeric: true })),
   fn_room_available: ({ p_room, p_from, p_to, p_exclude_reservation }) => roomAvailable(p_room, p_from, p_to, p_exclude_reservation),
   // multi-unit booking (0011): one reservation per unit sharing group_ref, all-or-nothing
+  fn_staff_similar_bookings: ({ p }) => {
+    requireCap("res.create");
+    if (!p.check_in || !p.check_out || !p.category_id) return { count: 0, items: [] };
+    const np = p.guest_phone ? normPhone(p.guest_phone) : null; const nk = nameKey(p.guest_name);
+    const items = T("reservations").filter((r) => r.branch_id === p.branch_id && r.room_category_id === p.category_id && r.check_in === p.check_in && r.check_out === p.check_out && !["draft", "cancelled", "rejected"].includes(r.status))
+      .map((r) => { const g = T("reservation_guests").find((x) => x.reservation_id === r.id && x.is_primary); return g ? { r, same_phone: !!np && normPhone(g.phone) === np, same_name: !!nk && nameKey(g.full_name) === nk } : null; })
+      .filter((x): x is { r: any; same_phone: boolean; same_name: boolean } => !!x && (x.same_phone || x.same_name)).slice(0, 5)
+      .map((x) => ({ internal_ref: x.r.internal_ref, status: x.r.status, check_in: x.r.check_in, check_out: x.r.check_out, same_phone: x.same_phone, same_name: x.same_name }));
+    return { count: items.length, items };
+  },
   fn_staff_create_reservation: ({ p }) => {
     requireCap("res.create");
     const units: any[] | null = Array.isArray(p.units) && p.units.length > 0 ? p.units : null;

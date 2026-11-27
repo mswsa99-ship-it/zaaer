@@ -117,6 +117,18 @@ export default function StaffReservationNew() {
     return () => { alive = false; };
   }, [branchId, cats, f.category_id, f.check_in, f.check_out, f.override, f.nightly_rate, f.discount, f.source_id, nights, canDiscount]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 0154: a warning, never a block: the same guest already has a booking of this unit type on these dates
+  const [similar, setSimilar] = useState<{ internal_ref: string; same_phone: boolean; same_name: boolean }[]>([]);
+  useEffect(() => {
+    if (!branchId || !f.category_id || nights <= 0 || (!f.guest_name.trim() && !f.guest_phone.trim())) { setSimilar([]); return; }
+    let alive = true;
+    const t = window.setTimeout(() => {
+      opsApi.similarBookings({ branch_id: branchId, category_id: f.category_id, check_in: f.check_in, check_out: f.check_out, guest_name: f.guest_name, guest_phone: f.guest_phone || null })
+        .then((r) => { if (alive) setSimilar(r.items); }).catch(() => { if (alive) setSimilar([]); });
+    }, 400);
+    return () => { alive = false; window.clearTimeout(t); };
+  }, [branchId, f.category_id, f.check_in, f.check_out, f.guest_name, f.guest_phone, nights]);
+
   async function submit() {
     // the server also refuses a discount without its reason; say it here, at the field, and move there
     if (canDiscount && f.discount > 0 && !f.discount_reason.trim()) {
@@ -335,6 +347,12 @@ export default function StaffReservationNew() {
           <Card>
             <Toggle checked={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} label="تأكيد الحجز مباشرة" />
             <p className="mt-1 text-xs text-ink-400">بدون تأكيد يبقى الحجز «بانتظار التحقق» ولا يحجز الوحدة إلا بعد تخصيصها.</p>
+            {similar.length > 0 && (
+              <div className="mt-3 rounded-lg border border-rai-line bg-rai-warning-tint p-3 text-sm text-rai-ink" role="status" data-testid="similar-booking-warning">
+                <p className="font-semibold">يبدو أن هذا الحجز مكرر</p>
+                <p className="mt-1 text-xs">يوجد حجز بنفس نوع الوحدة وفي نفس التواريخ لنفس النزيل ({similar.map((x) => x.internal_ref).join("، ")}). تأكد أنه حجز مختلف قبل الحفظ؛ يمكنك المتابعة إن كان كذلك.</p>
+              </div>
+            )}
             <button type="submit" disabled={busy || !!blockReason} aria-describedby={blockReason ? "create-block-reason" : undefined} title={blockReason ?? undefined} className="btn-primary mt-4 w-full" data-testid="create-reservation">{busy ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} {extraUnits.length > 0 ? `إنشاء ${extraUnits.length + 1} حجوزات` : "إنشاء الحجز"}</button>
             {blockReason && !busy && <p id="create-block-reason" className="mt-2 text-xs text-ink-600" role="status" data-testid="create-block-reason">لا يمكن الإنشاء الآن: {blockReason}</p>}
           </Card>
