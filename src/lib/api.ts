@@ -943,7 +943,7 @@ export interface DiscountReport {
   period: { from: string; to: string }; total_halalas: number; count: number;
   /** decision 36: the filters the figures were computed with */
   filters?: ReportFilters;
-  by_staff: Array<{ staff: string | null; role: string | null; count: number; total_halalas: number }>;
+  by_staff: Array<{ staff_id?: string | null; staff: string | null; role: string | null; count: number; total_halalas: number }>;
   rows: Array<{ id: string; reservation_id: string; internal_ref: string; amount_halalas: number; reason: string | null; staff: string | null; role: string | null; created_at: string; after_arrival: boolean }> | null;
 }
 
@@ -1175,8 +1175,8 @@ export const guestProfileApi = {
 };
 /** The owner's and the manager's reports of phase 5 (decisions 2, 4). */
 export const guestReportsApi = {
-  lateEntries: (branchId: string, from: string, to: string, minDays = 1, filters: ReportFilters = {}) => rpc<{ platform_bookings: number; late: number; after_arrival: number; by_staff: Array<{ staff: string; count: number; max_lag: number }>; rows: Array<{ id: string; internal_ref: string; external_ref: string | null; source_name: string | null; booked_on: string; entered_on: string; entered_at: string; lag_days: number; check_in: string; after_arrival: boolean; status: string; created_by: string | null }> }>("fn_reports_late_entries", { p_branch: branchId, p_from: from, p_to: to, p_min_days: minDays, p_filters: filters }),
-  identities: (branchId: string, from: string, to: string, path: "office" | "guest" | "all" = "office", filters: ReportFilters = {}) => rpc<{ count: number; by_staff: Array<{ staff: string; office: number; guest: number }>; rows: Array<{ guest_id: string; reservation_id: string; internal_ref: string; full_name: string; is_primary: boolean; identity_type: string | null; identity_last4: string | null; entry_path: string | null; entered_by: string | null; entered_at: string | null; verified_by: string | null; verified_at: string }> }>("fn_reports_identities", { p_branch: branchId, p_from: from, p_to: to, p_path: path, p_filters: filters }),
+  lateEntries: (branchId: string, from: string, to: string, minDays = 1, filters: ReportFilters = {}) => rpc<{ platform_bookings: number; late: number; after_arrival: number; by_staff: Array<{ staff_id?: string | null; staff: string; count: number; max_lag: number }>; rows: Array<{ id: string; internal_ref: string; external_ref: string | null; source_name: string | null; booked_on: string; entered_on: string; entered_at: string; lag_days: number; check_in: string; after_arrival: boolean; status: string; created_by: string | null }> }>("fn_reports_late_entries", { p_branch: branchId, p_from: from, p_to: to, p_min_days: minDays, p_filters: filters }),
+  identities: (branchId: string, from: string, to: string, path: "office" | "guest" | "all" = "office", filters: ReportFilters = {}) => rpc<{ count: number; by_staff: Array<{ staff_id?: string | null; staff: string; office: number; guest: number }>; rows: Array<{ guest_id: string; reservation_id: string; internal_ref: string; full_name: string; is_primary: boolean; identity_type: string | null; identity_last4: string | null; entry_path: string | null; entered_by: string | null; entered_at: string | null; verified_by: string | null; verified_at: string }> }>("fn_reports_identities", { p_branch: branchId, p_from: from, p_to: to, p_path: path, p_filters: filters }),
 };
 /** The branch's media (decision 31): the logo (≤200 KB) and the image (≤1 MB), kept with the branch's settings. */
 export interface BranchGuide {

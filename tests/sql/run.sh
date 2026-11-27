@@ -160,6 +160,8 @@ run_tests tests/sql/history_details_tests.sql
 run_tests tests/sql/page_rls_tests.sql
 
 run_tests tests/sql/branch_read_boundaries_tests.sql
+echo "== running 0150 by-staff id tests"
+run_tests tests/sql/reports_by_staff_id_0150_tests.sql
 echo "== running 0126 locked-month expense approval tests"
 run_tests tests/sql/expense_lock_0126_tests.sql
 echo "== running 0128 inbox reply add-only candidate tests"

@@ -361,7 +361,7 @@ function LateEntriesCard({ from, to, filters, statementFor }: { from: string; to
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <p className="mb-1 text-xs font-medium text-ink-500">حسب الموظف</p>
-            <div className="divide-y divide-ink-50 text-sm">{d.by_staff.map((s) => <div key={s.staff} className="flex justify-between gap-2 py-1.5"><span>{s.staff}</span><span className="text-xs text-ink-500">{s.count} · أقصى تأخير {arabicCount(s.max_lag, ["يوم واحد", "يومان", "أيام", "يومًا"])}</span></div>)}</div>
+            <div className="divide-y divide-ink-50 text-sm">{d.by_staff.map((s) => <div key={s.staff_id ?? s.staff} className="flex justify-between gap-2 py-1.5"><span>{s.staff}</span><span className="text-xs text-ink-500">{s.count} · أقصى تأخير {arabicCount(s.max_lag, ["يوم واحد", "يومان", "أيام", "يومًا"])}</span></div>)}</div>
           </div>
           <div className="overflow-x-auto lg:col-span-2">
             <table className="w-full text-sm">
@@ -406,7 +406,7 @@ function IdentitiesCard({ from, to, filters, statementFor }: { from: string; to:
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <p className="mb-1 text-xs font-medium text-ink-500">حسب من اعتمد</p>
-            <div className="divide-y divide-ink-50 text-sm">{d.by_staff.map((s) => <div key={s.staff} className="flex justify-between gap-2 py-1.5"><span>{s.staff}</span><span className="text-xs text-ink-500">من المكتب {s.office} · مطابقة {s.guest}</span></div>)}</div>
+            <div className="divide-y divide-ink-50 text-sm">{d.by_staff.map((s) => <div key={s.staff_id ?? s.staff} className="flex justify-between gap-2 py-1.5"><span>{s.staff}</span><span className="text-xs text-ink-500">من المكتب {s.office} · مطابقة {s.guest}</span></div>)}</div>
           </div>
           <div className="overflow-x-auto lg:col-span-2">
             <table className="w-full text-sm">
@@ -450,7 +450,7 @@ function DiscountsCard({ from, to, filters, statementFor }: { from: string; to: 
           <div>
             <p className="mb-1 text-xs font-medium text-ink-500">حسب الموظف</p>
             <div className="divide-y divide-ink-50 text-sm">
-              {d.by_staff.map((s) => <div key={`${s.staff}|${s.role}`} className="flex justify-between gap-2 py-1.5"><span>{s.staff ?? "—"} <span className="text-xs text-ink-400">{s.role ? ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role : ""}</span></span><span dir="ltr">{s.count} · {sar(s.total_halalas)}</span></div>)}
+              {d.by_staff.map((s) => <div key={`${s.staff_id ?? s.staff}|${s.role}`} className="flex justify-between gap-2 py-1.5"><span>{s.staff ?? "—"} <span className="text-xs text-ink-400">{s.role ? ROLE_LABELS[s.role as keyof typeof ROLE_LABELS] ?? s.role : ""}</span></span><span dir="ltr">{s.count} · {sar(s.total_halalas)}</span></div>)}
             </div>
           </div>
           {d.rows && (

@@ -77,7 +77,7 @@ export function mergeDiscounts<T extends { total_halalas: number; count: number;
     ...first,
     total_halalas: parts.reduce((s, p) => s + p.total_halalas, 0),
     count: parts.reduce((s, p) => s + p.count, 0),
-    by_staff: mergeRows(parts.map((p) => p.by_staff ?? []), (r) => `${r.staff ?? ""}|${r.role ?? ""}`, ["count", "total_halalas"]),
+    by_staff: mergeRows(parts.map((p) => p.by_staff ?? []), (r) => `${r.staff_id ?? r.staff ?? ""}|${r.role ?? ""}`, ["count", "total_halalas"]),
     rows: parts.some((p) => p.rows) ? parts.flatMap((p) => p.rows ?? []).sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))) : null,
   };
 }
@@ -87,7 +87,7 @@ export function mergeLateEntries<T extends { platform_bookings: number; late: nu
   const first = parts[0];
   const staff = new Map<string, Json>();
   for (const p of parts) for (const r of p.by_staff ?? []) {
-    const k = String(r.staff ?? ""); const cur = staff.get(k);
+    const k = String(r.staff_id ?? r.staff ?? ""); const cur = staff.get(k);
     if (!cur) staff.set(k, { ...r });
     else { cur.count = Number(cur.count) + Number(r.count); cur.max_lag = Math.max(Number(cur.max_lag ?? 0), Number(r.max_lag ?? 0)); }
   }
@@ -107,7 +107,7 @@ export function mergeIdentities<T extends { count: number; by_staff: Json[]; row
   return {
     ...first,
     count: parts.reduce((s, p) => s + p.count, 0),
-    by_staff: mergeRows(parts.map((p) => p.by_staff ?? []), (r) => String(r.staff ?? ""), ["office", "guest"]),
+    by_staff: mergeRows(parts.map((p) => p.by_staff ?? []), (r) => String(r.staff_id ?? r.staff ?? ""), ["office", "guest"]),
     rows: parts.flatMap((p) => p.rows ?? []),
   };
 }
