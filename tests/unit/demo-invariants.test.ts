@@ -2661,6 +2661,12 @@ describe("Permissions matrix in the demo (0043)", () => {
     expect(await fails(rpc("fn_staff_invite", { p_email: "MX09-HK@demo.sa", p_full_name: "مرة أخرى", p_role: "housekeeping", p_branch_ids: [A] }))).toBe("DUPLICATE_EMAIL");
     expect(await fails(rpc("fn_staff_invite", { p_email: EMAIL.supervisor, p_full_name: "المشرف مرة أخرى", p_role: "supervisor", p_branch_ids: [A] }))).toBe("DUPLICATE_EMAIL");
     expect((await all("staff_profiles")).some((x) => x.email === "second-acct@demo.sa")).toBe(false);
+    // 0151: reactivation and invisible characters
+    { const nv = await rpc<any>("fn_staff_invite", { p_email: "mx09-nv@demo.sa", p_full_name: "نورة الاختبار", p_role: "housekeeping", p_branch_ids: [A] });
+      await rpc("fn_admin_set_staff_active", { p_staff: nv.staff_id, p_active: false, p_reason: "إيقاف" });
+      expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-nv2@demo.sa", p_full_name: "نورة الاختبار", p_role: "housekeeping", p_branch_ids: [A] })).ok).toBe(true);
+      expect(await fails(rpc("fn_admin_set_staff_active", { p_staff: nv.staff_id, p_active: true, p_reason: "تفعيل" }))).toBe("DUPLICATE_NAME");
+      expect(await fails(rpc("fn_staff_invite", { p_email: "mx09-nv3@demo.sa", p_full_name: "نورة\u200c الاختبار\u200b", p_role: "housekeeping", p_branch_ids: [A] }))).toBe("DUPLICATE_NAME"); }
     // 0151: a second active person with the same name (spaces, marks, alef forms ignored) is refused; a distinguishing word is accepted
     expect(await fails(rpc("fn_staff_invite", { p_email: "mx09-dup@demo.sa", p_full_name: " عامل  نظافة جديد ", p_role: "housekeeping", p_branch_ids: [A] }))).toBe("DUPLICATE_NAME");
     expect((await rpc<any>("fn_staff_invite", { p_email: "mx09-dup2@demo.sa", p_full_name: "عامل نظافة جديد - الدور الثاني", p_role: "housekeeping", p_branch_ids: [A] })).ok).toBe(true);

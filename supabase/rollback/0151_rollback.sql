@@ -116,4 +116,49 @@ begin
   return jsonb_build_object('ok', true, 'changed', to_jsonb(changed));
 end $function$;
 
+
+DROP INDEX IF EXISTS public.uq_staff_active_name;
+CREATE OR REPLACE FUNCTION public.fn_admin_set_staff_active(p_staff uuid, p_active boolean, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare sp staff_profiles%rowtype; n int := 0;
+begin
+  perform fn_require_cap('staff.manage');
+  if coalesce(trim(p_reason), '') = '' then raise exception 'VALIDATION: reason'; end if;
+  select * into sp from staff_profiles where id = p_staff and organization_id = fn_user_org_id() for update;
+  if not found then raise exception 'NOT_FOUND: staff'; end if;
+  if sp.id = fn_staff_id() then raise exception 'SELF_NOT_ALLOWED'; end if;
+  if sp.role = 'owner' and not fn_has_role('owner') then raise exception 'FORBIDDEN: only the owner changes an owner' using errcode = '42501'; end if;
+  if not fn_role_within_mine(sp.role) then raise exception 'FORBIDDEN: a role beyond your own' using errcode = '42501'; end if;
+  if sp.is_active = coalesce(p_active, sp.is_active) then return jsonb_build_object('ok', true, 'unchanged', true); end if;
+  perform set_config('app.staff_reason', trim(p_reason), true);
+  update staff_profiles set is_active = p_active, updated_at = now(), sessions_ended_at = case when p_active then sessions_ended_at else now() end where id = sp.id;
+  perform set_config('app.staff_reason', '', true);
+  if not p_active then n := fn_end_sessions(sp.auth_user_id); end if;
+  return jsonb_build_object('ok', true, 'is_active', p_active, 'sessions_ended', n);
+end $function$;
+CREATE OR REPLACE FUNCTION public.fn_claim_staff_profile(p_full_name text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare em text; sp staff_profiles%rowtype;
+begin
+ if auth.uid() is null then raise exception 'NOT_AUTHENTICATED' using errcode='42501';end if;
+ select lower(email) into em from auth.users where id=auth.uid();
+ if exists(select 1 from platform_operators where auth_user_id=auth.uid()) then return jsonb_build_object('ok',false,'error','PLATFORM_ACCOUNT');end if;
+ select * into sp from staff_profiles where auth_user_id=auth.uid();
+ if found then return jsonb_build_object('ok',true,'role',sp.role,'claimed',false);end if;
+ if not exists(select 1 from auth.users where id=auth.uid() and email_confirmed_at is not null) then raise exception 'EMAIL_NOT_CONFIRMED' using errcode='42501';end if;
+
+ select * into sp from staff_profiles where lower(email)=em and auth_user_id is null and is_active and role<>'owner'
+ and exists(select 1 from organizations o where o.id=staff_profiles.organization_id and o.platform_status='active') for update;
+ if not found then return jsonb_build_object('ok',false,'error','NO_INVITATION');end if;
+ update staff_profiles set auth_user_id=auth.uid(),full_name=coalesce(nullif(btrim(p_full_name),''),full_name) where id=sp.id;
+ return jsonb_build_object('ok',true,'role',sp.role,'claimed',true);
+end$function$;
 DROP FUNCTION IF EXISTS public.fn_person_name_key(text);

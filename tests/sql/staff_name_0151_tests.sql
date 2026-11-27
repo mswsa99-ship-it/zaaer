@@ -44,9 +44,27 @@ do $$ declare br uuid := '00000000-0000-0000-0000-000000000010'; e text; r jsonb
   perform t_record('NM08 editing another field of a person is not blocked', e = 'accepted', e);
   begin r := fn_admin_update_staff(jsonb_build_object('staff_id', sid, 'full_name', 'محمد الاختبار - الصندوق', 'reason', 'اختبار')); e := 'accepted'; exception when others then e := sqlerrm; end;
   perform t_record('NM09 renaming to a free name is accepted', e = 'accepted', e);
+  -- NM11 reactivation must not create a second active namesake
+  r := fn_staff_invite('r151a@example.test','نورة المالية151','supervisor',array[br]); sid := (r->>'staff_id')::uuid;
+  perform fn_admin_set_staff_active(sid, false, 'اختبار');
+  begin perform fn_staff_invite('r151b@example.test','نورة المالية151','supervisor',array[br]); e := 'accepted'; exception when others then e := sqlerrm; end;
+  perform t_record('NM11a a deactivated person''s name can be used by a new person', e = 'accepted', e);
+  begin perform fn_admin_set_staff_active(sid, true, 'اختبار'); e := 'accepted'; exception when others then e := sqlerrm; end;
+  perform t_record('NM11b reactivating the former person while the namesake is active is refused', e like '%DUPLICATE_NAME%', e);
+  -- NM12 invisible characters, presentation forms and Persian letter forms are the same name
+  begin perform fn_staff_invite('z151a@example.test', E'خالد\u200c  \u200fالاختبار', 'supervisor', array[br]); e := 'accepted'; exception when others then e := sqlerrm; end;
+  perform t_record('NM12a invisible characters are not a different name (setup)', e = 'accepted', e);
+  begin perform fn_staff_invite('z151b@example.test', E'خالد الاختبار\u200b', 'supervisor', array[br]); e := 'accepted'; exception when others then e := sqlerrm; end;
+  perform t_record('NM12b zero-width space is not a different name', e like '%DUPLICATE_NAME%', e);
+  begin perform fn_staff_invite('z151c@example.test', E'\uFEE3\uFEA3\uFEE3\uFEA9 الاختبار', 'supervisor', array[br]); e := 'accepted'; exception when others then e := sqlerrm; end;
+  perform t_record('NM12c presentation-form letters equal the plain name of an existing person', e like '%DUPLICATE_NAME%', e);
 exception when others then perform t_record('NM00 unexpected error', false, sqlerrm); end $$;
 reset role;
 do $$ begin
+  perform t_record('NM12e a presentation-form spelling equals the plain letters', fn_person_name_key(E'\uFEE3\uFEA3\uFEE3\uFEA9') = fn_person_name_key('محمد'), fn_person_name_key(E'\uFEE3\uFEA3\uFEE3\uFEA9'));
+  perform t_record('NM12f Persian ya and kaf equal the Arabic letters', fn_person_name_key(E'\u06A9\u06CC') = fn_person_name_key('كي'), null);
+  begin insert into staff_profiles(organization_id, full_name, email, role, is_active) values ('00000000-0000-0000-0000-000000000001','  محمد   الاختبار ','race151@example.test','supervisor',true); perform t_record('NM13 the database itself refuses a second active namesake (race backstop)', false, 'inserted');
+  exception when unique_violation then perform t_record('NM13 the database itself refuses a second active namesake (race backstop)', true, 'unique_violation'); end;
   perform t_record('NM10 fn_person_name_key ignores case, spaces, marks, alef and ya/ta-marbuta forms', fn_person_name_key(' مُحَمَّد  اللاعبة ') = fn_person_name_key('محمد اللاعبه') and fn_person_name_key('x') <> fn_person_name_key('y') and fn_person_name_key('  ') is null, fn_person_name_key(' مُحَمَّد  اللاعبة '));
 end $$;
 select case when ok then 'PASS' else 'FAIL' end as result, name, left(coalesce(detail,''),160) as detail from test_results order by name;

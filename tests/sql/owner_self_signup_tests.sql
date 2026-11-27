@@ -9,7 +9,7 @@ insert into auth.users(id,email,email_confirmed_at) values
 ('98000000-0000-0000-0000-000000000003','signup-duplicate@example.test',now()),
 ('98000000-0000-0000-0000-000000000004','signup-pending@example.test',now()),
 ('98000000-0000-0000-0000-000000000005','signup-operator@example.test',now());
-insert into staff_profiles(organization_id,full_name,email,role,is_active) values('00000000-0000-0000-0000-000000000001','موظف مدعو','signup-pending@example.test','supervisor',true);
+insert into staff_profiles(organization_id,full_name,email,role,is_active) values('00000000-0000-0000-0000-000000000001','موظف مدعو للتسجيل','signup-pending@example.test','supervisor',true);
 insert into platform_operators(auth_user_id,full_name) values('98000000-0000-0000-0000-000000000005','مشغل اختبار التسجيل');
 select t_login('98000000-0000-0000-0000-000000000002','signup-new@example.test');
 set local role authenticated;

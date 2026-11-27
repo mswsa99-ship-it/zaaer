@@ -310,6 +310,7 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
       if (sp.role === "owner" && !hasRole("owner")) throw new Error("FORBIDDEN: only the owner changes an owner");   // decision 44 (0043)
       if (!roleWithinMine(sp.role)) throw new Error("FORBIDDEN: a role beyond your own");                             // 0046
       const active = p_active == null ? !!sp.is_active : !!p_active; if (!!sp.is_active === active) return { ok: true, unchanged: true };
+      if (active && orgStaff().some((s) => s.id !== sp.id && s.is_active && nameKey(s.full_name) === nameKey(sp.full_name))) throw new Error("DUPLICATE_NAME");   // 0151
       const before = { role: sp.role, is_active: !!sp.is_active };
       Object.assign(sp, { is_active: active, updated_at: nowISO(), sessions_ended_at: active ? sp.sessions_ended_at ?? null : nowISO() });
       if (!active) for (const b of liveBranches(sp.id)) c.staffLeftBranch?.(b, sp.id, "أُوقف حسابه");
@@ -356,4 +357,4 @@ export function phase6Rpcs(c: Phase6Ctx): Record<string, (a: any) => any> {
   };
 }
 
-const nameKey = (s: unknown): string => String(s ?? "").toLowerCase().replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/ـ/g, "").replace(/[\u064B-\u065F\u0670]/g, "").replace(/\s+/g, " ").trim();   // 0151
+const nameKey = (s: unknown): string => String(s ?? "").normalize("NFKC").toLowerCase().replace(/[أإآٱ]/g, "ا").replace(/[ىی]/g, "ي").replace(/ة/g, "ه").replace(/ک/g, "ك").replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0)).replace(/[\u064B-\u065F\u0670\u0640\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g, "").replace(/[\s\u00A0]+/g, " ").trim();   // 0151

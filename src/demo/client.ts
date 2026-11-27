@@ -2839,4 +2839,4 @@ export function demoBridgeKey(branchId: string): string | null {
   return T("branch_whatsapp_channels").find((x) => x.branch_id === branchId && x.mode === "web_bridge")?.bridge_key ?? null;
 }
 
-export const nameKey = (s: unknown): string => String(s ?? "").toLowerCase().replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/ـ/g, "").replace(/[\u064B-\u065F\u0670]/g, "").replace(/\s+/g, " ").trim();   // 0151
+export const nameKey = (s: unknown): string => String(s ?? "").normalize("NFKC").toLowerCase().replace(/[أإآٱ]/g, "ا").replace(/[ىی]/g, "ي").replace(/ة/g, "ه").replace(/ک/g, "ك").replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0)).replace(/[\u064B-\u065F\u0670\u0640\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g, "").replace(/[\s\u00A0]+/g, " ").trim();   // 0151
