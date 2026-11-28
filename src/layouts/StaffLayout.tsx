@@ -27,9 +27,32 @@ const HEADER_BTN = "flex h-[48px] w-[48px] items-center justify-center rounded-l
 
 /** the open tab of a centre scrolls into view when its strip is wider than the screen (nothing else on the page moves) */
 function centerActiveTab(el: HTMLElement | null) {
+  if (el) trackTabEdges(el);
   const a = el?.querySelector<HTMLElement>('[aria-current="page"]');
   if (!el || !a || el.scrollWidth <= el.clientWidth) return;
   el.scrollLeft += a.getBoundingClientRect().left + a.offsetWidth / 2 - (el.getBoundingClientRect().left + el.clientWidth / 2);
+}
+
+/** A tab strip wider than the screen fades the side that has more tabs; a strip that fits is never dimmed.
+ *  Sets --fade-l / --fade-r (px) on the strip; the stylesheet turns them into a mask. Works for RTL (scrollLeft is 0 at the start and negative after). */
+const tabEdgeTracked = new WeakSet<HTMLElement>();
+function trackTabEdges(el: HTMLElement) {
+  if (tabEdgeTracked.has(el)) return;
+  tabEdgeTracked.add(el);
+  const FADE = 24;
+  const update = () => {
+    const max = el.scrollWidth - el.clientWidth;
+    const pos = Math.abs(el.scrollLeft);
+    const rtl = getComputedStyle(el).direction === "rtl";
+    const moreAtStart = max > 2 && pos > 2, moreAtEnd = max > 2 && pos < max - 2;
+    const left = rtl ? moreAtEnd : moreAtStart, right = rtl ? moreAtStart : moreAtEnd;
+    el.style.setProperty("--fade-l", left ? `${FADE}px` : "0px");
+    el.style.setProperty("--fade-r", right ? `${FADE}px` : "0px");
+  };
+  el.addEventListener("scroll", update, { passive: true });
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(update).observe(el);
+  window.addEventListener("resize", update);
+  update();
 }
 
 export default function StaffLayout() {

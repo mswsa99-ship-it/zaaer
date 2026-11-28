@@ -289,6 +289,14 @@ body, #root {background:var(--paper);color:var(--ink);}
   }
 }
 
+/* Hub tabs wider than the screen: the side with more tabs fades (set by trackTabEdges in StaffLayout; both 0 when the tabs fit, so nothing is dimmed). */
+@media (max-width: 639px) {
+  :root nav[data-testid="hub-tabs"] {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l, 0px), #000 calc(100% - var(--fade-r, 0px)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l, 0px), #000 calc(100% - var(--fade-r, 0px)), transparent 100%);
+  }
+}
+
 /* UX review (finance tabs): the pill tab strips (accounts, bank movements, orders, guest journey) scroll sideways on a phone.
    Same soft edge as the hub tabs, on the side that has more; only background-image is set so the pill keeps its own colour. */
 @media (max-width: 639px) {
